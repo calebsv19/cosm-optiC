@@ -7,6 +7,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/material_editor.h"
 #include "editor/scene_editor_material_preview.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 #include "scene/object_manager.h"
 
 #define SCENE_EDITOR_DIGEST_OVERLAY_BOUNDS_DRAW_RATIO_LIMIT (3.0)
@@ -505,6 +506,16 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     int selected_triangle_count = 0;
     if (!renderer || !projector || !digest) return;
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+
+    if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL) {
+        SceneEditorMeshPreviewFrameStats mesh_stats = {0};
+        (void)SceneEditorMeshPreviewRenderGeometry(renderer,
+                                                   projector,
+                                                   active_mode,
+                                                   selected_object_index,
+                                                   hover_object_index,
+                                                   &mesh_stats);
+    }
 
     if (!material_focus_mode && digest->has_scene_bounds) {
         SDL_Color bounds_color = digest->bounds_enabled

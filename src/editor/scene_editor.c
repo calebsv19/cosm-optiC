@@ -22,6 +22,7 @@
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_input_router.h"
 #include "editor/scene_editor_mesh_preview_store.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_session_runtime.h"
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_viewport_nav.h"
@@ -646,6 +647,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     if (!SceneEditorLoadSessionState(editor)) {
         return false;
     }
+    SceneEditorMeshPreviewRenderReset(renderer);
     SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
 
     editor->window = window;
@@ -713,6 +715,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     if (!SceneEditorLoadSessionState(editor)) {
         return false;
     }
+    SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
 
     //  Create the window using stored scene settings
     editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -773,6 +776,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
 
     editor->owns_window = true;
     editor->owns_renderer = true;
+    SceneEditorMeshPreviewRenderReset(editor->renderer);
 
     //  Initialize TTF for font rendering
     if (!ray_tracing_font_runtime_init()) {
@@ -880,6 +884,7 @@ void SceneEditorSessionEnd(SceneEditor* editor) {
     if (!editor) {
         return;
     }
+    SceneEditorMeshPreviewRenderReset(editor->renderer);
     editor->running = false;
     editor->window = NULL;
     editor->renderer = NULL;
@@ -958,6 +963,8 @@ void DestroySceneEditor(SceneEditor* editor) {
     if (!editor) {
         return;
     }
+    SceneEditorMeshPreviewRenderReset(editor->renderer);
+    SceneEditorMeshPreviewStoreReset();
     editor->running = false;
     ray_tracing_font_runtime_detach_renderer(editor->renderer);
     if (editor->renderer && editor->owns_renderer) {

@@ -7,6 +7,7 @@
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 #include "editor/material_editor.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 #include "render/ray_tracing_mode_backend.h"
 
 static bool scene_editor_digest_overlay_point_in_rect(int x, int y, const SDL_Rect* rect) {
@@ -427,6 +428,10 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                       projector.center_y,
                                       projector.center_z + projector.span_max * 0.15,
                                       (SDL_Color){120, 170, 240, 240});
+
+    if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL) {
+        SceneEditorMeshPreviewRenderToolbar(renderer, &projector.viewport);
+    }
 
     if (clip_was_enabled) {
         SDL_RenderSetClipRect(renderer, &previous_clip);

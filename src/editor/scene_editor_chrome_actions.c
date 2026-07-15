@@ -12,6 +12,7 @@
 #include "editor/object_editor.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_control_surface.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "editor/scene_editor_tool_state.h"
 
@@ -291,6 +292,12 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
                                                 &projector)) return false;
     metrics = SceneEditorDigestOverlayResolveBezierMetrics(&digest, &projector);
     plane_z = SceneEditorDigestOverlayResolveEditPlaneZ(&digest, &projector);
+
+    if (SceneEditorMeshPreviewHandleModeClick(&projector.viewport,
+                                              command->event->button.x,
+                                              command->event->button.y)) {
+        return true;
+    }
 
     pick = SceneEditorDigestOverlayPickObjectIndex(&projector,
                                                    &digest,
@@ -646,6 +653,11 @@ static bool scene_editor_dispatch_material_canvas_command(
                                                       focused_origin,
                                                       &projector)) {
         return false;
+    }
+    if (SceneEditorMeshPreviewHandleModeClick(&projector.viewport,
+                                              command->event->button.x,
+                                              command->event->button.y)) {
+        return true;
     }
     additive = (SDL_GetModState() & KMOD_SHIFT) != 0;
     return MaterialEditorHandleCanvasPointerDown(&projector,

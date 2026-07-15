@@ -3,6 +3,8 @@
 #include <math.h>
 
 #include "config/config_manager.h"
+#include "editor/editor_mode_router.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 
 static bool scene_editor_digest_overlay_objects_point_in_rect(int x, int y, const SDL_Rect* rect) {
     if (!rect) return false;
@@ -252,6 +254,12 @@ int SceneEditorDigestOverlayPickObjectIndex(const SceneEditorDigestOverlayProjec
     int i = 0;
 
     if (!projector || !digest) return -1;
+    pick_index = SceneEditorMeshPreviewPickObjectIndex(projector,
+                                                       EDITOR_MODE_OBJECT,
+                                                       -1,
+                                                       mx,
+                                                       my);
+    if (pick_index >= 0) return pick_index;
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
 
     if (seeds.valid && seeds.primitive_count > 0) {

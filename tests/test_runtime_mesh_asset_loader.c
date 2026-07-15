@@ -9,7 +9,9 @@
 #include <unistd.h>
 
 #include "import/runtime_mesh_asset_loader.h"
+#include "editor/editor_mode_router.h"
 #include "editor/scene_editor_mesh_preview_contract.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 #include "import/runtime_mesh_asset_pack.h"
 #include "config/config_manager.h"
@@ -44,6 +46,122 @@ static int test_scene_editor_mesh_preview_contract(void) {
     assert_true("mesh_preview_contract_view_direction_resets",
                 SceneEditorMeshPreviewInvalidationResetsQuality(
                     SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_VIEW_DIRECTION));
+    return 0;
+}
+
+static int test_scene_editor_mesh_preview_modes_and_pick(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    const RayTracingRuntimeMeshAssetSet* active = NULL;
+    SceneEditorDigestOverlayProjector projector = {0};
+    SDL_Rect buttons[SCENE_EDITOR_MESH_DISPLAY_COUNT];
+    char diagnostics[256] = {0};
+    int origin_x = 0;
+    int origin_y = 0;
+    bool ok = false;
+
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(kMrt0ScenePath,
+                                                          &set,
+                                                          diagnostics,
+                                                          sizeof(diagnostics));
+    assert_true("mesh_preview_modes_fixture_load", ok);
+    if (!ok) return 0;
+    ray_tracing_runtime_mesh_assets_take_last(&set);
+    active = ray_tracing_runtime_mesh_assets_last();
+    SceneEditorMeshPreviewStorePrepare(active);
+
+    projector.viewport = (SDL_Rect){0, 0, 800, 600};
+    projector.center_x = 0.0;
+    projector.center_y = 0.0;
+    projector.center_z = 0.0;
+    projector.yaw_rad = 0.0;
+    projector.pitch_rad = 0.0;
+    projector.scale = 100.0;
+    projector.span_max = 6.0;
+    SceneEditorMeshPreviewLayoutModeButtons(&projector.viewport, buttons);
+    assert_true("mesh_preview_mode_buttons_ordered",
+                buttons[0].x < buttons[1].x && buttons[1].x < buttons[2].x &&
+                    buttons[2].x < buttons[3].x);
+    assert_true("mesh_preview_mode_button_material_hit",
+                SceneEditorMeshPreviewModeButtonAtPoint(&projector.viewport,
+                                                        buttons[3].x + 2,
+                                                        buttons[3].y + 2) == 3);
+    assert_true("mesh_preview_mode_click_material",
+                SceneEditorMeshPreviewHandleModeClick(&projector.viewport,
+                                                      buttons[3].x + 2,
+                                                      buttons[3].y + 2));
+    assert_true("mesh_preview_mode_click_applied",
+                SceneEditorMeshPreviewModeGet() == SCENE_EDITOR_MESH_DISPLAY_MATERIAL);
+
+    if (active && active->instance_count > 0) {
+        const RayTracingRuntimeMeshAssetInstance* instance = &active->instances[0];
+        assert_true("mesh_preview_pick_origin_projects",
+                    SceneEditorDigestOverlayProjectPoint(&projector,
+                                                         instance->position_x,
+                                                         instance->position_y,
+                                                         instance->position_z,
+                                                         &origin_x,
+                                                         &origin_y));
+        for (int mode = 0; mode < SCENE_EDITOR_MESH_DISPLAY_COUNT; ++mode) {
+            SceneEditorMeshPreviewModeSet((SceneEditorMeshDisplayMode)mode);
+            assert_true(mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS
+                            ? "mesh_preview_pick_bounds"
+                            : mode == SCENE_EDITOR_MESH_DISPLAY_WIRE
+                                  ? "mesh_preview_pick_wire"
+                                  : mode == SCENE_EDITOR_MESH_DISPLAY_SOLID
+                                        ? "mesh_preview_pick_solid"
+                                        : "mesh_preview_pick_material",
+                        SceneEditorMeshPreviewPickObjectIndex(&projector,
+                                                              EDITOR_MODE_OBJECT,
+                                                              -1,
+                                                              origin_x,
+                                                              origin_y) ==
+                            instance->scene_object_index);
+        }
+    }
+    SceneEditorMeshPreviewModeSet(SCENE_EDITOR_MESH_DISPLAY_SOLID);
+    SceneEditorMeshPreviewStoreReset();
+    ray_tracing_runtime_mesh_assets_reset_last();
+    return 0;
+}
+
+static int test_scene_editor_mesh_preview_complex_scene_from_env(void) {
+    const char* scene_path = getenv("RAY_TRACING_MESH_PREVIEW_COMPLEX_SCENE");
+    RayTracingRuntimeMeshAssetSet set;
+    const RayTracingRuntimeMeshAssetSet* active = NULL;
+    const CoreMeshPreviewLodMesh* largest_lod = NULL;
+    size_t largest_source_triangles = 0u;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (!scene_path || !scene_path[0]) return 0;
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(scene_path,
+                                                          &set,
+                                                          diagnostics,
+                                                          sizeof(diagnostics));
+    assert_true("mesh_preview_complex_scene_load", ok);
+    if (!ok) return 0;
+    ray_tracing_runtime_mesh_assets_take_last(&set);
+    active = ray_tracing_runtime_mesh_assets_last();
+    SceneEditorMeshPreviewStorePrepare(active);
+    if (active) {
+        for (int i = 0; i < active->asset_count; ++i) {
+            const CoreMeshPreviewLodMesh* lod = SceneEditorMeshPreviewStoreGet(i);
+            if (lod && lod->source_triangle_count > largest_source_triangles) {
+                largest_source_triangles = lod->source_triangle_count;
+                largest_lod = lod;
+            }
+        }
+    }
+    assert_true("mesh_preview_complex_source_is_high_triangle",
+                largest_source_triangles >= 100000u);
+    assert_true("mesh_preview_complex_coherent_lod_available",
+                largest_lod && largest_lod->vertex_count > 0u &&
+                    largest_lod->triangle_count > 1000u &&
+                    largest_lod->triangle_count <= SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES);
+    SceneEditorMeshPreviewStoreReset();
+    ray_tracing_runtime_mesh_assets_reset_last();
     return 0;
 }
 
@@ -1399,6 +1517,8 @@ int run_test_runtime_mesh_asset_loader_tests(void) {
     int before = g_runtime_mesh_asset_loader_failures;
 
     test_scene_editor_mesh_preview_contract();
+    test_scene_editor_mesh_preview_modes_and_pick();
+    test_scene_editor_mesh_preview_complex_scene_from_env();
     test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture();
     test_runtime_mesh_asset_loader_cache_preserves_vertex_normal_contract();
     test_runtime_mesh_asset_loader_reports_missing_asset();

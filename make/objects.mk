@@ -495,6 +495,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/editor/scene_editor_material_preview.o \
+	$(BUILD_DIR)/editor/scene_editor_mesh_preview_render.o \
 	$(BUILD_DIR)/editor/scene_editor_mesh_preview_store.o \
 	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
 	$(BUILD_DIR)/editor/scene_editor_viewport_nav_zoom.o \

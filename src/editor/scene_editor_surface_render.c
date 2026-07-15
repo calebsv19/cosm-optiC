@@ -16,6 +16,7 @@
 #include "editor/object_editor.h"
 #include "editor/object_editor_panels.h"
 #include "editor/scene_editor_chrome_shell.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_tool_state.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/render_helper.h"
@@ -270,6 +271,18 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
 
     if (contract->activeMode == EDITOR_MODE_OBJECT) {
         selected_index = ObjectEditorGetSelectedObjectIndex();
+        snprintf(line,
+                 sizeof(line),
+                 "Mesh display: %s  |  stable LOD",
+                 SceneEditorMeshDisplayModeName(SceneEditorMeshPreviewModeGet()));
+        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
+                                                    bounds,
+                                                    cursor_y,
+                                                    bottom_y,
+                                                    line,
+                                                    body_color,
+                                                    false,
+                                                    6);
         cursor_y = SceneEditorSurfaceRenderObjectList(renderer,
                                                       bounds,
                                                       cursor_y,
