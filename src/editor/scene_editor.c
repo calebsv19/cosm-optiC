@@ -11,6 +11,7 @@
 #include "app/animation.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_motion_bridge.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "render/fluid/fluid_state.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "camera/camera.h"
@@ -20,6 +21,7 @@
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_input_router.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_session_runtime.h"
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_viewport_nav.h"
@@ -644,6 +646,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     if (!SceneEditorLoadSessionState(editor)) {
         return false;
     }
+    SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
 
     editor->window = window;
     editor->renderer = renderer;
@@ -882,6 +885,7 @@ void SceneEditorSessionEnd(SceneEditor* editor) {
     editor->renderer = NULL;
     editor->owns_window = false;
     editor->owns_renderer = false;
+    SceneEditorMeshPreviewStoreReset();
     g_viewport_nav_state.orbit_active = false;
     g_viewport_nav_state.last_mouse_x = 0;
     g_viewport_nav_state.last_mouse_y = 0;

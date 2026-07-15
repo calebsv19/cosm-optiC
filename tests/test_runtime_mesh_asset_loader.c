@@ -9,6 +9,8 @@
 #include <unistd.h>
 
 #include "import/runtime_mesh_asset_loader.h"
+#include "editor/scene_editor_mesh_preview_contract.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "import/runtime_mesh_asset_pack.h"
 #include "config/config_manager.h"
 
@@ -18,6 +20,32 @@ static const char* kMrt0ScenePath =
     "tests/fixtures/mesh_asset_runtime_spheres/scene_runtime.json";
 
 static int g_runtime_mesh_asset_loader_failures = 0;
+
+static void assert_true(const char* name, bool cond);
+
+static int test_scene_editor_mesh_preview_contract(void) {
+    const unsigned overlay_only = SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_PROJECTION |
+                                  SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_HOVER |
+                                  SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_SELECTION;
+    assert_true("mesh_preview_contract_bounds_name",
+                strcmp(SceneEditorMeshDisplayModeName(SCENE_EDITOR_MESH_DISPLAY_BOUNDS),
+                       "Bounds") == 0);
+    assert_true("mesh_preview_contract_wire_cycle",
+                SceneEditorMeshDisplayModeCycle(SCENE_EDITOR_MESH_DISPLAY_BOUNDS, 1) ==
+                    SCENE_EDITOR_MESH_DISPLAY_WIRE);
+    assert_true("mesh_preview_contract_reverse_cycle",
+                SceneEditorMeshDisplayModeCycle(SCENE_EDITOR_MESH_DISPLAY_BOUNDS, -1) ==
+                    SCENE_EDITOR_MESH_DISPLAY_MATERIAL);
+    assert_true("mesh_preview_contract_overlay_stable",
+                !SceneEditorMeshPreviewInvalidationResetsQuality(overlay_only));
+    assert_true("mesh_preview_contract_geometry_resets",
+                SceneEditorMeshPreviewInvalidationResetsQuality(
+                    SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_GEOMETRY));
+    assert_true("mesh_preview_contract_view_direction_resets",
+                SceneEditorMeshPreviewInvalidationResetsQuality(
+                    SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_VIEW_DIRECTION));
+    return 0;
+}
 
 static void assert_true(const char* name, bool cond) {
     if (!cond) {
@@ -186,6 +214,7 @@ static int test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture(void) 
                                                         sizeof(diagnostics));
     assert_true("mrt2_load_mrt0_scene_assets", ok);
     if (ok) {
+        SceneEditorMeshPreviewStorePrepare(&set);
         assert_true("mrt2_load_asset_count_three", set.asset_count == 3);
         assert_true("mrt2_load_instance_count_three", set.instance_count == 3);
         low_index = find_loaded_asset(&set, "asset_sphere_8x4");
@@ -194,6 +223,20 @@ static int test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture(void) 
         assert_true("mrt2_load_low_asset_present", low_index >= 0);
         assert_true("mrt2_load_medium_asset_present", medium_index >= 0);
         assert_true("mrt2_load_high_asset_present", high_index >= 0);
+        if (high_index >= 0) {
+            const RayTracingRuntimeMeshAsset* asset = &set.assets[high_index];
+            const CoreMeshPreviewLodMesh* lod = SceneEditorMeshPreviewStoreGet(high_index);
+            assert_true("mrt2_editor_lod_attached", lod != NULL);
+            assert_true("mrt2_editor_lod_has_indexed_triangles",
+                        lod && lod->triangle_count > 0u &&
+                            lod->vertex_count > 0u && lod->indices != NULL);
+            assert_true("mrt2_editor_lod_preserves_source_count",
+                        lod && lod->source_triangle_count ==
+                            asset->document.triangle_count);
+            assert_true("mrt2_editor_lod_is_bounded",
+                        lod && lod->triangle_count <=
+                            asset->document.triangle_count);
+        }
         assert_true("mrt3_low_scene_object_index", set.instances[0].scene_object_index == 3);
         assert_true("mrt3_medium_scene_object_index", set.instances[1].scene_object_index == 4);
         assert_true("mrt3_high_scene_object_index", set.instances[2].scene_object_index == 5);
@@ -216,6 +259,7 @@ static int test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture(void) 
             assert_true("mrt2_high_triangles", set.assets[high_index].document.triangle_count == 960u);
         }
     }
+    SceneEditorMeshPreviewStoreReset();
     ray_tracing_runtime_mesh_asset_set_free(&set);
     return 0;
 }
@@ -1354,6 +1398,7 @@ static int test_runtime_mesh_asset_loader_preview_limited_keeps_sidecar_metadata
 int run_test_runtime_mesh_asset_loader_tests(void) {
     int before = g_runtime_mesh_asset_loader_failures;
 
+    test_scene_editor_mesh_preview_contract();
     test_runtime_mesh_asset_loader_resolves_and_loads_mrt0_fixture();
     test_runtime_mesh_asset_loader_cache_preserves_vertex_normal_contract();
     test_runtime_mesh_asset_loader_reports_missing_asset();

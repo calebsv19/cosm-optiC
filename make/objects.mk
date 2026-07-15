@@ -495,6 +495,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/editor/scene_editor_material_preview.o \
+	$(BUILD_DIR)/editor/scene_editor_mesh_preview_store.o \
 	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
 	$(BUILD_DIR)/editor/scene_editor_viewport_nav_zoom.o \
 	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
@@ -647,7 +648,9 @@ CORE_MESH_ASSET_SRCS := \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_authoring_document.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c
-CORE_MESH_PREVIEW_SRCS := $(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c
+CORE_MESH_PREVIEW_SRCS := \
+	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
+	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview_lod.c
 CORE_OBJECT_SRCS := $(CORE_OBJECT_DIR)/src/core_object.c
 CORE_UNITS_SRCS := $(CORE_UNITS_DIR)/src/core_units.c
 CORE_SPACE_SRCS := $(CORE_SPACE_DIR)/src/core_space.c
