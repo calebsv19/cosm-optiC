@@ -197,6 +197,83 @@ Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit) {
     return hit->normal;
 }
 
+Vec3 HitInfo3D_ShadingNormalForDirection(const HitInfo3D* hit, Vec3 direction) {
+    Vec3 geometric = vec3(0.0, 0.0, 0.0);
+    Vec3 shading = vec3(0.0, 0.0, 0.0);
+    double geometric_dot = 0.0;
+    double shading_dot = 0.0;
+    double blend = 0.0;
+
+    if (!hit) return vec3(0.0, 1.0, 0.0);
+    geometric = vec3_normalize(hit->geometricNormal);
+    shading = vec3_normalize(hit->shadingNormal);
+    if (vec3_length(shading) <= 1e-9) shading = vec3_normalize(hit->normal);
+    direction = vec3_normalize(direction);
+    if (vec3_length(geometric) <= 1e-9) return shading;
+    if (vec3_length(shading) <= 1e-9 || vec3_length(direction) <= 1e-9) return geometric;
+    geometric_dot = vec3_dot(geometric, direction);
+    shading_dot = vec3_dot(shading, direction);
+    if (geometric_dot <= 1e-9 || shading_dot >= 1e-9) return shading;
+
+    blend = (-shading_dot + 1e-6) / (geometric_dot - shading_dot);
+    blend = fmin(1.0, fmax(0.0, blend));
+    shading = vec3_normalize(vec3_add(vec3_scale(shading, 1.0 - blend),
+                                       vec3_scale(geometric, blend)));
+    return vec3_length(shading) > 1e-9 ? shading : geometric;
+}
+
+Vec3 HitInfo3D_ShadingNormalForReflection(const HitInfo3D* hit, Vec3 view_direction) {
+    const double hemisphere_epsilon = 1e-6;
+    Vec3 geometric = vec3(0.0, 0.0, 0.0);
+    Vec3 shading = vec3(0.0, 0.0, 0.0);
+    Vec3 incident = vec3(0.0, 0.0, 0.0);
+    Vec3 candidate = vec3(0.0, 0.0, 0.0);
+    Vec3 reflected = vec3(0.0, 0.0, 0.0);
+    double low = 0.0;
+    double high = 1.0;
+
+    if (!hit) return vec3(0.0, 1.0, 0.0);
+    geometric = vec3_normalize(hit->geometricNormal);
+    shading = vec3_normalize(hit->shadingNormal);
+    if (vec3_length(shading) <= 1e-9) shading = vec3_normalize(hit->normal);
+    if (vec3_length(geometric) <= 1e-9) geometric = shading;
+    view_direction = vec3_normalize(view_direction);
+    if (vec3_length(shading) <= 1e-9) return geometric;
+    if (vec3_length(geometric) <= 1e-9 || vec3_length(view_direction) <= 1e-9) {
+        return shading;
+    }
+    if (vec3_dot(shading, geometric) < 0.0) shading = vec3_scale(shading, -1.0);
+
+    incident = vec3_scale(view_direction, -1.0);
+    reflected = vec3_normalize(vec3_sub(
+        incident,
+        vec3_scale(shading, 2.0 * vec3_dot(shading, incident))));
+    if (vec3_dot(reflected, geometric) > hemisphere_epsilon) return shading;
+
+    reflected = vec3_normalize(vec3_sub(
+        incident,
+        vec3_scale(geometric, 2.0 * vec3_dot(geometric, incident))));
+    if (vec3_dot(reflected, geometric) <= hemisphere_epsilon) return geometric;
+
+    for (int iteration = 0; iteration < 32; ++iteration) {
+        const double blend = 0.5 * (low + high);
+        candidate = vec3_normalize(vec3_add(vec3_scale(shading, 1.0 - blend),
+                                             vec3_scale(geometric, blend)));
+        reflected = vec3_normalize(vec3_sub(
+            incident,
+            vec3_scale(candidate, 2.0 * vec3_dot(candidate, incident))));
+        if (vec3_dot(reflected, geometric) > hemisphere_epsilon) {
+            high = blend;
+        } else {
+            low = blend;
+        }
+    }
+
+    candidate = vec3_normalize(vec3_add(vec3_scale(shading, 1.0 - high),
+                                         vec3_scale(geometric, high)));
+    return vec3_length(candidate) > 1e-9 ? candidate : geometric;
+}
+
 bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                     const RuntimeTriangle3D* triangle,
                                     int triangle_index,

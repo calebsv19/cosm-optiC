@@ -158,6 +158,7 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     RuntimeDisneyV2_3DResult result = {0};
     RuntimeDirectLight3DResult direct = {0};
     Vec3 light_dir = vec3(0.0, 0.0, 0.0);
+    Vec3 light_response_normal = vec3(0.0, 0.0, 0.0);
     Vec3 half_vec = vec3(0.0, 0.0, 0.0);
     double light_distance = 0.0;
     double cos_theta_h = 0.0;
@@ -204,9 +205,10 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     } else {
         light_dir = vec3_normalize(hit->normal);
     }
-    result.ndotl = runtime_disney_v2_3d_clamp01(vec3_dot(hit->normal, light_dir));
+    light_response_normal = HitInfo3D_ShadingNormalForDirection(hit, light_dir);
+    result.ndotl = runtime_disney_v2_3d_clamp01(vec3_dot(light_response_normal, light_dir));
     half_vec = vec3_normalize(vec3_add(light_dir, view_dir));
-    cos_theta_h = runtime_disney_v2_3d_clamp01(vec3_dot(hit->normal, half_vec));
+    cos_theta_h = runtime_disney_v2_3d_clamp01(vec3_dot(light_response_normal, half_vec));
     dot_i_h = runtime_disney_v2_3d_clamp01(vec3_dot(light_dir, half_vec));
     result.fresnelWeight =
         RuntimePrincipledBSDF3D_FresnelSchlick(dot_i_h, result.principled.dielectricF0);

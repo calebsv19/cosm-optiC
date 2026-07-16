@@ -177,6 +177,54 @@ static int test_runtime_ray_3d_offset_contract(void) {
     return 0;
 }
 
+static int test_runtime_ray_3d_shading_normal_terminator_contract(void) {
+    HitInfo3D hit = {0};
+    Vec3 direction = vec3(0.0, 0.0, 1.0);
+    Vec3 corrected;
+    Vec3 incident;
+    Vec3 reflected;
+
+    hit.geometricNormal = vec3(0.0, 0.0, 1.0);
+    hit.shadingNormal = vec3_normalize(vec3(0.0, 1.0, -0.25));
+    hit.normal = hit.shadingNormal;
+    corrected = HitInfo3D_ShadingNormalForDirection(&hit, direction);
+    assert_true("runtime_ray_3d_terminator_preserves_lit_geometric_face",
+                vec3_dot(corrected, direction) > 0.0);
+    assert_true("runtime_ray_3d_terminator_keeps_geometric_hemisphere",
+                vec3_dot(corrected, hit.geometricNormal) > 0.0);
+
+    hit.shadingNormal = vec3_normalize(vec3(0.0, 0.4, 1.0));
+    corrected = HitInfo3D_ShadingNormalForDirection(&hit, direction);
+    assert_close("runtime_ray_3d_terminator_leaves_valid_smooth_normal_z",
+                 corrected.z,
+                 hit.shadingNormal.z,
+                 1e-9);
+
+    hit.geometricNormal = vec3(0.0, 0.0, 1.0);
+    hit.shadingNormal = vec3_normalize(vec3(0.8, 0.0, 0.6));
+    hit.normal = hit.shadingNormal;
+    incident = vec3_scale(direction, -1.0);
+    corrected = HitInfo3D_ShadingNormalForReflection(&hit, direction);
+    reflected = vec3_normalize(vec3_sub(
+        incident,
+        vec3_scale(corrected, 2.0 * vec3_dot(corrected, incident))));
+    assert_true("runtime_ray_3d_reflection_normal_exits_geometric_hemisphere",
+                vec3_dot(reflected, hit.geometricNormal) > 1e-6);
+
+    hit.shadingNormal = vec3_normalize(vec3(0.2, 0.0, 0.98));
+    hit.normal = hit.shadingNormal;
+    corrected = HitInfo3D_ShadingNormalForReflection(&hit, direction);
+    assert_close("runtime_ray_3d_reflection_normal_preserves_valid_smooth_x",
+                 corrected.x,
+                 hit.shadingNormal.x,
+                 1e-9);
+    assert_close("runtime_ray_3d_reflection_normal_preserves_valid_smooth_z",
+                 corrected.z,
+                 hit.shadingNormal.z,
+                 1e-9);
+    return 0;
+}
+
 static int test_runtime_light_emitter_3d_center_hit_contract(void) {
     RuntimeScene3D scene;
     Ray3D ray = {0};
@@ -629,10 +677,13 @@ static int test_runtime_camera_projector_3d_zoom_contract(void) {
 }
 
 int run_test_runtime_scene_3d_geometry_trace_suite(void) {
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+
     int before = test_support_failures();
 
     test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_triangle_intersection_contract");
     test_runtime_ray_3d_triangle_intersection_contract();
+    test_runtime_ray_3d_shading_normal_terminator_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_scene_first_hit_contract");
     test_runtime_ray_3d_scene_first_hit_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_offset_contract");

@@ -1136,6 +1136,13 @@ static int test_runtime_caustic_transport_debug_export_records_path_geometry(voi
                 debug_state.pathsPath[0] != '\0' && access(debug_state.pathsPath, F_OK) == 0);
     path = RuntimeCausticTransportDebug3D_RecordAt(0u);
     assert_true("runtime_caustic_transport_debug_first_path", path != NULL);
+    if (!path) {
+        RuntimeCausticVolumeCache3D_Free(&cache);
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        RuntimeCausticTransport3D_ResetRequestState();
+        return 0;
+    }
     assert_true("runtime_caustic_transport_debug_light",
                 path->lightIntensity > 0.0 && path->lightRadius > 0.0);
     assert_true("runtime_caustic_transport_debug_target",
@@ -1938,6 +1945,13 @@ static int test_runtime_caustic_transport_mesh_dielectric_lens_debug_export_reco
                 RuntimeCausticTransportDebug3D_RecordCount() > 0u);
     path = RuntimeCausticTransportDebug3D_RecordAt(0u);
     assert_true("runtime_caustic_transport_mesh_dielectric_debug_first_path", path != NULL);
+    if (!path) {
+        RuntimeCausticVolumeCache3D_Free(&cache);
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        RuntimeCausticTransport3D_ResetRequestState();
+        return 0;
+    }
     assert_true("runtime_caustic_transport_mesh_dielectric_debug_policy",
                 strcmp(path->emissionPolicy, "mesh_dielectric_lens") == 0);
     assert_true("runtime_caustic_transport_mesh_dielectric_debug_event",
@@ -1969,6 +1983,8 @@ static int test_runtime_caustic_transport_mesh_dielectric_lens_debug_export_reco
 }
 
 int run_test_runtime_caustic_transport_3d_tests(void) {
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+
     int before = test_support_failures();
 
     test_runtime_caustic_transport_populates_volume_cache();

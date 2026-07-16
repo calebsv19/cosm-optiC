@@ -78,6 +78,18 @@ Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
                               [[fisics::dim(length)]] [[fisics::unit(meter)]] double epsilon);
 void HitInfo3D_Reset(HitInfo3D* hit);
 Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit);
+/*
+ * Returns the BRDF normal for a direction while preserving the geometric
+ * surface's lit hemisphere.  This prevents a coarse triangle with smooth
+ * vertex normals from producing a false, diagonal light terminator.
+ */
+Vec3 HitInfo3D_ShadingNormalForDirection(const HitInfo3D* hit, Vec3 direction);
+/*
+ * Returns the closest shading normal to Ns whose perfect reflection of the
+ * incoming view ray exits the geometric Ng hemisphere.  Ng remains the ray
+ * offset/intersection authority; this helper only constrains BRDF reflection.
+ */
+Vec3 HitInfo3D_ShadingNormalForReflection(const HitInfo3D* hit, Vec3 view_direction);
 void RuntimeRay3D_ResolveTriangleNormals(const RuntimeTriangle3D* triangle,
                                         const Ray3D* ray,
                                         double bary_u,

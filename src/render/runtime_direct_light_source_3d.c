@@ -706,7 +706,7 @@ void runtime_direct_light_3d_accumulate_source(
     }
 
     to_light = vec3_scale(to_light, 1.0 / light_distance);
-    ndotl = fabs(vec3_dot(hit->normal, to_light));
+    ndotl = fabs(vec3_dot(HitInfo3D_ShadingNormalForDirection(hit, to_light), to_light));
     attenuation = runtime_direct_light_3d_attenuation(&light, light_distance);
     if (io_result->evaluatedLightCount == 1) {
         io_result->ndotl = ndotl;
@@ -760,7 +760,8 @@ void runtime_direct_light_3d_accumulate_source(
                 continue;
             }
             sample_dir = vec3_scale(sample_to_light, 1.0 / sample_distance);
-            sample_ndotl = fabs(vec3_dot(hit->normal, sample_dir));
+            sample_ndotl = fabs(vec3_dot(HitInfo3D_ShadingNormalForDirection(hit, sample_dir),
+                                          sample_dir));
             sample_source_facing =
                 runtime_direct_light_3d_source_facing(source, sample_dir);
             sample_emission_weight =

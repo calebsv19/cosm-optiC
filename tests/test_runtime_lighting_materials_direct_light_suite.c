@@ -2422,6 +2422,8 @@ static int test_runtime_direct_light_3d_mesh_material_emitter_stays_diagnostic(v
 }
 
 int run_test_runtime_lighting_materials_direct_light_suite(void) {
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+
     run_test_runtime_light_set_3d_tests();
     test_runtime_direct_light_3d_shade_pixel_visible_contract();
     test_runtime_direct_light_3d_shade_pixel_shadowed_contract();

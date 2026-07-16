@@ -66,6 +66,7 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
     RuntimeSpecularReflection3DResult result = {0};
     RuntimeLightEmitterTrace3DResult trace = {0};
     Vec3 incident_dir = vec3(0.0, 0.0, 0.0);
+    Vec3 reflection_normal = vec3(0.0, 0.0, 0.0);
     Vec3 reflection_dir = vec3(0.0, 0.0, 0.0);
     double tint_luma = 1.0;
 
@@ -74,7 +75,9 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
     memset(out_result, 0, sizeof(*out_result));
     if (!scene || !hit || !payload || !payload->valid) return false;
 
-    result.weight = runtime_specular_reflection_3d_weight(payload, view_dir, hit->normal);
+    incident_dir = vec3_scale(vec3_normalize(view_dir), -1.0);
+    reflection_normal = HitInfo3D_ShadingNormalForReflection(hit, view_dir);
+    result.weight = runtime_specular_reflection_3d_weight(payload, view_dir, reflection_normal);
     if (!(result.weight > kRuntimeSpecularReflection3DMinWeight)) {
         *out_result = result;
         return false;
@@ -90,8 +93,7 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
         result.tintB /= tint_luma;
     }
 
-    incident_dir = vec3_scale(vec3_normalize(view_dir), -1.0);
-    reflection_dir = runtime_specular_reflection_3d_reflect(incident_dir, hit->normal);
+    reflection_dir = runtime_specular_reflection_3d_reflect(incident_dir, reflection_normal);
     if (!(vec3_length(reflection_dir) > 1e-9)) {
         *out_result = result;
         return false;

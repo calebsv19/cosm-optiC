@@ -1015,6 +1015,58 @@ static int test_runtime_specular_reflection_reaches_far_geometry(void) {
     return 0;
 }
 
+static int test_runtime_specular_reflection_constrains_smooth_normal_hemisphere(void) {
+    RuntimeScene3D scene;
+    HitInfo3D hit = {0};
+    RuntimeMaterialPayload3D payload = {0};
+    RuntimeSpecularReflection3DResult reflection = {0};
+    Vec3 valid_shading = vec3_normalize(vec3(0.2, 0.0, 0.98));
+    Vec3 preserved_normal = vec3(0.0, 0.0, 0.0);
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    hit.position = vec3(0.0, 0.0, 0.0);
+    hit.geometricNormal = vec3(0.0, 0.0, 1.0);
+    hit.shadingNormal = vec3_normalize(vec3(0.8, 0.0, 0.6));
+    hit.normal = hit.shadingNormal;
+    hit.triangleIndex = 0;
+    payload.valid = true;
+    payload.baseColorR = 1.0;
+    payload.baseColorG = 1.0;
+    payload.baseColorB = 1.0;
+    payload.bsdf.reflectivity = 0.98;
+    payload.bsdf.specWeight = 1.0;
+    payload.bsdf.roughness = 0.02;
+
+    ok = RuntimeSpecularReflection3D_Trace(&scene,
+                                           &hit,
+                                           &payload,
+                                           vec3(0.0, 0.0, 1.0),
+                                           NULL,
+                                           &reflection);
+    assert_true("runtime_specular_reflection_normal_constraint_trace",
+                ok && reflection.traced);
+    assert_true("runtime_specular_reflection_normal_constraint_direction",
+                vec3_dot(reflection.ray.direction, hit.geometricNormal) > 1e-6);
+    assert_true("runtime_specular_reflection_normal_constraint_geometric_offset",
+                reflection.ray.origin.z > hit.position.z);
+
+    hit.shadingNormal = valid_shading;
+    hit.normal = valid_shading;
+    preserved_normal = HitInfo3D_ShadingNormalForReflection(&hit, vec3(0.0, 0.0, 1.0));
+    assert_close("runtime_specular_reflection_normal_preserves_valid_smooth_x",
+                 preserved_normal.x,
+                 valid_shading.x,
+                 1e-9);
+    assert_close("runtime_specular_reflection_normal_preserves_valid_smooth_z",
+                 preserved_normal.z,
+                 valid_shading.z,
+                 1e-9);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_runtime_disney_3d_illuminated_mirror_preserves_reflected_geometry(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -4737,6 +4789,8 @@ static int test_runtime_disney_v2_3d_path_policy_roulette_can_terminate_recursiv
 }
 
 int run_test_runtime_lighting_materials_transport_suite(void) {
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+
     test_runtime_dielectric_transport_water_ior_fresnel_contract();
     test_runtime_dielectric_transport_explicit_unit_ior_straight_through_contract();
     test_runtime_disney_v2_transmission_sample_uses_payload_ior_contract();
@@ -4746,6 +4800,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_material_response_3d_mirror_surface_kind_parity();
     test_runtime_material_response_3d_mirror_dominance_reflects_light_emitter();
     test_runtime_specular_reflection_reaches_far_geometry();
+    test_runtime_specular_reflection_constrains_smooth_normal_hemisphere();
     test_runtime_disney_3d_illuminated_mirror_preserves_reflected_geometry();
     test_runtime_disney_3d_lower_tier_separation_contract();
     test_runtime_disney_3d_opaque_receiver_preserves_transport_support();
