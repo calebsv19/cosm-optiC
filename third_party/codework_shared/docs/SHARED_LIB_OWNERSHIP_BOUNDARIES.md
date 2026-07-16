@@ -27,6 +27,11 @@ This document defines what each shared library owns so behavior does not overlap
   LOD construction with host-selected triangle budgets.
 - `core_space`: coordinate-space mapping, transforms, and grid/window/world conversion.
 - `core_viewport2d`: renderer-agnostic 2D viewport/camera state transitions for fit-to-window, screen/content transforms, drag pan, and cursor-anchor zoom.
+- `core_viewport3d`: renderer-agnostic double-precision 3D viewport target,
+  canonical orientation/basis, camera-basis pan, anchor zoom, orbit,
+  frame/reset/resize transitions, and projected-extents fit-scale math. It
+  does not own host camera storage, projector matrices, input, picking,
+  rendering, or authoring policy.
 - `core_units`: unit vocabulary, unit conversions, and world-scale conversion primitives.
 - `core_object`: app-neutral object identity/transform/dimensional-mode validation primitives.
 - `core_authored_texture`: authored-texture manifest semantics, binding/output vocabulary, supported primitive/face-role vocabulary, and manifest-contract validation primitives.
@@ -48,6 +53,11 @@ This document defines what each shared library owns so behavior does not overlap
 - `kit_render`: shared render command vocabulary, frame-recording/submission contract, backend attach/adopt boundary, shared theme/font/text policy resolution, and renderer-adjacent external text helpers. It does not own widget behavior, pane semantics, host event loops/window lifetimes, persistence, or app-local layout/cursor policy.
 - `kit_ui`: shared immediate-mode widget expression, reusable button/state/style semantics, HUD button-row/readout layout, alpha-aware floating HUD style fields, nested corner/inset math, and optional SDL rounded-surface draw adapters. It does not own app action dispatch, playback/session policy, active theme persistence, event loops, retained focus, pane topology, or renderer lifecycle.
 - `kit_viz`: visualization-specific helpers layered on top of core contracts.
+- `kit_viewport3d`: optional renderer-neutral 3D viewport presentation helpers
+  for semantic object-outline palettes plus CPU color/depth/owner-buffer
+  silhouette, depth-discontinuity, and object-boundary composition. It does not
+  own projection, rasterization, renderer resources, cache lifetime, picking,
+  input, scene objects, or overlay visibility policy.
 - `kit_workspace_authoring`: host-agnostic authoring interaction glue (entry chord checks, trigger mapping, callback-driven action/text-step adapters) plus host-attach contract guidance for theme/font state handoff and top-level shell parity expectations.
 
 ## Non-Core Shared Modules
@@ -66,6 +76,9 @@ This document defines what each shared library owns so behavior does not overlap
     helpers, and primitive 2D contact queries in `core_collision2d`.
   - Put world/unit placement conversion in `core_space`.
   - Put generic 2D screen/content viewport-camera transforms in `core_viewport2d`.
+  - Put canonical 3D editor viewport target/orientation/scale transitions in
+    `core_viewport3d`; keep runtime camera/projector representation and gesture
+    policy in app adapters.
 
 - Scene vs object ownership:
   - `core_scene` owns app-agnostic scene structure/schema.
@@ -99,6 +112,8 @@ This document defines what each shared library owns so behavior does not overlap
 
 - Do not duplicate generic math helpers in app code if `core_math` already owns them.
 - Do not place SDL input routing, mouse-wheel policy, or app pane hit-testing in `core_viewport2d`.
+- Do not place SDL input routing, projector construction, picking, scene bounds
+  resolution, or authoring arbitration in `core_viewport3d`.
 - Do not place scene-schema types in app-specific UI/render modules.
 - Do not place authored-texture manifest field meaning in app-local exporter/loader code once `core_authored_texture` is adopted.
 - Do not add compiler include emulation behavior to runtime core libs.

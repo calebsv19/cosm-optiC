@@ -179,6 +179,9 @@ contract.
 - Does not own UI selection, hitboxes, camera projection, renderer state,
   scene placement, mesh repair, retopo, GPU buffers, BVHs, solver proxies,
   collision meshes, or SDF generation
+- Proven consumers: LineDrawing retains its CPU depth-raster/cache policy;
+  RayTracing retains its native Vulkan editor rendering, mode controls,
+  picking, overlays, final geometry, and BVH authority.
 
 ---
 
@@ -206,6 +209,23 @@ contract.
 - Owns pure 2D viewport state and transform math only
 - No SDL/input event ownership
 - No map projection semantics, scene import placement, or renderer backend coupling
+
+---
+
+### core_viewport3d (BOOTSTRAP)
+**Role:** Shared renderer-neutral 3D editor viewport navigation contract.
+**Responsibilities:**
+- Double-precision effective viewport-center target and scale state
+- Canonical radian orientation and camera right/screen-down/forward basis
+- Camera-basis pan, anchor-preserving zoom, orbit, frame, reset, and resize transitions
+- Projected-extents fit-scale resolution with host-selected padding
+- Invalid-input rejection without output mutation
+
+**Boundary:**
+- Depends only on `core_base`; uses a domain-specific double vector ABI
+- No SDL/input, projector matrices, selection/bounds resolution, picking,
+  rendering, authoring, persistence, geometry, or BVH ownership
+- RayTracing and LineDrawing remain responsible for thin runtime adapters
 
 ---
 
@@ -670,6 +690,18 @@ contract.
 - Owns app-neutral frame-stage timing math helpers.
 - Owns app-neutral input-frame cumulative totals helpers.
 - Does not own program input policy, routing behavior, or render behavior.
+
+### kit_viewport3d (BOOTSTRAP)
+**Role:** Optional renderer-neutral 3D editor viewport presentation helpers.
+**Notes:**
+- Owns semantic object-outline palette roles and CPU buffer composition for
+  silhouettes, relative depth discontinuities, and object-owner boundaries.
+- Accepts borrowed float or double depth buffers and optional object-owner
+  buffers; supports filled-surface and outline-only composition.
+- Does not own `core_viewport3d` navigation state, projection, rasterization,
+  renderer/GPU resources, cache lifetime, picking, scene state, input, or
+  app overlay visibility policy.
+- RayTracing and LineDrawing are the first source-level proving hosts.
 
 ### kit_graph (ACTIVE)
 **Role:** Shared graph visualization kit.
