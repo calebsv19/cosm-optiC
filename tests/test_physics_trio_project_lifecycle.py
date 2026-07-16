@@ -36,6 +36,7 @@ class PhysicsTrioLifecycleTests(unittest.TestCase):
                 "job_id": "ray-tracing--lifecycle-fixture--20260713T000000Z--test0001",
                 "ray_version": "0.6.2",
                 "physics_version": "0.3.1",
+                "execution_profile": "trio-headless-v1-mesh-sidecar",
             },
             "queue": {"staging_root": "staging"},
         }
@@ -65,6 +66,15 @@ class PhysicsTrioLifecycleTests(unittest.TestCase):
         planner = plan["phases"][-1]["commands"][0]["argv"]
         self.assertIn("--dry-run", planner)
         self.assertNotIn("submit", planner)
+        export = plan["phases"][3]["commands"][0]["argv"]
+        profile_index = export.index("--execution-profile")
+        self.assertEqual(export[profile_index + 1], "trio-headless-v1-mesh-sidecar")
+        queue_validate = plan["phases"][4]["commands"][0]["argv"]
+        remote_root_index = queue_validate.index("--remote-root")
+        self.assertEqual(
+            queue_validate[remote_root_index + 1],
+            ".codework-worker/export-dropbox",
+        )
 
     def test_changed_recipe_cannot_resume_existing_status(self) -> None:
         run_root = self.root / "run"

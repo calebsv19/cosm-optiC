@@ -21,6 +21,7 @@ SCENE_PROJECT_SCHEMA = "codework_scene_project_v1"
 RENDER_REQUEST_SCHEMA = "ray_tracing_agent_render_request_v1"
 CACHE_MANIFEST_SCHEMA = "physics_sim_active_cache_manifest_v1"
 PACKAGE_MODE = "scene-plus-physics-cache"
+DEFAULT_SUBMISSION_PROFILE = "trio-headless-v1-mesh-sidecar"
 PORTABLE_ONLY_PROJECT_RELPATHS = {
     "scene_project.json",
     "scene_authoring.json",
@@ -159,6 +160,47 @@ def mesh_asset_ids(scene: dict[str, Any]) -> list[str]:
             ids.append(asset_id)
             seen.add(asset_id)
     return ids
+
+
+def validate_mesh_asset_runtime(asset: dict[str, Any], path: Path) -> None:
+    if asset.get("schema_family") != "codework_geometry":
+        raise SceneProjectExportError(f"mesh asset schema_family must be codework_geometry: {path}")
+    if asset.get("schema_variant") != "mesh_asset_runtime_v1":
+        raise SceneProjectExportError(f"mesh asset schema_variant must be mesh_asset_runtime_v1: {path}")
+    mesh = asset.get("mesh")
+    if not isinstance(mesh, dict):
+        raise SceneProjectExportError(f"mesh asset mesh object is required: {path}")
+    vertices = mesh.get("vertices")
+    triangles = mesh.get("triangles")
+    if not isinstance(vertices, list) or not vertices:
+        raise SceneProjectExportError(f"mesh asset vertices must be a non-empty array: {path}")
+    if not isinstance(triangles, list) or not triangles:
+        raise SceneProjectExportError(f"mesh asset triangles must be a non-empty array: {path}")
+    if mesh.get("vertex_count") != len(vertices) or mesh.get("triangle_count") != len(triangles):
+        raise SceneProjectExportError(f"mesh asset counts must match geometry arrays: {path}")
+
+
+def rewrite_scene_runtime_mesh_paths(scene: dict[str, Any]) -> dict[str, Any]:
+    rewritten = json.loads(json.dumps(scene))
+    for obj in rewritten.get("objects", []):
+        if not isinstance(obj, dict) or obj.get("object_type") != "mesh_asset_instance":
+            continue
+        geometry_ref = obj.get("geometry_ref")
+        if not isinstance(geometry_ref, dict) or geometry_ref.get("kind") != "mesh_asset":
+            continue
+        asset_id = str(geometry_ref.get("id") or "").strip()
+        if not asset_id:
+            continue
+        extensions = obj.setdefault("extensions", {})
+        if not isinstance(extensions, dict):
+            extensions = {}
+            obj["extensions"] = extensions
+        line_drawing = extensions.setdefault("line_drawing", {})
+        if not isinstance(line_drawing, dict):
+            line_drawing = {}
+            extensions["line_drawing"] = line_drawing
+        line_drawing["runtime_mesh_path"] = f"assets/mesh_assets/{asset_id}.runtime.json"
+    return rewritten
 
 
 def simulation_window(request: dict[str, Any]) -> tuple[int, int, int, list[int]]:
@@ -357,6 +399,7 @@ def build_queue_config(
     request: dict[str, Any],
     inspection_path: Path,
     force_worker_id: str | None = None,
+    execution_profile: str = DEFAULT_SUBMISSION_PROFILE,
 ) -> dict[str, Any]:
     frame_count = int_render_value(request, "frame_count", 1, minimum=1)
     start_frame = int_render_value(request, "start_frame", 0, minimum=0)
@@ -368,6 +411,7 @@ def build_queue_config(
     submit_args = [
         "--job-id", job_id,
         "--job-id-policy", "validate",
+        "--execution-profile", execution_profile,
         "--profile", "preview",
         "--ray-version", ray_version,
         "--start-stage", "ray_tracing",
@@ -483,10 +527,13 @@ def export_scene_plus_physics_cache(
     ray_version: str,
     physics_version: str,
     force_worker_id: str | None = None,
+    execution_profile: str = DEFAULT_SUBMISSION_PROFILE,
     force: bool = False,
 ) -> dict[str, Any]:
     project_root = project_root.resolve()
     output_root = output_root.resolve()
+    if not isinstance(execution_profile, str) or not execution_profile.strip():
+        raise SceneProjectExportError("execution profile must be a non-empty string")
     try:
         project_validation = validate_project(project_root)
     except SceneProjectValidationError as exc:
@@ -562,16 +609,13 @@ def export_scene_plus_physics_cache(
     asset_sources: list[tuple[str, Path]] = []
     asset_ids = mesh_asset_ids(scene)
     for asset_id in asset_ids:
-        asset_sources.append(
-            (
-                asset_id,
-                resolve_project_file(
-                    project_root,
-                    f"assets/mesh_assets/{asset_id}.runtime.json",
-                    field=f"mesh asset {asset_id}",
-                ),
-            )
+        asset_path = resolve_project_file(
+            project_root,
+            f"assets/mesh_assets/{asset_id}.runtime.json",
+            field=f"mesh asset {asset_id}",
         )
+        validate_mesh_asset_runtime(read_json(asset_path), asset_path)
+        asset_sources.append((asset_id, asset_path))
     vf3d_sources: list[tuple[Path, Path, Path | None]] = []
     for frame in vf3d_frames:
         source = resolve_child_file(
@@ -613,10 +657,11 @@ def export_scene_plus_physics_cache(
         has_object_manifest=object_manifest_path is not None,
     )
     snapshot_cache = rewrite_cache_manifest(cache_manifest, selected_indices, start, count, stride)
+    snapshot_scene = rewrite_scene_runtime_mesh_paths(scene)
     project_request = rewrite_project_render_request(source_request, item_name, job_id)
     worker_request = rewrite_worker_render_request(source_request, item_name, job_id)
     write_derived_json(bundle_root / "scene_project.json", snapshot_project, project_manifest_path, source_map)
-    copy_file(runtime_path, bundle_root / "scene_runtime.json", source_map)
+    write_derived_json(bundle_root / "scene_runtime.json", snapshot_scene, runtime_path, source_map)
     if authoring_path:
         copy_file(authoring_path, bundle_root / "scene_authoring.json", source_map)
     if object_manifest_path:
@@ -745,6 +790,7 @@ def export_scene_plus_physics_cache(
         worker_request,
         bundle_root / "presets" / "inspection_settings.json",
         force_worker_id,
+        execution_profile,
     )
     write_json(item_root / "worker_job_queue.json", queue_config)
 

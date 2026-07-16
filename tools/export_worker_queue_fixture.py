@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from scene_project_worker_export import (
+    DEFAULT_SUBMISSION_PROFILE,
     SceneProjectExportError,
     export_scene_plus_physics_cache,
 )
@@ -542,6 +543,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ray-version", default=DEFAULT_RAY_VERSION)
     parser.add_argument("--physics-version", default=DEFAULT_PHYSICS_VERSION)
     parser.add_argument(
+        "--execution-profile",
+        default=DEFAULT_SUBMISSION_PROFILE,
+        help=(
+            "VPS submission profile for scene-plus-physics-cache exports. "
+            f"Defaults to {DEFAULT_SUBMISSION_PROFILE}."
+        ),
+    )
+    parser.add_argument(
         "--force-worker-id",
         help="Optionally hard-target the project-backed queue item to one worker id.",
     )
@@ -573,6 +582,7 @@ def main() -> int:
                 ray_version=args.ray_version,
                 physics_version=args.physics_version,
                 force_worker_id=args.force_worker_id,
+                execution_profile=args.execution_profile,
                 force=args.force,
             )
         else:

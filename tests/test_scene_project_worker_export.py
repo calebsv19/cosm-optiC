@@ -64,6 +64,15 @@ class SceneProjectWorkerExportTests(unittest.TestCase):
         self.assertTrue((bundle / "assets/physics/active/water_surface_000002.json").is_file())
         self.assertFalse((bundle / "assets/physics/active/water_surface_000004.json").exists())
 
+        scene_runtime = read_json(bundle / "scene_runtime.json")
+        mesh_object = next(
+            obj for obj in scene_runtime["objects"] if obj.get("object_type") == "mesh_asset_instance"
+        )
+        self.assertEqual(
+            mesh_object["extensions"]["line_drawing"]["runtime_mesh_path"],
+            "assets/mesh_assets/fixture_mesh.runtime.json",
+        )
+
         vf3d_manifest = read_json(bundle / "assets/vf3d/active/manifest.json")
         self.assertEqual(vf3d_manifest["run_name"], ".")
         self.assertEqual([frame["frame_index"] for frame in vf3d_manifest["frames"]], [0, 2])
@@ -103,7 +112,20 @@ class SceneProjectWorkerExportTests(unittest.TestCase):
             bundle / "request/payload/physics_sim/active_cache_manifest.json"
         )
         self.assertEqual(worker_cache["scene_bundle"], "assets/physics/active/scene_bundle.json")
+        worker_scene = read_json(bundle / "request/payload/line_drawing/scene_runtime.json")
+        worker_mesh_object = next(
+            obj for obj in worker_scene["objects"] if obj.get("object_type") == "mesh_asset_instance"
+        )
+        self.assertEqual(
+            worker_mesh_object["extensions"]["line_drawing"]["runtime_mesh_path"],
+            "assets/mesh_assets/fixture_mesh.runtime.json",
+        )
         queue = read_json(Path(result["worker_job_queue_path"]))
+        profile_index = queue["submit_args"].index("--execution-profile")
+        self.assertEqual(
+            queue["submit_args"][profile_index + 1],
+            "trio-headless-v1-mesh-sidecar",
+        )
         self.assertNotIn("--ray-disable-volume", queue["submit_args"])
         volume_index = queue["submit_args"].index("--ray-volume-source-path")
         self.assertEqual(
@@ -135,6 +157,23 @@ class SceneProjectWorkerExportTests(unittest.TestCase):
     def test_missing_requested_frame_is_rejected_without_partial_item(self) -> None:
         (self.project / "assets/vf3d/active/frame_000002.vf3d").unlink()
         with self.assertRaisesRegex(SceneProjectExportError, "file is missing"):
+            self.export()
+        self.assertFalse((self.output / "inbox/r2b-fixture").exists())
+
+    def test_metadata_only_mesh_asset_is_rejected_without_partial_item(self) -> None:
+        mesh_path = self.project / "assets/mesh_assets/fixture_mesh.runtime.json"
+        mesh_path.write_text(
+            json.dumps(
+                {
+                    "schema_variant": "mesh_asset_runtime_v1",
+                    "asset_id": "fixture_mesh",
+                    "vertex_count": 8,
+                    "triangle_count": 12,
+                }
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(SceneProjectExportError, "schema_family"):
             self.export()
         self.assertFalse((self.output / "inbox/r2b-fixture").exists())
 
