@@ -1353,9 +1353,9 @@ Last updated: 2026-07-16
   through a thin adapter over shared `core_viewport3d >= 0.1.0`; RayTracing
   still owns its durable double
   target storage, projector construction, zoom-domain policy, input, picking,
-  overlays, mesh preview, and rendering. The prior local math remains a
-  rollback oracle until cross-app hands-on acceptance and clean subtree
-  adoption close CV3D4.
+  overlays, mesh preview, and rendering. Managed shared snapshot `e804658`
+  now carries the matching core/kit contracts; the prior local math remains a
+  rollback oracle only until cross-app hands-on acceptance closes CV3D4.
 - Solid and Material imported-mesh preview fills use transformed LOD face
   normals for two-sided flat color variation. A Ray-local reduced-resolution
   depth surface preserves cross-triangle occlusion and interactive caching.
