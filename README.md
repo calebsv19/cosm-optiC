@@ -28,6 +28,10 @@ Identity note:
 ## Implemented Today
 
 - native `3D` output is now RGB-aware through the full shipped ladder
+- a default-off production photon-mapping lane is implemented through PPM-23,
+  with deterministic emission, general mixed-BSDF scene traversal, multi-bounce
+  and nested-medium transport, measured attenuation, transactional surface/beam
+  maps, and headless comparison proof; it is not yet a promoted product default
 - native `3D` config now persists a dedicated `3D` integrator lane plus bounded temporal-frame, bounce-depth, roulette, denoise, top-fill, and atmosphere-source settings independently of legacy `2D` state
 - native `3D` support layers include:
   - tile preview

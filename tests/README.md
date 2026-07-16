@@ -63,7 +63,16 @@ make -C ray_tracing test-runtime-scene-bridge-contract
 make -C ray_tracing test-ray-tracing-runtime-host-lifecycle-contract
 make -C ray_tracing test-ray-tracing-core-sim-runtime-frame-contract
 make -C ray_tracing test-scene-editor-pane-host-contract
+make -C ray_tracing test-scene-editor-viewport3d-bridge-contract
+make -C ray_tracing test-scene-editor-viewport-nav-contract
 ```
+
+The viewport3d bridge target proves Ray orientation conversion, canonical pan,
+anchor zoom, orbit, frame, resize, validation, and invalid-input nonmutation against shared
+`core_viewport3d >= 0.1.0`. The retained viewport-navigation target remains the
+rollback oracle for the EVN3 canonical pan and anchor fixtures; the integrated
+`runtime_scene_editor` group supplies frame, orbit, resize/projector, and input
+adapter coverage.
 
 Scene-project worker snapshot lane:
 
@@ -132,7 +141,9 @@ Phase 5 surface-cache replacement is covered by focused runner groups:
 proves receiver-cache lifecycle/deposit/sample behavior, and
 `TEST_RUNNER_GROUP=runtime_caustic_transport_3d make -C ray_tracing test` proves
 transport can populate a surface cache and Disney v2 can sample it with the
-analytic caustic sidecar disabled.
+analytic caustic sidecar disabled. Debug-record assertions now stop safely and
+clean up when record zero is absent, so a transport regression reports the
+failed assertion instead of dereferencing a null debug path.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_trace_3d make -C ray_tracing test`
 is the focused PPM-1/PPM-8 photon-mapper trace proof. It covers isolated photon
@@ -170,12 +181,12 @@ is the focused PPM-21 seeded sampling and roulette proof. It validates stable
 sample replay from photon identity plus depth, independent lobe/direction/
 roulette dimensions, mixed-lobe population frequencies, RGB expected-energy
 reconciliation, shared path-depth-policy roulette decisions, survival
-reweighting, termination accounting, and statistical unbiasedness. PPM-23.2
-adds nested-medium eta selection in the continuation suite; production-default
-integration remains later work.
+reweighting, termination accounting, and statistical unbiasedness. PPM-23
+adds nested-medium eta selection and attenuation in the continuation suite;
+production-default integration remains later work.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_path_transport_3d make -C ray_tracing test`
-is the focused PPM-22 continuation and PPM-23.1/23.2 integration proof. The
+is the focused PPM-22 continuation and completed PPM-23 integration proof. The
 PPM-22.1 fixture traces a seeded
 photon between reflective surfaces for three shared-TLAS hits, resolves material
 state and records a distinct sample stream at every depth, applies geometric-
@@ -202,17 +213,28 @@ glass-to-air eta with four successful no-change transitions. PPM-23.2 adds a
 closed air/glass/water/glass/air scene that proves four ordered object/material
 identities, push/push/pop/pop transitions, `1.0/1.5`, `1.5/1.33`, `1.33/1.5`,
 and `1.5/1.0` interface pairs, refraction shape, return to air, and exact replay.
-Attenuation, beam medium identity, storage behavior, and production defaults do
-not change in this slice.
+PPM-23.3 applies authored Beer-Lambert absorption over measured segments before
+BSDF selection, records pre/post throughput and medium-absorbed flux without
+changing path PDF, preserves attenuation and stack state across TIR, and stores
+beam records with the traced segment medium identity. PPM-23.4 verifies that
+malformed medium transitions terminate through `fail_closed` with exact reason
+and depth readback before any map mutation.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_medium_stack_3d make -C ray_tracing test`
-is the independent PPM-23.1/23.2 medium-state proof. It validates explicit air
+is the independent PPM-23 medium-state proof. It validates explicit air
 initialization, material metadata conversion, ordered glass/water entry and
 exit, non-mutating nested interface-IOR resolution, TIR no-change,
 duplicate-entry and wrong-exit mismatch records, bounded overflow, air
-underflow, invalid entries, counters, and stable reason labels. No scene
-traversal, direction sampling, attenuation, or map mutation occurs in this
-group.
+underflow, invalid entries, counters, stable reason labels, and measured-distance
+segment transmittance for authored absorption. No scene traversal, direction
+sampling, or map mutation occurs in this group.
+
+`TEST_RUNNER_GROUP=runtime_caustic_photon_medium_acceptance_3d make -C ray_tracing test`
+is the integrated PPM-23.4 malformed-boundary acceptance proof. Duplicate entry,
+non-top exit, underflow, and overflow scenarios must retain their initial stack,
+report `medium_transition_rejected` plus the exact `fail_closed` reason/depth,
+leave the trace invalid, and produce zero surface/beam map records and zero
+store attempts.
 
 `TEST_RUNNER_GROUP=runtime_caustic_photon_map_3d make -C ray_tracing test`
 is the focused PPM-2 surface photon-map proof. It covers map allocation,

@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-07-08
+Last updated: 2026-07-13
 
 ## Bundle Contract
 
@@ -16,7 +16,7 @@ Last updated: 2026-07-08
 
 ## Public Package Discovery
 
-The current public desktop package release is `optiC 0.5.0`.
+The current public desktop package release is `optiC 0.6.1`.
 
 Fresh agents should discover public release downloads through the Ecosystem
 agent manifest:
@@ -25,10 +25,12 @@ agent manifest:
 https://ecosystem.calebsv.tech/agents/programs/optic.json
 ```
 
-The manifest links both macOS desktop architectures:
+The manifest links both macOS desktop architectures and the Linux x86_64 GUI
+desktop package:
 
-- `optiC-0.5.0-macOS-arm64-stable.zip`
-- `optiC-0.5.0-macOS-x86_64-stable.zip`
+- `optiC-0.6.1-macOS-arm64-stable.zip`
+- `optiC-0.6.1-macOS-x86_64-stable.zip`
+- `optiC-0.6.1-linux-x86_64-desktop-stable.tar.gz`
 
 It also provides immutable version URLs, SHA-256 values, and size metadata. A
 public package smoke should verify those values without rebuilding, replacing,
@@ -76,16 +78,17 @@ Future release-artifact hygiene:
 Linux desktop package target:
 
 - status:
-  private proof target only; not a public release target yet
+  public package baseline at `0.6.1`; later source builds remain private until
+  an approved release-control lane publishes them
 - package class:
   `desktop_app_linux`
 - artifact role:
   `desktop_app`
 - runtime:
   `linux_gui`
-- expected private artifact name:
+- artifact name:
   `optiC-<version>-linux-x86_64-desktop-stable.tar.gz`
-- expected private checksum sidecar:
+- checksum sidecar:
   `optiC-<version>-linux-x86_64-desktop-stable.tar.gz.sha256`
 - package root layout:
 
@@ -126,8 +129,8 @@ again, and fails if the second SHA differs from the first. This proves
 deterministic tar/gzip metadata for stable staged content; it does not claim
 full compiler/linker output reproducibility.
 
-Before any public Linux desktop release, the package must pass a real-display
-unpacked-package proof on the Linux PC. The minimum proof is:
+Before any new public Linux desktop release, the package must pass a
+real-display unpacked-package proof on the Linux PC. The minimum proof is:
 
 - build from a named source branch/commit;
 - run `package-linux-desktop-self-test`;
@@ -156,6 +159,25 @@ Reusable Linux GUI package/proof flow for future programs:
 9. Keep public release promotion separate from private proof. Promotion needs
    an explicit release-control approval, version decision, and public metadata
    update.
+
+## Linux Folder Selection
+
+The menu Input Root, Output Root, Mesh Asset Root, batch frame-output root,
+batch video-output root, and authored-texture file control use a platform
+adapter. macOS uses `osascript`; Linux tries `zenity` and then `kdialog`.
+Selection, fallback, cancellation, and unavailable-helper behavior have
+deterministic tests in the Linux package self-test.
+
+The picker-capable package was proven and promoted as the canonical local
+optiC `0.6.1` install on the Linux PC after an operator click test. That local
+promotion did not replace the public `0.6.1` archive. The current source tree
+is a separate `0.7.0` local release candidate and has not been published as a
+Linux desktop package. Its private P1/P2 source also derives input, output, and
+video roots from `XDG_DATA_HOME`, uses `XDG_CONFIG_HOME/user-dirs.dirs` before
+the legacy Desktop source fallback, and supplies an unopened-yet directory
+adapter that tries Linux `xdg-open` then `gio open`. A fresh Linux-PC package
+proof is still required before any release decision; the current PC blocker is
+disk quota exhaustion while writing deterministic fake-helper fixtures.
 
 ## Runtime Efficiency Defaults
 

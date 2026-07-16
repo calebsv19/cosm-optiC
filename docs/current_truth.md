@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-13
+Last updated: 2026-07-16
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -112,17 +112,24 @@ Last updated: 2026-07-13
 ## Current Shipped State
 - Legacy `2D` rendering and editor flows remain present.
 - Linux GUI package status:
-  - `desktop_app_linux` is proven as a private Linux desktop package class for
-    optiC, separate from the already-published Linux headless worker/CLI
-    artifact.
-  - The private proof package shape is
-    `optiC-<version>-linux-x86_64-desktop-stable.tar.gz` plus `.sha256`
-    sidecar.
-  - Release-grade Linux GUI proof requires deterministic archive metadata,
-    package self-test, clean unpacked launcher self-test, real Linux PC
-    desktop-session launch, app-window screenshots, and a runtime action marker.
-  - This is not yet a public Linux GUI release; public promotion still requires
-    a separate release-control version/export/metadata/readback lane.
+  - public optiC `0.6.1` includes the
+    `optiC-0.6.1-linux-x86_64-desktop-stable.tar.gz` GUI package, separate from
+    the Linux headless worker/CLI artifact;
+  - its release proof covered deterministic archive metadata, package
+    self-test, clean unpacked launcher self-test, a real Linux PC desktop
+    session, app-window capture, and a runtime action marker;
+  - a later private `0.6.1` PC-local build adds native Linux folder selection
+    through `zenity` with `kdialog` fallback and is now the canonical PC install
+    after operator confirmation; it did not replace the public archive;
+  - the separate private `0.7.0` source candidate adds the same shell-free
+    native file selection to authored-texture binding, XDG-derived packaged
+    input/output/video roots, XDG Desktop-aware source fallback, and a future
+    directory opener (`xdg-open`, then `gio open` on Linux). These additions
+    are locally tested and remain unpublished while Linux-PC package proof is
+    completed;
+  - the current source tree is a separate `0.7.0` local release candidate. A
+    `0.7.0` Linux GUI artifact still requires an approved build, proof, export,
+    metadata, and public readback lane.
 - Native `3D` runtime ladder is shipped through:
   - `Direct Light`
   - `Diffuse Bounce`
@@ -159,9 +166,9 @@ Last updated: 2026-07-13
   genuinely low-roughness mirror/glossy pixels, skips high-temporal-activity
   pixels, leaves rough reflective stable interiors eligible for blur, and
   exposes raw-versus-reconstructed/preserved/skipped diagnostics through native
-  render stats. Disney v2 also defaults to an analytic caustic sidecar policy
-  for focused glass caustic contribution. Headless requests can set
-  `inspection.caustic_mode = "off"` for comparison renders; explicit
+  render stats. Disney v2 caustics default to `off`. Headless requests can set
+  `inspection.caustic_mode = "analytic"` for the focused glass receiver proof;
+  explicit
   `transport` / `physical` requests can populate bounded physical caustic
   volume and/or surface caches when the matching cache flags are enabled.
   Volume-cache transport requires a sampleable VF3D attachment; without one,
@@ -792,6 +799,19 @@ Last updated: 2026-07-13
       instance scale uses the inverse transpose, and
       `RAY_TRACING_MESH_SHADING_MODE=flat` restores face-normal shading for
       comparison
+    - direct-light and perfect-specular evaluation constrain smooth shading
+      normals against geometric `Ng` only when needed. Perfect mirror rays use
+      the minimum deterministic `Ns`-toward-`Ng` blend that keeps the outgoing
+      direction in the real triangle hemisphere, while ray offsets and
+      visibility remain geometric-normal authoritative
+    - desktop/runtime configuration persists an imported-mesh normal default:
+      `flat`, `smooth`, or `crease-aware`; the default is crease-aware at
+      `60` degrees and the `Scene + Mode` menu exposes it separately from the
+      native `3D` framebuffer upscale selector
+    - this menu setting is an authoring default for the next STL/runtime-sidecar
+      compile only. It deliberately does not mutate, invalidate, or reload an
+      already compiled sidecar; selected-asset recompilation remains a future
+      explicit workflow
     - runtime scenes may reference `mesh_asset_instance` objects through
       `geometry_ref.kind = "mesh_asset"`
     - file-backed assets are resolved beside the runtime scene from
@@ -1144,6 +1164,37 @@ Last updated: 2026-07-13
   - `tools/scene_project_worker_export.py` for non-UI project snapshot
     selection, copying, path normalization, and lineage
 
+## Production Photon Mapping
+
+- The production photon-mapper implementation is complete through PPM-23 on
+  current `main`. It includes deterministic light-backed emission, general
+  shared-TLAS/BLAS traversal, mixed diffuse/glossy/specular/transmission and
+  emissive events, multi-object and multi-bounce continuation, continuing TIR,
+  nested air/glass/water medium state, measured-distance Beer-Lambert
+  attenuation, fail-closed malformed-boundary diagnostics, transactional
+  surface-photon and volume-beam storage, accelerated radius queries, persistent
+  request-owned maps, and explicit energy/cost/readback ledgers.
+- Product integration currently exposes `off`, `reference`, and `production`
+  through headless request inspection fields. `production` selects the
+  `photon_map` transport engine; contribution remains separately gated by
+  `caustic_photon_render_contribution_enabled`, and native render-prep
+  population remains separately gated. Defaults keep ordinary caustics off and
+  photon render contribution suppressed.
+- Production-map results currently reach Disney v2 through an explicit
+  conversion into the existing display-facing surface and volume caustic
+  caches. Disney v2 does not yet directly sample photon or beam maps.
+- The current menu has caustic controls but does not yet provide one settled
+  user-facing selector that makes existing caustics and production photon
+  mapping mutually exclusive. The proven comparison surface is the headless
+  PPM-10 product matrix with `off`, `reference`, `production`, populated, traced,
+  and render-prep cells plus request JSON, summaries, PNG frames, a contact
+  sheet, and numeric report output.
+- The next implementation boundary is PPM-24 estimator policy and convergence
+  diagnostics, followed by the deliberate product toggle/matrix connection,
+  direct integrator sampling decision in PPM-25, and production quality/default
+  gates in PPM-26. Current implementation must not be described as a promoted
+  production default.
+
 ## Recommended Scene-Authoring / Render Loop
 - Treat `line_drawing` as the canonical source for room/object/camera/light
   authoring and `ray_tracing` as the downstream preview, render, and publish
@@ -1273,9 +1324,48 @@ Last updated: 2026-07-13
 - Export/video roots are runtime-config driven and menu-editable.
 
 ## Current Boundary
+- Linux desktop runtime parity P1/P2 is complete in the private `0.7.0`
+  source candidate: authored-texture file selection shares the native picker
+  contract; package runtime roots are XDG-derived; program/export discovery no
+  longer hardcodes `~/Desktop/CodeWork`; and the directory opener is available
+  for future UI actions. The `0.6.1` public artifact and canonical PC install
+  remain distinct and unchanged.
+- The next proof boundary is a fresh Linux-PC package run once the PC quota
+  permits temporary helper fixtures and valid visual capture. Do not
+  infer publication, installer replacement, or scene-asset resolution from the
+  local source candidate.
 - Do not reopen closed `I5`/`I6` slices.
 - Treat procedural material-texture sampling plus focused Material editor mode as the active post-`I6` material authoring foundation.
-- Preserve Material mode's object-focused viewport controls while the next authoring controls land: `F` should frame the focused object, and wheel zoom should accumulate around that fit instead of resetting on every scroll tick.
+- Controlled native-`3D` scene navigation now keeps a durable finite target:
+  MMB drag pans in the camera screen basis, Alt/Option+LMB orbits without
+  discarding that target, wheel zoom preserves the cursor anchor, and `F`
+  explicitly reframes the selected object or falls back to the whole scene.
+  Scene/object projectors, picking, and overlays use the same target-aware
+  projector state; navigation does not change mesh-preview geometry policy.
+- Wheel/trackpad zoom limits are established by initial/explicit frame
+  operations and remain independent of incidental selection. Deltas are
+  direction-normalized, fractional, reciprocal, and bounded, preventing the
+  selected-object clamp jump that could translate the cursor anchor severely.
+- EVN3 canonical fixtures now match LineDrawing's camera-basis pan and
+  anchor-preservation invariants, with runtime projector coverage confirming
+  resize preserves target and orientation. CV3D2 routes RayTracing pan,
+  anchor zoom, controlled orbit, shared fit/frame, and resize transitions
+  through a thin adapter over shared `core_viewport3d >= 0.1.0`; RayTracing
+  still owns its durable double
+  target storage, projector construction, zoom-domain policy, input, picking,
+  overlays, mesh preview, and rendering. The prior local math remains a
+  rollback oracle until cross-app hands-on acceptance and clean subtree
+  adoption close CV3D4.
+- Solid and Material imported-mesh preview fills use transformed LOD face
+  normals for two-sided flat color variation. A Ray-local reduced-resolution
+  depth surface preserves cross-triangle occlusion and interactive caching.
+  Stable per-object editor accents and silhouette/depth/object-owner boundaries
+  now route through optional shared `kit_viewport3d >= 0.1.0`; selected outlines
+  override hover outlines. Object mode suppresses passive path clutter and the
+  remaining bounds/cage/construction guides use lower emphasis so the visible
+  surfaces define the scene hierarchy. Projection, rasterization, cache policy,
+  picking, SDL upload, overlays, and final rendering remain RayTracing-owned;
+  allocation or upload failure falls back to the prior uniform GPU fill.
 - Keep the next material/material-authoring slice focused on authoring-side layer-role conventions, then coexistence polish between procedural overlays and authored bitmap bindings, plus durable group/preset controls on top of the now-live manifest path.
 - Keep deep-render start/resume behavior stable while adjacent runtime-scene buckets settle.
 - Keep the new menu-render, digest-pick, and native `3D` test-family seams aligned with their current helper/file boundaries while larger file-split work continues.

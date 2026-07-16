@@ -63,6 +63,25 @@ A trustworthy close-up should show all of the following:
 - different smooth and flat image hashes;
 - zero route parity mismatches, traversal overflows, and silent fallbacks.
 
+The high-tier matrix is the correctness/parity gate. For a human-readable
+low-poly comparison, use a purpose-built small fixture as well: smooth shading
+changes BRDF/reflection response but does not add silhouette geometry. The
+current 120-triangle rounded-slab probe confirms distinct flat, smooth, and
+60-degree crease-aware behavior. Its earlier fully smooth render exposed a dark
+diagonal wedge because the perfect-specular path reflected directly around an
+unconstrained interpolated `Ns`. The runtime now blends `Ns` toward `Ng` only as
+far as necessary to keep the reflected ray in the geometric surface hemisphere;
+the fresh smooth rerender removes that wedge, preserves smooth response, and
+keeps the crease-aware hard-edge result distinct.
+
+This acceptance is provisional until the policy is exercised on a real
+imported asset compiled after the menu setting is chosen. Reopen the lane if a
+close reflective view of that asset shows a diagonal dark wedge, a discontinuity
+that tracks triangle boundaries, or loss of an intended hard crease. Capture the
+asset sidecar, selected normal mode/crease angle, camera/light/material settings,
+and a flat-versus-smooth-versus-crease-aware comparison before changing the
+normal algorithm again.
+
 Cold JSON load/normal payload cost must be reported separately from steady-state
 render time. A same-scene unexplained render regression above 10 percent is a
 review blocker for this lane.

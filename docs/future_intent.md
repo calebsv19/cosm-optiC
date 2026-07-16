@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-06-16
+Last updated: 2026-07-14
 
 ## Direction
 
@@ -62,7 +62,26 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
      Disney, and Disney-v2 route identities while centralizing shared
      environment-light normalization.
 
-5. Defer VF3D / `physics_sim` ingestion until the next internal renderer boundary is chosen and stabilized.
+5. Finish production photon mapping through explicit product boundaries.
+   - Treat completed PPM-23 transport, nested media, attenuation, and
+     fail-closed acceptance as current implementation truth.
+   - Implement PPM-24 estimator selection and convergence/rejected-energy
+     diagnostics before visual tuning or default promotion.
+   - Connect existing caustics and production photon mapping through one
+     explicit user-facing mode contract and deterministic output matrix; keep
+     simultaneous operation disabled initially unless independent accounting
+     proves a clear use case.
+   - Decide direct Disney v2 photon/beam-map sampling in PPM-25 only after the
+     cache-conversion bridge and estimator contracts are measurable.
+   - Keep production/default promotion in PPM-26 behind numeric, visual, cost,
+     lifecycle, and regression acceptance.
+
+6. Preserve bounded VF3D / `physics_sim` ingestion while renderer quality work
+   proceeds.
+   - Existing volume and water sidecar ingestion is current behavior, not
+     deferred intent.
+   - Avoid broadening ingestion formats until photon/caustic estimator and
+     product-mode boundaries are stable.
 
 ## Structural Intent
 
