@@ -72,12 +72,17 @@ static void SceneEditorResumeAfterPreview(SceneEditor* editor);
 #define SCENE_EDITOR_DIGEST_OVERLAY_FRAME_FIT_FACTOR (0.72)
 
 static SceneEditorDigestOverlayNavState g_viewport_nav_state = {
-    false,
-    0,
-    0,
-    SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG,
-    SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG,
-    1.0
+    .orbit_active = false,
+    .pan_active = false,
+    .target_valid = false,
+    .last_mouse_x = 0,
+    .last_mouse_y = 0,
+    .orbit_yaw_deg = SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG,
+    .orbit_pitch_deg = SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG,
+    .overlay_zoom = 1.0,
+    .target_x = 0.0,
+    .target_y = 0.0,
+    .target_z = 0.0
 };
 static int g_digest_hover_object_index = -1;
 static SceneEditorBezier3DGizmoState g_bezier3d_gizmo_state = {0};
@@ -232,6 +237,7 @@ static bool SceneEditorHandleViewportNavigation(SceneEditor* editor,
     nav_command.viewport_drag_region = (command->pane_hit_region == SCENE_EDITOR_PANE_HIT_DRAG);
     nav_command.key_frame_enabled = contract.laneKeyFrameEnabled;
     nav_command.gesture_orbit_enabled = contract.laneGestureOrbitEnabled;
+    nav_command.gesture_pan_enabled = contract.laneGestureOrbitEnabled;
     nav_command.wheel_zoom_enabled = contract.laneWheelZoomEnabled;
     nav_command.active_mode = contract.activeMode;
     nav_command.selected_object_index = (contract.activeMode == EDITOR_MODE_MATERIAL)
@@ -514,6 +520,7 @@ void SceneEditorSyncWindowSize(SceneEditor* editor) {
     SDL_GetWindowSize(editor->window, &width, &height);
     if (width <= 0 || height <= 0) return;
     if (width != sceneSettings.windowWidth || height != sceneSettings.windowHeight) {
+        (void)SceneEditorViewportNavApplyDigestResize(&g_viewport_nav_state);
         sceneSettings.windowWidth = width;
         sceneSettings.windowHeight = height;
 #if USE_VULKAN
@@ -871,6 +878,7 @@ bool SceneEditorSessionWantsExit(const SceneEditor* editor) {
 bool SceneEditorSessionInteractionActive(const SceneEditor* editor) {
     (void)editor;
     return g_viewport_nav_state.orbit_active ||
+           g_viewport_nav_state.pan_active ||
            scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost) ||
            g_bezier3d_gizmo_state.dragging ||
            g_camera3d_gizmo_state.dragging;

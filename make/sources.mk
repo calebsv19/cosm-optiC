@@ -24,6 +24,7 @@ endif
 CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
 CORE_SCENE_VIEW_SRCS := $(CORE_SCENE_VIEW_DIR)/src/core_scene_view.c
+CORE_VIEWPORT3D_SRCS := $(CORE_VIEWPORT3D_DIR)/src/core_viewport3d.c
 CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
 CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
 CORE_MESH_ASSET_SRCS := \
@@ -49,6 +50,7 @@ KIT_RENDER_SRCS := \
 KIT_PANE_SRCS := $(KIT_PANE_DIR)/src/kit_pane.c
 KIT_VIZ_SRCS := $(KIT_VIZ_DIR)/src/kit_viz.c
 KIT_RUNTIME_DIAG_SRCS := $(KIT_RUNTIME_DIAG_DIR)/src/kit_runtime_diag.c
+KIT_VIEWPORT3D_SRCS := $(KIT_VIEWPORT3D_DIR)/src/kit_viewport3d.c
 KIT_WORKSPACE_AUTHORING_SRCS := \
 	$(KIT_WORKSPACE_AUTHORING_DIR)/src/kit_workspace_authoring.c \
 	$(KIT_WORKSPACE_AUTHORING_DIR)/src/ui/kit_workspace_authoring_ui_overlay.c \

@@ -9,6 +9,7 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "config/mesh_import_policy.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
@@ -697,11 +698,26 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                    layout.meshAssetRootValueRect.y,
                                                    ROOT_CTRL_BUTTON_W,
                                                    ROOT_ROW_HEIGHT};
+        {
+            char mesh_policy_label[96];
+            ray_tracing_mesh_import_policy_format_label(&animSettings,
+                                                        mesh_policy_label,
+                                                        sizeof(mesh_policy_label));
+            layout.meshImportNormalPolicyRect = build_adaptive_button_rect(
+                font,
+                leftX,
+                layout.meshAssetRootValueRect.y + ROOT_ROW_HEIGHT + ROOT_ROW_SPACING,
+                LOAD_SCENE_BUTTON_WIDTH,
+                ROOT_ROW_HEIGHT,
+                mesh_policy_label,
+                maxLeftWidth);
+        }
         layout.attachVolumeRect = (SDL_Rect){0, 0, 0, 0};
         layout.volumeToggleRect = (SDL_Rect){0, 0, 0, 0};
         layout.volumeClearRect = (SDL_Rect){0, 0, 0, 0};
         if (animSettings.spaceMode == SPACE_MODE_3D) {
-            int volume_buttons_y = layout.meshAssetRootValueRect.y + ROOT_ROW_HEIGHT + ROOT_ROW_SPACING + 4;
+            int volume_buttons_y = layout.meshImportNormalPolicyRect.y +
+                                   layout.meshImportNormalPolicyRect.h + 4;
             int half_width = (maxLeftWidth - 6) / 2;
             if (half_width < 120) half_width = 120;
             volume_source_ui_format_active_button_label(volumeLabel, sizeof(volumeLabel));

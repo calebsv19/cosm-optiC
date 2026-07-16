@@ -4,6 +4,8 @@
 
 #include "editor/editor_mode_router.h"
 #include "editor/material_editor.h"
+#include "editor/scene_editor_viewport3d_bridge.h"
+#include "editor/scene_editor_viewport_nav_math.h"
 #include "render/ray_tracing_mode_backend.h"
 
 #define SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG (-35.0)
@@ -37,7 +39,7 @@ static bool scene_editor_viewport_nav_target_is_focused_material(int active_mode
 
 static bool scene_editor_viewport_nav_resolve_target_extents(
     const RuntimeSceneBridge3DDigestState* digest,
-    int active_mode,
+    bool use_selected_object,
     int selected_object_index,
     double* min_x,
     double* min_y,
@@ -46,7 +48,7 @@ static bool scene_editor_viewport_nav_resolve_target_extents(
     double* max_y,
     double* max_z,
     double* span_max) {
-    if (scene_editor_viewport_nav_target_is_focused_material(active_mode, selected_object_index) &&
+    if (use_selected_object && selected_object_index >= 0 &&
         SceneEditorDigestOverlayResolveObjectExtents(digest,
                                                      selected_object_index,
                                                      min_x,
@@ -71,9 +73,11 @@ static bool scene_editor_viewport_nav_resolve_target_extents(
 static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayNavState* nav_state,
                                                        const SDL_Rect* viewport_rect,
                                                        bool reset_angles,
-                                                       int active_mode,
+                                                       bool use_selected_object,
                                                        int selected_object_index,
-                                                       double* out_fit_zoom) {
+                                                       double* out_fit_zoom,
+                                                       SceneEditorViewportNavVec3* out_target,
+                                                       bool* out_target_valid) {
     RuntimeSceneBridge3DDigestState digest = {0};
     SceneEditorDigestOverlayProjector projector = {0};
     double min_x = 0.0;
@@ -88,14 +92,14 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
     double projected_max_x = 0.0;
     double projected_max_y = 0.0;
     double corners[8][3];
-    double available_w = 0.0;
-    double available_h = 0.0;
     double projected_w = 0.0;
     double projected_h = 0.0;
     double fit_zoom = 1.0;
+    CoreViewport3DFitRequest fit_request = {0};
     int sx = 0;
     int sy = 0;
     int i = 0;
+    if (out_target_valid) *out_target_valid = false;
     if (!nav_state || !viewport_rect || !out_fit_zoom) {
         return false;
     }
@@ -107,7 +111,7 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
         nav_state->orbit_pitch_deg = SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG;
     }
     if (!scene_editor_viewport_nav_resolve_target_extents(&digest,
-                                                          active_mode,
+                                                          use_selected_object,
                                                           selected_object_index,
                                                           &min_x,
                                                           &min_y,
@@ -119,6 +123,7 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
         nav_state->orbit_yaw_deg = SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG;
         nav_state->orbit_pitch_deg = SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG;
         nav_state->overlay_zoom = 1.0;
+        if (out_target_valid) *out_target_valid = false;
         return true;
     }
 
@@ -130,6 +135,9 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
                                                         &projector)) {
         return false;
     }
+    projector.center_x = (min_x + max_x) * 0.5;
+    projector.center_y = (min_y + max_y) * 0.5;
+    projector.center_z = (min_z + max_z) * 0.5;
 
     corners[0][0] = min_x; corners[0][1] = min_y; corners[0][2] = min_z;
     corners[1][0] = min_x; corners[1][1] = min_y; corners[1][2] = max_z;
@@ -160,23 +168,49 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
         }
     }
 
-    available_w = (double)projector.viewport.w * SCENE_EDITOR_DIGEST_OVERLAY_FRAME_FIT_FACTOR;
-    available_h = (double)projector.viewport.h * SCENE_EDITOR_DIGEST_OVERLAY_FRAME_FIT_FACTOR;
     projected_w = fmax(1.0, projected_max_x - projected_min_x);
     projected_h = fmax(1.0, projected_max_y - projected_min_y);
-    if (available_w > 1.0 && available_h > 1.0) {
-        double zoom_x = available_w / projected_w;
-        double zoom_y = available_h / projected_h;
-        fit_zoom = fmin(zoom_x, zoom_y);
-    }
-    if (fit_zoom < SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM) {
-        fit_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM;
-    }
-    if (fit_zoom > SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM) {
-        fit_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM;
+    fit_request.viewport_width_px = (double)projector.viewport.w;
+    fit_request.viewport_height_px = (double)projector.viewport.h;
+    fit_request.projected_span_right_world = projected_w;
+    fit_request.projected_span_down_world = projected_h;
+    fit_request.fill_fraction = SCENE_EDITOR_DIGEST_OVERLAY_FRAME_FIT_FACTOR;
+    fit_request.min_scale_px_per_world_unit = SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM;
+    fit_request.max_scale_px_per_world_unit = SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM;
+    if (core_viewport3d_resolve_fit_scale(&fit_request, &fit_zoom).code != CORE_OK) {
+        return false;
     }
     *out_fit_zoom = fit_zoom;
+    if (out_target) {
+        *out_target = (SceneEditorViewportNavVec3){projector.center_x,
+                                                   projector.center_y,
+                                                   projector.center_z};
+    }
+    if (out_target_valid) *out_target_valid = true;
     return true;
+}
+
+static void scene_editor_viewport_nav_set_zoom_limits(
+    SceneEditorDigestOverlayNavState* nav_state,
+    double fit_zoom,
+    bool material_focus) {
+    const double min_factor = material_focus
+                                  ? SCENE_EDITOR_DIGEST_OVERLAY_MATERIAL_MIN_FACTOR
+                                  : SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MIN_FACTOR;
+    const double max_factor = material_focus
+                                  ? SCENE_EDITOR_DIGEST_OVERLAY_MATERIAL_MAX_FACTOR
+                                  : SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MAX_FACTOR;
+    if (!nav_state || !(fit_zoom > 0.0) || !isfinite(fit_zoom)) return;
+    nav_state->zoom_min = fmax(SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM,
+                               fit_zoom * min_factor);
+    nav_state->zoom_max = fmin(SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM,
+                               fit_zoom * max_factor);
+    if (nav_state->zoom_max < nav_state->zoom_min) {
+        nav_state->zoom_max = nav_state->zoom_min;
+    }
+    nav_state->zoom_limits_material_focus = material_focus;
+    nav_state->zoom_limits_valid = isfinite(nav_state->zoom_min) &&
+                                   isfinite(nav_state->zoom_max);
 }
 
 bool SceneEditorViewportNavFitDigestOverlayForTarget(SceneEditorDigestOverlayNavState* nav_state,
@@ -185,63 +219,289 @@ bool SceneEditorViewportNavFitDigestOverlayForTarget(SceneEditorDigestOverlayNav
                                                      int active_mode,
                                                      int selected_object_index) {
     double fit_zoom = 1.0;
-    if (!scene_editor_viewport_nav_resolve_fit_zoom(nav_state,
+    SceneEditorViewportNavVec3 target = {0};
+    bool target_valid = false;
+    bool current_target_valid = false;
+    CoreViewport3DVec3d current_target = {0};
+    CoreViewport3DVec3d frame_target = {0};
+    CoreViewport3DVec3d next_target = {0};
+    double current_scale = 1.0;
+    double next_scale = 1.0;
+    const double degrees_to_radians = 3.14159265358979323846 / 180.0;
+    const bool material_focus = scene_editor_viewport_nav_target_is_focused_material(
+        active_mode,
+        selected_object_index);
+    SceneEditorDigestOverlayNavState candidate = {0};
+    if (!nav_state) return false;
+    candidate = *nav_state;
+    if (!scene_editor_viewport_nav_resolve_fit_zoom(&candidate,
                                                    viewport_rect,
                                                    reset_angles,
-                                                   active_mode,
+                                                   selected_object_index >= 0,
                                                    selected_object_index,
-                                                   &fit_zoom)) {
+                                                   &fit_zoom,
+                                                   &target,
+                                                   &target_valid)) {
         return false;
     }
-    nav_state->overlay_zoom = fit_zoom;
+    current_target_valid = candidate.target_valid &&
+                           isfinite(candidate.target_x) &&
+                           isfinite(candidate.target_y) &&
+                           isfinite(candidate.target_z);
+    scene_editor_viewport_nav_set_zoom_limits(&candidate, fit_zoom, material_focus);
+    candidate.target_valid = target_valid;
+    if (target_valid) {
+        frame_target = (CoreViewport3DVec3d){target.x, target.y, target.z};
+        current_target = current_target_valid
+                             ? (CoreViewport3DVec3d){candidate.target_x,
+                                                    candidate.target_y,
+                                                    candidate.target_z}
+                             : frame_target;
+        current_scale = candidate.overlay_zoom;
+        if (!isfinite(current_scale) || current_scale <= 0.0) current_scale = fit_zoom;
+        if (current_scale < candidate.zoom_min) current_scale = candidate.zoom_min;
+        if (current_scale > candidate.zoom_max) current_scale = candidate.zoom_max;
+        if (!SceneEditorViewport3DBridgeApplyFrame(
+                current_target,
+                candidate.orbit_yaw_deg * degrees_to_radians,
+                candidate.orbit_pitch_deg * degrees_to_radians,
+                current_scale,
+                candidate.zoom_min,
+                candidate.zoom_max,
+                frame_target,
+                fit_zoom,
+                &next_target,
+                &next_scale)) {
+            return false;
+        }
+        candidate.target_x = next_target.x;
+        candidate.target_y = next_target.y;
+        candidate.target_z = next_target.z;
+        candidate.overlay_zoom = next_scale;
+    } else {
+        candidate.overlay_zoom = fit_zoom;
+    }
+    *nav_state = candidate;
+    return true;
+}
+
+bool SceneEditorViewportNavApplyDigestResize(SceneEditorDigestOverlayNavState* nav_state) {
+    SceneEditorDigestOverlayNavState candidate;
+    CoreViewport3DVec3d target;
+    CoreViewport3DVec3d next_target;
+    double next_scale = 0.0;
+    double min_scale = 0.0;
+    double max_scale = 0.0;
+    const double degrees_to_radians = 3.14159265358979323846 / 180.0;
+    if (!nav_state || !nav_state->target_valid ||
+        !isfinite(nav_state->target_x) ||
+        !isfinite(nav_state->target_y) ||
+        !isfinite(nav_state->target_z) ||
+        !isfinite(nav_state->overlay_zoom) || nav_state->overlay_zoom <= 0.0) {
+        return false;
+    }
+    candidate = *nav_state;
+    min_scale = candidate.zoom_limits_valid ? candidate.zoom_min : candidate.overlay_zoom;
+    max_scale = candidate.zoom_limits_valid ? candidate.zoom_max : candidate.overlay_zoom;
+    target = (CoreViewport3DVec3d){candidate.target_x,
+                                   candidate.target_y,
+                                   candidate.target_z};
+    if (!SceneEditorViewport3DBridgeApplyResize(
+            target,
+            candidate.orbit_yaw_deg * degrees_to_radians,
+            candidate.orbit_pitch_deg * degrees_to_radians,
+            candidate.overlay_zoom,
+            min_scale,
+            max_scale,
+            &next_target,
+            &next_scale)) {
+        return false;
+    }
+    candidate.target_x = next_target.x;
+    candidate.target_y = next_target.y;
+    candidate.target_z = next_target.z;
+    candidate.overlay_zoom = next_scale;
+    *nav_state = candidate;
+    return true;
+}
+
+static bool scene_editor_viewport_nav_build_active_projector(
+    const RuntimeSceneBridge3DDigestState* digest,
+    const SDL_Rect* viewport_rect,
+    const SceneEditorDigestOverlayNavState* nav_state,
+    int active_mode,
+    int selected_object_index,
+    SceneEditorDigestOverlayProjector* out_projector) {
+    if (scene_editor_viewport_nav_target_is_focused_material(active_mode, selected_object_index)) {
+        return SceneEditorDigestOverlayBuildObjectProjector(digest,
+                                                            viewport_rect,
+                                                            nav_state,
+                                                            selected_object_index,
+                                                            true,
+                                                            out_projector);
+    }
+    return SceneEditorDigestOverlayBuildProjector(digest,
+                                                  viewport_rect,
+                                                  nav_state,
+                                                  out_projector);
+}
+
+static bool scene_editor_viewport_nav_ensure_target(
+    SceneEditorDigestOverlayNavState* nav_state,
+    const SceneEditorDigestOverlayProjector* projector) {
+    if (!nav_state || !projector) return false;
+    if (nav_state->target_valid &&
+        isfinite(nav_state->target_x) &&
+        isfinite(nav_state->target_y) &&
+        isfinite(nav_state->target_z)) {
+        return true;
+    }
+    if (!isfinite(projector->center_x) ||
+        !isfinite(projector->center_y) ||
+        !isfinite(projector->center_z)) {
+        return false;
+    }
+    nav_state->target_x = projector->center_x;
+    nav_state->target_y = projector->center_y;
+    nav_state->target_z = projector->center_z;
+    nav_state->target_valid = true;
+    return true;
+}
+
+bool SceneEditorViewportNavApplyDigestPan(SceneEditorDigestOverlayNavState* nav_state,
+                                         const SDL_Rect* viewport_rect,
+                                         int screen_dx,
+                                         int screen_dy,
+                                         int active_mode,
+                                         int selected_object_index) {
+    RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayProjector projector = {0};
+    CoreViewport3DVec3d target = {0};
+    CoreViewport3DVec3d next_target = {0};
+    SceneEditorDigestOverlayNavState candidate = {0};
+    if (!nav_state || !viewport_rect) return false;
+    candidate = *nav_state;
+    if (!scene_editor_viewport_nav_resolve_digest(&digest)) return false;
+    if (!scene_editor_viewport_nav_build_active_projector(&digest,
+                                                          viewport_rect,
+                                                          &candidate,
+                                                          active_mode,
+                                                          selected_object_index,
+                                                          &projector)) {
+        return false;
+    }
+    if (!scene_editor_viewport_nav_ensure_target(&candidate, &projector)) return false;
+    if (screen_dx == 0 && screen_dy == 0) {
+        *nav_state = candidate;
+        return true;
+    }
+    target = (CoreViewport3DVec3d){candidate.target_x,
+                                   candidate.target_y,
+                                   candidate.target_z};
+    if (!SceneEditorViewport3DBridgeApplyPan(target,
+                                             projector.yaw_rad,
+                                             projector.pitch_rad,
+                                             projector.scale,
+                                             (double)screen_dx,
+                                             (double)screen_dy,
+                                             &next_target)) {
+        return false;
+    }
+    candidate.target_x = next_target.x;
+    candidate.target_y = next_target.y;
+    candidate.target_z = next_target.z;
+    *nav_state = candidate;
     return true;
 }
 
 bool SceneEditorViewportNavApplyDigestWheelZoom(SceneEditorDigestOverlayNavState* nav_state,
                                                 const SDL_Rect* viewport_rect,
-                                                int wheel_y,
+                                                int screen_x,
+                                                int screen_y,
+                                                double wheel_delta,
                                                 int active_mode,
                                                 int selected_object_index) {
     RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayProjector old_projector = {0};
+    SceneEditorDigestOverlayProjector new_projector = {0};
+    CoreViewport3DVec3d target = {0};
+    CoreViewport3DVec3d next_target = {0};
+    SceneEditorDigestOverlayNavState candidate = {0};
     double fit_zoom = 1.0;
-    double min_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM;
-    double max_zoom = SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM;
+    double bounded_delta = 0.0;
     bool material_focus = scene_editor_viewport_nav_target_is_focused_material(active_mode,
                                                                                selected_object_index);
-    if (!nav_state || wheel_y == 0) {
+    if (!nav_state || wheel_delta == 0.0 || !isfinite(wheel_delta)) {
         return false;
     }
+    candidate = *nav_state;
     if (!scene_editor_viewport_nav_resolve_digest(&digest)) {
         return false;
     }
-    if (viewport_rect &&
-        scene_editor_viewport_nav_resolve_fit_zoom(nav_state,
+    if ((!candidate.zoom_limits_valid ||
+         candidate.zoom_limits_material_focus != material_focus) &&
+        viewport_rect &&
+        scene_editor_viewport_nav_resolve_fit_zoom(&candidate,
                                                    viewport_rect,
                                                    false,
-                                                   active_mode,
+                                                   material_focus,
                                                    selected_object_index,
-                                                   &fit_zoom)) {
-        double min_factor = material_focus ? SCENE_EDITOR_DIGEST_OVERLAY_MATERIAL_MIN_FACTOR
-                                           : SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MIN_FACTOR;
-        double max_factor = material_focus ? SCENE_EDITOR_DIGEST_OVERLAY_MATERIAL_MAX_FACTOR
-                                           : SCENE_EDITOR_DIGEST_OVERLAY_DYNAMIC_MAX_FACTOR;
-        min_zoom = fmax(SCENE_EDITOR_DIGEST_OVERLAY_MIN_ZOOM, fit_zoom * min_factor);
-        max_zoom = fmin(SCENE_EDITOR_DIGEST_OVERLAY_MAX_ZOOM, fit_zoom * max_factor);
-        if (max_zoom < min_zoom) {
-            max_zoom = min_zoom;
-        }
-        if (!(nav_state->overlay_zoom > 0.0) || !isfinite(nav_state->overlay_zoom)) {
-            nav_state->overlay_zoom = fit_zoom;
+                                                   &fit_zoom,
+                                                   NULL,
+                                                   NULL)) {
+        scene_editor_viewport_nav_set_zoom_limits(&candidate, fit_zoom, material_focus);
+        if (!(candidate.overlay_zoom > 0.0) || !isfinite(candidate.overlay_zoom)) {
+            candidate.overlay_zoom = fit_zoom;
         }
     }
-    if (wheel_y > 0) {
-        double factor = material_focus ? 1.25 : 1.12;
-        nav_state->overlay_zoom *= pow(factor, (double)wheel_y);
-    } else {
-        double factor = material_focus ? 0.80 : 0.90;
-        nav_state->overlay_zoom *= pow(factor, (double)(-wheel_y));
+    if (!viewport_rect ||
+        !scene_editor_viewport_nav_build_active_projector(&digest,
+                                                          viewport_rect,
+                                                          &candidate,
+                                                          active_mode,
+                                                          selected_object_index,
+                                                          &old_projector) ||
+        !scene_editor_viewport_nav_ensure_target(&candidate, &old_projector)) {
+        return false;
     }
-    if (nav_state->overlay_zoom < min_zoom) nav_state->overlay_zoom = min_zoom;
-    if (nav_state->overlay_zoom > max_zoom) nav_state->overlay_zoom = max_zoom;
+    old_projector.center_x = candidate.target_x;
+    old_projector.center_y = candidate.target_y;
+    old_projector.center_z = candidate.target_z;
+    bounded_delta = fmax(-8.0, fmin(8.0, wheel_delta));
+    candidate.overlay_zoom *= pow(material_focus ? 1.25 : 1.12, bounded_delta);
+    if (candidate.zoom_limits_valid) {
+        if (candidate.overlay_zoom < candidate.zoom_min) {
+            candidate.overlay_zoom = candidate.zoom_min;
+        }
+        if (candidate.overlay_zoom > candidate.zoom_max) {
+            candidate.overlay_zoom = candidate.zoom_max;
+        }
+    }
+    if (!scene_editor_viewport_nav_build_active_projector(&digest,
+                                                          viewport_rect,
+                                                          &candidate,
+                                                          active_mode,
+                                                          selected_object_index,
+                                                          &new_projector)) {
+        return false;
+    }
+    target = (CoreViewport3DVec3d){candidate.target_x,
+                                   candidate.target_y,
+                                   candidate.target_z};
+    if (!SceneEditorViewport3DBridgePreserveAnchor(
+            target,
+            old_projector.yaw_rad,
+            old_projector.pitch_rad,
+            old_projector.scale,
+            new_projector.scale,
+            (double)screen_x - ((double)viewport_rect->x + (double)viewport_rect->w * 0.5),
+            (double)screen_y - ((double)viewport_rect->y + (double)viewport_rect->h * 0.5),
+            &next_target)) {
+        return false;
+    }
+    candidate.target_x = next_target.x;
+    candidate.target_y = next_target.y;
+    candidate.target_z = next_target.z;
+    *nav_state = candidate;
     return true;
 }

@@ -58,6 +58,7 @@ typedef struct MenuButtonLayout {
     SDL_Rect meshAssetRootEditRect;
     SDL_Rect meshAssetRootFolderRect;
     SDL_Rect meshAssetRootApplyRect;
+    SDL_Rect meshImportNormalPolicyRect;
     SDL_Rect outputRootValueRect;
     SDL_Rect outputRootEditRect;
     SDL_Rect outputRootFolderRect;

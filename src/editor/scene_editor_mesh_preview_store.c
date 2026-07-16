@@ -2,6 +2,7 @@
 
 #include "editor/scene_editor_mesh_preview_contract.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct SceneEditorMeshPreviewStore {
@@ -9,6 +10,8 @@ typedef struct SceneEditorMeshPreviewStore {
     int instance_count;
     int recovered_instance_count;
     bool valid[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
+    CoreObjectVec3* vertex_normals[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
+    size_t vertex_normal_counts[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
     CoreMeshAssetRuntimeContract contracts[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
     CoreMeshPreviewLodMesh lods[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
     RayTracingRuntimeMeshAssetInstance
@@ -20,8 +23,29 @@ static SceneEditorMeshPreviewStore g_mesh_preview_store;
 void SceneEditorMeshPreviewStoreReset(void) {
     for (int i = 0; i < RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS; ++i) {
         SceneEditorMeshPreviewFreeLod(&g_mesh_preview_store.lods[i]);
+        free(g_mesh_preview_store.vertex_normals[i]);
     }
     memset(&g_mesh_preview_store, 0, sizeof(g_mesh_preview_store));
+}
+
+static bool scene_editor_mesh_preview_store_copy_vertex_normals(
+    int asset_index,
+    const CoreMeshAssetRuntimeDocument* document,
+    const CoreMeshPreviewLodMesh* lod) {
+    CoreObjectVec3* normals = NULL;
+    if (asset_index < 0 || asset_index >= RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS ||
+        !document || !lod || document->vertex_normal_count != document->vertex_count ||
+        lod->vertex_count != document->vertex_count) {
+        return false;
+    }
+    normals = (CoreObjectVec3*)malloc(document->vertex_count * sizeof(*normals));
+    if (!normals) return false;
+    for (size_t i = 0u; i < document->vertex_count; ++i) {
+        normals[i] = document->vertices[i].normal;
+    }
+    g_mesh_preview_store.vertex_normals[asset_index] = normals;
+    g_mesh_preview_store.vertex_normal_counts[asset_index] = document->vertex_count;
+    return true;
 }
 
 void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* assets) {
@@ -35,6 +59,8 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
             &g_mesh_preview_store.lods[i]);
         if (g_mesh_preview_store.valid[i]) {
             g_mesh_preview_store.contracts[i] = assets->assets[i].document.contract;
+            (void)scene_editor_mesh_preview_store_copy_vertex_normals(
+                i, &assets->assets[i].document, &g_mesh_preview_store.lods[i]);
             g_mesh_preview_store.asset_count = i + 1;
         }
     }
@@ -82,6 +108,8 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
                 &g_mesh_preview_store.lods[asset_index]);
             if (g_mesh_preview_store.valid[asset_index]) {
                 g_mesh_preview_store.contracts[asset_index] = document.contract;
+                (void)scene_editor_mesh_preview_store_copy_vertex_normals(
+                    asset_index, &document, &g_mesh_preview_store.lods[asset_index]);
                 g_mesh_preview_store.asset_count += 1;
             }
             core_mesh_asset_runtime_document_free(&document);
@@ -127,4 +155,17 @@ int SceneEditorMeshPreviewStoreRecoveredInstanceCount(void) {
 bool SceneEditorMeshPreviewStoreIsValid(int asset_index) {
     return asset_index >= 0 && asset_index < RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS &&
            g_mesh_preview_store.valid[asset_index];
+}
+
+bool SceneEditorMeshPreviewStoreGetVertexNormal(int asset_index,
+                                                size_t vertex_index,
+                                                CoreObjectVec3* out_normal) {
+    if (out_normal) memset(out_normal, 0, sizeof(*out_normal));
+    if (!out_normal || !SceneEditorMeshPreviewStoreIsValid(asset_index) ||
+        vertex_index >= g_mesh_preview_store.vertex_normal_counts[asset_index] ||
+        !g_mesh_preview_store.vertex_normals[asset_index]) {
+        return false;
+    }
+    *out_normal = g_mesh_preview_store.vertex_normals[asset_index][vertex_index];
+    return true;
 }

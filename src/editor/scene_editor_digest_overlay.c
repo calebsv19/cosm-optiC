@@ -372,17 +372,18 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                                   selected_object_index);
     }
 
-    if (active_mode != EDITOR_MODE_MATERIAL) {
+    if (active_mode == EDITOR_MODE_CAMERA) {
         SceneEditorDigestOverlayDrawPathPassive3D(renderer,
                                                   &projector,
                                                   &sceneSettings.bezierPath,
                                                   &sceneSettings.bezierPath3D,
-                                                  (SDL_Color){128, 214, 255, 210});
+                                                  (SDL_Color){128, 214, 255, 72});
+    } else if (active_mode == EDITOR_MODE_PATH) {
         SceneEditorDigestOverlayDrawPathPassive3D(renderer,
                                                   &projector,
                                                   &sceneSettings.cameraPath,
                                                   &sceneSettings.cameraPath3D,
-                                                  (SDL_Color){210, 168, 255, 210});
+                                                  (SDL_Color){210, 168, 255, 72});
     }
 
     if (active_mode == EDITOR_MODE_PATH) {

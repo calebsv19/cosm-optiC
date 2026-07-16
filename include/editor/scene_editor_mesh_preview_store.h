@@ -17,3 +17,6 @@ const RayTracingRuntimeMeshAssetInstance* SceneEditorMeshPreviewStoreGetInstance
 bool SceneEditorMeshPreviewStoreHasSceneObject(int scene_object_index);
 int SceneEditorMeshPreviewStoreRecoveredInstanceCount(void);
 bool SceneEditorMeshPreviewStoreIsValid(int asset_index);
+bool SceneEditorMeshPreviewStoreGetVertexNormal(int asset_index,
+                                                size_t vertex_index,
+                                                CoreObjectVec3* out_normal);

@@ -2,6 +2,7 @@ STABLE_TEST_TARGETS := \
 	test \
 	test-runtime-scene-bridge-contract \
 	test-runtime-mesh-asset-loader \
+	test-scene-editor-mesh-preview-outline \
 	test-runtime-mesh-asset-pack \
 	test-runtime-mesh-asset-builder \
 	test-smooth-mesh-reflection-fixtures \
@@ -11,6 +12,8 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-runtime-host-lifecycle-contract \
 	test-menu-pane-host-contract \
 	test-scene-editor-pane-host-contract \
+	test-scene-editor-viewport-nav-contract \
+	test-scene-editor-viewport3d-bridge-contract \
 	test-ray-tracing-render-headless-preflight \
 	test-ray-tracing-render-headless-image-export \
 	test-ray-tracing-render-headless-mesh-asset-spheres \
@@ -35,6 +38,22 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-workspace-authoring-host
 
 LEGACY_TEST_TARGETS :=
+
+SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN := \
+	$(BUILD_DIR)/tests/scene_editor_mesh_preview_outline_test
+SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_SRCS := \
+	$(TEST_DIR)/scene_editor_mesh_preview_outline_test.c \
+	$(SRC_DIR)/editor/scene_editor_mesh_preview_outline.c \
+	$(KIT_VIEWPORT3D_DIR)/src/kit_viewport3d.c
+
+$(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN): $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		$(SDL_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(KIT_VIEWPORT3D_DIR)/include \
+		-o $@ $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_SRCS) $(SDL_LIBS) -lm
+
+test-scene-editor-mesh-preview-outline: $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN)
+	@$(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN)
 
 run: $(APP_TARGET)
 	./$(APP_TARGET)
@@ -130,8 +149,8 @@ $(RUNTIME_MESH_ASSET_LOADER_TEST_BIN): $(RUNTIME_MESH_ASSET_LOADER_TEST_SRCS)
 		-DRAY_TRACING_RUNTIME_MESH_ASSET_LOADER_STANDALONE \
 		-o $@ $(RUNTIME_MESH_ASSET_LOADER_TEST_SRCS) $(JSON_LIBS) -lm
 
-test-runtime-mesh-asset-loader: $(RUNTIME_MESH_ASSET_LOADER_TEST_BIN)
-	@$(RUNTIME_MESH_ASSET_LOADER_TEST_BIN) || (echo "ray tracing runtime mesh asset loader test failed."; exit 1)
+test-runtime-mesh-asset-loader: $(APP_TARGET) $(TEST_BIN)
+	@TEST_RUNNER_GROUP=runtime_mesh_asset_loader ./$(TEST_BIN) || (echo "ray tracing runtime mesh asset loader test failed."; exit 1)
 	@echo "ray tracing runtime mesh asset loader lane passed"
 
 RUNTIME_MESH_ASSET_PACK_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_pack_test
@@ -476,6 +495,33 @@ $(SCENE_EDITOR_PANE_HOST_TEST_BIN): $(SCENE_EDITOR_PANE_HOST_TEST_SRCS)
 
 test-scene-editor-pane-host-contract: $(SCENE_EDITOR_PANE_HOST_TEST_BIN)
 	@$(SCENE_EDITOR_PANE_HOST_TEST_BIN) || (echo "scene editor pane host contract test failed."; exit 1)
+
+SCENE_EDITOR_VIEWPORT_NAV_TEST_BIN := $(BUILD_DIR)/tests/scene_editor_viewport_nav_contract_test
+SCENE_EDITOR_VIEWPORT_NAV_TEST_SRC := $(TEST_DIR)/scene_editor_viewport_nav_contract_test.c
+
+$(SCENE_EDITOR_VIEWPORT_NAV_TEST_BIN): $(SCENE_EDITOR_VIEWPORT_NAV_TEST_SRC) $(INC_DIR)/editor/scene_editor_viewport_nav_math.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+		-o $@ $(SCENE_EDITOR_VIEWPORT_NAV_TEST_SRC) -lm
+
+test-scene-editor-viewport-nav-contract: $(SCENE_EDITOR_VIEWPORT_NAV_TEST_BIN)
+	@$(SCENE_EDITOR_VIEWPORT_NAV_TEST_BIN) || (echo "scene editor viewport navigation contract test failed."; exit 1)
+
+SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_BIN := $(BUILD_DIR)/tests/scene_editor_viewport3d_bridge_test
+SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_SRCS := \
+	$(TEST_DIR)/scene_editor_viewport3d_bridge_test.c \
+	$(SRC_DIR)/editor/scene_editor_viewport3d_bridge.c \
+	$(CORE_VIEWPORT3D_DIR)/src/core_viewport3d.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_BIN): $(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-I$(INC_DIR) -I$(CORE_VIEWPORT3D_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_SRCS) -lm
+
+test-scene-editor-viewport3d-bridge-contract: $(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_BIN)
+	@$(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_BIN) || (echo "scene editor viewport3d bridge test failed."; exit 1)
 
 MENU_PANE_HOST_TEST_BIN := $(BUILD_DIR)/tests/menu_pane_host_contract_test
 MENU_PANE_HOST_TEST_SRCS := \

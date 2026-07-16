@@ -287,19 +287,19 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
         if (contract.activeMode == EDITOR_MODE_PATH) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB select bezier Shift+LMB add point Cmd+drag smooth");
+                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame LMB select bezier Shift+LMB add point Cmd+drag smooth");
         } else if (contract.activeMode == EDITOR_MODE_OBJECT) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB pick object");
+                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame LMB pick object");
         } else if (contract.activeMode == EDITOR_MODE_CAMERA) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame LMB select camera Shift+LMB add camera point Cmd+drag smooth");
+                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame LMB select camera Shift+LMB add camera point Cmd+drag smooth");
         } else {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+drag orbit MMB pan Wheel zoom F frame | Material controls edit selected object");
+                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame | Material controls edit selected object");
         }
     }
 

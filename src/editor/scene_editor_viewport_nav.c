@@ -6,6 +6,7 @@
 #include "config/config_manager.h"
 #include "editor/camera_editor.h"
 #include "editor/editor_mode_router.h"
+#include "editor/scene_editor_viewport3d_bridge.h"
 #include "render/space_mode_adapter.h"
 #include "scene/object_manager.h"
 
@@ -70,8 +71,23 @@ static void scene_editor_viewport_nav_orbit_by_mouse_delta(SceneEditorDigestOver
     RuntimeSceneBridge3DDigestState digest = {0};
     if (!nav_state) return;
     if (SceneEditorDigestOverlayResolve(&digest)) {
-        nav_state->orbit_yaw_deg += (double)dx * 0.45;
-        nav_state->orbit_pitch_deg += (double)dy * 0.35;
+        const double degrees_to_radians = 3.14159265358979323846 / 180.0;
+        const double radians_to_degrees = 180.0 / 3.14159265358979323846;
+        double next_yaw_rad = 0.0;
+        double next_pitch_rad = 0.0;
+        if (!SceneEditorViewport3DBridgeApplyOrbit(
+                nav_state->orbit_yaw_deg * degrees_to_radians,
+                nav_state->orbit_pitch_deg * degrees_to_radians,
+                (double)dx * 0.45 * degrees_to_radians,
+                (double)dy * 0.35 * degrees_to_radians,
+                &next_yaw_rad,
+                &next_pitch_rad)) {
+            return;
+        }
+        nav_state->orbit_yaw_deg = next_yaw_rad * radians_to_degrees;
+        nav_state->orbit_pitch_deg = next_pitch_rad * radians_to_degrees;
+        nav_state->orbit_yaw_deg = fmod(nav_state->orbit_yaw_deg, 360.0);
+        if (nav_state->orbit_yaw_deg < 0.0) nav_state->orbit_yaw_deg += 360.0;
         if (nav_state->orbit_pitch_deg < SCENE_EDITOR_DIGEST_OVERLAY_MIN_PITCH_DEG) {
             nav_state->orbit_pitch_deg = SCENE_EDITOR_DIGEST_OVERLAY_MIN_PITCH_DEG;
         }
@@ -140,9 +156,21 @@ static bool scene_editor_viewport_nav_frame_to_scene(void) {
 
 void SceneEditorViewportNavResetDigestOverlayNavigation(SceneEditorDigestOverlayNavState* nav_state) {
     if (!nav_state) return;
+    nav_state->orbit_active = false;
+    nav_state->pan_active = false;
+    nav_state->target_valid = false;
+    nav_state->zoom_limits_valid = false;
+    nav_state->zoom_limits_material_focus = false;
+    nav_state->last_mouse_x = 0;
+    nav_state->last_mouse_y = 0;
     nav_state->orbit_yaw_deg = SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_YAW_DEG;
     nav_state->orbit_pitch_deg = SCENE_EDITOR_DIGEST_OVERLAY_DEFAULT_PITCH_DEG;
     nav_state->overlay_zoom = 1.0;
+    nav_state->zoom_min = 0.0;
+    nav_state->zoom_max = 0.0;
+    nav_state->target_x = 0.0;
+    nav_state->target_y = 0.0;
+    nav_state->target_z = 0.0;
 }
 
 bool SceneEditorViewportNavFitDigestOverlay(SceneEditorDigestOverlayNavState* nav_state,
@@ -183,15 +211,51 @@ bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* co
     if (consumed) {
         return true;
     }
+    if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_MIDDLE &&
+        nav_state->pan_active) {
+        nav_state->pan_active = false;
+        return true;
+    }
+    if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT) {
+        nav_state->orbit_active = false;
+    }
     if (!command->viewport_canvas_region && !command->viewport_drag_region) {
         return false;
     }
 
-    if (event->type == SDL_MOUSEMOTION &&
+    if (event->type == SDL_MOUSEBUTTONDOWN &&
+        event->button.button == SDL_BUTTON_MIDDLE &&
+        command->gesture_pan_enabled &&
+        scene_editor_viewport_nav_rect_contains_event_point(command->viewport_rect, event) &&
+        SceneEditorViewportNavApplyDigestPan(nav_state,
+                                             command->viewport_rect,
+                                             0,
+                                             0,
+                                             command->active_mode,
+                                             command->selected_object_index)) {
+        nav_state->pan_active = true;
+        nav_state->orbit_active = false;
+        nav_state->last_mouse_x = event->button.x;
+        nav_state->last_mouse_y = event->button.y;
+        consumed = true;
+    } else if (event->type == SDL_MOUSEMOTION &&
         scene_editor_viewport_nav_rect_contains_event_point(command->viewport_rect, event)) {
         SDL_Keymod mods = SDL_GetModState();
         bool alt_down = ((mods & KMOD_ALT) != 0);
-        if (alt_down && command->gesture_orbit_enabled) {
+        bool left_down = ((event->motion.state & SDL_BUTTON_LMASK) != 0);
+        bool middle_down = ((event->motion.state & SDL_BUTTON_MMASK) != 0);
+        if (nav_state->pan_active && middle_down && command->gesture_pan_enabled) {
+            if (SceneEditorViewportNavApplyDigestPan(nav_state,
+                                                     command->viewport_rect,
+                                                     event->motion.xrel,
+                                                     event->motion.yrel,
+                                                     command->active_mode,
+                                                     command->selected_object_index)) {
+                nav_state->last_mouse_x = event->motion.x;
+                nav_state->last_mouse_y = event->motion.y;
+                consumed = true;
+            }
+        } else if (alt_down && left_down && command->gesture_orbit_enabled) {
             scene_editor_viewport_nav_orbit_by_mouse_delta(nav_state,
                                                            event->motion.xrel,
                                                            event->motion.yrel);
@@ -200,23 +264,39 @@ bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* co
             nav_state->last_mouse_y = event->motion.y;
             consumed = true;
         } else {
+            if (!middle_down) nav_state->pan_active = false;
             nav_state->orbit_active = false;
         }
     } else if (event->type == SDL_MOUSEWHEEL &&
                scene_editor_viewport_nav_rect_contains_event_point(command->viewport_rect, event)) {
         int mx = 0;
         int my = 0;
-        int wheel_y = event->wheel.y;
-        if (wheel_y != 0 && command->wheel_zoom_enabled) {
+        double wheel_delta = event->wheel.preciseY != 0.0f
+                                 ? (double)event->wheel.preciseY
+                                 : (double)event->wheel.y;
+        if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+            wheel_delta = -wheel_delta;
+        }
+        if (wheel_delta != 0.0 && command->wheel_zoom_enabled) {
+#if SDL_VERSION_ATLEAST(2, 26, 0)
+            mx = event->wheel.mouseX;
+            my = event->wheel.mouseY;
+#else
+            SDL_GetMouseState(&mx, &my);
+#endif
             if (SceneEditorViewportNavApplyDigestWheelZoom(nav_state,
                                                            command->viewport_rect,
-                                                           wheel_y,
+                                                           mx,
+                                                           my,
+                                                           wheel_delta,
                                                            command->active_mode,
                                                            command->selected_object_index)) {
                 consumed = true;
             } else {
-                SDL_GetMouseState(&mx, &my);
-                scene_editor_viewport_nav_zoom_toward_screen_point(mx, my, wheel_y);
+                scene_editor_viewport_nav_zoom_toward_screen_point(
+                    mx,
+                    my,
+                    wheel_delta > 0.0 ? 1 : -1);
                 consumed = true;
             }
         }
@@ -226,7 +306,8 @@ bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* co
         return false;
     }
     if (out_interaction_drag) {
-        *out_interaction_drag = (event->type == SDL_MOUSEMOTION && nav_state->orbit_active);
+        *out_interaction_drag = (event->type == SDL_MOUSEMOTION &&
+                                 (nav_state->orbit_active || nav_state->pan_active));
     }
     return true;
 }

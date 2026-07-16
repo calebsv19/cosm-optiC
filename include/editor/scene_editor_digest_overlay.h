@@ -11,11 +11,20 @@
 
 typedef struct SceneEditorDigestOverlayNavState {
     bool orbit_active;
+    bool pan_active;
+    bool target_valid;
+    bool zoom_limits_valid;
+    bool zoom_limits_material_focus;
     int last_mouse_x;
     int last_mouse_y;
     double orbit_yaw_deg;
     double orbit_pitch_deg;
     double overlay_zoom;
+    double zoom_min;
+    double zoom_max;
+    double target_x;
+    double target_y;
+    double target_z;
 } SceneEditorDigestOverlayNavState;
 
 typedef enum SceneEditorBezier3DGizmoAxis {

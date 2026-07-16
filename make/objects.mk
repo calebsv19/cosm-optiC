@@ -176,6 +176,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
 	$(BUILD_DIR)/config/core/config_animation_runtime3d.o \
+	$(BUILD_DIR)/config/core/mesh_import_policy.o \
 	$(BUILD_DIR)/config/core/config_animation_persistence.o \
 	$(BUILD_DIR)/config/scene/config_scene_material_persistence.o \
 	$(BUILD_DIR)/config/io/config_file_io.o \
@@ -496,7 +497,10 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/editor/scene_editor_material_preview.o \
 	$(BUILD_DIR)/editor/scene_editor_mesh_preview_render.o \
+	$(BUILD_DIR)/editor/scene_editor_mesh_preview_outline.o \
+	$(BUILD_DIR)/editor/scene_editor_mesh_preview_shading.o \
 	$(BUILD_DIR)/editor/scene_editor_mesh_preview_store.o \
+	$(BUILD_DIR)/editor/scene_editor_mesh_preview_surface.o \
 	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
 	$(BUILD_DIR)/editor/scene_editor_viewport_nav_zoom.o \
 	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
@@ -643,6 +647,7 @@ CORE_WORKERS_SRCS := $(CORE_WORKERS_DIR)/src/core_workers.c
 CORE_SIM_SRCS := $(CORE_SIM_DIR)/src/core_sim.c
 CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
 CORE_SCENE_VIEW_SRCS := $(CORE_SCENE_VIEW_DIR)/src/core_scene_view.c
+CORE_VIEWPORT3D_SRCS := $(CORE_VIEWPORT3D_DIR)/src/core_viewport3d.c
 CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
 CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
 CORE_MESH_ASSET_SRCS := \
@@ -668,6 +673,7 @@ KIT_RENDER_SRCS := \
 KIT_PANE_SRCS := $(KIT_PANE_DIR)/src/kit_pane.c
 KIT_VIZ_SRCS := $(KIT_VIZ_DIR)/src/kit_viz.c
 KIT_RUNTIME_DIAG_SRCS := $(KIT_RUNTIME_DIAG_DIR)/src/kit_runtime_diag.c
+KIT_VIEWPORT3D_SRCS := $(KIT_VIEWPORT3D_DIR)/src/kit_viewport3d.c
 KIT_WORKSPACE_AUTHORING_SRCS := \
 	$(KIT_WORKSPACE_AUTHORING_DIR)/src/kit_workspace_authoring.c \
 	$(KIT_WORKSPACE_AUTHORING_DIR)/src/ui/kit_workspace_authoring_ui_overlay.c \
@@ -682,6 +688,7 @@ CORE_WORKERS_OBJS := $(patsubst $(CORE_WORKERS_DIR)/src/%.c,$(BUILD_DIR)/core_wo
 CORE_SIM_OBJS := $(patsubst $(CORE_SIM_DIR)/src/%.c,$(BUILD_DIR)/core_sim/%.o,$(CORE_SIM_SRCS))
 CORE_SCENE_OBJS := $(patsubst $(CORE_SCENE_DIR)/src/%.c,$(BUILD_DIR)/core_scene/%.o,$(CORE_SCENE_SRCS))
 CORE_SCENE_VIEW_OBJS := $(patsubst $(CORE_SCENE_VIEW_DIR)/src/%.c,$(BUILD_DIR)/core_scene_view/%.o,$(CORE_SCENE_VIEW_SRCS))
+CORE_VIEWPORT3D_OBJS := $(patsubst $(CORE_VIEWPORT3D_DIR)/src/%.c,$(BUILD_DIR)/core_viewport3d/%.o,$(CORE_VIEWPORT3D_SRCS))
 CORE_AUTHORED_TEXTURE_OBJS := $(patsubst $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c,$(BUILD_DIR)/core_authored_texture/%.o,$(CORE_AUTHORED_TEXTURE_SRCS))
 CORE_SCENE_COMPILE_OBJS := $(patsubst $(CORE_SCENE_COMPILE_DIR)/src/%.c,$(BUILD_DIR)/core_scene_compile/%.o,$(CORE_SCENE_COMPILE_SRCS))
 CORE_MESH_ASSET_OBJS := $(patsubst $(CORE_MESH_ASSET_DIR)/src/%.c,$(BUILD_DIR)/core_mesh_asset/%.o,$(CORE_MESH_ASSET_SRCS))
@@ -698,6 +705,7 @@ KIT_RENDER_OBJS := $(patsubst $(KIT_RENDER_DIR)/src/%.c,$(BUILD_DIR)/kit_render/
 KIT_PANE_OBJS := $(patsubst $(KIT_PANE_DIR)/src/%.c,$(BUILD_DIR)/kit_pane/%.o,$(KIT_PANE_SRCS))
 KIT_VIZ_OBJS := $(patsubst $(KIT_VIZ_DIR)/src/%.c,$(BUILD_DIR)/kit_viz/%.o,$(KIT_VIZ_SRCS))
 KIT_RUNTIME_DIAG_OBJS := $(patsubst $(KIT_RUNTIME_DIAG_DIR)/src/%.c,$(BUILD_DIR)/kit_runtime_diag/%.o,$(KIT_RUNTIME_DIAG_SRCS))
+KIT_VIEWPORT3D_OBJS := $(patsubst $(KIT_VIEWPORT3D_DIR)/src/%.c,$(BUILD_DIR)/kit_viewport3d/%.o,$(KIT_VIEWPORT3D_SRCS))
 KIT_WORKSPACE_AUTHORING_OBJS := $(patsubst $(KIT_WORKSPACE_AUTHORING_DIR)/src/%.c,$(BUILD_DIR)/kit_workspace_authoring/%.o,$(KIT_WORKSPACE_AUTHORING_SRCS))
 
 TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(CORE_PANE_MODULE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS) \
@@ -707,7 +715,7 @@ TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(CORE_PANE_MODULE_OBJS) $(KIT
 
 OBJ := $(OBJ) $(TIMER_HUD_OBJS) $(TIMER_HUD_EXTERNAL_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
-	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_VIEW_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_MESH_ASSET_OBJS) $(CORE_MESH_PREVIEW_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_PANE_MODULE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(CORE_HEADLESS_JOB_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
+	$(CORE_BASE_OBJS) $(CORE_IO_OBJS) $(CORE_DATA_OBJS) $(CORE_PACK_OBJS) $(CORE_QUEUE_OBJS) $(CORE_TIME_OBJS) $(CORE_WORKERS_OBJS) $(CORE_SIM_OBJS) $(CORE_SCENE_OBJS) $(CORE_SCENE_VIEW_OBJS) $(CORE_VIEWPORT3D_OBJS) $(CORE_AUTHORED_TEXTURE_OBJS) $(CORE_SCENE_COMPILE_OBJS) $(CORE_MESH_ASSET_OBJS) $(CORE_MESH_PREVIEW_OBJS) $(CORE_OBJECT_OBJS) $(CORE_UNITS_OBJS) $(CORE_SPACE_OBJS) $(CORE_PANE_OBJS) $(CORE_PANE_MODULE_OBJS) $(CORE_THEME_OBJS) $(CORE_FONT_OBJS) $(CORE_HEADLESS_JOB_OBJS) $(KIT_RENDER_OBJS) $(KIT_PANE_OBJS) $(KIT_VIZ_OBJS) $(KIT_RUNTIME_DIAG_OBJS) $(KIT_VIEWPORT3D_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS)
 TEST_DEPS := $(sort $(TEST_DEPS) $(filter-out $(BUILD_DIR)/app/animation.o $(BUILD_DIR)/app/ray_tracing_job_runner.o,$(OBJ)))
 DEP := $(sort \
 	$(OBJ:.o=.d) \

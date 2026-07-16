@@ -546,6 +546,20 @@ static bool scene_editor_digest_overlay_projector_from_extents(
     return true;
 }
 
+static void scene_editor_digest_overlay_projector_apply_navigation_target(
+    const SceneEditorDigestOverlayNavState* nav_state,
+    SceneEditorDigestOverlayProjector* projector) {
+    if (!nav_state || !projector || !nav_state->target_valid) return;
+    if (!isfinite(nav_state->target_x) ||
+        !isfinite(nav_state->target_y) ||
+        !isfinite(nav_state->target_z)) {
+        return;
+    }
+    projector->center_x = nav_state->target_x;
+    projector->center_y = nav_state->target_y;
+    projector->center_z = nav_state->target_z;
+}
+
 bool SceneEditorDigestOverlayResolveExtents(const RuntimeSceneBridge3DDigestState* digest,
                                             double* out_min_x,
                                             double* out_min_y,
@@ -684,12 +698,16 @@ bool SceneEditorDigestOverlayBuildProjector(const RuntimeSceneBridge3DDigestStat
                                             const SceneEditorDigestOverlayNavState* nav_state,
                                             SceneEditorDigestOverlayProjector* out_projector) {
     if (!nav_state) return false;
-    return SceneEditorDigestOverlayBuildProjectorWithView(digest,
-                                                          viewport,
-                                                          nav_state->orbit_yaw_deg,
-                                                          nav_state->orbit_pitch_deg,
-                                                          nav_state->overlay_zoom,
-                                                          out_projector);
+    if (!SceneEditorDigestOverlayBuildProjectorWithView(digest,
+                                                        viewport,
+                                                        nav_state->orbit_yaw_deg,
+                                                        nav_state->orbit_pitch_deg,
+                                                        nav_state->overlay_zoom,
+                                                        out_projector)) {
+        return false;
+    }
+    scene_editor_digest_overlay_projector_apply_navigation_target(nav_state, out_projector);
+    return true;
 }
 
 bool SceneEditorDigestOverlayBuildObjectProjector(const RuntimeSceneBridge3DDigestState* digest,
@@ -719,15 +737,19 @@ bool SceneEditorDigestOverlayBuildObjectProjector(const RuntimeSceneBridge3DDige
                                                       NULL)) {
         return SceneEditorDigestOverlayBuildProjector(digest, viewport, nav_state, out_projector);
     }
-    return scene_editor_digest_overlay_projector_from_extents(viewport,
-                                                              nav_state->orbit_yaw_deg,
-                                                              nav_state->orbit_pitch_deg,
-                                                              nav_state->overlay_zoom,
-                                                              min_x,
-                                                              min_y,
-                                                              min_z,
-                                                              max_x,
-                                                              max_y,
-                                                              max_z,
-                                                              out_projector);
+    if (!scene_editor_digest_overlay_projector_from_extents(viewport,
+                                                            nav_state->orbit_yaw_deg,
+                                                            nav_state->orbit_pitch_deg,
+                                                            nav_state->overlay_zoom,
+                                                            min_x,
+                                                            min_y,
+                                                            min_z,
+                                                            max_x,
+                                                            max_y,
+                                                            max_z,
+                                                            out_projector)) {
+        return false;
+    }
+    scene_editor_digest_overlay_projector_apply_navigation_target(nav_state, out_projector);
+    return true;
 }

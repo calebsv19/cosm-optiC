@@ -1,4 +1,5 @@
 #include "config/config_manager.h"
+#include "config/mesh_import_policy.h"
 #include "config/config_file_io.h"
 #include "config/core/config_runtime_paths.h"
 #include "config_animation_runtime3d.h"
@@ -285,6 +286,11 @@ void SaveAnimationConfig(void) {
     config_runtime_paths_normalize_data_roots();
     json_object_object_add(config, "inputRoot", json_object_new_string(animSettings.inputRoot));
     json_object_object_add(config, "meshAssetRoot", json_object_new_string(animSettings.meshAssetRoot));
+    ray_tracing_mesh_import_policy_normalize(&animSettings);
+    json_object_object_add(config, "meshImportNormalMode", json_object_new_int(animSettings.meshImportNormalMode));
+    json_object_object_add(config,
+                           "meshImportCreaseAngleDegrees",
+                           json_object_new_double(animSettings.meshImportCreaseAngleDegrees));
     json_object_object_add(config, "outputRoot", json_object_new_string(animSettings.outputRoot));
     config_runtime_paths_normalize_frame_dir();
     json_object_object_add(config, "frameDir", json_object_new_string(animSettings.frameDir));
@@ -542,6 +548,17 @@ void LoadAnimationConfig(void) {
             animSettings.meshAssetRoot[sizeof(animSettings.meshAssetRoot) - 1] = '\0';
         }
     }
+    if (json_object_object_get_ex(config, "meshImportNormalMode", &temp)) {
+        animSettings.meshImportNormalMode = json_object_get_int(temp);
+    } else {
+        animSettings.meshImportNormalMode = RAY_TRACING_MESH_IMPORT_NORMAL_MODE_DEFAULT;
+    }
+    if (json_object_object_get_ex(config, "meshImportCreaseAngleDegrees", &temp)) {
+        animSettings.meshImportCreaseAngleDegrees = json_object_get_double(temp);
+    } else {
+        animSettings.meshImportCreaseAngleDegrees = RAY_TRACING_MESH_IMPORT_CREASE_ANGLE_DEFAULT;
+    }
+    ray_tracing_mesh_import_policy_normalize(&animSettings);
     if (json_object_object_get_ex(config, "outputRoot", &temp) && json_object_is_type(temp, json_type_string)) {
         const char* path = json_object_get_string(temp);
         if (path) {

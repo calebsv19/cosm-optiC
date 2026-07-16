@@ -12,6 +12,7 @@ CORE_WORKERS_DIR := $(SHARED_ROOT)/core/core_workers
 CORE_SIM_DIR := $(SHARED_ROOT)/core/core_sim
 CORE_SCENE_DIR := $(SHARED_ROOT)/core/core_scene
 CORE_SCENE_VIEW_DIR := $(SHARED_ROOT)/core/core_scene_view
+CORE_VIEWPORT3D_DIR := $(SHARED_ROOT)/core/core_viewport3d
 CORE_AUTHORED_TEXTURE_DIR := $(SHARED_ROOT)/core/core_authored_texture
 CORE_SCENE_COMPILE_DIR := $(SHARED_ROOT)/core/core_scene_compile
 CORE_MESH_ASSET_DIR := $(SHARED_ROOT)/core/core_mesh_asset
@@ -29,6 +30,7 @@ KIT_RENDER_DIR := $(SHARED_ROOT)/kit/kit_render
 KIT_PANE_DIR := $(SHARED_ROOT)/kit/kit_pane
 KIT_VIZ_DIR := $(SHARED_ROOT)/kit/kit_viz
 KIT_RUNTIME_DIAG_DIR := $(SHARED_ROOT)/kit/kit_runtime_diag
+KIT_VIEWPORT3D_DIR := $(SHARED_ROOT)/kit/kit_viewport3d
 KIT_WORKSPACE_AUTHORING_DIR := $(SHARED_ROOT)/kit/kit_workspace_authoring
 ifeq ($(wildcard $(CORE_AUTHORED_TEXTURE_DIR)/include/core_authored_texture.h),)
 CORE_AUTHORED_TEXTURE_DIR := $(SHARED_WORKSPACE_DIR)/core/core_authored_texture
@@ -41,6 +43,12 @@ CORE_MESH_PREVIEW_DIR := $(SHARED_WORKSPACE_DIR)/core/core_mesh_preview
 endif
 ifeq ($(wildcard $(CORE_SCENE_VIEW_DIR)/include/core_scene_view.h),)
 CORE_SCENE_VIEW_DIR := $(SHARED_WORKSPACE_DIR)/core/core_scene_view
+endif
+ifeq ($(wildcard $(CORE_VIEWPORT3D_DIR)/include/core_viewport3d.h),)
+CORE_VIEWPORT3D_DIR := $(SHARED_WORKSPACE_DIR)/core/core_viewport3d
+endif
+ifeq ($(wildcard $(KIT_VIEWPORT3D_DIR)/include/kit_viewport3d.h),)
+KIT_VIEWPORT3D_DIR := $(SHARED_WORKSPACE_DIR)/kit/kit_viewport3d
 endif
 ifeq ($(wildcard $(CORE_HEADLESS_JOB_DIR)/include/core_headless_job.h),)
 CORE_HEADLESS_JOB_DIR := $(SHARED_WORKSPACE_DIR)/core/core_headless_job

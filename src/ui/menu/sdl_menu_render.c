@@ -6,6 +6,7 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "config/mesh_import_policy.h"
 #include "editor/editor_mode_router.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
@@ -280,6 +281,18 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootEditRect, "Edit", state->editingMeshAssetRoot);
     menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootFolderRect, "Folder", false);
     menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootApplyRect, "Apply", false);
+    {
+        char mesh_policy_label[96];
+        ray_tracing_mesh_import_policy_format_label(&animSettings,
+                                                    mesh_policy_label,
+                                                    sizeof(mesh_policy_label));
+        menu_render_draw_button_rect(renderer,
+                                     font,
+                                     &buttons.meshImportNormalPolicyRect,
+                                     mesh_policy_label,
+                                     animSettings.meshImportNormalMode ==
+                                         RAY_TRACING_MESH_IMPORT_NORMAL_MODE_CREASE_AWARE);
+    }
     if (buttons.attachVolumeRect.w > 0 && buttons.attachVolumeRect.h > 0) {
         char volumeLabel[160];
         menu_render_format_volume_button_label(state, volumeLabel, sizeof(volumeLabel));

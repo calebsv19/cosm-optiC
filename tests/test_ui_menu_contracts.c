@@ -544,6 +544,13 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
     assert_true("menu_buttons_left_controls_inside_left_panel",
                 buttons.loadSceneRect.x >= screen.leftPanelRect.x &&
                 test_rect_right(&buttons.inputRootApplyRect) <= test_rect_right(&screen.leftPanelRect));
+    assert_true("menu_buttons_mesh_import_policy_inside_left_panel",
+                buttons.meshImportNormalPolicyRect.w > 0 &&
+                buttons.meshImportNormalPolicyRect.x >= screen.leftPanelRect.x &&
+                test_rect_right(&buttons.meshImportNormalPolicyRect) <=
+                    test_rect_right(&screen.leftPanelRect) &&
+                buttons.meshImportNormalPolicyRect.y >=
+                    buttons.meshAssetRootValueRect.y + buttons.meshAssetRootValueRect.h);
     assert_true("menu_buttons_center_controls_inside_center_zone",
                 buttons.falloffRect.x >= screen.centerControlsRect.x &&
                 test_rect_right(&buttons.topFillRect) <= test_rect_right(&screen.centerControlsRect));

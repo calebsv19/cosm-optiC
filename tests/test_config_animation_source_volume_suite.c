@@ -6,6 +6,7 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "config/mesh_import_policy.h"
 #include "material/material_manager.h"
 #include "test_config_animation_internal.h"
 #include "test_support.h"
@@ -639,6 +640,36 @@ static int test_animation_mesh_asset_root_roundtrip(void) {
     return 0;
 }
 
+static int test_animation_mesh_import_policy_roundtrip_and_defaults(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+
+    animSettings.meshImportNormalMode = RAY_TRACING_MESH_IMPORT_NORMAL_MODE_SMOOTH;
+    animSettings.meshImportCreaseAngleDegrees = 90.0;
+    SaveAnimationConfig();
+    animSettings.meshImportNormalMode = RAY_TRACING_MESH_IMPORT_NORMAL_MODE_NONE;
+    animSettings.meshImportCreaseAngleDegrees = 1.0;
+    LoadAnimationConfig();
+
+    assert_true("mesh_import_policy_roundtrip_mode",
+                animSettings.meshImportNormalMode == RAY_TRACING_MESH_IMPORT_NORMAL_MODE_SMOOTH);
+    assert_true("mesh_import_policy_roundtrip_crease",
+                animSettings.meshImportCreaseAngleDegrees == 90.0);
+
+    animSettings.meshImportNormalMode = -1;
+    animSettings.meshImportCreaseAngleDegrees = 999.0;
+    ray_tracing_mesh_import_policy_normalize(&animSettings);
+    assert_true("mesh_import_policy_invalid_mode_defaults_to_crease_aware",
+                animSettings.meshImportNormalMode ==
+                    RAY_TRACING_MESH_IMPORT_NORMAL_MODE_CREASE_AWARE);
+    assert_true("mesh_import_policy_invalid_crease_defaults_to_60",
+                animSettings.meshImportCreaseAngleDegrees ==
+                    RAY_TRACING_MESH_IMPORT_CREASE_ANGLE_DEFAULT);
+
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
 int run_test_config_animation_source_volume_suite(void) {
     int before = test_support_failures();
 
@@ -657,5 +688,6 @@ int run_test_config_animation_source_volume_suite(void) {
     test_animation_apply_runtime_scene_defers_missing_mesh_assets();
     test_animation_save_preserves_runtime_source_even_without_path();
     test_animation_mesh_asset_root_roundtrip();
+    test_animation_mesh_import_policy_roundtrip_and_defaults();
     return test_support_failures() - before;
 }

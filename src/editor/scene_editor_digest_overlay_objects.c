@@ -519,8 +519,8 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
 
     if (!material_focus_mode && digest->has_scene_bounds) {
         SDL_Color bounds_color = digest->bounds_enabled
-                                     ? (SDL_Color){90, 130, 190, 220}
-                                     : (SDL_Color){70, 84, 102, 170};
+                                     ? (SDL_Color){90, 130, 190, 118}
+                                     : (SDL_Color){70, 84, 102, 82};
         double bounds_span = fmax(fabs(digest->bounds_max_x - digest->bounds_min_x),
                                   fmax(fabs(digest->bounds_max_y - digest->bounds_min_y),
                                        fabs(digest->bounds_max_z - digest->bounds_min_z)));
@@ -546,7 +546,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
         SceneEditorDigestOverlayDrawConstructionPlane(renderer,
                                                       projector,
                                                       digest,
-                                                      (SDL_Color){205, 176, 106, 220});
+                                                      (SDL_Color){205, 176, 106, 112});
     } else if (selected_object_index >= 0) {
         int material_selected_count = MaterialEditorSelectedTriangleCount();
         if (material_selected_count > SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES) {
@@ -582,6 +582,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
             SDL_Color highlight_color = is_selected
                                             ? (SDL_Color){255, 120, 70, 255}
                                             : (SDL_Color){84, 224, 255, 245};
+            primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
             if (material_focus_mode && !is_selected) continue;
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
                 if (primitive->guide_only) {
@@ -627,6 +628,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
             SDL_Color highlight_color = is_selected
                                             ? (SDL_Color){255, 120, 70, 255}
                                             : (SDL_Color){84, 224, 255, 245};
+            primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
             if (material_focus_mode && !is_selected) continue;
             if (!primitive->guide_only) continue;
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {
@@ -677,6 +679,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
         SDL_Color highlight_color = is_selected
                                         ? (SDL_Color){255, 120, 70, 255}
                                         : (SDL_Color){84, 224, 255, 245};
+        primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
         if (material_focus_mode && !is_selected) continue;
         if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {
             double half_w = fmax(0.05, fabs(primitive->width) * 0.5);

@@ -12,6 +12,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_mesh_preview_contract.h"
 #include "editor/scene_editor_mesh_preview_render.h"
+#include "editor/scene_editor_mesh_preview_shading.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 #include "import/runtime_mesh_asset_pack.h"
 #include "config/config_manager.h"
@@ -44,8 +45,8 @@ static int test_scene_editor_mesh_preview_contract(void) {
     assert_true("mesh_preview_contract_solid_omits_structure",
                 !SceneEditorMeshDisplayModeDrawsStructuralWire(
                     SCENE_EDITOR_MESH_DISPLAY_SOLID));
-    assert_true("mesh_preview_contract_material_draws_structure",
-                SceneEditorMeshDisplayModeDrawsStructuralWire(
+    assert_true("mesh_preview_contract_material_uses_surface_outline",
+                !SceneEditorMeshDisplayModeDrawsStructuralWire(
                     SCENE_EDITOR_MESH_DISPLAY_MATERIAL));
     assert_true("mesh_preview_contract_overlay_stable",
                 !SceneEditorMeshPreviewInvalidationResetsQuality(overlay_only));
@@ -55,6 +56,35 @@ static int test_scene_editor_mesh_preview_contract(void) {
     assert_true("mesh_preview_contract_view_direction_resets",
                 SceneEditorMeshPreviewInvalidationResetsQuality(
                     SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_VIEW_DIRECTION));
+    {
+        const SDL_Color base = {200u, 160u, 120u, 255u};
+        const SceneEditorMeshPreviewShadeNormal aligned = {
+            0.3836486121626103,
+            -0.4240337281797272,
+            -0.8204351898687576};
+        const SceneEditorMeshPreviewShadeNormal opposite = {
+            -aligned.x,
+            -aligned.y,
+            -aligned.z};
+        const SceneEditorMeshPreviewShadeNormal side = {
+            aligned.y,
+            -aligned.x,
+            0.0};
+        const SDL_Color bright = SceneEditorMeshPreviewShadeColor(base, aligned);
+        const SDL_Color dark = SceneEditorMeshPreviewShadeColor(base, side);
+        assert_true("mesh_preview_shade_aligned_max",
+                    fabs(SceneEditorMeshPreviewShadeFactor(aligned) - 1.0) < 1e-9);
+        assert_true("mesh_preview_shade_winding_invariant",
+                    fabs(SceneEditorMeshPreviewShadeFactor(aligned) -
+                         SceneEditorMeshPreviewShadeFactor(opposite)) < 1e-9);
+        assert_true("mesh_preview_shade_degenerate_ambient",
+                    fabs(SceneEditorMeshPreviewShadeFactor(
+                             (SceneEditorMeshPreviewShadeNormal){0.0, 0.0, 0.0}) -
+                         0.36) < 1e-9);
+        assert_true("mesh_preview_shade_orientations_vary",
+                    bright.r != dark.r && bright.g != dark.g && bright.b != dark.b);
+        assert_true("mesh_preview_shade_preserves_alpha", dark.a == base.a);
+    }
     return 0;
 }
 

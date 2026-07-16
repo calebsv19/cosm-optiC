@@ -14,6 +14,7 @@ typedef struct SceneEditorViewportNavCommand {
     bool viewport_drag_region;
     bool key_frame_enabled;
     bool gesture_orbit_enabled;
+    bool gesture_pan_enabled;
     bool wheel_zoom_enabled;
     int active_mode;
     int selected_object_index;
@@ -30,9 +31,18 @@ bool SceneEditorViewportNavFitDigestOverlayForTarget(SceneEditorDigestOverlayNav
                                                      int selected_object_index);
 bool SceneEditorViewportNavApplyDigestWheelZoom(SceneEditorDigestOverlayNavState* nav_state,
                                                 const SDL_Rect* viewport_rect,
-                                                int wheel_y,
+                                                int screen_x,
+                                                int screen_y,
+                                                double wheel_delta,
                                                 int active_mode,
                                                 int selected_object_index);
+bool SceneEditorViewportNavApplyDigestPan(SceneEditorDigestOverlayNavState* nav_state,
+                                         const SDL_Rect* viewport_rect,
+                                         int screen_dx,
+                                         int screen_dy,
+                                         int active_mode,
+                                         int selected_object_index);
+bool SceneEditorViewportNavApplyDigestResize(SceneEditorDigestOverlayNavState* nav_state);
 bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* command,
                                          SceneEditorDigestOverlayNavState* nav_state,
                                          bool* out_interaction_drag);

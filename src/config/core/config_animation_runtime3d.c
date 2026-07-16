@@ -1,5 +1,7 @@
 #include "config_animation_runtime3d.h"
 
+#include "config/mesh_import_policy.h"
+
 static int ClampSecondaryDiffuseSamples3D(int value) {
     if (value < RUNTIME_3D_SECONDARY_SAMPLES_MIN) {
         value = RUNTIME_3D_SECONDARY_SAMPLES_MIN;
@@ -141,6 +143,7 @@ void animation_config_normalize_runtime3d_fields(AnimationConfig* cfg) {
         ClampRenderScale3D(cfg->renderScale3D);
     cfg->upscaleMode3D =
         ClampUpscaleMode3D(cfg->upscaleMode3D);
+    ray_tracing_mesh_import_policy_normalize(cfg);
     cfg->causticMode3D = ClampInt(cfg->causticMode3D,
                                  RUNTIME_3D_CAUSTIC_MODE_MIN,
                                  RUNTIME_3D_CAUSTIC_MODE_MAX);

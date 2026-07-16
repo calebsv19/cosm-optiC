@@ -13,6 +13,7 @@ typedef struct SceneEditorMeshPreviewFrameStats {
     int rendered_instances;
     size_t rendered_triangles;
     size_t rendered_wire_segments;
+    size_t rendered_outline_pixels;
     int rendered_bounds;
 } SceneEditorMeshPreviewFrameStats;
 
@@ -44,4 +45,3 @@ int SceneEditorMeshPreviewPickObjectIndex(
     int selected_object_index,
     int screen_x,
     int screen_y);
-

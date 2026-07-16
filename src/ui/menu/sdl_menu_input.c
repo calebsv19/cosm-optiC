@@ -9,6 +9,7 @@
 #include "app/animation.h"
 #include "app/data_paths.h"
 #include "config/config_manager.h"
+#include "config/mesh_import_policy.h"
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
@@ -669,6 +670,24 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         } else {
             apply_mesh_asset_root(state, animSettings.meshAssetRoot);
         }
+        return;
+    }
+    if (point_in_rect(&buttons.meshImportNormalPolicyRect, x, y)) {
+        if (animSettings.meshImportNormalMode == RAY_TRACING_MESH_IMPORT_NORMAL_MODE_NONE) {
+            animSettings.meshImportNormalMode = RAY_TRACING_MESH_IMPORT_NORMAL_MODE_SMOOTH;
+        } else if (animSettings.meshImportNormalMode == RAY_TRACING_MESH_IMPORT_NORMAL_MODE_SMOOTH) {
+            animSettings.meshImportNormalMode = RAY_TRACING_MESH_IMPORT_NORMAL_MODE_CREASE_AWARE;
+        } else {
+            animSettings.meshImportNormalMode = RAY_TRACING_MESH_IMPORT_NORMAL_MODE_NONE;
+        }
+        ray_tracing_mesh_import_policy_normalize(&animSettings);
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "Mesh defaults: %s (next compile only)",
+                 ray_tracing_mesh_import_normal_mode_name(animSettings.meshImportNormalMode));
+        state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
+        state->statusColor = (SDL_Color){160, 210, 255, 255};
+        state->statusExpireMs = SDL_GetTicks() + 2400;
         return;
     }
 

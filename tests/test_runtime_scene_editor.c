@@ -4668,6 +4668,7 @@ static int test_material_editor_object_projector_centers_focused_object(void) {
     SceneEditorDigestOverlayProjector projector;
     SceneEditorDigestOverlayProjector scene_projector;
     SDL_Rect viewport = {0, 0, 800, 600};
+    SDL_Rect resized_viewport = {0, 0, 1024, 720};
 
     memset(&digest, 0, sizeof(digest));
     memset(&nav_state, 0, sizeof(nav_state));
@@ -4722,6 +4723,40 @@ static int test_material_editor_object_projector_centers_focused_object(void) {
     assert_close("material_editor_projector_center_z", projector.center_z, -2.0, 1e-9);
     assert_close("material_editor_projector_span", projector.span_max, 10.0, 1e-9);
 
+    nav_state.target_valid = true;
+    nav_state.target_x = 11.0;
+    nav_state.target_y = 12.0;
+    nav_state.target_z = 13.0;
+    assert_true("material_editor_durable_target_projector_builds",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &viewport,
+                                                             &nav_state,
+                                                             8,
+                                                             true,
+                                                             &projector));
+    assert_close("material_editor_durable_target_center_x", projector.center_x, 11.0, 1e-9);
+    assert_close("material_editor_durable_target_center_y", projector.center_y, 12.0, 1e-9);
+    assert_close("material_editor_durable_target_center_z", projector.center_z, 13.0, 1e-9);
+    assert_close("material_editor_durable_target_keeps_object_span", projector.span_max, 10.0, 1e-9);
+
+    nav_state.orbit_yaw_deg = 35.0;
+    nav_state.orbit_pitch_deg = -20.0;
+    assert_true("evn3_resize_projector_rebuilds",
+                SceneEditorDigestOverlayBuildObjectProjector(&digest,
+                                                             &resized_viewport,
+                                                             &nav_state,
+                                                             8,
+                                                             true,
+                                                             &projector));
+    assert_close("evn3_resize_preserves_target_x", nav_state.target_x, 11.0, 1e-9);
+    assert_close("evn3_resize_preserves_target_y", nav_state.target_y, 12.0, 1e-9);
+    assert_close("evn3_resize_preserves_target_z", nav_state.target_z, 13.0, 1e-9);
+    assert_close("evn3_resize_preserves_yaw", nav_state.orbit_yaw_deg, 35.0, 1e-9);
+    assert_close("evn3_resize_preserves_pitch", nav_state.orbit_pitch_deg, -20.0, 1e-9);
+    assert_close("evn3_resize_projector_target_x", projector.center_x, 11.0, 1e-9);
+    assert_close("evn3_resize_projector_target_y", projector.center_y, 12.0, 1e-9);
+    assert_close("evn3_resize_projector_target_z", projector.center_z, 13.0, 1e-9);
+
     return 0;
 }
 
@@ -4768,6 +4803,10 @@ static int test_material_editor_focused_zoom_accumulates_around_object_fit(void)
     double zoom_once = 0.0;
     double zoom_twice = 0.0;
     double zoom_far = 0.0;
+    double target_before_pan_x = 0.0;
+    double target_after_pan_x = 0.0;
+    double target_after_pan_y = 0.0;
+    double target_after_pan_z = 0.0;
 
     memset(&sceneSettings, 0, sizeof(sceneSettings));
     memset(&animSettings, 0, sizeof(animSettings));
@@ -4786,19 +4825,47 @@ static int test_material_editor_focused_zoom_accumulates_around_object_fit(void)
                                                                 1));
     fit_zoom = nav_state.overlay_zoom;
     assert_true("material_zoom_fit_positive", fit_zoom > 0.0);
+    assert_true("material_zoom_fit_sets_durable_target", nav_state.target_valid);
+    assert_close("material_zoom_fit_target_x", nav_state.target_x, 40.0, 1e-9);
+    assert_close("material_zoom_fit_target_y", nav_state.target_y, 3.0, 1e-9);
+    assert_close("material_zoom_fit_target_z", nav_state.target_z, -1.0, 1e-9);
+
+    target_before_pan_x = nav_state.target_x;
+    assert_true("material_zoom_pan_applies",
+                SceneEditorViewportNavApplyDigestPan(&nav_state,
+                                                     &viewport,
+                                                     30,
+                                                     -15,
+                                                     EDITOR_MODE_MATERIAL,
+                                                     1));
+    assert_true("material_zoom_pan_changes_target",
+                fabs(nav_state.target_x - target_before_pan_x) > 1e-9 ||
+                fabs(nav_state.target_y - 3.0) > 1e-9 ||
+                fabs(nav_state.target_z + 1.0) > 1e-9);
+    target_after_pan_x = nav_state.target_x;
+    target_after_pan_y = nav_state.target_y;
+    target_after_pan_z = nav_state.target_z;
 
     assert_true("material_zoom_wheel_once",
                 SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
                                                            &viewport,
+                                                           600,
+                                                           200,
                                                            1,
                                                            EDITOR_MODE_MATERIAL,
                                                            1));
     zoom_once = nav_state.overlay_zoom;
     assert_true("material_zoom_first_step_increases", zoom_once > fit_zoom * 1.20);
+    assert_true("material_zoom_cursor_anchor_adjusts_target",
+                fabs(nav_state.target_x - target_after_pan_x) > 1e-9 ||
+                fabs(nav_state.target_y - target_after_pan_y) > 1e-9 ||
+                fabs(nav_state.target_z - target_after_pan_z) > 1e-9);
 
     assert_true("material_zoom_wheel_twice",
                 SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
                                                            &viewport,
+                                                           400,
+                                                           300,
                                                            1,
                                                            EDITOR_MODE_MATERIAL,
                                                            1));
@@ -4809,6 +4876,8 @@ static int test_material_editor_focused_zoom_accumulates_around_object_fit(void)
     assert_true("material_zoom_wheel_far_out",
                 SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
                                                            &viewport,
+                                                           400,
+                                                           300,
                                                            -40,
                                                            EDITOR_MODE_MATERIAL,
                                                            1));
@@ -4816,6 +4885,224 @@ static int test_material_editor_focused_zoom_accumulates_around_object_fit(void)
     assert_true("material_zoom_far_out_below_fit", zoom_far < fit_zoom);
     assert_true("material_zoom_far_out_keeps_positive", zoom_far > 0.0);
 
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_scene_editor_object_zoom_keeps_frame_domain(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_object_zoom_domain\","
+        "\"unit_system\":\"meters\",\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":["
+          "{\"object_id\":\"wide\",\"object_type\":\"rect_prism_primitive\","
+           "\"transform\":{\"position\":{\"x\":-120.0,\"y\":0.0,\"z\":0.0},"
+             "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+           "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+             "\"width\":12.0,\"height\":12.0,\"depth\":12.0}},"
+          "{\"object_id\":\"small\",\"object_type\":\"rect_prism_primitive\","
+           "\"transform\":{\"position\":{\"x\":40.0,\"y\":3.0,\"z\":-1.0},"
+             "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+           "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+             "\"width\":4.0,\"height\":3.0,\"depth\":2.0}}],"
+        "\"materials\":[],\"lights\":[],\"cameras\":[],"
+        "\"constraints\":[],\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    SceneEditorDigestOverlayNavState nav_state = {0};
+    SDL_Rect viewport = {0, 0, 800, 600};
+    double scene_fit = 0.0;
+    double selected_fit = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+    MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT);
+    assert_true("object_zoom_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+    assert_true("object_zoom_scene_frame",
+                SceneEditorViewportNavFitDigestOverlay(&nav_state, &viewport, true));
+    scene_fit = nav_state.overlay_zoom;
+    assert_true("object_zoom_incidental_selection_tick",
+                SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
+                                                           &viewport,
+                                                           400,
+                                                           300,
+                                                           1.0,
+                                                           EDITOR_MODE_OBJECT,
+                                                           1));
+    assert_close("object_zoom_incidental_selection_no_clamp_jump",
+                 nav_state.overlay_zoom,
+                 scene_fit * 1.12,
+                 1e-9);
+    assert_true("object_zoom_reciprocal_tick",
+                SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
+                                                           &viewport,
+                                                           400,
+                                                           300,
+                                                           -1.0,
+                                                           EDITOR_MODE_OBJECT,
+                                                           1));
+    assert_close("object_zoom_reciprocal_roundtrip",
+                 nav_state.overlay_zoom,
+                 scene_fit,
+                 1e-9);
+
+    assert_true("object_zoom_selected_frame",
+                SceneEditorViewportNavFitDigestOverlayForTarget(&nav_state,
+                                                                &viewport,
+                                                                true,
+                                                                EDITOR_MODE_OBJECT,
+                                                                1));
+    selected_fit = nav_state.overlay_zoom;
+    assert_true("object_zoom_selected_frame_tick",
+                SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
+                                                           &viewport,
+                                                           400,
+                                                           300,
+                                                           0.5,
+                                                           EDITOR_MODE_OBJECT,
+                                                           0));
+    assert_close("object_zoom_selected_domain_is_durable",
+                 nav_state.overlay_zoom,
+                 selected_fit * sqrt(1.12),
+                 1e-9);
+    assert_true("object_zoom_nonfinite_rejected",
+                !SceneEditorViewportNavApplyDigestWheelZoom(&nav_state,
+                                                            &viewport,
+                                                            400,
+                                                            300,
+                                                            NAN,
+                                                            EDITOR_MODE_OBJECT,
+                                                            0));
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_scene_editor_viewport_navigation_gesture_contract(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    SDL_Keymod saved_mods = SDL_GetModState();
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_viewport_navigation_gestures\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"nav_block\","
+          "\"object_type\":\"rect_prism_primitive\","
+          "\"transform\":{\"position\":{\"x\":2.0,\"y\":3.0,\"z\":4.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}},"
+          "\"primitive\":{\"kind\":\"rect_prism_primitive\","
+            "\"width\":4.0,\"height\":6.0,\"depth\":8.0}"
+        "}],"
+        "\"materials\":[],\"lights\":[],\"cameras\":[],"
+        "\"constraints\":[],\"extensions\":{}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    SceneEditorDigestOverlayNavState nav_state = {0};
+    SceneEditorViewportNavCommand command = {0};
+    SDL_Rect viewport = {0, 0, 800, 600};
+    SDL_Event event = {0};
+    bool interaction_drag = false;
+    double yaw_before = 0.0;
+    double target_before_x = 0.0;
+    double target_before_y = 0.0;
+    double target_before_z = 0.0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    animSettings.integratorMode = 1;
+    assert_true("viewport_gesture_runtime_apply_ok",
+                runtime_scene_bridge_apply_json(runtime_json, &summary));
+    SceneEditorViewportNavResetDigestOverlayNavigation(&nav_state);
+
+    command.viewport_rect = &viewport;
+    command.event = &event;
+    command.viewport_canvas_region = true;
+    command.viewport_drag_region = false;
+    command.gesture_orbit_enabled = true;
+    command.gesture_pan_enabled = true;
+    command.wheel_zoom_enabled = true;
+    command.active_mode = EDITOR_MODE_OBJECT;
+    command.selected_object_index = 0;
+
+    SDL_SetModState(KMOD_ALT);
+    event.type = SDL_MOUSEMOTION;
+    event.motion.x = 420;
+    event.motion.y = 310;
+    event.motion.xrel = 20;
+    event.motion.yrel = 10;
+    event.motion.state = 0;
+    yaw_before = nav_state.orbit_yaw_deg;
+    assert_true("viewport_alt_hover_not_consumed",
+                !SceneEditorViewportNavHandleCommand(&command, &nav_state, &interaction_drag));
+    assert_close("viewport_alt_hover_preserves_yaw", nav_state.orbit_yaw_deg, yaw_before, 1e-9);
+    assert_true("viewport_alt_hover_not_orbiting", !nav_state.orbit_active);
+
+    event.motion.state = SDL_BUTTON_LMASK;
+    assert_true("viewport_alt_lmb_orbit_consumed",
+                SceneEditorViewportNavHandleCommand(&command, &nav_state, &interaction_drag));
+    assert_true("viewport_alt_lmb_changes_yaw", fabs(nav_state.orbit_yaw_deg - yaw_before) > 1e-9);
+    assert_true("viewport_alt_lmb_marks_drag", interaction_drag && nav_state.orbit_active);
+
+    event.type = SDL_MOUSEBUTTONUP;
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = 420;
+    event.button.y = 310;
+    (void)SceneEditorViewportNavHandleCommand(&command, &nav_state, &interaction_drag);
+    assert_true("viewport_lmb_release_ends_orbit", !nav_state.orbit_active);
+
+    SDL_SetModState(KMOD_NONE);
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.button = SDL_BUTTON_MIDDLE;
+    event.button.x = 400;
+    event.button.y = 300;
+    assert_true("viewport_mmb_begin_consumed",
+                SceneEditorViewportNavHandleCommand(&command, &nav_state, &interaction_drag));
+    assert_true("viewport_mmb_begin_active", nav_state.pan_active && nav_state.target_valid);
+    target_before_x = nav_state.target_x;
+    target_before_y = nav_state.target_y;
+    target_before_z = nav_state.target_z;
+
+    event.type = SDL_MOUSEMOTION;
+    event.motion.x = 430;
+    event.motion.y = 285;
+    event.motion.xrel = 30;
+    event.motion.yrel = -15;
+    event.motion.state = SDL_BUTTON_MMASK;
+    assert_true("viewport_mmb_motion_consumed",
+                SceneEditorViewportNavHandleCommand(&command, &nav_state, &interaction_drag));
+    assert_true("viewport_mmb_motion_marks_drag", interaction_drag && nav_state.pan_active);
+    assert_true("viewport_mmb_motion_changes_target",
+                fabs(nav_state.target_x - target_before_x) > 1e-9 ||
+                fabs(nav_state.target_y - target_before_y) > 1e-9 ||
+                fabs(nav_state.target_z - target_before_z) > 1e-9);
+
+    event.type = SDL_MOUSEBUTTONUP;
+    event.button.button = SDL_BUTTON_MIDDLE;
+    event.button.x = 430;
+    event.button.y = 285;
+    assert_true("viewport_mmb_release_consumed",
+                SceneEditorViewportNavHandleCommand(&command, &nav_state, &interaction_drag));
+    assert_true("viewport_mmb_release_ends_pan", !nav_state.pan_active);
+
+    SDL_SetModState(saved_mods);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -6487,7 +6774,7 @@ static int test_scene_editor_control_surface_native_lane_parity(void) {
     assert_true("surface_native_viewport_pick_disabled", !contract.laneViewportObjectPickEnabled);
     assert_true("surface_native_canvas_enabled", contract.laneCanvasEditEnabled);
     assert_true("surface_native_controls_active",
-                strstr(contract.statusControls, "Alt+drag orbit") != NULL);
+                strstr(contract.statusControls, "Alt+LMB orbit") != NULL);
     return 0;
 }
 
@@ -6536,7 +6823,7 @@ static int test_scene_editor_control_surface_controlled_3d_interaction_parity(vo
     assert_true("surface_controlled3d_canvas_enabled",
                 contract.laneCanvasEditEnabled);
     assert_true("surface_controlled3d_controls_has_orbit",
-                strstr(contract.statusControls, "Alt+drag orbit") != NULL);
+                strstr(contract.statusControls, "Alt+LMB orbit") != NULL);
     return 0;
 }
 
@@ -6721,6 +7008,8 @@ int run_test_runtime_scene_editor_tests(void) {
     test_material_editor_layer_list_routes_object_stack_controls();
     test_material_editor_object_projector_centers_focused_object();
     test_material_editor_focused_zoom_accumulates_around_object_fit();
+    test_scene_editor_object_zoom_keeps_frame_domain();
+    test_scene_editor_viewport_navigation_gesture_contract();
     test_material_editor_preview_resolves_focused_triangle_substrate();
     test_scene_editor_scene_view_packet_exports_focused_object();
     test_material_editor_face_metrics_ground_uv_scales_with_dimensions();

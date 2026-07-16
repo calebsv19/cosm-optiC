@@ -53,8 +53,7 @@ static inline SceneEditorMeshDisplayMode SceneEditorMeshDisplayModeCycle(
 static inline bool SceneEditorMeshDisplayModeDrawsStructuralWire(
     SceneEditorMeshDisplayMode mode) {
     const SceneEditorMeshDisplayMode clamped = SceneEditorMeshDisplayModeClamp((int)mode);
-    return clamped == SCENE_EDITOR_MESH_DISPLAY_WIRE ||
-           clamped == SCENE_EDITOR_MESH_DISPLAY_MATERIAL;
+    return clamped == SCENE_EDITOR_MESH_DISPLAY_WIRE;
 }
 
 static inline bool SceneEditorMeshPreviewInvalidationResetsQuality(unsigned invalidation) {

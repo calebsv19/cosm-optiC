@@ -10,6 +10,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
 #include "editor/scene_editor_mesh_preview_store.h"
+#include "editor/scene_editor_mesh_preview_surface.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/render_helper.h"
 
@@ -502,6 +503,7 @@ static void scene_editor_mesh_preview_draw_bounds(
 }
 
 void SceneEditorMeshPreviewRenderReset(SDL_Renderer* renderer) {
+    SceneEditorMeshPreviewSurfaceReset(renderer);
 #if USE_VULKAN
     if (renderer) {
         VkRenderer* vk = (VkRenderer*)renderer;
@@ -571,9 +573,21 @@ bool SceneEditorMeshPreviewRenderGeometry(
     int hover_object_index,
     SceneEditorMeshPreviewFrameStats* out_stats) {
     SceneEditorMeshPreviewFrameStats stats = {0};
+    bool surface_rendered = false;
     stats.mode = SceneEditorMeshPreviewModeGet();
     if (out_stats) *out_stats = stats;
     if (!renderer || !projector) return false;
+
+    if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_SOLID ||
+        stats.mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL) {
+        surface_rendered = SceneEditorMeshPreviewSurfaceRender(renderer,
+                                                               projector,
+                                                               active_editor_mode,
+                                                               selected_object_index,
+                                                               hover_object_index,
+                                                               stats.mode,
+                                                               &stats);
+    }
 
     for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance =
@@ -598,7 +612,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                   (SDL_Color){112, 168, 220, 235});
             stats.rendered_bounds += 1;
             stats.rendered_instances += 1;
-        } else {
+        } else if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || !surface_rendered) {
 #if USE_VULKAN
             VkRenderer* vk = (VkRenderer*)renderer;
             int slot_index = (int)vk->current_frame_index;
@@ -623,7 +637,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                       instance->scene_object_index)) {
                 continue;
             }
-            if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE) {
+            if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || surface_rendered) {
                 vk_renderer_draw_line_mesh(vk, &slot->wire_mesh);
                 stats.rendered_wire_segments += slot->wire_segment_count;
             } else {
@@ -638,7 +652,9 @@ bool SceneEditorMeshPreviewRenderGeometry(
                     stats.rendered_wire_segments += slot->wire_segment_count;
                 }
             }
-            stats.rendered_instances += 1;
+            if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || !surface_rendered) {
+                stats.rendered_instances += 1;
+            }
 #else
             (void)lod;
 #endif
@@ -648,7 +664,10 @@ bool SceneEditorMeshPreviewRenderGeometry(
         } else if (instance->scene_object_index == hover_object_index) {
             highlight = (SDL_Color){92, 228, 255, 245};
         }
-        if (highlight.a != 0u) {
+        if (highlight.a != 0u &&
+            (stats.mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS ||
+             stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE ||
+             !surface_rendered)) {
             scene_editor_mesh_preview_draw_bounds(renderer,
                                                   projector,
                                                   contract,
