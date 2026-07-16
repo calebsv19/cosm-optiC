@@ -307,6 +307,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
 	$(BUILD_DIR)/tests/test_runtime_object_motion_tracks.o \
+	$(BUILD_DIR)/tests/test_runtime_timeline_foundation.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \

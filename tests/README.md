@@ -68,6 +68,7 @@ make -C ray_tracing test-scene-editor-viewport3d-bridge-contract
 make -C ray_tracing test-scene-editor-viewport-nav-contract
 make -C ray_tracing test-scene-editor-primitive-preview-geometry
 make -C ray_tracing test-ray-tracing-worker-version-contract
+TEST_RUNNER_GROUP=runtime_timeline_foundation make -C ray_tracing test
 ```
 
 The worker-version contract target is non-packaging proof. It verifies the
@@ -79,6 +80,13 @@ The primitive-preview geometry target pins editor-only plane tessellation and
 rect-prism face coverage, including the rule that guide primitives stay
 outline-only. Solid/Material integration uses these bounded triangles in the
 same depth surface as imported mesh preview LODs.
+
+`runtime_timeline_foundation` proves the TAF0-TAF1 UI-free frame-authored
+clock/context and detached scalar/vector track-document evaluator. It covers
+exact frames, range offsets, subframes, chunk/resume equivalence, invalid input,
+sorted/duplicate keys, step/linear interpolation, type mismatch, independent
+multi-track results, and equivalent authored motion across frame rates. It does
+not apply values to scene state or claim persistence/editor integration.
 
 The viewport3d bridge target proves Ray orientation conversion, canonical pan,
 anchor zoom, orbit, frame, resize, validation, and invalid-input nonmutation against shared
