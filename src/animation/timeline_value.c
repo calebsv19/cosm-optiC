@@ -13,6 +13,21 @@ const char* TimelineValueTypeLabel(TimelineValueType type) {
     }
 }
 
+const char* TimelineUnitLabel(TimelineUnit unit) {
+    switch (unit) {
+        case TIMELINE_UNIT_UNSPECIFIED: return "unspecified";
+        case TIMELINE_UNIT_UNITLESS: return "unitless";
+        case TIMELINE_UNIT_WORLD_DISTANCE: return "world_distance";
+        case TIMELINE_UNIT_RELATIVE_INTENSITY: return "relative_intensity";
+        default: return "unknown";
+    }
+}
+
+bool TimelineUnitIsValid(TimelineUnit unit) {
+    return unit >= TIMELINE_UNIT_UNSPECIFIED &&
+           unit <= TIMELINE_UNIT_RELATIVE_INTENSITY;
+}
+
 TimelineValue TimelineValueScalar(double value) {
     TimelineValue result;
     memset(&result, 0, sizeof(result));

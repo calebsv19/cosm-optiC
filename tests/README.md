@@ -69,6 +69,7 @@ make -C ray_tracing test-scene-editor-viewport-nav-contract
 make -C ray_tracing test-scene-editor-primitive-preview-geometry
 make -C ray_tracing test-ray-tracing-worker-version-contract
 TEST_RUNNER_GROUP=runtime_timeline_foundation make -C ray_tracing test
+TEST_RUNNER_GROUP=runtime_timeline_property_registry make -C ray_tracing test
 ```
 
 The worker-version contract target is non-packaging proof. It verifies the
@@ -87,6 +88,12 @@ exact frames, range offsets, subframes, chunk/resume equivalence, invalid input,
 sorted/duplicate keys, step/linear interpolation, type mismatch, independent
 multi-track results, and equivalent authored motion across frame rates. It does
 not apply values to scene state or claim persistence/editor integration.
+
+`runtime_timeline_property_registry` proves the TAF2 typed binding layer over
+the detached evaluator: foundation descriptors, stable lookup, target/type/
+unit/ownership/interpolation/range refusal, copied invalidation metadata,
+multi-track evaluation, and output nonmutation on failed validation. It does
+not apply evaluated values or invalidate renderer state.
 
 The viewport3d bridge target proves Ray orientation conversion, canonical pan,
 anchor zoom, orbit, frame, resize, validation, and invalid-input nonmutation against shared

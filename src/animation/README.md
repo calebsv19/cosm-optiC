@@ -36,9 +36,24 @@ claim an application or invalidation policy.
 simulation orchestration boundary. Neither library owns authored timeline
 documents or keyframe interpolation, so no shared module changed for this wave.
 
-## Next boundary: TAF2
+## TAF2 property registry
 
-Add a typed property registry describing value type, units, authored versus
-simulated ownership, validation, application target, and invalidation domain.
-Keep registry evaluation detached; scene snapshot/application work remains a
-later boundary.
+`timeline_property_registry.*` adds bounded copied descriptors for stable
+property identity, target kind, value type, units, authoring ownership,
+per-component bounds, allowed interpolation, and renderer invalidation domains.
+The first registered meanings are object position, light intensity, and
+material roughness.
+
+Registry validation refuses unknown properties, mismatched targets/types/units,
+non-authorable ownership, unsupported interpolation, out-of-range values, and
+duplicate ownership of one target/property pair. Detached document evaluation
+copies descriptor provenance and invalidation metadata into results only after
+the complete request validates; failed evaluation does not mutate caller output.
+The mask is descriptive in TAF2 and does not invalidate renderer state.
+
+## Next boundary: TAF3
+
+Design and implement one immutable evaluated frame snapshot/application seam
+over copied scene state, then connect typed invalidation domains to existing
+scene preparation and cache ownership. Keep application outside the registry
+and prove static-scene behavior remains unchanged.

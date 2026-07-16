@@ -21,6 +21,17 @@ const char* TimelineStatusLabel(TimelineStatus status) {
         case TIMELINE_STATUS_TYPE_MISMATCH: return "type_mismatch";
         case TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION:
             return "unsupported_interpolation";
+        case TIMELINE_STATUS_INVALID_PROPERTY_DESCRIPTOR:
+            return "invalid_property_descriptor";
+        case TIMELINE_STATUS_UNKNOWN_PROPERTY: return "unknown_property";
+        case TIMELINE_STATUS_TARGET_KIND_MISMATCH:
+            return "target_kind_mismatch";
+        case TIMELINE_STATUS_OWNERSHIP_MISMATCH:
+            return "ownership_mismatch";
+        case TIMELINE_STATUS_DUPLICATE_OWNERSHIP:
+            return "duplicate_ownership";
+        case TIMELINE_STATUS_UNIT_MISMATCH: return "unit_mismatch";
+        case TIMELINE_STATUS_VALUE_OUT_OF_RANGE: return "value_out_of_range";
         default: return "unknown";
     }
 }

@@ -12,6 +12,13 @@ typedef enum TimelineValueType {
     TIMELINE_VALUE_ROTATION_RESERVED
 } TimelineValueType;
 
+typedef enum TimelineUnit {
+    TIMELINE_UNIT_UNSPECIFIED = 0,
+    TIMELINE_UNIT_UNITLESS,
+    TIMELINE_UNIT_WORLD_DISTANCE,
+    TIMELINE_UNIT_RELATIVE_INTENSITY
+} TimelineUnit;
+
 typedef struct TimelineVec3 {
     double x;
     double y;
@@ -27,6 +34,8 @@ typedef struct TimelineValue {
 } TimelineValue;
 
 const char* TimelineValueTypeLabel(TimelineValueType type);
+const char* TimelineUnitLabel(TimelineUnit unit);
+bool TimelineUnitIsValid(TimelineUnit unit);
 TimelineValue TimelineValueScalar(double value);
 TimelineValue TimelineValueVec3(double x, double y, double z);
 bool TimelineValueIsFinite(TimelineValue value);

@@ -35,6 +35,7 @@ typedef struct TimelineTrack {
     char target_id[TIMELINE_ID_CAPACITY];
     char property_id[TIMELINE_ID_CAPACITY];
     TimelineValueType value_type;
+    TimelineUnit unit;
     TimelineChannelSource source;
     bool enabled;
     size_t key_count;
@@ -69,6 +70,7 @@ TimelineStatus TimelineTrackAddKey(TimelineTrack* track,
                                    int64_t frame,
                                    TimelineValue value,
                                    TimelineInterpolation interpolation_to_next);
+TimelineStatus TimelineTrackSetUnit(TimelineTrack* track, TimelineUnit unit);
 TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
                                      const TimelineRange* range);
 TimelineStatus TimelineTrackEvaluate(const TimelineTrack* track,

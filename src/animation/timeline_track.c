@@ -56,9 +56,19 @@ TimelineStatus TimelineTrackInit(TimelineTrack* track,
     status = timeline_copy_id(candidate.property_id, property_id);
     if (status != TIMELINE_STATUS_OK) return status;
     candidate.value_type = value_type;
+    candidate.unit = TIMELINE_UNIT_UNSPECIFIED;
     candidate.source = TIMELINE_CHANNEL_SOURCE_AUTHORED;
     candidate.enabled = true;
     *track = candidate;
+    return TIMELINE_STATUS_OK;
+}
+
+TimelineStatus TimelineTrackSetUnit(TimelineTrack* track, TimelineUnit unit) {
+    if (!track) return TIMELINE_STATUS_INVALID_ARGUMENT;
+    if (!TimelineUnitIsValid(unit) || unit == TIMELINE_UNIT_UNSPECIFIED) {
+        return TIMELINE_STATUS_UNIT_MISMATCH;
+    }
+    track->unit = unit;
     return TIMELINE_STATUS_OK;
 }
 
@@ -105,6 +115,7 @@ TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
         track->value_type != TIMELINE_VALUE_VEC3) {
         return TIMELINE_STATUS_TYPE_MISMATCH;
     }
+    if (!TimelineUnitIsValid(track->unit)) return TIMELINE_STATUS_UNIT_MISMATCH;
     if (track->source != TIMELINE_CHANNEL_SOURCE_AUTHORED || track->key_count == 0u ||
         track->key_count > TIMELINE_TRACK_KEY_CAPACITY) {
         return TIMELINE_STATUS_INVALID_TRACK;
