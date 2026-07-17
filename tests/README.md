@@ -73,6 +73,8 @@ anchor zoom, orbit, frame, resize, validation, and invalid-input nonmutation aga
 rollback oracle for the EVN3 canonical pan and anchor fixtures; the integrated
 `runtime_scene_editor` group supplies frame, orbit, resize/projector, and input
 adapter coverage.
+The same `runtime_scene_editor` group also proves whole-object projected-origin
+stable-key ranking and capture-radius rejection through `core_screen_pick >= 0.1.0`.
 
 Scene-project worker snapshot lane:
 

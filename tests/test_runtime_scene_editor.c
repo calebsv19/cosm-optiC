@@ -6972,6 +6972,47 @@ static int test_scene_editor_control_surface_material_mode_contract(void) {
     return 0;
 }
 
+static int test_scene_editor_object_pick_uses_shared_origin_ranking(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeSceneBridge3DDigestState digest = {0};
+    SceneEditorDigestOverlayProjector projector = {0};
+    int screen_x = 0;
+    int screen_y = 0;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 2;
+    digest.valid = true;
+    digest.primitive_count = 2;
+    digest.primitives[0].scene_object_index = 0;
+    digest.primitives[0].origin_x = 0.0;
+    digest.primitives[0].origin_y = 0.0;
+    digest.primitives[0].origin_z = 0.0;
+    digest.primitives[1].scene_object_index = 1;
+    digest.primitives[1].origin_x = 0.0;
+    digest.primitives[1].origin_y = 0.0;
+    digest.primitives[1].origin_z = 0.0;
+
+    projector.viewport = (SDL_Rect){0, 0, 640, 480};
+    projector.center_x = 0.0;
+    projector.center_y = 0.0;
+    projector.center_z = 0.0;
+    projector.yaw_rad = 0.0;
+    projector.pitch_rad = 0.0;
+    projector.scale = 16.0;
+    assert_true("object_pick_projects_shared_origin",
+                SceneEditorDigestOverlayProjectPoint(
+                    &projector, 0.0, 0.0, 0.0, &screen_x, &screen_y));
+    assert_true("object_pick_stable_key_tie",
+                SceneEditorDigestOverlayPickObjectIndex(
+                    &projector, &digest, screen_x, screen_y) == 0);
+    assert_true("object_pick_capture_radius_rejects_far_mouse",
+                SceneEditorDigestOverlayPickObjectIndex(
+                    &projector, &digest, screen_x + 80, screen_y) == -1);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
 
 int run_test_runtime_scene_editor_tests(void) {
     int before = test_support_failures();
@@ -7034,6 +7075,7 @@ int run_test_runtime_scene_editor_tests(void) {
     test_scene_editor_control_surface_selected_object_status();
     test_scene_editor_viewport_render_falls_back_without_digest();
     test_scene_editor_control_surface_material_mode_contract();
+    test_scene_editor_object_pick_uses_shared_origin_ranking();
     test_material_editor_authored_texture_binding_routes_to_runtime_binding();
     test_material_editor_authored_texture_binding_persists_and_reopens();
     test_material_editor_authored_texture_binding_replace_clear_roundtrip();

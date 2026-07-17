@@ -173,6 +173,10 @@ $(BUILD_DIR)/core_viewport3d/%.o: $(CORE_VIEWPORT3D_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
 
+$(BUILD_DIR)/core_screen_pick/%.o: $(CORE_SCREEN_PICK_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
+
 $(BUILD_DIR)/core_authored_texture/%.o: $(CORE_AUTHORED_TEXTURE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@
