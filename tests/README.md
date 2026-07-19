@@ -70,6 +70,7 @@ make -C ray_tracing test-scene-editor-primitive-preview-geometry
 make -C ray_tracing test-ray-tracing-worker-version-contract
 TEST_RUNNER_GROUP=runtime_timeline_foundation make -C ray_tracing test
 TEST_RUNNER_GROUP=runtime_timeline_property_registry make -C ray_tracing test
+TEST_RUNNER_GROUP=runtime_timeline_frame_snapshot make -C ray_tracing test
 ```
 
 The worker-version contract target is non-packaging proof. It verifies the
@@ -94,6 +95,14 @@ the detached evaluator: foundation descriptors, stable lookup, target/type/
 unit/ownership/interpolation/range refusal, copied invalidation metadata,
 multi-track evaluation, and output nonmutation on failed validation. It does
 not apply evaluated values or invalidate renderer state.
+
+`runtime_timeline_frame_snapshot` proves the TAF3 immutable evaluated-frame
+boundary: copied context/property provenance, aggregate invalidation domains,
+detachment from later document edits, deterministic typed application into a
+caller-owned scene copy, exact static-scene copying, and transactional refusal
+for missing targets, tampered snapshots, invalid property values, and failed
+candidate-scene validation. It does not mutate live `SceneConfig`, route
+renderer caches, persist JSON, or add timeline UI.
 
 The viewport3d bridge target proves Ray orientation conversion, canonical pan,
 anchor zoom, orbit, frame, resize, validation, and invalid-input nonmutation against shared

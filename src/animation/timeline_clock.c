@@ -32,6 +32,10 @@ const char* TimelineStatusLabel(TimelineStatus status) {
             return "duplicate_ownership";
         case TIMELINE_STATUS_UNIT_MISMATCH: return "unit_mismatch";
         case TIMELINE_STATUS_VALUE_OUT_OF_RANGE: return "value_out_of_range";
+        case TIMELINE_STATUS_INVALID_SNAPSHOT: return "invalid_snapshot";
+        case TIMELINE_STATUS_TARGET_NOT_FOUND: return "target_not_found";
+        case TIMELINE_STATUS_SCENE_VALIDATION_FAILED:
+            return "scene_validation_failed";
         default: return "unknown";
     }
 }

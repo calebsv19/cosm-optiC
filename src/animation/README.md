@@ -1,8 +1,10 @@
 # RayTracing Timeline Foundation
 
-This directory owns authored frame meaning and detached property-track
-evaluation. It does not own scene mutation, renderer invalidation, persistence,
-editor state, playback, simulation stepping, or wall-clock scheduling.
+This directory owns authored frame meaning, detached property-track evaluation,
+and immutable evaluated-frame snapshots. It exposes a transactional copied-scene
+application seam, but does not mutate live global scene state, invalidate
+renderer caches, persist data, own editor state/playback, step simulations, or
+schedule wall-clock work.
 
 ## TAF0 ownership audit
 
@@ -51,9 +53,25 @@ copies descriptor provenance and invalidation metadata into results only after
 the complete request validates; failed evaluation does not mutate caller output.
 The mask is descriptive in TAF2 and does not invalidate renderer state.
 
-## Next boundary: TAF3
+## TAF3 evaluated-frame snapshot seam
 
-Design and implement one immutable evaluated frame snapshot/application seam
-over copied scene state, then connect typed invalidation domains to existing
-scene preparation and cache ownership. Keep application outside the registry
-and prove static-scene behavior remains unchanged.
+`timeline_frame_snapshot.*` freezes one canonical evaluation context, copied
+property results, provenance, and the aggregate invalidation-domain mask. The
+snapshot has no mutator API and is consumed through `const` pointers.
+
+Application stays outside the property registry. A caller supplies a typed
+adapter plus reusable scratch scene storage; the seam copies the authored base,
+applies every property in deterministic track order, validates the candidate,
+and commits to caller output only after the complete application succeeds.
+Static documents produce an empty snapshot, copy the base scene exactly, and
+report no invalidation domains. Failed target resolution, snapshot validation,
+property application, or scene validation leaves the authored base, committed
+output, and application report unchanged.
+
+## Next boundary: TAF3 live integration
+
+Define stable live target identity and the first explicit `SceneConfig`/runtime
+scene adapter, then map the descriptive camera/light/material/rigid-transform
+domains onto existing scene preparation, accumulation, and TLAS/BLAS cache
+owners. Object motion can become a compatibility consumer only after that
+identity and invalidation routing are proven. UI and persistence remain later.
