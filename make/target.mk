@@ -1,6 +1,6 @@
 UNAME_S := $(shell uname -s)
 PKG_CONFIG ?= pkg-config
-TARGET_CONTRACT_HELPER ?= ../bin/desktop_release_target_contract.sh
+TARGET_CONTRACT_HELPER ?= tools/desktop_release_target_contract.sh
 HOST_ARCH := $(shell uname -m)
 TARGET_ARCH ?= $(HOST_ARCH)
 RELEASE_PLATFORM ?= $(UNAME_S)
