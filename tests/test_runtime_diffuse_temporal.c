@@ -478,7 +478,8 @@ static int test_runtime_native_3d_temporal_accumulation_contract(void) {
           "}"
         "],"
         "\"materials\":[],"
-        "\"lights\":[{\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
+        "\"lights\":[{\"kind\":\"sphere\",\"radius\":0.25,"
+          "\"position\":{\"x\":2.0,\"y\":-2.0,\"z\":0.0}}],"
         "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
         "\"constraints\":[],"
         "\"extensions\":{}"
@@ -568,7 +569,6 @@ static int test_runtime_native_3d_temporal_accumulation_contract(void) {
         &sampling,
         &stats_single);
     assert_true("runtime_native_3d_temporal_direct_light_single_ok", ok);
-    animSettings.lightRadius = 0.25;
     ok = RuntimeNative3DRenderToPixelBufferWithSamplingTemporal(
         pixels_temporal,
         RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,

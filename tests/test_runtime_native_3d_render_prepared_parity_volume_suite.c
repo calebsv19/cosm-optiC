@@ -12,7 +12,9 @@
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_native_3d_tile_occupancy.h"
+#include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
+#include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "test_runtime_native_3d_render_internal.h"
@@ -534,6 +536,7 @@ static int test_runtime_native_3d_primary_volume_transmittance_darks_surface(voi
 
     RuntimeScene3D_Init(&scene);
     RuntimeNative3DTileOccupancy_Init(&frame.tileOccupancy);
+    scene.scope.triangleMeshEnabled = true;
     scene.hasLight = true;
     scene.light.position = vec3(0.0, -2.0, 2.0);
     scene.light.radius = 0.1;
@@ -571,10 +574,16 @@ static int test_runtime_native_3d_primary_volume_transmittance_darks_surface(voi
              "center_plane");
     scene.triangleMesh.triangles[0].p0 = vec3(-2.0, -5.0, -2.0);
     scene.triangleMesh.triangles[0].p1 = vec3(2.0, -5.0, -2.0);
-    scene.triangleMesh.triangles[0].p2 = vec3(-2.0, -5.0, 2.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, -5.0, 2.0);
     scene.triangleMesh.triangles[0].normal = vec3(0.0, 1.0, 0.0);
     scene.triangleMesh.triangles[0].primitiveIndex = 0;
     scene.triangleMesh.triangles[0].sceneObjectIndex = 3;
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_native_3d_volume_surface_bvh_ok", ok);
+    if (!ok) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
 
     ok = RuntimeCameraProjector3D_Build(&scene.camera, 41, 41, &frame.projector);
     assert_true("runtime_native_3d_volume_surface_projector_ok", ok);
@@ -588,6 +597,8 @@ static int test_runtime_native_3d_primary_volume_transmittance_darks_surface(voi
     frame.height = 41;
     frame.valid = true;
     memset(baseline_radiance, 0, sizeof(baseline_radiance));
+    /* This shading-only fixture constructs no prepared TLAS. */
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     ok = RuntimeNative3DRenderPreparedRegionRadianceRGB(baseline_radiance,
                                                         41,
                                                         RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
@@ -618,6 +629,7 @@ static int test_runtime_native_3d_primary_volume_transmittance_darks_surface(voi
                                                         41,
                                                         41,
                                                         &stats);
+    RuntimeRay3D_ResetTraceRouteForTests();
     assert_true("runtime_native_3d_volume_surface_attenuated_ok", ok);
 
     center_idx = (((size_t)20u * 41u) + 20u) * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
