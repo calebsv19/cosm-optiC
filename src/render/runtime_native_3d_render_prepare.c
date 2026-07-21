@@ -308,14 +308,22 @@ static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
 
     if (scene->lightSet.lightCount > 0) {
         RuntimeSceneBridge3DScaffoldState scaffold = {0};
+        const RuntimeLightSource3D* first_enabled =
+            RuntimeLightSet3D_GetEnabled(&scene->lightSet, 0);
+        if (!first_enabled) first_enabled = &scene->lightSet.lights[0];
+        const double live_radius =
+            (first_enabled->radius > 0.0 ||
+             first_enabled->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT)
+                ? first_enabled->radius
+                : runtime_native_3d_render_resolve_default_light_radius(scene);
         runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
         if (runtime_native_3d_render_should_sample_authored_motion() &&
             scaffold.has_light_path &&
             RuntimeScene3DSampleAuthoredLight(normalized_t, &sampled_light)) {
-            sampled_light.radius =
-                (sampled_light.radius > 0.0)
-                    ? sampled_light.radius
-                    : runtime_native_3d_render_resolve_default_light_radius(scene);
+            /* Preserve the authored source shape while sampling its motion path.
+             * A point light intentionally has radius zero; replacing that with a
+             * scene-scaled fallback silently promotes it to a visible sphere. */
+            sampled_light.radius = live_radius;
             sampled_light.intensity = animSettings.lightIntensity;
             sampled_light.falloffDistance = animSettings.forwardDecay;
             sampled_light.falloffMode = animSettings.forwardFalloffMode;
@@ -325,13 +333,8 @@ static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
                                                                              &scene->light);
             return;
         }
-        const RuntimeLightSource3D* first_enabled =
-            RuntimeLightSet3D_GetEnabled(&scene->lightSet, 0);
-        if (!first_enabled) first_enabled = &scene->lightSet.lights[0];
         scene->light.position = first_enabled->position;
-        scene->light.radius = (first_enabled->radius > 0.0)
-                                  ? first_enabled->radius
-                                  : runtime_native_3d_render_resolve_default_light_radius(scene);
+        scene->light.radius = live_radius;
         scene->light.intensity = first_enabled->intensity;
         scene->light.falloffDistance = first_enabled->falloffDistance;
         scene->light.falloffMode = first_enabled->falloffMode;
