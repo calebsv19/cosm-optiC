@@ -1,0 +1,16 @@
+{
+  "schema": "procedural_object_recipe_v1",
+  "asset_id": "generated_organic_reflection_blob_high_v1",
+  "display_name": "Organic Reflection Blob High V1",
+  "recipe_family": "organic_reflection_blob",
+  "tags": ["reflection_stress", "smooth_surface", "organic", "high_resolution"],
+  "recommended_first_material": "mirror",
+  "notes": "Deterministic low-frequency radial displacement over a 20,480-face icosphere.",
+  "geometry": {
+    "radius": 1.0,
+    "subdivisions": 5,
+    "amplitude": 0.14,
+    "frequency": 5,
+    "seed": 17
+  }
+}

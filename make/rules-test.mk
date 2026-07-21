@@ -554,6 +554,9 @@ test-ray-tracing-render-headless-image-export: $(RAY_TRACING_RENDER_HEADLESS_BIN
 test-ray-tracing-render-headless-mesh-asset-spheres: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_mesh_asset_spheres.sh
 
+test-optic-build-week-showcase: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	tests/integration/run_optic_build_week_showcase.sh
+
 test-ray-tracing-render-headless-mesh-asset-sphere-pressure: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_mesh_asset_sphere_pressure.sh
 

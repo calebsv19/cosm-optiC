@@ -1,0 +1,35 @@
+{
+  "schema": "procedural_stl_generation_summary_v1",
+  "asset_id": "generated_seamed_ball_v1",
+  "display_name": "Generated Seamed Ball V1",
+  "recipe_family": "grooved_sphere",
+  "stl_path": "curated/generated_seamed_ball_v1/source/generated_seamed_ball_v1.stl",
+  "recipe_path": "curated/generated_seamed_ball_v1/recipe.json",
+  "summary_path": "curated/generated_seamed_ball_v1/generation_summary.json",
+  "triangle_count": 16384,
+  "bounds": {
+    "min": {
+      "x": -0.9975923633360985,
+      "y": -0.9975923633360985,
+      "z": -0.9987954562051724
+    },
+    "max": {
+      "x": 0.9975923633360985,
+      "y": 0.9975923633360985,
+      "z": 0.9987954562051724
+    },
+    "span": {
+      "x": 1.995184726672197,
+      "y": 1.995184726672197,
+      "z": 1.9975909124103448
+    }
+  },
+  "file_size_bytes": 3957531,
+  "sha256": "c799572f0a49caa168d763839d5a4acea3157936ee5f9c6b4509b4c5a9317f16",
+  "tags": [
+    "near_sphere",
+    "shallow_grooves",
+    "hard_seams",
+    "normal_behavior"
+  ]
+}

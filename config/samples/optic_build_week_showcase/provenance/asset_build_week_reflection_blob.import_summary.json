@@ -1,0 +1,11 @@
+{
+	"schema":	"line_drawing_imported_mesh_harness_summary_v1",
+	"source_stl":	"/private/tmp/optic-build-week-assets.T7sJq3/curated/generated_organic_reflection_blob_high_v1/source/generated_organic_reflection_blob_high_v1.stl",
+	"asset_id":	"asset_build_week_reflection_blob",
+	"authoring":	"/tmp/optic-build-week-assets.T7sJq3/runtime_mesh_sidecars/generated_organic_reflection_blob_high_v1/authoring/asset_build_week_reflection_blob.authoring.json",
+	"runtime":	"/tmp/optic-build-week-assets.T7sJq3/runtime_mesh_sidecars/generated_organic_reflection_blob_high_v1/assets/mesh_assets/asset_build_week_reflection_blob.runtime.json",
+	"scene_runtime":	"/tmp/optic-build-week-assets.T7sJq3/runtime_mesh_sidecars/generated_organic_reflection_blob_high_v1/scene_runtime.json",
+	"vertices":	10242,
+	"triangles":	20480,
+	"surface_groups":	1
+}

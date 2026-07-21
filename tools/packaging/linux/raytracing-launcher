@@ -80,6 +80,9 @@ setup_runtime_root() {
 
     copy_tree_if_needed "$RUNTIME_DIR/config" "$RES_DIR/config" "scene_config.json:animation_config.json:default.ttf"
     sync_bundle_files "$RUNTIME_DIR/config/materials" "$RES_DIR/config/materials" "*.json"
+    copy_tree_if_needed "$RUNTIME_DIR/config/samples/optic_build_week_showcase" \
+        "$RES_DIR/config/samples/optic_build_week_showcase" \
+        "scene_runtime.json:render_request.json:assets/mesh_assets/asset_build_week_reflection_blob.runtime.json:assets/mesh_assets/asset_build_week_grooved_orb.runtime.json:assets/mesh_assets/asset_build_week_lattice_shell.runtime.json"
     copy_tree_if_needed "$RUNTIME_DIR/shared" "$RES_DIR/shared" "assets/fonts/Montserrat-Regular.ttf"
     copy_tree_if_needed "$RUNTIME_DIR/shaders" "$RES_DIR/shaders" "textured.vert.spv:textured.frag.spv:line.vert.spv:line.frag.spv"
     copy_tree_if_needed "$RUNTIME_DIR/vk_renderer" "$RES_DIR/vk_renderer" "shaders/textured.vert.spv:shaders/textured.frag.spv:shaders/line.vert.spv:shaders/line.frag.spv"
@@ -153,6 +156,10 @@ if [ "${1:-}" = "--self-test" ]; then
     [ -f "$RUNTIME_DIR/config/materials/transparent.json" ] || { echo "missing: config/materials/transparent.json" >&2; exit 1; }
     grep -q '"thin_walled": true' "$RUNTIME_DIR/config/materials/transparent.json" || { echo "missing: transparent material thin-wall fixture" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/objects/Hexagon.asset.json" ] || { echo "missing: bundled shape assets" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/scene_runtime.json" ] || { echo "missing: Build Week showcase scene" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_reflection_blob.runtime.json" ] || { echo "missing: Build Week reflection mesh" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_grooved_orb.runtime.json" ] || { echo "missing: Build Week grooved orb mesh" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_lattice_shell.runtime.json" ] || { echo "missing: Build Week lattice shell mesh" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime" ] || { echo "missing: runtime dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/frames" ] || { echo "missing: frames dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/videos" ] || { echo "missing: videos dir" >&2; exit 1; }

@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-07-14.
+Last audited: 2026-07-17.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -98,6 +98,9 @@ Current public focus:
 - `docs/render_review_sets/README.md`: local repo-doc review sets from detached
   renders. These are not the live visualizer website lane.
 - `docs/desktop_packaging.md`: `.app` packaging commands, launcher diagnostics, and release-readiness workflow.
+- `docs/build_week_judge_guide.md`: no-rebuild installation, supported platform,
+  packaged showcase flow, self-test, and source-level judge test for the OpenAI
+  Build Week submission.
 - `docs/memory_check_audit.md`: default-off fisiCs memory-check audit
   command, report interpretation, and latest clean RayTracing BVH harness
   summary.
@@ -134,6 +137,9 @@ Current verification contract:
 - `make -C ray_tracing memory-check-audit`
 - `make -C ray_tracing clean && make -C ray_tracing`
 - `make -C ray_tracing test-stable`
+- `make -C ray_tracing test-optic-build-week-showcase`
+  - renders the packaged photon-free showcase and verifies its three imported
+    mesh assets, TLAS/BLAS route, object visibility, and caustic-off state
 - `make -C ray_tracing run-headless-smoke`
   - currently routes through `test-stable` rather than a separate runtime-only lane
 - `make -C ray_tracing visual-harness`

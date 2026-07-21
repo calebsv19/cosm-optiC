@@ -1,0 +1,11 @@
+{
+	"schema":	"line_drawing_imported_mesh_harness_summary_v1",
+	"source_stl":	"/private/tmp/optic-build-week-assets.T7sJq3/curated/generated_lattice_shell_v1/source/generated_lattice_shell_v1.stl",
+	"asset_id":	"asset_build_week_lattice_shell",
+	"authoring":	"/tmp/optic-build-week-assets.T7sJq3/runtime_mesh_sidecars/generated_lattice_shell_v1/authoring/asset_build_week_lattice_shell.authoring.json",
+	"runtime":	"/tmp/optic-build-week-assets.T7sJq3/runtime_mesh_sidecars/generated_lattice_shell_v1/assets/mesh_assets/asset_build_week_lattice_shell.runtime.json",
+	"scene_runtime":	"/tmp/optic-build-week-assets.T7sJq3/runtime_mesh_sidecars/generated_lattice_shell_v1/scene_runtime.json",
+	"vertices":	7920,
+	"triangles":	8064,
+	"surface_groups":	1
+}

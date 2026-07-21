@@ -1,0 +1,35 @@
+{
+  "schema": "procedural_stl_generation_summary_v1",
+  "asset_id": "generated_organic_reflection_blob_high_v1",
+  "display_name": "Organic Reflection Blob High V1",
+  "recipe_family": "organic_reflection_blob",
+  "stl_path": "curated/generated_organic_reflection_blob_high_v1/source/generated_organic_reflection_blob_high_v1.stl",
+  "recipe_path": "curated/generated_organic_reflection_blob_high_v1/recipe.json",
+  "summary_path": "curated/generated_organic_reflection_blob_high_v1/generation_summary.json",
+  "triangle_count": 20480,
+  "bounds": {
+    "min": {
+      "x": -1.0497768809852028,
+      "y": -1.0475762106317472,
+      "z": -1.0629750205144914
+    },
+    "max": {
+      "x": 1.0421462054692405,
+      "y": 1.0396680595005476,
+      "z": 1.043760388414147
+    },
+    "span": {
+      "x": 2.091923086454443,
+      "y": 2.087244270132295,
+      "z": 2.1067354089286385
+    }
+  },
+  "file_size_bytes": 4919806,
+  "sha256": "8e871d809ff6326c939f7b43144f2111d049a19956895bf4ff706b318b1edfc1",
+  "tags": [
+    "reflection_stress",
+    "smooth_surface",
+    "organic",
+    "high_resolution"
+  ]
+}

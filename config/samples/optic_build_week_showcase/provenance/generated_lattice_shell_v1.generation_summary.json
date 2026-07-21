@@ -1,0 +1,35 @@
+{
+  "schema": "procedural_stl_generation_summary_v1",
+  "asset_id": "generated_lattice_shell_v1",
+  "display_name": "Generated Lattice Shell V1",
+  "recipe_family": "lattice_shell",
+  "stl_path": "curated/generated_lattice_shell_v1/source/generated_lattice_shell_v1.stl",
+  "recipe_path": "curated/generated_lattice_shell_v1/recipe.json",
+  "summary_path": "curated/generated_lattice_shell_v1/generation_summary.json",
+  "triangle_count": 8064,
+  "bounds": {
+    "min": {
+      "x": -0.5621562198201354,
+      "y": -0.5621562198201354,
+      "z": -0.021599999999999998
+    },
+    "max": {
+      "x": 0.5621562198201354,
+      "y": 0.5621562198201354,
+      "z": 2.2216
+    },
+    "span": {
+      "x": 1.1243124396402708,
+      "y": 1.1243124396402708,
+      "z": 2.2432
+    }
+  },
+  "file_size_bytes": 1915947,
+  "sha256": "b73fb9ce5d0d0729e3bf8d36624e79318bafdd9eb76198698ea09c9bfaf67377",
+  "tags": [
+    "hollow_geometry",
+    "thin_walls",
+    "many_holes",
+    "occlusion"
+  ]
+}

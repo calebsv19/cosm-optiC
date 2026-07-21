@@ -1,0 +1,211 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "optic-build-week-showcase",
+  "source_scene_id": "optic-build-week-showcase",
+  "compile_meta": {
+    "compiler_version": "optic-0.8.0-build-week",
+    "compiled_at_ns": 0,
+    "normalization": "curated_build_week_showcase"
+  },
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "showcase_floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 9.0,
+        "height": 7.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "showcase_back_wall",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 3.2, "z": 2.4 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 9.0,
+        "height": 4.8,
+        "frame": {
+          "origin": { "x": 0.0, "y": 3.2, "z": 2.4 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "reflection_blob",
+      "object_type": "mesh_asset_instance",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": -2.15, "y": 0.35, "z": 1.0 },
+        "rotation": { "x": 0.0, "y": 0.18, "z": -0.12 },
+        "scale": { "x": 0.88, "y": 0.88, "z": 0.88 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_build_week_reflection_blob",
+        "variant": "runtime_default"
+      },
+      "extensions": {
+        "line_drawing": {
+          "runtime_mesh_path": "assets/mesh_assets/asset_build_week_reflection_blob.runtime.json"
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "grooved_orb",
+      "object_type": "mesh_asset_instance",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.25, "z": 1.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.24 },
+        "scale": { "x": 0.92, "y": 0.92, "z": 0.92 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_build_week_grooved_orb",
+        "variant": "runtime_default"
+      },
+      "extensions": {
+        "line_drawing": {
+          "runtime_mesh_path": "assets/mesh_assets/asset_build_week_grooved_orb.runtime.json"
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "lattice_shell",
+      "object_type": "mesh_asset_instance",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 2.15, "y": 0.35, "z": 0.08 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": -0.2 },
+        "scale": { "x": 0.78, "y": 0.78, "z": 0.78 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_build_week_lattice_shell",
+        "variant": "runtime_default"
+      },
+      "extensions": {
+        "line_drawing": {
+          "runtime_mesh_path": "assets/mesh_assets/asset_build_week_lattice_shell.runtime.json"
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    }
+  ],
+  "hierarchy": [],
+  "materials": [],
+  "lights": [
+    {
+      "light_id": "showcase_key",
+      "kind": "sphere",
+      "position": { "x": -2.6, "y": -2.4, "z": 4.8 },
+      "radius": 0.18,
+      "intensity": 7.0,
+      "falloff_distance": 10.0,
+      "color": { "r": 1.0, "g": 0.94, "b": 0.86 },
+      "enabled": true,
+      "moving": false
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "showcase_camera",
+      "kind": "perspective",
+      "position": { "x": 0.0, "y": -7.4, "z": 2.75 },
+      "target": { "x": 0.0, "y": 0.4, "z": 1.05 },
+      "yaw": 0.0,
+      "look_pitch": -0.1
+    }
+  ],
+  "constraints": [],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "camera_focus_target": { "x": 0.0, "y": 0.4, "z": 1.05 },
+        "light_settings": { "intensity": 7.0, "radius": 0.18 },
+        "environment": {
+          "light_mode": 2,
+          "ambient_strength": 0.24,
+          "top_fill_strength": 1.35
+        },
+        "object_materials": [
+          {
+            "object_id": "showcase_floor",
+            "material_id": 3,
+            "object_color": 3028032,
+            "alpha": 1.0,
+            "roughness": 0.28,
+            "reflectivity": 0.24
+          },
+          {
+            "object_id": "showcase_back_wall",
+            "material_id": 0,
+            "object_color": 15067632,
+            "alpha": 1.0,
+            "roughness": 0.72,
+            "reflectivity": 0.04
+          },
+          {
+            "object_id": "reflection_blob",
+            "material_id": 1,
+            "object_color": 11833005,
+            "alpha": 1.0,
+            "roughness": 0.05,
+            "reflectivity": 0.94
+          },
+          {
+            "object_id": "grooved_orb",
+            "material_id": 3,
+            "object_color": 6193580,
+            "alpha": 1.0,
+            "roughness": 0.18,
+            "reflectivity": 0.42
+          },
+          {
+            "object_id": "lattice_shell",
+            "material_id": 2,
+            "object_color": 13666160,
+            "alpha": 1.0,
+            "roughness": 0.31,
+            "reflectivity": 0.58
+          }
+        ]
+      }
+    }
+  }
+}

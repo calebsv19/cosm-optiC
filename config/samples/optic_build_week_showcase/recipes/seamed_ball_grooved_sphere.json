@@ -1,0 +1,18 @@
+{
+  "schema": "procedural_object_recipe_v1",
+  "asset_id": "generated_seamed_ball_v1",
+  "display_name": "Generated Seamed Ball V1",
+  "recipe_family": "grooved_sphere",
+  "tags": ["near_sphere", "shallow_grooves", "hard_seams", "normal_behavior"],
+  "recommended_first_material": "matte_orange",
+  "notes": "Grooved sphere proving recipe for ball-like imported mesh tests.",
+  "geometry": {
+    "radius": 1.0,
+    "lat_segments": 64,
+    "lon_segments": 128,
+    "longitude_grooves": 12,
+    "latitude_grooves": 6,
+    "groove_depth": 0.045,
+    "groove_width": 0.08
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "schema": "procedural_object_recipe_v1",
+  "asset_id": "generated_lattice_shell_v1",
+  "display_name": "Generated Lattice Shell V1",
+  "recipe_family": "lattice_shell",
+  "tags": ["hollow_geometry", "thin_walls", "many_holes", "occlusion"],
+  "recommended_first_material": "matte_white",
+  "notes": "Open lattice shell proving recipe for porous mesh tests.",
+  "geometry": {
+    "levels": 18,
+    "segments": 36,
+    "height": 2.2,
+    "base_radius": 0.45,
+    "bulge_radius": 0.12,
+    "taper": 0.05,
+    "strut_radius": 0.018,
+    "tube_sides": 8,
+    "stride": 3,
+    "twist": 0.6,
+    "cap_rings": true
+  }
+}

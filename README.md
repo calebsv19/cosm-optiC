@@ -24,6 +24,8 @@ Identity note:
   - `Disney`
 - deep-render frame export with start/resume controls
 - fluid/scene import support for `.vf2d`, `.pack`, `manifest.json`, and `scene_bundle.json`
+- a packaged, self-contained Build Week showcase with three original procedural
+  STL meshes and editable mirror, glossy, and metal materials
 
 ## Implemented Today
 
@@ -52,6 +54,43 @@ Identity note:
   - keep output numbering and timeline sampling on the same absolute-frame contract
 - the menu/export surface includes current frame-root and video-output-root batch actions, and the native `3D` menu keeps geometry-scene selection separate from optional atmosphere attachment
 
+## OpenAI Build Week 2026
+
+`optiC` is a pre-existing project being meaningfully extended during the
+OpenAI Build Week submission period (July 13-21, 2026). The frozen pre-period
+baseline is commit `bd8ee85dae5e62707810065d413d94c24475535b`.
+The public commit link will be added after the Build Week branch is pushed;
+the current public GitHub branch does not yet contain this baseline.
+
+Build Week work after that baseline includes imported-mesh editor preview,
+large-mesh LOD recovery, smoother mesh shading and reflection behavior,
+viewport navigation improvements, cross-platform authored-texture selection,
+asynchronous deep-render completion, and whole-object origin selection. The
+submission candidate now includes a self-contained installed demo path at
+`config/samples/optic_build_week_showcase/`. Judges can open the packaged scene,
+inspect three original imported meshes, edit their materials, and render without
+depending on the maintainer's PhysicsSim or LineDrawing workspace. The focused
+proof is `make test-optic-build-week-showcase`; full installation and judge
+testing instructions are in
+[`docs/build_week_judge_guide.md`](docs/build_week_judge_guide.md).
+
+### How Codex and GPT-5.6 contributed
+
+The project was developed iteratively with Codex and GPT-5.6. Codex helped
+trace renderer and editor behavior across a large C codebase, build focused
+fixtures, compare visual and machine-readable proof, isolate performance and
+material-policy defects, maintain release tooling, and reconcile public and
+private documentation. The maintainer chose the creative direction, visual
+acceptance thresholds, architecture boundaries, release scope, and which
+experiments were accepted, deferred, or rejected.
+
+The final eligible end commit, release artifact checksum, and principal Codex
+`/feedback` Session ID will be recorded here at submission freeze. The stable
+Build Week demo is documented in
+[`config/samples/optic_build_week_showcase/README.md`](config/samples/optic_build_week_showcase/README.md);
+the broader source-checkout demo path remains in
+[`docs/AGENT_DEMO_PACK.md`](docs/AGENT_DEMO_PACK.md).
+
 ## Build and Run
 
 Dependencies:
@@ -79,6 +118,7 @@ make -C ray_tracing clean && make -C ray_tracing
 make -C ray_tracing run-headless-smoke
 make -C ray_tracing visual-harness
 make -C ray_tracing visual-artifact
+make -C ray_tracing test-optic-build-week-showcase
 make -C ray_tracing test-stable
 make -C ray_tracing test-legacy
 ```
@@ -116,6 +156,7 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 ## Docs
 
 - public docs index: `docs/README.md`
+- Build Week installation/testing guide: `docs/build_week_judge_guide.md`
 - agent-control guide: `docs/AGENT_CONTROL.md`
 - canonical agent demo pack: `docs/AGENT_DEMO_PACK.md`
 - runtime controls: `docs/KEYBINDS.md`
