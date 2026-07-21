@@ -48,6 +48,42 @@ static int test_scene_editor_mesh_preview_contract(void) {
     assert_true("mesh_preview_contract_material_uses_surface_outline",
                 !SceneEditorMeshDisplayModeDrawsStructuralWire(
                     SCENE_EDITOR_MESH_DISPLAY_MATERIAL));
+    assert_true("mesh_preview_contract_depth_clear_is_rearmost",
+                isinf(SceneEditorMeshPreviewDepthClearValue()) &&
+                    SceneEditorMeshPreviewDepthClearValue() < 0.0);
+    assert_true("mesh_preview_contract_larger_depth_is_frontmost",
+                SceneEditorMeshPreviewDepthWins(4.0, 3.0) &&
+                    !SceneEditorMeshPreviewDepthWins(3.0, 4.0) &&
+                    !SceneEditorMeshPreviewDepthWins(NAN, 4.0));
+    {
+        const CoreMeshPreviewLodMesh exact = {
+            .vertex_count = 12u,
+            .source_vertex_count = 12u,
+            .cluster_resolution = 0};
+        const CoreMeshPreviewLodMesh clustered = {
+            .vertex_count = 8u,
+            .source_vertex_count = 12u,
+            .cluster_resolution = 4};
+        assert_true("mesh_preview_contract_exact_lod_can_use_source_normals",
+                    SceneEditorMeshPreviewLodUsesSourceVertexIndices(&exact));
+        assert_true("mesh_preview_contract_clustered_lod_rejects_source_normals",
+                    !SceneEditorMeshPreviewLodUsesSourceVertexIndices(&clustered));
+    }
+    assert_true("mesh_preview_contract_solid_uses_composed_outline",
+                !SceneEditorMeshPreviewDrawsPrimitiveWire(
+                    SCENE_EDITOR_MESH_DISPLAY_SOLID,
+                    false,
+                    true));
+    assert_true("mesh_preview_contract_guide_wire_survives_surface",
+                SceneEditorMeshPreviewDrawsPrimitiveWire(
+                    SCENE_EDITOR_MESH_DISPLAY_SOLID,
+                    true,
+                    true));
+    assert_true("mesh_preview_contract_surface_failure_keeps_wire_fallback",
+                SceneEditorMeshPreviewDrawsPrimitiveWire(
+                    SCENE_EDITOR_MESH_DISPLAY_MATERIAL,
+                    false,
+                    false));
     assert_true("mesh_preview_contract_overlay_stable",
                 !SceneEditorMeshPreviewInvalidationResetsQuality(overlay_only));
     assert_true("mesh_preview_contract_geometry_resets",
@@ -96,6 +132,8 @@ static int test_scene_editor_mesh_preview_modes_and_pick(void) {
     char diagnostics[256] = {0};
     int origin_x = 0;
     int origin_y = 0;
+    double origin_fx = 0.0;
+    double origin_fy = 0.0;
     bool ok = false;
 
     ray_tracing_runtime_mesh_asset_set_init(&set);
@@ -117,6 +155,15 @@ static int test_scene_editor_mesh_preview_modes_and_pick(void) {
     projector.pitch_rad = 0.0;
     projector.scale = 100.0;
     projector.span_max = 6.0;
+    assert_true("mesh_preview_float_projection_preserves_subpixel",
+                SceneEditorDigestOverlayProjectPointF(&projector,
+                                                       0.123,
+                                                       0.456,
+                                                       0.0,
+                                                       &origin_fx,
+                                                       &origin_fy) &&
+                    fabs(origin_fx - lround(origin_fx)) > 1e-6 &&
+                    fabs(origin_fy - lround(origin_fy)) > 1e-6);
     SceneEditorMeshPreviewLayoutModeButtons(&projector.viewport, buttons);
     assert_true("mesh_preview_mode_buttons_ordered",
                 buttons[0].x < buttons[1].x && buttons[1].x < buttons[2].x &&
@@ -191,6 +238,23 @@ static int test_scene_editor_mesh_preview_complex_scene_from_env(void) {
             SceneEditorMeshPreviewStoreGetInstance(i);
         const CoreMeshPreviewLodMesh* lod =
             instance ? SceneEditorMeshPreviewStoreGet(instance->asset_index) : NULL;
+        const CoreMeshPreviewLodMesh* interactive_lod =
+            instance ? SceneEditorMeshPreviewStoreGetForQuality(instance->asset_index, true)
+                     : NULL;
+        CoreObjectVec3 settled_normal = {0.0, 0.0, 0.0};
+        CoreObjectVec3 interactive_normal = {0.0, 0.0, 0.0};
+        assert_true("mesh_preview_complex_interactive_lod_available",
+                    interactive_lod &&
+                        interactive_lod->triangle_count <=
+                            SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES);
+        assert_true("mesh_preview_complex_settled_smooth_normal_available",
+                    instance && lod &&
+                        SceneEditorMeshPreviewStoreGetVertexNormal(
+                            instance->asset_index, 0u, false, &settled_normal));
+        assert_true("mesh_preview_complex_interactive_smooth_normal_available",
+                    instance && interactive_lod &&
+                        SceneEditorMeshPreviewStoreGetVertexNormal(
+                            instance->asset_index, 0u, true, &interactive_normal));
         if (lod && lod->source_triangle_count > largest_source_triangles) {
             largest_source_triangles = lod->source_triangle_count;
             largest_lod = lod;

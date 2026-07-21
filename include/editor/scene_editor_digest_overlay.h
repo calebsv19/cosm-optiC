@@ -121,6 +121,12 @@ SceneEditorBezier3DInteractionMetrics SceneEditorDigestOverlayResolveBezierMetri
     const RuntimeSceneBridge3DDigestState* digest,
     const SceneEditorDigestOverlayProjector* projector);
 double SceneEditorDigestOverlayQuantizeWorldValue(double value, double step);
+bool SceneEditorDigestOverlayProjectPointF(const SceneEditorDigestOverlayProjector* projector,
+                                           double world_x,
+                                           double world_y,
+                                           double world_z,
+                                           double* out_x,
+                                           double* out_y);
 bool SceneEditorDigestOverlayProjectPoint(const SceneEditorDigestOverlayProjector* projector,
                                           double world_x,
                                           double world_y,

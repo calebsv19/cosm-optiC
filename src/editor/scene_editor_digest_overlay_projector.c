@@ -470,12 +470,12 @@ bool SceneEditorDigestOverlayResolveObjectExtents(const RuntimeSceneBridge3DDige
     return true;
 }
 
-bool SceneEditorDigestOverlayProjectPoint(const SceneEditorDigestOverlayProjector* projector,
-                                          double world_x,
-                                          double world_y,
-                                          double world_z,
-                                          int* out_x,
-                                          int* out_y) {
+bool SceneEditorDigestOverlayProjectPointF(const SceneEditorDigestOverlayProjector* projector,
+                                           double world_x,
+                                           double world_y,
+                                           double world_z,
+                                           double* out_x,
+                                           double* out_y) {
     double px = 0.0;
     double py = 0.0;
     double pz = 0.0;
@@ -499,6 +499,28 @@ bool SceneEditorDigestOverlayProjectPoint(const SceneEditorDigestOverlayProjecto
                yaw_x * projector->scale;
     screen_y = (double)projector->viewport.y + (double)projector->viewport.h * 0.5 +
                pitch_y * projector->scale;
+    *out_x = screen_x;
+    *out_y = screen_y;
+    return true;
+}
+
+bool SceneEditorDigestOverlayProjectPoint(const SceneEditorDigestOverlayProjector* projector,
+                                          double world_x,
+                                          double world_y,
+                                          double world_z,
+                                          int* out_x,
+                                          int* out_y) {
+    double screen_x = 0.0;
+    double screen_y = 0.0;
+    if (!out_x || !out_y ||
+        !SceneEditorDigestOverlayProjectPointF(projector,
+                                               world_x,
+                                               world_y,
+                                               world_z,
+                                               &screen_x,
+                                               &screen_y)) {
+        return false;
+    }
     *out_x = (int)lround(screen_x);
     *out_y = (int)lround(screen_y);
     return true;

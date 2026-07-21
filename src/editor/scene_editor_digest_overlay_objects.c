@@ -501,6 +501,8 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     int i = 0;
     bool material_focus_mode = (active_mode == EDITOR_MODE_MATERIAL);
     bool material_preview_rendered = false;
+    bool preview_surface_composed = false;
+    SceneEditorMeshDisplayMode preview_mode = SceneEditorMeshPreviewModeGet();
     SceneEditorMaterialPreviewTriangleAddress selected_triangles
         [SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES];
     int selected_triangle_count = 0;
@@ -509,12 +511,15 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
 
     if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL) {
         SceneEditorMeshPreviewFrameStats mesh_stats = {0};
-        (void)SceneEditorMeshPreviewRenderGeometry(renderer,
-                                                   projector,
-                                                   active_mode,
-                                                   selected_object_index,
-                                                   hover_object_index,
-                                                   &mesh_stats);
+        preview_surface_composed = SceneEditorMeshPreviewRenderGeometry(
+            renderer,
+            projector,
+            active_mode,
+            selected_object_index,
+            hover_object_index,
+            &mesh_stats) &&
+            (preview_mode == SCENE_EDITOR_MESH_DISPLAY_SOLID ||
+             preview_mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL);
     }
 
     if (!material_focus_mode && digest->has_scene_bounds) {
@@ -590,7 +595,11 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                                                       projector,
                                                                       primitive,
                                                                       primitive_color);
-                } else if (!material_preview_rendered) {
+                } else if (!material_preview_rendered &&
+                           SceneEditorMeshPreviewDrawsPrimitiveWire(
+                               preview_mode,
+                               primitive->guide_only,
+                               preview_surface_composed)) {
                     scene_editor_digest_overlay_draw_seed_plane(renderer,
                                                                 projector,
                                                                 primitive,
@@ -602,7 +611,11 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                                                       projector,
                                                                       primitive,
                                                                       primitive_color);
-                } else if (!material_preview_rendered) {
+                } else if (!material_preview_rendered &&
+                           SceneEditorMeshPreviewDrawsPrimitiveWire(
+                               preview_mode,
+                               primitive->guide_only,
+                               preview_surface_composed)) {
                     scene_editor_digest_overlay_draw_seed_prism(renderer,
                                                                 projector,
                                                                 primitive,

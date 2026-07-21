@@ -1,5 +1,6 @@
 #pragma once
 
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -56,6 +57,30 @@ static inline bool SceneEditorMeshDisplayModeDrawsStructuralWire(
     return clamped == SCENE_EDITOR_MESH_DISPLAY_WIRE;
 }
 
+// RayTracing's projector, material picker, and shared core_screen_pick adapter
+// all define larger signed view depth as frontmost.
+static inline double SceneEditorMeshPreviewDepthClearValue(void) {
+    return -INFINITY;
+}
+
+static inline bool SceneEditorMeshPreviewDepthWins(double candidate,
+                                                   double stored) {
+    return isfinite(candidate) && candidate > stored;
+}
+
+// Solid/Material surfaces already receive depth-aware silhouette and owner
+// boundaries from kit_viewport3d. Keep raw primitive edges only for guides,
+// explicit wire/bounds modes, or a failed surface-composition fallback.
+static inline bool SceneEditorMeshPreviewDrawsPrimitiveWire(
+    SceneEditorMeshDisplayMode mode,
+    bool guide_only,
+    bool surface_composed) {
+    const SceneEditorMeshDisplayMode clamped = SceneEditorMeshDisplayModeClamp((int)mode);
+    return guide_only || !surface_composed ||
+           clamped == SCENE_EDITOR_MESH_DISPLAY_BOUNDS ||
+           clamped == SCENE_EDITOR_MESH_DISPLAY_WIRE;
+}
+
 static inline bool SceneEditorMeshPreviewInvalidationResetsQuality(unsigned invalidation) {
     return (invalidation & (SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_GEOMETRY |
                             SCENE_EDITOR_MESH_PREVIEW_INVALIDATION_VIEW_DIRECTION)) != 0u;
@@ -66,6 +91,14 @@ static inline bool SceneEditorMeshPreviewBuildLod(
     size_t target_triangles,
     CoreMeshPreviewLodMesh* out_lod) {
     return core_mesh_preview_build_lod_mesh(document, target_triangles, out_lod).code == CORE_OK;
+}
+
+// Clustered preview vertices are averaged positions with a new index space;
+// only exact LODs can address normals from the source runtime document.
+static inline bool SceneEditorMeshPreviewLodUsesSourceVertexIndices(
+    const CoreMeshPreviewLodMesh* lod) {
+    return lod && lod->cluster_resolution == 0 &&
+           lod->vertex_count == lod->source_vertex_count;
 }
 
 static inline void SceneEditorMeshPreviewFreeLod(CoreMeshPreviewLodMesh* lod) {

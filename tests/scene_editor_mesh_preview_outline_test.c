@@ -82,6 +82,21 @@ static void test_object_boundary_uses_each_object_accent(void) {
     expect_true("object_boundary_accents_differ", left.r != right.r || left.g != right.g);
 }
 
+static void test_meaningful_self_depth_change_uses_shared_accent(void) {
+    enum { WIDTH = 5, HEIGHT = 5 };
+    uint8_t rgba[WIDTH * HEIGHT * 4];
+    double depth[WIDTH * HEIGHT];
+    int owner[WIDTH * HEIGHT];
+    clear_fixture(rgba, depth, owner, WIDTH, HEIGHT);
+    for (int y = 1; y <= 3; ++y) {
+        for (int x = 1; x <= 3; ++x) seed_pixel(rgba, depth, owner, WIDTH, x, y, 0, 2.0);
+    }
+    depth[pixel_at(2, 2, WIDTH)] = 200.0;
+    (void)SceneEditorMeshPreviewApplyOutlines(rgba, depth, owner, WIDTH, HEIGHT, -1, -1);
+    expect_true("self_depth_change_uses_shared_accent",
+                rgba[pixel_at(2, 2, WIDTH) * 4u + 0u] != 40u);
+}
+
 static void test_selected_and_hover_colors_take_priority(void) {
     const SDL_Color selected = SceneEditorMeshPreviewOutlineColor(3, 3, 3);
     const SDL_Color hover = SceneEditorMeshPreviewOutlineColor(4, -1, 4);
@@ -94,6 +109,7 @@ static void test_selected_and_hover_colors_take_priority(void) {
 int main(void) {
     test_silhouette_keeps_interior_surface();
     test_object_boundary_uses_each_object_accent();
+    test_meaningful_self_depth_change_uses_shared_accent();
     test_selected_and_hover_colors_take_priority();
     if (g_failures != 0) return 1;
     puts("scene editor mesh preview outline tests passed");
