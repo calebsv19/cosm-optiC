@@ -375,9 +375,12 @@ bool AnimationUseFluidScene(void) {
 }
 
 void AnimationClearFluidGrid(void) {
+    const double zero_length = FluidSceneZeroLength();
     g_fluidGrid.valid = false;
-    g_fluidGrid.min_x = g_fluidGrid.min_y = 0.0f;
-    g_fluidGrid.max_x = g_fluidGrid.max_y = 0.0f;
+    g_fluidGrid.min_x = zero_length;
+    g_fluidGrid.min_y = zero_length;
+    g_fluidGrid.max_x = zero_length;
+    g_fluidGrid.max_y = zero_length;
 }
 
 static RuntimeVolume3DSourceKind animation_volume_source_kind_to_runtime_kind(int kind) {

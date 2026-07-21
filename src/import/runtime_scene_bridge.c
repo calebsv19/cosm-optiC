@@ -32,20 +32,21 @@ char g_last_runtime_object_ids[MAX_OBJECTS][64] = {{0}};
 int g_last_runtime_object_id_count = 0;
 
 static void scene_defaults_reset(void) {
+    const double zero_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
     sceneSettings.objectCount = 0;
-    sceneSettings.camera.x = 0.0;
-    sceneSettings.camera.y = 0.0;
+    sceneSettings.camera.x = zero_length;
+    sceneSettings.camera.y = zero_length;
     sceneSettings.cameraZ = 0.0;
     sceneSettings.camera.zoom = 1.0;
     sceneSettings.camera.rotation = 0.0;
     sceneSettings.bezierPath.numPoints = 0;
-    sceneSettings.bezierPath.points[0].x = 0.0;
-    sceneSettings.bezierPath.points[0].y = 0.0;
+    sceneSettings.bezierPath.points[0].x = zero_length;
+    sceneSettings.bezierPath.points[0].y = zero_length;
     sceneSettings.bezierPath.mode = BEZIER_CUBIC;
     CameraPath3D_Reset(&sceneSettings.bezierPath3D);
     sceneSettings.cameraPath.numPoints = 0;
-    sceneSettings.cameraPath.points[0].x = 0.0;
-    sceneSettings.cameraPath.points[0].y = 0.0;
+    sceneSettings.cameraPath.points[0].x = zero_length;
+    sceneSettings.cameraPath.points[0].y = zero_length;
     sceneSettings.cameraPath.mode = BEZIER_CUBIC;
     CameraPath3D_Reset(&sceneSettings.cameraPath3D);
     SceneEditorMaterialFacePlacementResetAll();

@@ -120,3 +120,13 @@ CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include $(VULKAN_CFL
 	-DKIT_RENDER_ENABLE_VK_BACKEND=0 \
 	-DUSE_VULKAN=1 -DVK_RENDERER_SHADER_ROOT=\"$(abspath $(VK_RENDERER_DIR))\" \
 	-include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h
+
+# fisiCs accepts language, preprocessing, and linker inputs directly, but not
+# Clang-driver warnings, debug, or architecture-selection flags. Keep the
+# ordinary Clang command line unchanged and sanitize only the fisiCs path.
+DEPFLAGS := -MMD -MP
+ifeq ($(BUILD_TOOLCHAIN),fisics)
+CFLAGS := $(filter-out -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(ARCH_FLAGS),$(CFLAGS))
+LDFLAGS := $(filter-out $(ARCH_FLAGS),$(LDFLAGS))
+DEPFLAGS :=
+endif
