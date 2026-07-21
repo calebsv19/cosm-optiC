@@ -66,7 +66,13 @@ make -C ray_tracing test-ray-tracing-core-sim-runtime-frame-contract
 make -C ray_tracing test-scene-editor-pane-host-contract
 make -C ray_tracing test-scene-editor-viewport3d-bridge-contract
 make -C ray_tracing test-scene-editor-viewport-nav-contract
+make -C ray_tracing test-scene-editor-primitive-preview-geometry
 ```
+
+The primitive-preview geometry target pins editor-only plane tessellation and
+rect-prism face coverage, including the rule that guide primitives stay
+outline-only. Solid/Material integration uses these bounded triangles in the
+same depth surface as imported mesh preview LODs.
 
 The viewport3d bridge target proves Ray orientation conversion, canonical pan,
 anchor zoom, orbit, frame, resize, validation, and invalid-input nonmutation against shared

@@ -11,6 +11,7 @@
 #include "editor/scene_editor_mesh_preview_outline.h"
 #include "editor/scene_editor_mesh_preview_shading.h"
 #include "editor/scene_editor_mesh_preview_store.h"
+#include "editor/scene_editor_primitive_preview_geometry.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "vk_renderer.h"
 
@@ -73,12 +74,30 @@ static uint64_t scene_editor_mesh_surface_signature(
     int active_mode,
     int selected_object_index,
     SceneEditorMeshDisplayMode mode) {
+    RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
     uint64_t hash = UINT64_C(1469598103934665603);
     hash = scene_editor_mesh_surface_hash(hash, projector, sizeof(*projector));
     hash = scene_editor_mesh_surface_hash(hash, &active_mode, sizeof(active_mode));
     hash = scene_editor_mesh_surface_hash(hash, &selected_object_index,
                                           sizeof(selected_object_index));
     hash = scene_editor_mesh_surface_hash(hash, &mode, sizeof(mode));
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+    hash = scene_editor_mesh_surface_hash(hash, &seeds.valid, sizeof(seeds.valid));
+    hash = scene_editor_mesh_surface_hash(hash,
+                                          &seeds.primitive_count,
+                                          sizeof(seeds.primitive_count));
+    for (int i = 0; seeds.valid && i < seeds.primitive_count; ++i) {
+        hash = scene_editor_mesh_surface_hash(hash,
+                                              &seeds.primitives[i],
+                                              sizeof(seeds.primitives[i]));
+        if (seeds.primitives[i].scene_object_index >= 0 &&
+            seeds.primitives[i].scene_object_index < sceneSettings.objectCount) {
+            hash = scene_editor_mesh_surface_hash(
+                hash,
+                &sceneSettings.sceneObjects[seeds.primitives[i].scene_object_index].color,
+                sizeof(sceneSettings.sceneObjects[seeds.primitives[i].scene_object_index].color));
+        }
+    }
     for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance =
             SceneEditorMeshPreviewStoreGetInstance(i);
@@ -247,6 +266,98 @@ static SDL_Color scene_editor_mesh_surface_base_color(SceneEditorMeshDisplayMode
                        (Uint8)((packed >> 8) & 0xff),
                        (Uint8)(packed & 0xff),
                        255u};
+}
+
+static void scene_editor_primitive_surface_rasterize_triangle(
+    const SceneEditorDigestOverlayProjector* projector,
+    const SceneEditorPrimitivePreviewTriangle* triangle,
+    int scene_object_index,
+    SceneEditorMeshDisplayMode mode,
+    double scale,
+    SceneEditorMeshPreviewFrameStats* stats) {
+    const SDL_Color base = scene_editor_mesh_surface_base_color(mode, scene_object_index);
+    const SceneEditorMeshSurfacePoint3 wa = {triangle->a.x, triangle->a.y, triangle->a.z};
+    const SceneEditorMeshSurfacePoint3 wb = {triangle->b.x, triangle->b.y, triangle->b.z};
+    const SceneEditorMeshSurfacePoint3 wc = {triangle->c.x, triangle->c.y, triangle->c.z};
+    SceneEditorMeshSurfaceVertex a;
+    SceneEditorMeshSurfaceVertex b;
+    SceneEditorMeshSurfaceVertex c;
+    SceneEditorMeshPreviewShadeNormal normal;
+    double area = 0.0;
+    int min_x = 0;
+    int max_x = 0;
+    int min_y = 0;
+    int max_y = 0;
+
+    if (!projector || !triangle || !stats ||
+        !scene_editor_mesh_surface_project(projector, wa, scale, &a) ||
+        !scene_editor_mesh_surface_project(projector, wb, scale, &b) ||
+        !scene_editor_mesh_surface_project(projector, wc, scale, &c)) {
+        return;
+    }
+    area = scene_editor_mesh_surface_edge(a.x, a.y, b.x, b.y, c.x, c.y);
+    if (!isfinite(area) || fabs(area) <= 1e-8) return;
+    min_x = (int)floor(fmin(a.x, fmin(b.x, c.x)));
+    max_x = (int)ceil(fmax(a.x, fmax(b.x, c.x)));
+    min_y = (int)floor(fmin(a.y, fmin(b.y, c.y)));
+    max_y = (int)ceil(fmax(a.y, fmax(b.y, c.y)));
+    if (max_x < 0 || max_y < 0 || min_x >= g_surface.width || min_y >= g_surface.height) {
+        return;
+    }
+    if (min_x < 0) min_x = 0;
+    if (min_y < 0) min_y = 0;
+    if (max_x >= g_surface.width) max_x = g_surface.width - 1;
+    if (max_y >= g_surface.height) max_y = g_surface.height - 1;
+    normal = scene_editor_mesh_surface_normal(wa, wb, wc);
+    for (int y = min_y; y <= max_y; ++y) {
+        for (int x = min_x; x <= max_x; ++x) {
+            const double px = (double)x + 0.5;
+            const double py = (double)y + 0.5;
+            const double w0 = scene_editor_mesh_surface_edge(b.x, b.y, c.x, c.y, px, py) / area;
+            const double w1 = scene_editor_mesh_surface_edge(c.x, c.y, a.x, a.y, px, py) / area;
+            const double w2 = 1.0 - w0 - w1;
+            const size_t pixel = (size_t)y * (size_t)g_surface.width + (size_t)x;
+            double depth = 0.0;
+            SDL_Color color;
+            if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
+            depth = w0 * a.depth + w1 * b.depth + w2 * c.depth;
+            if (!isfinite(depth) || depth >= g_surface.depth[pixel]) continue;
+            color = SceneEditorMeshPreviewShadeColor(base, normal);
+            g_surface.depth[pixel] = depth;
+            g_surface.owner[pixel] = scene_object_index;
+            g_surface.rgba[pixel * 4u + 0u] = color.r;
+            g_surface.rgba[pixel * 4u + 1u] = color.g;
+            g_surface.rgba[pixel * 4u + 2u] = color.b;
+            g_surface.rgba[pixel * 4u + 3u] = color.a;
+        }
+    }
+    stats->rendered_triangles += 1u;
+}
+
+static void scene_editor_primitive_surface_rasterize(
+    const SceneEditorDigestOverlayProjector* projector,
+    const RuntimeSceneBridgePrimitiveSeed* primitive,
+    SceneEditorMeshDisplayMode mode,
+    double scale,
+    SceneEditorMeshPreviewFrameStats* stats) {
+    SceneEditorPrimitivePreviewTriangle
+        triangles[SCENE_EDITOR_PRIMITIVE_PREVIEW_MAX_TRIANGLES];
+    size_t triangle_count = 0u;
+    if (!primitive || !stats ||
+        !SceneEditorPrimitivePreviewBuildTriangles(primitive,
+                                                   triangles,
+                                                   &triangle_count)) {
+        return;
+    }
+    for (size_t i = 0u; i < triangle_count; ++i) {
+        scene_editor_primitive_surface_rasterize_triangle(projector,
+                                                          &triangles[i],
+                                                          primitive->scene_object_index,
+                                                          mode,
+                                                          scale,
+                                                          stats);
+    }
+    stats->rendered_instances += 1;
 }
 
 static void scene_editor_mesh_surface_rasterize(
@@ -444,6 +555,7 @@ bool SceneEditorMeshPreviewSurfaceRender(
     g_surface.signature = signature;
     g_surface.signature_valid = true;
     if (reraster) {
+        RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
         SceneEditorMeshPreviewFrameStats stats = {0};
         scale = interactive ? SCENE_EDITOR_MESH_SURFACE_INTERACTIVE_SCALE
                             : SCENE_EDITOR_MESH_SURFACE_SETTLED_SCALE;
@@ -452,6 +564,20 @@ bool SceneEditorMeshPreviewSurfaceRender(
                 (int)ceil((double)projector->viewport.w * scale),
                 (int)ceil((double)projector->viewport.h * scale))) {
             return false;
+        }
+        runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+        for (int i = 0; seeds.valid && i < seeds.primitive_count; ++i) {
+            const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds.primitives[i];
+            if (!scene_editor_mesh_surface_visible(active_editor_mode,
+                                                   selected_object_index,
+                                                   primitive->scene_object_index)) {
+                continue;
+            }
+            scene_editor_primitive_surface_rasterize(projector,
+                                                     primitive,
+                                                     mode,
+                                                     scale,
+                                                     &stats);
         }
         for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
             const RayTracingRuntimeMeshAssetInstance* instance =

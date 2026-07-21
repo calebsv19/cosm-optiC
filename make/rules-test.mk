@@ -5,6 +5,7 @@ STABLE_TEST_TARGETS := \
 	test-runtime-scene-bridge-contract \
 	test-runtime-mesh-asset-loader \
 	test-scene-editor-mesh-preview-outline \
+	test-scene-editor-primitive-preview-geometry \
 	test-runtime-mesh-asset-pack \
 	test-runtime-mesh-asset-builder \
 	test-smooth-mesh-reflection-fixtures \
@@ -71,6 +72,23 @@ $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN): $(SCENE_EDITOR_MESH_PREVIEW_OUTLI
 
 test-scene-editor-mesh-preview-outline: $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN)
 	@$(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN)
+
+SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_BIN := \
+	$(BUILD_DIR)/tests/scene_editor_primitive_preview_geometry_test
+SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_SRCS := \
+	$(TEST_DIR)/scene_editor_primitive_preview_geometry_test.c \
+	$(SRC_DIR)/editor/scene_editor_primitive_preview_geometry.c
+
+$(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_BIN): \
+	$(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		-I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_SRCS) -lm
+
+test-scene-editor-primitive-preview-geometry: \
+	$(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_BIN)
+	@$(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_BIN)
 
 run: $(APP_TARGET)
 	./$(APP_TARGET)
