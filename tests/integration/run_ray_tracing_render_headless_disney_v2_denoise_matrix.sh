@@ -45,8 +45,12 @@ def common(summary, run_id, denoise_enabled):
     assert summary["render_stats"]["temporal_committed_subpasses"] == 12
     assert summary["render_stats"]["visible_pixels"] > 0
     assert summary["render_stats"]["nonzero_pixels"] > 0
-    assert summary["bvh_summary"]["ready"] is True
-    assert summary["bvh_summary"]["trace_overflows"] == 0
+    prepared_accel = summary["prepared_acceleration"]
+    assert prepared_accel["enabled"] is True
+    assert prepared_accel["active_trace_route"] == "tlas_blas"
+    assert prepared_accel["route_tlas_trace_calls"] > 0
+    assert prepared_accel["route_acceleration_failure_calls"] == 0
+    assert prepared_accel["route_flattened_fallback_calls"] == 0
 
 off = load(off_path)
 on = load(on_path)

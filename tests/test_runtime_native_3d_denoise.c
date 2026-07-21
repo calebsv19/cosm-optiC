@@ -244,7 +244,42 @@ static int test_runtime_native_3d_denoise_disney_v2_rejects_clean_visual_edges(v
     return 0;
 }
 
-static int test_runtime_native_3d_denoise_disney_v2_requires_same_surface_identity(void) {
+static int test_runtime_native_3d_denoise_disney_v2_blurs_across_coplanar_triangles(void) {
+    RuntimeNative3DFeatureBuffer features = {0};
+    RuntimeNative3DDenoiseDiagnostics diagnostics = {0};
+    float radiance[3 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = {0};
+    bool ok = test_runtime_native_3d_denoise_setup_flat_features(&features, 3);
+    assert_true("runtime_native_3d_denoise_v2_coplanar_features_alloc", ok);
+    if (!ok) {
+        RuntimeNative3DFeatureBuffer_Free(&features);
+        return 0;
+    }
+
+    test_runtime_native_3d_denoise_set_gray(radiance, 0, 0.20f);
+    test_runtime_native_3d_denoise_set_gray(radiance, 1, 0.00f);
+    test_runtime_native_3d_denoise_set_gray(radiance, 2, 0.20f);
+    features.triangleIndexBuffer[0] = 8;
+    features.triangleIndexBuffer[2] = 8;
+
+    ok = RuntimeNative3DDenoise_ApplyForIntegrator(radiance,
+                                                   3,
+                                                   &features,
+                                                   RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
+                                                   8,
+                                                   NULL,
+                                                   0,
+                                                   &diagnostics);
+    assert_true("runtime_native_3d_denoise_v2_coplanar_apply_ok", ok);
+    assert_true("runtime_native_3d_denoise_v2_coplanar_center_blurs",
+                radiance[RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] > 0.02f);
+    assert_true("runtime_native_3d_denoise_v2_coplanar_records_samples",
+                diagnostics.stableInteriorSampleCount > 0);
+
+    RuntimeNative3DFeatureBuffer_Free(&features);
+    return 0;
+}
+
+static int test_runtime_native_3d_denoise_disney_v2_requires_same_object_identity(void) {
     RuntimeNative3DFeatureBuffer features = {0};
     RuntimeNative3DDenoiseDiagnostics diagnostics = {0};
     float radiance[3 * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS] = {0};
@@ -258,8 +293,7 @@ static int test_runtime_native_3d_denoise_disney_v2_requires_same_surface_identi
     test_runtime_native_3d_denoise_set_gray(radiance, 0, 0.20f);
     test_runtime_native_3d_denoise_set_gray(radiance, 1, 0.00f);
     test_runtime_native_3d_denoise_set_gray(radiance, 2, 0.20f);
-    features.triangleIndexBuffer[0] = 8;
-    features.triangleIndexBuffer[2] = 8;
+    features.sceneObjectIndexBuffer[0] = 4;
     features.sceneObjectIndexBuffer[2] = 4;
 
     ok = RuntimeNative3DDenoise_ApplyForIntegrator(radiance,
@@ -364,7 +398,8 @@ int run_test_runtime_native_3d_denoise_tests(void) {
     test_runtime_native_3d_denoise_disney_v2_blurs_stable_same_triangle();
     test_runtime_native_3d_denoise_disney_v2_blurs_rough_reflective_interiors();
     test_runtime_native_3d_denoise_disney_v2_rejects_clean_visual_edges();
-    test_runtime_native_3d_denoise_disney_v2_requires_same_surface_identity();
+    test_runtime_native_3d_denoise_disney_v2_blurs_across_coplanar_triangles();
+    test_runtime_native_3d_denoise_disney_v2_requires_same_object_identity();
     test_runtime_native_3d_denoise_disney_v2_preserves_special_materials();
     test_runtime_native_3d_denoise_disney_v2_preserves_temporally_unstable_pixels();
     return test_support_failures() - before;

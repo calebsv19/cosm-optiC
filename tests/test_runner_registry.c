@@ -159,6 +159,8 @@ int test_runner_main(int argc, char** argv) {
         {"water_surface_runtime", run_test_water_surface_runtime_tests},
         {"runtime_lighting_materials_payload", run_test_runtime_lighting_materials_payload_tests},
         {"runtime_lighting_materials_direct_light", run_test_runtime_lighting_materials_direct_light_suite},
+        {"runtime_disney_v2_topology_stability",
+         run_test_runtime_disney_v2_topology_stability_suite},
         {"runtime_lighting_materials", run_test_runtime_lighting_materials_tests},
         {"runtime_mesh_asset_loader", run_test_runtime_mesh_asset_loader_tests},
         {"runtime_diffuse_temporal", run_test_runtime_diffuse_temporal_tests},

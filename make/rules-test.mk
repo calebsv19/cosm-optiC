@@ -1,5 +1,6 @@
 STABLE_TEST_TARGETS := \
 	test \
+	test-ray-tracing-triangle-topology-stability \
 	test-runtime-scene-bridge-contract \
 	test-runtime-mesh-asset-loader \
 	test-scene-editor-mesh-preview-outline \
@@ -75,6 +76,11 @@ visual-artifact: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 
 test: $(APP_TARGET) $(TEST_BIN)
 	./$(TEST_BIN)
+
+test-ray-tracing-triangle-topology-stability: $(TEST_BIN)
+	@TEST_RUNNER_GROUP=runtime_native_3d_denoise ./$(TEST_BIN)
+	@TEST_RUNNER_GROUP=runtime_disney_v2_topology_stability ./$(TEST_BIN)
+	@echo "ray tracing triangle topology stability lane passed"
 
 RAY_TRACING_FOLDER_PICKER_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_folder_picker_test
 RAY_TRACING_FOLDER_PICKER_TEST_SRCS := \

@@ -21,6 +21,7 @@
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_disney_v2_transport_3d.h"
+#include "render/runtime_disney_v2_transport_internal_3d.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -35,6 +36,29 @@ static double runtime_disney_v2_3d_test_peak(double r, double g, double b) {
     if (g > peak) peak = g;
     if (b > peak) peak = b;
     return peak;
+}
+
+static int test_runtime_disney_v2_3d_sampling_seed_ignores_triangle_topology(void) {
+    RuntimeNative3DSamplingContext sampling = {0};
+    HitInfo3D first = {0};
+    HitInfo3D second = {0};
+
+    sampling.sampleSequence = 17U;
+    first.position = vec3(1.25, 2.5, 3.75);
+    first.sceneObjectIndex = 4;
+    first.triangleIndex = 7;
+    second = first;
+    second.triangleIndex = 8;
+
+    assert_true(
+        "runtime_disney_v2_transport_seed_triangle_topology_independent",
+        runtime_disney_v2_transport_3d_seed_from_hit(&first, &sampling) ==
+            runtime_disney_v2_transport_3d_seed_from_hit(&second, &sampling));
+    assert_true(
+        "runtime_disney_v2_transmission_seed_triangle_topology_independent",
+        runtime_disney_v2_3d_transmission_seed_from_hit(&first, &sampling) ==
+            runtime_disney_v2_3d_transmission_seed_from_hit(&second, &sampling));
+    return 0;
 }
 
 static bool runtime_disney_v2_test_write_text_file(const char* path, const char* text) {
@@ -4792,6 +4816,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
 
     test_runtime_dielectric_transport_water_ior_fresnel_contract();
+    test_runtime_disney_v2_3d_sampling_seed_ignores_triangle_topology();
     test_runtime_dielectric_transport_explicit_unit_ior_straight_through_contract();
     test_runtime_disney_v2_transmission_sample_uses_payload_ior_contract();
     test_runtime_disney_v2_reflected_transmission_sample_cap_policy();
@@ -4837,4 +4862,8 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_disney_v2_3d_path_depth_policy_blocks_recursive_depth();
     test_runtime_disney_v2_3d_path_policy_roulette_can_terminate_recursive_depth();
     return 0;
+}
+
+int run_test_runtime_disney_v2_topology_stability_suite(void) {
+    return test_runtime_disney_v2_3d_sampling_seed_ignores_triangle_topology();
 }

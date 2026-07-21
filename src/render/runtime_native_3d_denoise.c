@@ -361,7 +361,6 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 const float center_nx = features->normalBuffer[center_normal_base];
                 const float center_ny = features->normalBuffer[center_normal_base + 1u];
                 const float center_nz = features->normalBuffer[center_normal_base + 2u];
-                const int center_triangle = features->triangleIndexBuffer[center_index];
                 const int center_object = features->sceneObjectIndexBuffer[center_index];
 
                 for (int dy = -RUNTIME_NATIVE_3D_DENOISE_RADIUS;
@@ -389,7 +388,6 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                             ((size_t)sample_y * (size_t)radiance_stride + (size_t)sample_x) *
                             (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
                         if (!features->hitMaskBuffer[sample_index] ||
-                            features->triangleIndexBuffer[sample_index] != center_triangle ||
                             features->sceneObjectIndexBuffer[sample_index] != center_object ||
                             runtime_native_3d_denoise_disney_v2_preserves_transparent(
                                 features,

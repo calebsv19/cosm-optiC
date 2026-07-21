@@ -91,15 +91,18 @@ uint32_t runtime_disney_v2_3d_transmission_seed_from_hit(
     uint32_t sx = 0U;
     uint32_t sy = 0U;
     uint32_t sz = 0U;
+    uint32_t surface_seed = 0U;
 
     if (!hit) return runtime_disney_v2_3d_transmission_hash_u32(sequence);
     sx = (uint32_t)(fabs(hit->position.x) * 4096.0);
     sy = (uint32_t)(fabs(hit->position.y) * 4096.0);
     sz = (uint32_t)(fabs(hit->position.z) * 4096.0);
+    /* Preserve the historical triangle-zero stream without keying valid hits by tessellation. */
+    surface_seed = hit->triangleIndex >= 0 ? 2654435761U : 0U;
     return runtime_disney_v2_3d_transmission_hash_u32(
         sx ^ (sy * 73856093U) ^ (sz * 19349663U) ^
         ((uint32_t)(hit->sceneObjectIndex + 1) * 83492791U) ^
-        ((uint32_t)(hit->triangleIndex + 1) * 2654435761U) ^
+        surface_seed ^
         runtime_disney_v2_3d_transmission_hash_u32(sequence ^ 0x9e3779b9U));
 }
 
