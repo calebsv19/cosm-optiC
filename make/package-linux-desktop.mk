@@ -182,6 +182,7 @@ package-linux-desktop-self-test: package-linux-desktop
 	@grep -q '"thin_walled": true' "$(LINUX_DESKTOP_CONFIG_DIR)/materials/transparent.json" || (echo "Missing transparent material thin-wall fixture"; exit 1)
 	@test -f "$(LINUX_DESKTOP_CONFIG_DIR)/objects/Hexagon.asset.json" || (echo "Missing bundled shape assets"; exit 1)
 	@test -f "$(LINUX_DESKTOP_CONFIG_DIR)/samples/optic_build_week_showcase/scene_runtime.json" || (echo "Missing Build Week showcase scene"; exit 1)
+	@test -f "$(LINUX_DESKTOP_CONFIG_DIR)/starter_scene_profile.json" || (echo "Missing starter scene profile"; exit 1)
 	@test -f "$(LINUX_DESKTOP_CONFIG_DIR)/samples/optic_build_week_showcase/render_request.json" || (echo "Missing Build Week showcase request"; exit 1)
 	@test -f "$(LINUX_DESKTOP_CONFIG_DIR)/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_reflection_blob.runtime.json" || (echo "Missing Build Week reflection mesh"; exit 1)
 	@test -f "$(LINUX_DESKTOP_CONFIG_DIR)/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_grooved_orb.runtime.json" || (echo "Missing Build Week grooved orb mesh"; exit 1)

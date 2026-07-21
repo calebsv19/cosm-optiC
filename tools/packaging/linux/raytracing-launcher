@@ -50,6 +50,28 @@ copy_tree_if_needed() {
     cp -R "$source" "$target"
 }
 
+seed_tree_once() {
+    target="$1"
+    source="$2"
+    [ -e "$target" ] && return 0
+    [ -d "$source" ] || return 0
+
+    target_parent="$(dirname "$target")"
+    mkdir -p "$target_parent" 2>/dev/null || true
+    seed_stage="$(mktemp -d "$target_parent/.starter-scene.XXXXXX")"
+    seed_bundle="$seed_stage/bundle"
+    if ! cp -R "$source" "$seed_bundle"; then
+        rm -rf "$seed_stage" 2>/dev/null || true
+        return 1
+    fi
+    if [ -e "$target" ]; then
+        rm -rf "$seed_stage" 2>/dev/null || true
+        return 0
+    fi
+    mv "$seed_bundle" "$target"
+    rmdir "$seed_stage" 2>/dev/null || true
+}
+
 sync_bundle_files() {
     target_dir="$1"
     source_dir="$2"
@@ -79,10 +101,13 @@ setup_runtime_root() {
         "$RUNTIME_DIR/data/snapshots" 2>/dev/null || true
 
     copy_tree_if_needed "$RUNTIME_DIR/config" "$RES_DIR/config" "scene_config.json:animation_config.json:default.ttf"
+    sync_bundle_files "$RUNTIME_DIR/config" "$RES_DIR/config" "starter_scene_profile.json"
     sync_bundle_files "$RUNTIME_DIR/config/materials" "$RES_DIR/config/materials" "*.json"
     copy_tree_if_needed "$RUNTIME_DIR/config/samples/optic_build_week_showcase" \
         "$RES_DIR/config/samples/optic_build_week_showcase" \
         "scene_runtime.json:render_request.json:assets/mesh_assets/asset_build_week_reflection_blob.runtime.json:assets/mesh_assets/asset_build_week_grooved_orb.runtime.json:assets/mesh_assets/asset_build_week_lattice_shell.runtime.json"
+    seed_tree_once "$RUNTIME_DIR/data/runtime/scenes/optic_studio_starter_v1" \
+        "$RUNTIME_DIR/config/samples/optic_build_week_showcase"
     copy_tree_if_needed "$RUNTIME_DIR/shared" "$RES_DIR/shared" "assets/fonts/Montserrat-Regular.ttf"
     copy_tree_if_needed "$RUNTIME_DIR/shaders" "$RES_DIR/shaders" "textured.vert.spv:textured.frag.spv:line.vert.spv:line.frag.spv"
     copy_tree_if_needed "$RUNTIME_DIR/vk_renderer" "$RES_DIR/vk_renderer" "shaders/textured.vert.spv:shaders/textured.frag.spv:shaders/line.vert.spv:shaders/line.frag.spv"
@@ -156,10 +181,16 @@ if [ "${1:-}" = "--self-test" ]; then
     [ -f "$RUNTIME_DIR/config/materials/transparent.json" ] || { echo "missing: config/materials/transparent.json" >&2; exit 1; }
     grep -q '"thin_walled": true' "$RUNTIME_DIR/config/materials/transparent.json" || { echo "missing: transparent material thin-wall fixture" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/objects/Hexagon.asset.json" ] || { echo "missing: bundled shape assets" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/config/starter_scene_profile.json" ] || { echo "missing: starter scene profile" >&2; exit 1; }
+    grep -q '"enabled": true' "$RUNTIME_DIR/config/starter_scene_profile.json" || { echo "stale: starter scene profile is not enabled" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/scene_runtime.json" ] || { echo "missing: Build Week showcase scene" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_reflection_blob.runtime.json" ] || { echo "missing: Build Week reflection mesh" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_grooved_orb.runtime.json" ] || { echo "missing: Build Week grooved orb mesh" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_lattice_shell.runtime.json" ] || { echo "missing: Build Week lattice shell mesh" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/data/runtime/scenes/optic_studio_starter_v1/scene_runtime.json" ] || { echo "missing: editable starter scene" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/data/runtime/scenes/optic_studio_starter_v1/assets/mesh_assets/asset_build_week_reflection_blob.runtime.json" ] || { echo "missing: editable starter reflection mesh" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/data/runtime/scenes/optic_studio_starter_v1/assets/mesh_assets/asset_build_week_grooved_orb.runtime.json" ] || { echo "missing: editable starter grooved orb mesh" >&2; exit 1; }
+    [ -f "$RUNTIME_DIR/data/runtime/scenes/optic_studio_starter_v1/assets/mesh_assets/asset_build_week_lattice_shell.runtime.json" ] || { echo "missing: editable starter lattice shell mesh" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime" ] || { echo "missing: runtime dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/frames" ] || { echo "missing: frames dir" >&2; exit 1; }
     [ -d "$RUNTIME_DIR/data/runtime/videos" ] || { echo "missing: videos dir" >&2; exit 1; }

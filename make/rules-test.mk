@@ -1,5 +1,6 @@
 STABLE_TEST_TARGETS := \
 	test \
+	test-starter-scene-profile-contract \
 	test-ray-tracing-triangle-topology-stability \
 	test-runtime-scene-bridge-contract \
 	test-runtime-mesh-asset-loader \
@@ -39,6 +40,21 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-workspace-authoring-host
 
 LEGACY_TEST_TARGETS :=
+
+STARTER_SCENE_PROFILE_TEST_BIN := $(BUILD_DIR)/tests/starter_scene_profile_test
+STARTER_SCENE_PROFILE_TEST_SRCS := \
+	$(TEST_DIR)/starter_scene_profile_test.c \
+	$(SRC_DIR)/app/starter_scene_profile.c \
+	$(SRC_DIR)/app/starter_scene_startup.c
+
+$(STARTER_SCENE_PROFILE_TEST_BIN): $(STARTER_SCENE_PROFILE_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(STARTER_SCENE_PROFILE_TEST_SRCS) $(JSON_LIBS)
+
+test-starter-scene-profile-contract: $(STARTER_SCENE_PROFILE_TEST_BIN)
+	@$(STARTER_SCENE_PROFILE_TEST_BIN)
 
 SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN := \
 	$(BUILD_DIR)/tests/scene_editor_mesh_preview_outline_test

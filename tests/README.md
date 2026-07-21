@@ -60,6 +60,7 @@ Fast C and contract lanes:
 ```bash
 make -C ray_tracing test
 make -C ray_tracing test-runtime-scene-bridge-contract
+make -C ray_tracing test-starter-scene-profile-contract
 make -C ray_tracing test-ray-tracing-runtime-host-lifecycle-contract
 make -C ray_tracing test-ray-tracing-core-sim-runtime-frame-contract
 make -C ray_tracing test-scene-editor-pane-host-contract

@@ -6,10 +6,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "app/animation.h"
+#include "app/data_paths.h"
 #include "app/scene_loop_diag.h"
 #include "app/scene_loop_policy.h"
+#include "app/starter_scene_startup.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
 #include "engine/Render/render_font.h"
@@ -95,6 +98,14 @@ static bool initialize_menu(SDL_Window** window,
                             SDL_Renderer** renderer,
                             TTF_Font** font,
                             MenuRuntimeState* state) {
+    RayTracingStarterSceneStartup starter_scene_startup;
+    char program_root[PATH_MAX] = {0};
+    char runtime_config_path[PATH_MAX] = {0};
+    char starter_scene_error[256] = {0};
+    struct stat runtime_config_info;
+    bool has_persisted_animation_config = false;
+    bool open_starter_scene_editor = false;
+
     if (!window || !renderer || !font || !state) return false;
 
     ray_tracing_shared_theme_load_persisted();
@@ -173,12 +184,52 @@ static bool initialize_menu(SDL_Window** window,
     }
 #endif
 
+    if (ray_tracing_find_program_root(program_root, sizeof(program_root)) &&
+        snprintf(runtime_config_path,
+                 sizeof(runtime_config_path),
+                 "%s/data/runtime/animation_config.json",
+                 program_root) < (int)sizeof(runtime_config_path)) {
+        has_persisted_animation_config =
+            stat(runtime_config_path, &runtime_config_info) == 0 &&
+            S_ISREG(runtime_config_info.st_mode);
+    }
+
     LoadAnimationConfig();
     LoadSceneConfig();
+    if (program_root[0] &&
+        ray_tracing_starter_scene_startup_evaluate(program_root,
+                                                   has_persisted_animation_config,
+                                                   animSettings.runtimeScenePath,
+                                                   &starter_scene_startup,
+                                                   starter_scene_error,
+                                                   sizeof(starter_scene_error))) {
+        if (starter_scene_startup.shouldActivate) {
+            animSettings.spaceMode = (SpaceMode)starter_scene_startup.preferredSpaceMode;
+            animSettings.editorMode = starter_scene_startup.preferredEditorMode;
+            animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+            animSettings.useFluidScene = false;
+            animSettings.fluidManifest[0] = '\0';
+            (void)snprintf(animSettings.runtimeScenePath,
+                           sizeof(animSettings.runtimeScenePath),
+                           "%s",
+                           starter_scene_startup.runtimeScenePath);
+            SaveAnimationConfig();
+            open_starter_scene_editor = starter_scene_startup.shouldOpenSceneEditor;
+            printf("INFO: Activated starter scene profile: %s\n",
+                   animSettings.runtimeScenePath);
+        }
+    } else if (program_root[0]) {
+        fprintf(stderr,
+                "WARN: Starter scene profile was not applied: %s\n",
+                starter_scene_error[0] ? starter_scene_error : "unknown error");
+    }
     ApplyAnimationWindowSizeOverride();
     animSettings.previewMode = false;
 
     menu_state_init(state);
+    if (open_starter_scene_editor) {
+        state->activeView = MENU_VIEW_SCENE_EDITOR;
+    }
     menu_refresh_render_context(*window, *renderer);
     ray_tracing_font_runtime_attach_renderer(*renderer);
 

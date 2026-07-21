@@ -1,9 +1,11 @@
 # optiC Build Week Showcase
 
 This is the self-contained, photon-free demo scene for the optiC OpenAI Build
-Week submission. Load `scene_runtime.json` from the app's scene picker to inspect
-and edit three original procedural objects with mirror, glossy, and metal
-materials.
+Week submission. A fresh packaged runtime seeds an editable copy and opens it
+directly in the 3D Object editor. Existing runtime profiles preserve their saved
+scene selection and can load
+`data/runtime/scenes/optic_studio_starter_v1/scene_runtime.json` from the app's
+scene picker.
 
 The package includes each editable procedural recipe, its generated STL source,
 the compiled runtime mesh sidecar, and generation/import summaries. No
@@ -17,11 +19,10 @@ third-party model or texture is required.
 
 ## Demo flow
 
-1. Launch optiC and choose **Load Scene**.
-2. Open `samples/optic_build_week_showcase/scene_runtime.json`.
-3. Select an object in the scene editor.
-4. Change its material preset, color, roughness, or reflectivity.
-5. Move the camera and start a deep render to compare the result.
+1. Launch optiC with a fresh runtime profile; it opens in the 3D Object editor.
+2. Select an object in the scene editor.
+3. Change its material preset, color, roughness, or reflectivity.
+4. Move the camera and start a deep render to compare the result.
 
 The scene intentionally does not enable or depend on photon mapping.
 

@@ -39,16 +39,17 @@ self-contained Build Week scene.
 
 ## Five-Minute Test
 
-1. Launch optiC.
-2. Choose **Load Scene**.
-3. Open `samples/optic_build_week_showcase/scene_runtime.json` from the bundled
-   runtime config root.
-4. Open **Scene Editor** and select the reflection blob, grooved orb, or lattice
-   shell.
-5. Change the selected object's material preset, color, roughness, or
+1. Launch optiC with a fresh runtime profile. The app opens directly in the 3D
+   **Object** editor with an editable copy of the showcase loaded.
+2. Select the reflection blob, grooved orb, or lattice shell.
+3. Change the selected object's material preset, color, roughness, or
    reflectivity, then apply the edit.
-6. Move or zoom the camera to inspect the imported geometry.
-7. Enable **Deep Render**, choose a shipped 3D integrator, and press **Start**.
+4. Move or zoom the camera to inspect the imported geometry.
+5. Enable **Deep Render**, choose a shipped 3D integrator, and press **Start**.
+
+Existing runtime profiles keep their saved scene selection. To inspect the
+showcase from one of those profiles, choose **Load Scene** and open
+`data/runtime/scenes/optic_studio_starter_v1/scene_runtime.json`.
 
 The scene should show three distinct original procedural meshes in a small
 studio: a mirror-like organic blob, a glossy grooved orb, and a copper-colored
@@ -65,7 +66,8 @@ optiC.app/Contents/MacOS/raytracing-launcher --self-test
 
 Expected output starts with `self-test: ok`. This verifies the executable,
 runtime libraries, shaders, fonts, material presets, showcase scene, and all
-three showcase mesh assets after they are copied into a writable runtime root.
+three showcase mesh assets after they are seeded together into the editable
+runtime scene root.
 
 ## Optional Source Test
 
