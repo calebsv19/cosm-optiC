@@ -206,12 +206,15 @@ representative textured-glass operator-scene proof did not justify default
 promotion, so do not add this env to the macOS launcher script or package
 defaults.
 
-Optional icon inputs:
+Packaged icon inputs:
+
+- tracked default icon, present in standalone source checkouts:
+  - `ray_tracing/tools/packaging/macos/AppIcon.icns`
 
 - default local icon store:
   - `ray_tracing/tools/packaging/macos/local_app_icon/AppIcon.icns`
   - `ray_tracing/tools/packaging/macos/local_app_icon/AppIcon.iconset`
-- plain `make -C ray_tracing package-desktop-refresh` now consumes that local store by default when present
+- plain `make -C ray_tracing package-desktop-refresh` uses the local icon store when present, then falls back to the tracked default
 - the local icon store is intentionally gitignored so icon refreshes do not pollute repo state
 - canonical local icon source:
   - `/Users/<user>/Desktop/icns/optic.icns`
@@ -262,10 +265,10 @@ make -C ray_tracing release-artifact \
   PACKAGE_FFMPEG_SRC="/absolute/path/to/x86_64/ffmpeg"
 ```
 
-If the local store or either override variable is present, packaging will bundle `Contents/Resources/AppIcon.icns` and the app plist will advertise `CFBundleIconFile=AppIcon`.
+Packaging requires `Contents/Resources/AppIcon.icns`, and the app plist advertises `CFBundleIconFile=AppIcon`. Explicit overrides and the local store remain available for intentional icon iteration; a standalone clone uses the tracked default.
 
 Local asset note:
-- because `tools/packaging/macos/local_app_icon/` is gitignored, a fresh clone does not automatically carry your chosen app icon until you copy one into that directory
+- `tools/packaging/macos/local_app_icon/` remains gitignored for private icon iteration, but a fresh clone carries the canonical tracked default
 - release/readiness:
   - `make -C ray_tracing release-contract`
   - `make -C ray_tracing release-bundle-audit`
