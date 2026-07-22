@@ -504,6 +504,18 @@ bool SceneEditorDigestOverlayProjectPointF(const SceneEditorDigestOverlayProject
     return true;
 }
 
+double SceneEditorDigestOverlayViewDepth(const SceneEditorDigestOverlayProjector* projector,
+                                         double world_x,
+                                         double world_y,
+                                         double world_z) {
+    double yaw_y = 0.0;
+    if (!projector) return 0.0;
+    yaw_y = sin(projector->yaw_rad) * (world_x - projector->center_x) +
+            cos(projector->yaw_rad) * (world_y - projector->center_y);
+    return sin(projector->pitch_rad) * yaw_y +
+           cos(projector->pitch_rad) * (world_z - projector->center_z);
+}
+
 bool SceneEditorDigestOverlayProjectPoint(const SceneEditorDigestOverlayProjector* projector,
                                           double world_x,
                                           double world_y,

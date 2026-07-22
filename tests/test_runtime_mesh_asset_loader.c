@@ -56,6 +56,62 @@ static int test_scene_editor_mesh_preview_contract(void) {
                     !SceneEditorMeshPreviewDepthWins(3.0, 4.0) &&
                     !SceneEditorMeshPreviewDepthWins(NAN, 4.0));
     {
+        SceneEditorDigestOverlayProjector projector = {0};
+        const double yaw = 0.73;
+        const double pitch = -0.41;
+        const double near_distance = 4.0;
+        const double far_distance = 1.0;
+        const double forward_x = sin(yaw) * sin(pitch);
+        const double forward_y = cos(yaw) * sin(pitch);
+        const double forward_z = cos(pitch);
+        double near_x = 0.0;
+        double near_y = 0.0;
+        double far_x = 0.0;
+        double far_y = 0.0;
+        double depth = SceneEditorMeshPreviewDepthClearValue();
+        int owner = -1;
+        projector.viewport = (SDL_Rect){20, 30, 640, 480};
+        projector.center_x = 2.0;
+        projector.center_y = -3.0;
+        projector.center_z = 5.0;
+        projector.yaw_rad = yaw;
+        projector.pitch_rad = pitch;
+        projector.scale = 64.0;
+        assert_true("mesh_preview_view_axis_projects_to_same_pixel",
+                    SceneEditorDigestOverlayProjectPointF(
+                        &projector,
+                        projector.center_x + forward_x * near_distance,
+                        projector.center_y + forward_y * near_distance,
+                        projector.center_z + forward_z * near_distance,
+                        &near_x,
+                        &near_y) &&
+                        SceneEditorDigestOverlayProjectPointF(
+                            &projector,
+                            projector.center_x + forward_x * far_distance,
+                            projector.center_y + forward_y * far_distance,
+                            projector.center_z + forward_z * far_distance,
+                            &far_x,
+                            &far_y) &&
+                        fabs(near_x - far_x) < 1e-9 &&
+                        fabs(near_y - far_y) < 1e-9);
+        if (SceneEditorMeshPreviewDepthWins(far_distance, depth)) {
+            depth = far_distance;
+            owner = 3; /* primitive */
+        }
+        if (SceneEditorMeshPreviewDepthWins(near_distance, depth)) {
+            depth = near_distance;
+            owner = 7; /* mesh */
+        }
+        assert_true("mesh_preview_primitive_mesh_nearest_owner", owner == 7);
+        assert_true("mesh_preview_projector_depth_is_orthogonal_to_screen_y",
+                    fabs(SceneEditorDigestOverlayViewDepth(
+                             &projector,
+                             projector.center_x + forward_x * near_distance,
+                             projector.center_y + forward_y * near_distance,
+                             projector.center_z + forward_z * near_distance) -
+                         near_distance) < 1e-9);
+    }
+    {
         const CoreMeshPreviewLodMesh exact = {
             .vertex_count = 12u,
             .source_vertex_count = 12u,

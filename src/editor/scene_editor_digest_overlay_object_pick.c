@@ -15,15 +15,7 @@ static double scene_editor_object_pick_view_depth(
     double world_x,
     double world_y,
     double world_z) {
-    const double dx = world_x - projector->center_x;
-    const double dy = world_y - projector->center_y;
-    const double dz = world_z - projector->center_z;
-    const double cy = cos(projector->yaw_rad);
-    const double sy = sin(projector->yaw_rad);
-    const double cp = cos(projector->pitch_rad);
-    const double sp = sin(projector->pitch_rad);
-    const double rotated_y = dx * sy + dy * cy;
-    return rotated_y * cp - dz * sp;
+    return SceneEditorDigestOverlayViewDepth(projector, world_x, world_y, world_z);
 }
 
 static bool scene_editor_object_pick_add_candidate(

@@ -193,13 +193,7 @@ static SceneEditorMeshPreviewShadeNormal scene_editor_mesh_surface_world_normal(
 static double scene_editor_mesh_surface_depth(
     const SceneEditorDigestOverlayProjector* projector,
     SceneEditorMeshSurfacePoint3 point) {
-    const double dx = point.x - projector->center_x;
-    const double dy = point.y - projector->center_y;
-    const double dz = point.z - projector->center_z;
-    const double sy = sin(projector->yaw_rad);
-    const double cy = cos(projector->yaw_rad);
-    return (dx * sy + dy * cy) * cos(projector->pitch_rad) -
-           dz * sin(projector->pitch_rad);
+    return SceneEditorDigestOverlayViewDepth(projector, point.x, point.y, point.z);
 }
 
 static bool scene_editor_mesh_surface_project(

@@ -127,6 +127,10 @@ bool SceneEditorDigestOverlayProjectPointF(const SceneEditorDigestOverlayProject
                                            double world_z,
                                            double* out_x,
                                            double* out_y);
+double SceneEditorDigestOverlayViewDepth(const SceneEditorDigestOverlayProjector* projector,
+                                         double world_x,
+                                         double world_y,
+                                         double world_z);
 bool SceneEditorDigestOverlayProjectPoint(const SceneEditorDigestOverlayProjector* projector,
                                           double world_x,
                                           double world_y,

@@ -9,18 +9,7 @@ double scene_editor_material_preview_view_depth(
     double world_x,
     double world_y,
     double world_z) {
-    double px = 0.0;
-    double py = 0.0;
-    double pz = 0.0;
-    double yaw_y = 0.0;
-    double yaw_z = 0.0;
-    if (!projector) return 0.0;
-    px = world_x - projector->center_x;
-    py = world_y - projector->center_y;
-    pz = world_z - projector->center_z;
-    yaw_y = sin(projector->yaw_rad) * px + cos(projector->yaw_rad) * py;
-    yaw_z = pz;
-    return sin(projector->pitch_rad) * yaw_y + cos(projector->pitch_rad) * yaw_z;
+    return SceneEditorDigestOverlayViewDepth(projector, world_x, world_y, world_z);
 }
 
 bool scene_editor_material_preview_barycentric_at_point(

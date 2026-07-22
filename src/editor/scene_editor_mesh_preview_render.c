@@ -174,17 +174,7 @@ static SceneEditorMeshPreviewPoint3 scene_editor_mesh_preview_world_point(
 static double scene_editor_mesh_preview_view_depth(
     const SceneEditorDigestOverlayProjector* projector,
     SceneEditorMeshPreviewPoint3 point) {
-    const double dx = point.x - projector->center_x;
-    const double dy = point.y - projector->center_y;
-    const double dz = point.z - projector->center_z;
-    const double cy = cos(projector->yaw_rad);
-    const double sy = sin(projector->yaw_rad);
-    const double cp = cos(projector->pitch_rad);
-    const double sp = sin(projector->pitch_rad);
-    const double x1 = dx * cy - dy * sy;
-    const double y1 = dx * sy + dy * cy;
-    (void)x1;
-    return y1 * cp - dz * sp;
+    return SceneEditorDigestOverlayViewDepth(projector, point.x, point.y, point.z);
 }
 
 static bool scene_editor_mesh_preview_project(
