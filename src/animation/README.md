@@ -94,10 +94,31 @@ The arc-length table is intentionally rebuilt by this initial pure evaluator.
 Interactive playback should cache it by spatial-path revision rather than add
 cache ownership to the authored timeline layer.
 
-## Next boundary: LTA1 persistence and headless parity
+## LTA1-LTA5 light authoring slice
 
-Persist the authored timeline rate/range, stable light target, scalar progress
-keys, temporal handles, and spatial path in one versioned runtime-scene shape.
-The scene editor and headless importer must consume the same parser and produce
-the same evaluated light position for an authored frame. UI ownership and
-playback controls remain outside this low-level module.
+Runtime-scene authoring now persists one versioned `light_timeline` document:
+rate/range, stable `light/<id>` target, embedded spatial path/depth, scalar
+progress keys, interpolation modes, and temporal handles. Legacy `light_path`
+data can seed the new document, while stale or duplicate target identities are
+refused. Save/reopen, editor preview, renderer preparation, and headless
+inspection all use the same parser and evaluator.
+
+The scene editor keeps the timeline collapsed until a light proxy is selected
+and **Animate Light Position** is requested. The bottom center pane then exposes
+frame scrubbing, progress and normalized speed graphs, key insertion/deletion,
+key and cubic-handle dragging, interpolation shortcuts, and bounded undo/redo.
+The viewport remains visible above the resizable pane and light selection uses
+the runtime light's stable ID rather than an array-only authoring identity.
+
+Frame preparation applies the evaluated sample to the per-frame light set after
+the prepared static scene is copied. This makes frame identity authoritative
+over legacy normalized-time sampling and preserves geometry/TLAS cache reuse for
+light-only motion. Headless summaries publish the sampled frame, target,
+progress, position, speed, and derivative validity for agent inspection.
+
+## Next boundary
+
+Finish installed desktop interaction proof and visual frame comparison for an
+ordinary authored scene. After that acceptance boundary, generalize the same
+property-track/editor contract to camera and rigid-object transform lanes; do
+not make every scene object timeline-owned as part of the light-first slice.

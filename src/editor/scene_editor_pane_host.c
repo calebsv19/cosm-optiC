@@ -8,7 +8,8 @@
 enum {
     SCENE_EDITOR_PANE_ID_LEFT = 2101u,
     SCENE_EDITOR_PANE_ID_CENTER = 2102u,
-    SCENE_EDITOR_PANE_ID_RIGHT = 2103u
+    SCENE_EDITOR_PANE_ID_RIGHT = 2103u,
+    SCENE_EDITOR_PANE_ID_TIMELINE = 2104u
 };
 
 enum {
@@ -24,6 +25,10 @@ enum {
     SCENE_EDITOR_PANE_HEADER_HEIGHT = 28,
     SCENE_EDITOR_MODE_ROUTER_HEIGHT = 44,
     SCENE_EDITOR_VIEWPORT_TOP_GAP = 8,
+    SCENE_EDITOR_MIN_VIEWPORT_HEIGHT = 180,
+    SCENE_EDITOR_MIN_TIMELINE_HEIGHT = 120,
+    SCENE_EDITOR_DEFAULT_TIMELINE_HEIGHT = 220,
+    SCENE_EDITOR_MAX_TIMELINE_HEIGHT = 420,
     SCENE_EDITOR_SPLITTER_HANDLE_THICKNESS = 8
 };
 
@@ -108,12 +113,19 @@ static void scene_editor_pane_host_sync_targets_from_leaves(SceneEditorPaneHost*
     if (scene_editor_pane_host_find_rect_for_pane_id(host, SCENE_EDITOR_PANE_ID_RIGHT, &rect)) {
         host->target_right_width = (int)lroundf(rect.width);
     }
+    if (host->timeline_visible &&
+        scene_editor_pane_host_find_rect_for_pane_id(host,
+                                                     SCENE_EDITOR_PANE_ID_TIMELINE,
+                                                     &rect)) {
+        host->target_timeline_height = (int)lroundf(rect.height);
+    }
 }
 
 static bool scene_editor_pane_host_assign_layout(SceneEditorPaneHost* host) {
     CorePaneRect left_rect = {0};
     CorePaneRect center_rect = {0};
     CorePaneRect right_rect = {0};
+    CorePaneRect timeline_rect = {0};
     SDL_Rect viewport = {0};
     int mode_h = SCENE_EDITOR_MODE_ROUTER_HEIGHT;
 
@@ -129,6 +141,18 @@ static bool scene_editor_pane_host_assign_layout(SceneEditorPaneHost* host) {
     host->layout.left_pane_rect = scene_editor_pane_rect_to_sdl(left_rect);
     host->layout.center_pane_rect = scene_editor_pane_rect_to_sdl(center_rect);
     host->layout.right_pane_rect = scene_editor_pane_rect_to_sdl(right_rect);
+    host->layout.timeline_visible = host->timeline_visible;
+    if (host->timeline_visible) {
+        if (!scene_editor_pane_host_find_rect_for_pane_id(
+                host, SCENE_EDITOR_PANE_ID_TIMELINE, &timeline_rect)) {
+            scene_editor_pane_host_set_error(host, "pane solve missing timeline leaf");
+            return false;
+        }
+        host->layout.center_pane_rect.h += (int)lroundf(timeline_rect.height);
+        host->layout.timeline_rect = pane_host_inset_rect(
+            scene_editor_pane_rect_to_sdl(timeline_rect),
+            SCENE_EDITOR_CONTENT_PADDING);
+    }
 
     host->layout.left_content_rect =
         pane_host_reserve_top_space(pane_host_inset_rect(host->layout.left_pane_rect,
@@ -151,7 +175,9 @@ static bool scene_editor_pane_host_assign_layout(SceneEditorPaneHost* host) {
         mode_h
     };
 
-    viewport = host->layout.center_content_rect;
+    viewport = pane_host_inset_rect(scene_editor_pane_rect_to_sdl(center_rect),
+                                    SCENE_EDITOR_CONTENT_PADDING);
+    viewport = pane_host_reserve_top_space(viewport, SCENE_EDITOR_PANE_HEADER_HEIGHT);
     viewport.y += mode_h + SCENE_EDITOR_VIEWPORT_TOP_GAP;
     viewport.h -= mode_h + SCENE_EDITOR_VIEWPORT_TOP_GAP;
     if (viewport.h < 0) viewport.h = 0;
@@ -206,7 +232,7 @@ static bool scene_editor_pane_host_solve_current(SceneEditorPaneHost* host, floa
 static void scene_editor_pane_host_seed_graph(SceneEditorPaneHost* host) {
     if (!host) return;
 
-    host->node_count = 5u;
+    host->node_count = host->timeline_visible ? 7u : 5u;
     host->root_index = 0u;
     host->nodes[0] = (CorePaneNode){
         .type = CORE_PANE_NODE_SPLIT,
@@ -227,17 +253,34 @@ static void scene_editor_pane_host_seed_graph(SceneEditorPaneHost* host) {
         .axis = CORE_PANE_AXIS_HORIZONTAL,
         .ratio_01 = 0.65f,
         .child_a = 3u,
-        .child_b = 4u,
+        .child_b = host->timeline_visible ? 4u : 4u,
         .constraints = {360.0f, 240.0f}
     };
-    host->nodes[3] = (CorePaneNode){
-        .type = CORE_PANE_NODE_LEAF,
-        .id = SCENE_EDITOR_PANE_ID_CENTER
-    };
+    host->nodes[3] = host->timeline_visible
+        ? (CorePaneNode){.type = CORE_PANE_NODE_SPLIT,
+                         .id = 3u,
+                         .axis = CORE_PANE_AXIS_VERTICAL,
+                         .ratio_01 = 0.70f,
+                         .child_a = 5u,
+                         .child_b = 6u,
+                         .constraints = {SCENE_EDITOR_MIN_VIEWPORT_HEIGHT,
+                                         SCENE_EDITOR_MIN_TIMELINE_HEIGHT}}
+        : (CorePaneNode){.type = CORE_PANE_NODE_LEAF,
+                         .id = SCENE_EDITOR_PANE_ID_CENTER};
     host->nodes[4] = (CorePaneNode){
         .type = CORE_PANE_NODE_LEAF,
         .id = SCENE_EDITOR_PANE_ID_RIGHT
     };
+    if (host->timeline_visible) {
+        host->nodes[5] = (CorePaneNode){
+            .type = CORE_PANE_NODE_LEAF,
+            .id = SCENE_EDITOR_PANE_ID_CENTER
+        };
+        host->nodes[6] = (CorePaneNode){
+            .type = CORE_PANE_NODE_LEAF,
+            .id = SCENE_EDITOR_PANE_ID_TIMELINE
+        };
+    }
 }
 
 bool scene_editor_pane_host_rebuild(SceneEditorPaneHost* host, int width, int height) {
@@ -309,6 +352,23 @@ bool scene_editor_pane_host_rebuild(SceneEditorPaneHost* host, int width, int he
                                                     center_ratio_min,
                                                     center_ratio_max);
 
+    if (host->timeline_visible) {
+        int timeline_h = pane_host_clamp_int(host->target_timeline_height,
+                                             SCENE_EDITOR_MIN_TIMELINE_HEIGHT,
+                                             SCENE_EDITOR_MAX_TIMELINE_HEIGHT);
+        int max_timeline_h = height - SCENE_EDITOR_MIN_VIEWPORT_HEIGHT;
+        if (max_timeline_h < SCENE_EDITOR_MIN_TIMELINE_HEIGHT) {
+            scene_editor_pane_host_set_error(host,
+                                             "cannot satisfy timeline minimum in %dx%d",
+                                             width,
+                                             height);
+            return false;
+        }
+        if (timeline_h > max_timeline_h) timeline_h = max_timeline_h;
+        host->nodes[3].ratio_01 =
+            (float)(height - timeline_h) / (float)height;
+    }
+
     return scene_editor_pane_host_solve_current(host, (float)width, (float)height);
 }
 
@@ -317,10 +377,30 @@ bool scene_editor_pane_host_init(SceneEditorPaneHost* host, int width, int heigh
     memset(host, 0, sizeof(*host));
     host->target_left_width = 286;
     host->target_right_width = 312;
+    host->target_timeline_height = SCENE_EDITOR_DEFAULT_TIMELINE_HEIGHT;
+    host->timeline_visible = false;
     kit_pane_splitter_interaction_init(&host->splitter_interaction,
                                        (float)SCENE_EDITOR_SPLITTER_HANDLE_THICKNESS);
     scene_editor_pane_host_seed_graph(host);
     return scene_editor_pane_host_rebuild(host, width, height);
+}
+
+bool scene_editor_pane_host_set_timeline_visible(SceneEditorPaneHost* host,
+                                                 bool visible) {
+    if (!host) return false;
+    if (host->timeline_visible == visible) return true;
+    if (host->splitter_interaction.drag_active) {
+        kit_pane_splitter_interaction_end_drag(&host->splitter_interaction);
+    }
+    host->timeline_visible = visible;
+    scene_editor_pane_host_seed_graph(host);
+    return scene_editor_pane_host_rebuild(host,
+                                          (int)lroundf(host->bounds_width),
+                                          (int)lroundf(host->bounds_height));
+}
+
+bool scene_editor_pane_host_timeline_visible(const SceneEditorPaneHost* host) {
+    return host && host->timeline_visible;
 }
 
 void scene_editor_pane_host_set_targets(SceneEditorPaneHost* host,

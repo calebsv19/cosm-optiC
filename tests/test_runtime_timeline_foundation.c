@@ -371,6 +371,39 @@ static int test_timeline_frame_rate_equivalence(void) {
     return 0;
 }
 
+static int test_timeline_track_transactional_key_mutation(void) {
+    TimelineTrack track = make_scalar_track(
+        "track_edit", "light/key", "light/path_progress", 0, 0.0,
+        TIMELINE_INTERPOLATION_LINEAR, 20, 1.0);
+    TimelineTrack original;
+    TimelineKeyframe key;
+    size_t index = 99u;
+    memset(&key, 0, sizeof(key));
+    key.frame = 10;
+    key.value = TimelineValueScalar(0.4);
+    key.interpolation_to_next = TIMELINE_INTERPOLATION_CUBIC_BEZIER;
+    assert_true("timeline_insert_middle",
+                TimelineTrackInsertKey(&track, key, &index) == TIMELINE_STATUS_OK);
+    assert_true("timeline_insert_index", index == 1u && track.key_count == 3u);
+    assert_true("timeline_insert_sorted", track.keys[1].frame == 10);
+    original = track;
+    assert_true("timeline_move_cross_refused",
+                TimelineTrackMoveScalarKey(&track, 1u, 20, 0.5) ==
+                    TIMELINE_STATUS_UNSORTED_KEYS);
+    assert_true("timeline_move_cross_nonmutation",
+                memcmp(&track, &original, sizeof(track)) == 0);
+    assert_true("timeline_move_valid",
+                TimelineTrackMoveScalarKey(&track, 1u, 12, 0.6) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("timeline_move_value",
+                track.keys[1].frame == 12 && track.keys[1].value.as.scalar == 0.6);
+    assert_true("timeline_remove_middle",
+                TimelineTrackRemoveKey(&track, 1u) == TIMELINE_STATUS_OK);
+    assert_true("timeline_remove_restores_count",
+                track.key_count == 2u && track.keys[1].frame == 20);
+    return 0;
+}
+
 int run_test_runtime_timeline_foundation_tests(void) {
     test_timeline_clock_exact_frames();
     test_timeline_clock_offsets_subframes_and_chunks();
@@ -380,5 +413,6 @@ int run_test_runtime_timeline_foundation_tests(void) {
     test_timeline_track_scalar_cubic_temporal_handles();
     test_timeline_document_multitrack_and_capacity();
     test_timeline_frame_rate_equivalence();
+    test_timeline_track_transactional_key_mutation();
     return test_support_failures();
 }

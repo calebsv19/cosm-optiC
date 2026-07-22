@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "render/runtime_light_set_3d.h"
+#include "animation/timeline_light_motion.h"
 #include "scene/object_manager.h"
 
 #define RUNTIME_SCENE_BRIDGE_MAX_DIGEST_PRIMITIVES 16
@@ -156,3 +157,6 @@ void runtime_scene_bridge_get_last_3d_light_seed_state(
 bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,
                                                              char *out_object_id,
                                                              size_t out_object_id_size);
+TimelineStatus runtime_scene_bridge_apply_light_timeline_sample(
+    TimelineSample sample,
+    TimelineLightMotionSample* out_sample);

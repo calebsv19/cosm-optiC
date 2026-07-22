@@ -210,6 +210,8 @@ int test_runner_main(int argc, char** argv) {
          run_test_ray_tracing_deep_render_desktop_host_tests},
         {"runtime_native_3d_render", run_test_runtime_native_3d_render_tests},
         {"runtime_native_3d_render_live", run_test_runtime_native_3d_render_live_suite},
+        {"runtime_native_3d_light_timeline_render",
+         run_test_runtime_native_3d_light_timeline_render_suite},
         {"runtime_native_3d_render_prepared", run_test_runtime_native_3d_render_prepared_suite},
         {"runtime_native_3d_render_prepared_parity_volume",
          run_test_runtime_native_3d_render_prepared_parity_volume_suite},

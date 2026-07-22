@@ -373,6 +373,106 @@ static int test_runtime_native_3d_deep_render_samples_authored_light_when_legacy
     return 0;
 }
 
+static int test_runtime_native_3d_light_timeline_uses_frame_index_after_cache_copy(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"scene_native_light_timeline\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"timeline_wall\",\"object_type\":\"plane\","
+          "\"primitive\":{\"kind\":\"plane\",\"width\":4.0,\"height\":4.0,"
+            "\"frame\":{\"origin\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"axis_u\":{\"x\":0.0,\"y\":0.0,\"z\":1.0},"
+            "\"axis_v\":{\"x\":1.0,\"y\":0.0,\"z\":0.0},"
+            "\"normal\":{\"x\":0.0,\"y\":1.0,\"z\":0.0}}},"
+          "\"transform\":{\"position\":{\"x\":0.0,\"y\":-5.0,\"z\":0.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.0,\"z\":1.0}}}],"
+        "\"materials\":[],"
+        "\"lights\":[{\"id\":\"key\",\"position\":{\"x\":0.0,\"y\":-2.0,\"z\":1.0}}],"
+        "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
+        "\"constraints\":[],"
+        "\"extensions\":{\"ray_tracing\":{\"authoring\":{"
+          "\"light_timeline\":{\"version\":1,"
+            "\"rate\":{\"numerator\":20,\"denominator\":1},"
+            "\"range\":{\"start_frame\":0,\"frame_count\":21},"
+            "\"target_id\":\"light/key\","
+            "\"spatial_path\":{"
+              "\"path\":{\"mode\":\"BEZIER_CUBIC\",\"points\":["
+                "{\"x\":0.0,\"y\":-2.0,\"velocity1\":{\"vx\":1.3333333333333333,\"vy\":0.0}},"
+                "{\"x\":4.0,\"y\":-2.0,\"velocity2\":{\"vx\":-1.3333333333333333,\"vy\":0.0}}]},"
+              "\"depth\":{\"points\":[{\"z\":1.0},{\"z\":1.0}]}},"
+            "\"progress_track\":{\"id\":\"key_progress\",\"enabled\":true,\"keys\":["
+              "{\"frame\":0,\"value\":0.0,\"interpolation\":\"linear\"},"
+              "{\"frame\":20,\"value\":1.0,\"interpolation\":\"step\"}]}}"
+        "}}}}";
+    RuntimeSceneBridgePreflight summary = {0};
+    RuntimeNative3DPreparedFrame frame_five = {0};
+    RuntimeNative3DPreparedFrame frame_fifteen = {0};
+    RuntimeNative3DPreparedSceneCacheStats after_first = {0};
+    RuntimeNative3DPreparedSceneCacheStats after_second = {0};
+    bool ok = false;
+
+    RuntimeNative3DPreparedSceneCacheResetForTests();
+    ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
+    assert_true("runtime_native_3d_timeline_apply_ok", ok);
+    if (!ok) goto cleanup;
+
+    animSettings.interactiveMode = true;
+    animSettings.deepRenderMode = true;
+    animSettings.lightIntensity = 10.0;
+    animSettings.forwardDecay = 10.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    sceneSettings.camera.x = 0.0;
+    sceneSettings.camera.y = 0.0;
+    sceneSettings.cameraZ = 0.0;
+    sceneSettings.camera.rotation = 0.0;
+    sceneSettings.camera.zoom = 1.0;
+
+    ok = RuntimeNative3DPrepareFrameAtFrameIndex(
+        &frame_five, 51, 51, 0.8, 5, -99.0, -99.0);
+    assert_true("runtime_native_3d_timeline_prepare_frame_five", ok);
+    RuntimeNative3DPreparedSceneCacheStatsSnapshot(&after_first);
+    ok = ok && RuntimeNative3DPrepareFrameAtFrameIndex(
+        &frame_fifteen, 51, 51, 0.8, 15, -99.0, -99.0);
+    assert_true("runtime_native_3d_timeline_prepare_frame_fifteen", ok);
+    RuntimeNative3DPreparedSceneCacheStatsSnapshot(&after_second);
+    if (ok) {
+        assert_close("runtime_native_3d_timeline_frame_five_x",
+                     frame_five.scene.light.position.x, 1.0, 1e-5);
+        assert_close("runtime_native_3d_timeline_frame_fifteen_x",
+                     frame_fifteen.scene.light.position.x, 3.0, 1e-5);
+        assert_true("runtime_native_3d_timeline_light_set_matches_compatibility",
+                    frame_fifteen.scene.lightSet.lightCount == 1 &&
+                    fabs(frame_fifteen.scene.lightSet.lights[0].position.x - 3.0) < 1e-5);
+        assert_true("runtime_native_3d_timeline_cache_reused",
+                    after_second.hits > after_first.hits);
+        assert_true("runtime_native_3d_timeline_no_cache_invalidation",
+                    after_second.invalidations == after_first.invalidations);
+    }
+
+cleanup:
+    RuntimeNative3DPreparedFrame_Free(&frame_five);
+    RuntimeNative3DPreparedFrame_Free(&frame_fifteen);
+    RuntimeNative3DPreparedSceneCacheResetForTests();
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+int run_test_runtime_native_3d_light_timeline_render_suite(void) {
+    int before = test_support_failures();
+    test_runtime_native_3d_light_timeline_uses_frame_index_after_cache_copy();
+    return test_support_failures() - before;
+}
+
 static int test_runtime_native_3d_render_direct_light_color_tint_contract(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -771,9 +871,11 @@ int run_test_runtime_native_3d_render_live_suite(void) {
 
     test_runtime_native_3d_render_live_buffer_contract();
     test_runtime_native_3d_deep_render_samples_authored_light_when_legacy_interactive_flag_is_set();
+    /* Timeline/cache contract is run below after legacy live-light cases. */
     test_runtime_native_3d_render_direct_light_color_tint_contract();
     test_runtime_native_3d_disney_result_contract();
     test_runtime_native_3d_render_live_visible_emitter_bounded();
     test_runtime_native_3d_render_environment_floor_lights_miss_pixels();
+    run_test_runtime_native_3d_light_timeline_render_suite();
     return test_support_failures() - before;
 }

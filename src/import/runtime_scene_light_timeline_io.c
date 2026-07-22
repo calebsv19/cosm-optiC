@@ -325,6 +325,19 @@ bool RuntimeSceneLightTimelineGetLast(RuntimeSceneLightTimelineDocument* out_doc
     return true;
 }
 
+TimelineStatus RuntimeSceneLightTimelineSetLast(
+    const RuntimeSceneLightTimelineDocument* document) {
+    if (!document || !document->valid ||
+        document->progress_track_index >= document->timeline.track_count) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    TimelineStatus status = TimelineDocumentValidate(&document->timeline);
+    if (status != TIMELINE_STATUS_OK) return status;
+    if (document->spatial_path.numPoints < 2) return TIMELINE_STATUS_INVALID_ARGUMENT;
+    g_last_light_timeline = *document;
+    return TIMELINE_STATUS_OK;
+}
+
 TimelineStatus RuntimeSceneLightTimelineInspectLast(
     TimelineSample sample, TimelineLightMotionSample* out_sample) {
     if (!g_last_light_timeline.valid) return TIMELINE_STATUS_TARGET_NOT_FOUND;

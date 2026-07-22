@@ -469,6 +469,26 @@ void ray_tracing_render_headless_write_summary(
             preflight->registered_light_first_color_g,
             preflight->registered_light_first_color_b);
     fprintf(file, "  },\n");
+    fprintf(file, "  \"light_timeline\": {\n");
+    fprintf(file, "    \"sampled\": %s,\n",
+            preflight->light_timeline_sampled ? "true" : "false");
+    fprintf(file, "    \"frame\": %d,\n", request->start_frame);
+    fprintf(file, "    \"target_id\": ");
+    RayTracingJsonWriteString(file,
+        preflight->light_timeline_sampled
+            ? preflight->light_timeline_sample.target_id : "");
+    fprintf(file, ",\n");
+    fprintf(file, "    \"progress\": %.9f,\n",
+            preflight->light_timeline_sample.progress);
+    fprintf(file, "    \"position\": [%.9f, %.9f, %.9f],\n",
+            preflight->light_timeline_sample.position.x,
+            preflight->light_timeline_sample.position.y,
+            preflight->light_timeline_sample.position.z);
+    fprintf(file, "    \"world_speed_per_second\": %.9f,\n",
+            preflight->light_timeline_sample.world_speed_per_second);
+    fprintf(file, "    \"speed_valid\": %s\n",
+            preflight->light_timeline_sample.speed_valid ? "true" : "false");
+    fprintf(file, "  },\n");
     fprintf(file, "  \"object_audit_summary\": {\n");
     fprintf(file, "    \"enabled\": %s,\n", preflight->object_audit_enabled ? "true" : "false");
     fprintf(file, "    \"requested_max_dimension\": %d,\n", request->object_audit_max_dimension);

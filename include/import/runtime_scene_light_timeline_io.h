@@ -43,6 +43,8 @@ TimelineStatus RuntimeSceneLightTimelineApplyAuthoring(
     char* out_diagnostics,
     size_t diagnostics_size);
 bool RuntimeSceneLightTimelineGetLast(RuntimeSceneLightTimelineDocument* out_document);
+TimelineStatus RuntimeSceneLightTimelineSetLast(
+    const RuntimeSceneLightTimelineDocument* document);
 TimelineStatus RuntimeSceneLightTimelineInspectLast(
     TimelineSample sample,
     TimelineLightMotionSample* out_sample);

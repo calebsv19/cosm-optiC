@@ -212,6 +212,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                    request->runtime_scene_path,
                                    true);
     runtime_scene_motion_bridge_get_last_summary(&preflight.object_motion_summary);
+    preflight.light_timeline_sampled =
+        RuntimeSceneLightTimelineInspectLast(
+            (TimelineSample){request->start_frame, 0u, 1u},
+            &preflight.light_timeline_sample) == TIMELINE_STATUS_OK;
     preflight.runtime_scene_apply_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     ray_tracing_runtime_mesh_assets_timing_snapshot(&preflight.mesh_asset_timing_stats);
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);

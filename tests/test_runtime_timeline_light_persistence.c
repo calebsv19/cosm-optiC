@@ -3,6 +3,7 @@
 #include "config/config_manager.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_bridge.h"
+#include "editor/scene_editor_light_timeline.h"
 #include "test_support.h"
 
 #include <json-c/json.h>
@@ -174,6 +175,51 @@ static int test_light_timeline_runtime_bridge_headless_inspection(void) {
     assert_true("light_persistence_bridge_target",
                 strcmp(sample.target_id, "light/key") == 0);
     assert_close("light_persistence_bridge_progress", sample.progress, 0.25, 1e-12);
+    {
+        SceneEditorPaneHost pane_host;
+        const SceneEditorPaneLayout* layout;
+        SDL_Event event;
+        memset(&pane_host, 0, sizeof(pane_host));
+        memset(&event, 0, sizeof(event));
+        SceneEditorLightTimelineReset();
+        assert_true("light_persistence_ui_select",
+                    SceneEditorLightTimelineSelectTargetId("light/key") ==
+                        TIMELINE_STATUS_OK);
+        assert_true("light_persistence_ui_pane_init",
+                    scene_editor_pane_host_init(&pane_host, 1280, 760));
+        assert_true("light_persistence_ui_open",
+                    SceneEditorLightTimelineToggle(&pane_host));
+        layout = scene_editor_pane_host_layout(&pane_host);
+        event.type = SDL_MOUSEBUTTONDOWN;
+        event.button.button = SDL_BUTTON_LEFT;
+        event.button.x = layout->timeline_rect.x + layout->timeline_rect.w / 2;
+        event.button.y = layout->timeline_rect.y + layout->timeline_rect.h / 2;
+        assert_true("light_persistence_ui_scrub",
+                    SceneEditorLightTimelineHandleEvent(&event, &pane_host,
+                                                        layout, NULL));
+        assert_true("light_persistence_ui_scrub_inspect",
+                    RuntimeSceneLightTimelineInspectLast((TimelineSample){10, 0u, 1u},
+                                                         &sample) ==
+                        TIMELINE_STATUS_OK);
+        assert_close("light_persistence_ui_scrub_progress", sample.progress, 0.5, 1e-12);
+        assert_true("light_persistence_ui_insert_key",
+                    SceneEditorLightTimelineInsertKey(8, 0.3) == TIMELINE_STATUS_OK);
+        RuntimeSceneLightTimelineDocument edited;
+        assert_true("light_persistence_ui_insert_readback",
+                    RuntimeSceneLightTimelineGetLast(&edited) &&
+                    edited.timeline.tracks[edited.progress_track_index].key_count == 3u);
+        assert_true("light_persistence_ui_undo", SceneEditorLightTimelineUndo());
+        assert_true("light_persistence_ui_undo_readback",
+                    RuntimeSceneLightTimelineGetLast(&edited) &&
+                    edited.timeline.tracks[edited.progress_track_index].key_count == 2u);
+        assert_true("light_persistence_ui_redo", SceneEditorLightTimelineRedo());
+        assert_true("light_persistence_ui_delete_selected",
+                    SceneEditorLightTimelineDeleteSelectedKey() == TIMELINE_STATUS_OK);
+        assert_true("light_persistence_ui_delete_readback",
+                    RuntimeSceneLightTimelineGetLast(&edited) &&
+                    edited.timeline.tracks[edited.progress_track_index].key_count == 2u);
+        assert_true("light_persistence_ui_delete_undo", SceneEditorLightTimelineUndo());
+    }
     assert_true("light_persistence_bridge_apply_stale_scene",
                 runtime_scene_bridge_apply_json(
                     json_object_to_json_string_ext(stale, JSON_C_TO_STRING_PLAIN),

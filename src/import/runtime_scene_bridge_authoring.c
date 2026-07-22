@@ -991,6 +991,10 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
                         .tracks[timeline_document.progress_track_index].target_id,
                     &timeline_target) != TIMELINE_STATUS_OK) {
                 RuntimeSceneLightTimelineResetLast();
+            } else {
+                sceneSettings.bezierPath = timeline_document.spatial_path;
+                sceneSettings.bezierPath3D = timeline_document.spatial_path_3d;
+                g_last_3d_scaffold.has_light_path = true;
             }
         }
     }

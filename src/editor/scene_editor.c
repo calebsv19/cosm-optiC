@@ -23,6 +23,7 @@
 #include "editor/scene_editor_input_router.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_mesh_preview_render.h"
+#include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_session_runtime.h"
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_viewport_nav.h"
@@ -668,6 +669,10 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     SceneEditorViewportNavResetDigestOverlayNavigation(&g_viewport_nav_state);
     SceneEditorBezier3DGizmoReset();
     SceneEditorCamera3DGizmoReset();
+    if (g_scenePaneHost.initialized) {
+        (void)scene_editor_pane_host_set_timeline_visible(&g_scenePaneHost, false);
+    }
+    SceneEditorLightTimelineSyncRuntime();
 
     if (!ray_tracing_font_runtime_init()) {
         fprintf(stderr, "Error: TTF_Init failed: %s\n", TTF_GetError());
@@ -722,6 +727,10 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     if (!SceneEditorLoadSessionState(editor)) {
         return false;
     }
+    if (g_scenePaneHost.initialized) {
+        (void)scene_editor_pane_host_set_timeline_visible(&g_scenePaneHost, false);
+    }
+    SceneEditorLightTimelineSyncRuntime();
     SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
 
     //  Create the window using stored scene settings
@@ -880,6 +889,7 @@ bool SceneEditorSessionInteractionActive(const SceneEditor* editor) {
     return g_viewport_nav_state.orbit_active ||
            g_viewport_nav_state.pan_active ||
            scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost) ||
+           SceneEditorLightTimelineInteractionActive() ||
            g_bezier3d_gizmo_state.dragging ||
            g_camera3d_gizmo_state.dragging;
 }
@@ -936,6 +946,20 @@ bool SceneEditorGetPaneLayout(SceneEditorPaneLayout* out_layout) {
     if (!out_layout || !g_scenePaneLayoutValid) return false;
     *out_layout = g_scenePaneLayout;
     return true;
+}
+
+SceneEditorPaneHost* SceneEditorGetPaneHost(void) {
+    return &g_scenePaneHost;
+}
+
+const SceneEditorDigestOverlayNavState* SceneEditorGetViewportNavState(void) {
+    return &g_viewport_nav_state;
+}
+
+bool SceneEditorToggleSelectedLightTimeline(void) {
+    bool changed = SceneEditorLightTimelineToggle(&g_scenePaneHost);
+    if (changed) SceneEditorLayoutChrome();
+    return changed;
 }
 
 void ToggleSceneMode(SceneEditor* editor) {

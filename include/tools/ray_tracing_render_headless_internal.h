@@ -7,6 +7,7 @@
 
 #include "app/agent_render_request.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
@@ -108,6 +109,8 @@ typedef struct RayTracingHeadlessPreflight {
     double registered_light_first_color_r;
     double registered_light_first_color_g;
     double registered_light_first_color_b;
+    bool light_timeline_sampled;
+    TimelineLightMotionSample light_timeline_sample;
     RuntimeVolumeDebugSummary3D volume_summary;
     bool volume_frame_selection_built;
     bool volume_frame_selection_dynamic;

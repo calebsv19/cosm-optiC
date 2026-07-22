@@ -635,6 +635,9 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     {
         RuntimeSceneLightTimelineDocument timeline_document;
         if (RuntimeSceneLightTimelineGetLast(&timeline_document)) {
+            timeline_document.spatial_path = sceneSettings.bezierPath;
+            timeline_document.spatial_path_3d = sceneSettings.bezierPath3D;
+            (void)RuntimeSceneLightTimelineSetLast(&timeline_document);
             light_timeline = RuntimeSceneLightTimelineToJsonObject(&timeline_document,
                                                                    world_scale);
         }

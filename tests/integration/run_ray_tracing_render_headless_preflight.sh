@@ -42,6 +42,8 @@ grep -q '"preset": "sky"' "$SUMMARY"
 grep -q '"background_brightness_source": "background_brightness"' "$SUMMARY"
 grep -q '"background_miss_contributes": true' "$SUMMARY"
 grep -q '"registered_lights": {' "$SUMMARY"
+grep -q '"light_timeline": {' "$SUMMARY"
+grep -q '"sampled": false' "$SUMMARY"
 grep -q '"light_count": 2' "$SUMMARY"
 grep -q '"enabled_count": 2' "$SUMMARY"
 grep -q '"shape_counts": { "point": 0, "sphere": 1, "disk": 0, "rect": 1, "mesh_emissive": 0 }' "$SUMMARY"
@@ -60,6 +62,65 @@ grep -q '"object_motion_acceleration": {' "$SUMMARY"
 grep -q '"authored_rigid_motion_tracks": 0' "$SUMMARY"
 grep -q '"moving_object_tlas_policy": "static_scene_or_prepared_cache_reuse"' "$SUMMARY"
 grep -q '"flattened_fallback_available": true' "$SUMMARY"
+
+TIMELINE_SCENE="$WORK_ROOT/light_timeline_scene_runtime.json"
+TIMELINE_REQUEST="$WORK_ROOT/light_timeline_request.json"
+TIMELINE_SUMMARY="$WORK_ROOT/light_timeline_summary.json"
+python3 - "$REQUEST" "$TIMELINE_SCENE" "$TIMELINE_REQUEST" <<'PY'
+import json
+import pathlib
+import sys
+
+request_path, scene_dst, request_dst = sys.argv[1:4]
+request = json.load(open(request_path, "r", encoding="utf-8"))
+scene_path = pathlib.Path(request["scene"]["runtime_scene_path"])
+if not scene_path.is_absolute():
+    scene_path = (pathlib.Path(request_path).parent / scene_path).resolve()
+scene = json.load(open(scene_path, "r", encoding="utf-8"))
+scene["lights"] = [{
+    "id": "key",
+    "position": {"x": 0.0, "y": -2.0, "z": 1.0},
+}]
+authoring = scene.setdefault("extensions", {}).setdefault(
+    "ray_tracing", {}).setdefault("authoring", {})
+authoring["light_timeline"] = {
+    "version": 1,
+    "rate": {"numerator": 20, "denominator": 1},
+    "range": {"start_frame": 0, "frame_count": 21},
+    "target_id": "light/key",
+    "spatial_path": {
+        "path": {
+            "mode": "BEZIER_CUBIC",
+            "points": [
+                {"x": 0.0, "y": -2.0,
+                 "velocity1": {"vx": 4.0 / 3.0, "vy": 0.0}},
+                {"x": 4.0, "y": -2.0,
+                 "velocity2": {"vx": -4.0 / 3.0, "vy": 0.0}},
+            ],
+        },
+        "depth": {"points": [{"z": 1.0}, {"z": 1.0}]},
+    },
+    "progress_track": {
+        "id": "key_progress",
+        "enabled": True,
+        "keys": [
+            {"frame": 0, "value": 0.0, "interpolation": "linear"},
+            {"frame": 20, "value": 1.0, "interpolation": "step"},
+        ],
+    },
+}
+json.dump(scene, open(scene_dst, "w", encoding="utf-8"), indent=2)
+request["scene"]["runtime_scene_path"] = str(pathlib.Path(scene_dst).resolve())
+request["render"]["start_frame"] = 5
+json.dump(request, open(request_dst, "w", encoding="utf-8"), indent=2)
+PY
+"$CLI" --request "$TIMELINE_REQUEST" --preflight --summary "$TIMELINE_SUMMARY" >/dev/null
+grep -q '"sampled": true' "$TIMELINE_SUMMARY"
+grep -q '"frame": 5' "$TIMELINE_SUMMARY"
+grep -q '"target_id": "light/key"' "$TIMELINE_SUMMARY"
+grep -q '"progress": 0.250000000' "$TIMELINE_SUMMARY"
+grep -q '"position": \[1.000000000, -2.000000000, 1.000000000\]' "$TIMELINE_SUMMARY"
+grep -q '"world_speed_per_second": 4.000000000' "$TIMELINE_SUMMARY"
 
 python3 - "$REQUEST" "$WORK_ROOT/object_motion_scene_runtime.json" "$WORK_ROOT/object_motion_request.json" "$WORK_ROOT/object_motion_output" <<'PY'
 import json

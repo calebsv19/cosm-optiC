@@ -14,6 +14,8 @@
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_light_timeline_bridge.h"
+#include "import/runtime_scene_light_timeline_io.h"
 #include "import/water_surface_import.h"
 #include "material/material.h"
 #include "render/runtime_caustic_beam_map_3d.h"
@@ -349,6 +351,48 @@ static void runtime_native_3d_render_apply_live_light(RuntimeScene3D* scene,
                                                         scene->hasLight);
 }
 
+static bool runtime_native_3d_render_apply_light_timeline(
+    RuntimeScene3D* scene,
+    int frame_index) {
+    TimelineLightMotionSample motion = {0};
+    RuntimeSceneLightTimelineTarget target = {0};
+    const RuntimeLightSource3D* first_enabled = NULL;
+    size_t first_enabled_index = 0u;
+    bool target_is_compatibility_light = false;
+    TimelineStatus status;
+
+    if (!scene) return false;
+    status = RuntimeSceneLightTimelineInspectLast(
+        (TimelineSample){frame_index, 0u, 1u}, &motion);
+    if (status == TIMELINE_STATUS_TARGET_NOT_FOUND) return true;
+    if (status != TIMELINE_STATUS_OK) return false;
+
+    first_enabled = RuntimeLightSet3D_GetEnabled(&scene->lightSet, 0);
+    if (first_enabled) {
+        first_enabled_index = (size_t)(first_enabled - scene->lightSet.lights);
+    }
+    status = RuntimeSceneLightTimelineApplyMotion(
+        scene->lightSet.lights,
+        (size_t)scene->lightSet.lightCount,
+        &motion,
+        &target);
+    if (status != TIMELINE_STATUS_OK) return false;
+
+    target_is_compatibility_light = first_enabled &&
+        target.light_index == first_enabled_index;
+    if (target_is_compatibility_light) {
+        const RuntimeLightSource3D* source =
+            &scene->lightSet.lights[target.light_index];
+        scene->light.position = source->position;
+        scene->light.radius = source->radius;
+        scene->light.intensity = source->intensity;
+        scene->light.falloffDistance = source->falloffDistance;
+        scene->light.falloffMode = source->falloffMode;
+        scene->hasLight = source->enabled;
+    }
+    return true;
+}
+
 static void runtime_native_3d_render_apply_live_camera(RuntimeScene3D* scene,
                                                        double normalized_t) {
     RuntimeCamera3D camera = {0};
@@ -396,6 +440,7 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                                       int width,
                                                       int height,
                                                       double normalized_t,
+                                                      int frame_index,
                                                       double live_light_x,
                                                       double live_light_y) {
     RuntimeNative3DPreparedSceneCacheStats* stats =
@@ -409,6 +454,9 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
                                              live_light_x,
                                              live_light_y,
                                              normalized_t);
+    if (!runtime_native_3d_render_apply_light_timeline(scene, frame_index)) {
+        return false;
+    }
     (void)width;
     (void)height;
     runtime_native_3d_render_apply_live_camera(scene, normalized_t);
@@ -913,6 +961,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
                                                    width,
                                                    height,
                                                    normalized_t,
+                                                   frame_index,
                                                    live_light_x,
                                                    live_light_y)) {
         runtime_native_3d_prepare_frame_set_diagf(

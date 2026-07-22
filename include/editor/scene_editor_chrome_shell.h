@@ -13,6 +13,7 @@ extern SDL_Rect previewButton;
 extern SDL_Rect changeModeButton;
 extern SDL_Rect saveButton;
 extern SDL_Rect backToMenuButton;
+extern SDL_Rect animateLightButton;
 extern SDL_Rect selectButton;
 extern SDL_Rect addButton;
 extern SDL_Rect deleteButton;

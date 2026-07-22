@@ -77,6 +77,14 @@ TimelineStatus TimelineTrackAddKey(TimelineTrack* track,
                                    int64_t frame,
                                    TimelineValue value,
                                    TimelineInterpolation interpolation_to_next);
+TimelineStatus TimelineTrackInsertKey(TimelineTrack* track,
+                                      TimelineKeyframe key,
+                                      size_t* out_key_index);
+TimelineStatus TimelineTrackRemoveKey(TimelineTrack* track, size_t key_index);
+TimelineStatus TimelineTrackMoveScalarKey(TimelineTrack* track,
+                                          size_t key_index,
+                                          int64_t frame,
+                                          double value);
 TimelineStatus TimelineTrackSetScalarTemporalHandles(
     TimelineTrack* track,
     size_t key_index,

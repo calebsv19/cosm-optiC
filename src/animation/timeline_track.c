@@ -106,6 +106,74 @@ TimelineStatus TimelineTrackAddKey(TimelineTrack* track,
     return TIMELINE_STATUS_OK;
 }
 
+TimelineStatus TimelineTrackInsertKey(TimelineTrack* track,
+                                      TimelineKeyframe key,
+                                      size_t* out_key_index) {
+    TimelineTrack candidate;
+    size_t index = 0u;
+    if (!track || !out_key_index) return TIMELINE_STATUS_INVALID_ARGUMENT;
+    if (track->key_count >= TIMELINE_TRACK_KEY_CAPACITY) {
+        return TIMELINE_STATUS_CAPACITY_EXCEEDED;
+    }
+    if (key.value.type != track->value_type || !TimelineValueIsFinite(key.value)) {
+        return TIMELINE_STATUS_TYPE_MISMATCH;
+    }
+    if (key.interpolation_to_next != TIMELINE_INTERPOLATION_STEP &&
+        key.interpolation_to_next != TIMELINE_INTERPOLATION_LINEAR &&
+        key.interpolation_to_next != TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
+        return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
+    }
+    if (key.interpolation_to_next == TIMELINE_INTERPOLATION_CUBIC_BEZIER &&
+        track->value_type != TIMELINE_VALUE_SCALAR) {
+        return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
+    }
+    while (index < track->key_count && track->keys[index].frame < key.frame) index += 1u;
+    if (index < track->key_count && track->keys[index].frame == key.frame) {
+        return TIMELINE_STATUS_DUPLICATE_KEY;
+    }
+    candidate = *track;
+    memmove(&candidate.keys[index + 1u], &candidate.keys[index],
+            (candidate.key_count - index) * sizeof(candidate.keys[0]));
+    candidate.keys[index] = key;
+    candidate.key_count += 1u;
+    *track = candidate;
+    *out_key_index = index;
+    return TIMELINE_STATUS_OK;
+}
+
+TimelineStatus TimelineTrackRemoveKey(TimelineTrack* track, size_t key_index) {
+    TimelineTrack candidate;
+    if (!track || key_index >= track->key_count) return TIMELINE_STATUS_INVALID_ARGUMENT;
+    candidate = *track;
+    memmove(&candidate.keys[key_index], &candidate.keys[key_index + 1u],
+            (candidate.key_count - key_index - 1u) * sizeof(candidate.keys[0]));
+    candidate.key_count -= 1u;
+    memset(&candidate.keys[candidate.key_count], 0, sizeof(candidate.keys[0]));
+    *track = candidate;
+    return TIMELINE_STATUS_OK;
+}
+
+TimelineStatus TimelineTrackMoveScalarKey(TimelineTrack* track,
+                                          size_t key_index,
+                                          int64_t frame,
+                                          double value) {
+    TimelineTrack candidate;
+    if (!track || key_index >= track->key_count ||
+        track->value_type != TIMELINE_VALUE_SCALAR || !isfinite(value)) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    if ((key_index > 0u && frame <= track->keys[key_index - 1u].frame) ||
+        (key_index + 1u < track->key_count &&
+         frame >= track->keys[key_index + 1u].frame)) {
+        return TIMELINE_STATUS_UNSORTED_KEYS;
+    }
+    candidate = *track;
+    candidate.keys[key_index].frame = frame;
+    candidate.keys[key_index].value.as.scalar = value;
+    *track = candidate;
+    return TIMELINE_STATUS_OK;
+}
+
 TimelineStatus TimelineTrackSetScalarTemporalHandles(
     TimelineTrack* track,
     size_t key_index,

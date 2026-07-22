@@ -179,6 +179,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_paths.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_file.o \
 	$(BUILD_DIR)/import/runtime_scene_motion_bridge.o \
+	$(BUILD_DIR)/import/runtime_scene_light_timeline_bridge.o \
 	$(BUILD_DIR)/import/runtime_scene_light_timeline_io.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
@@ -191,6 +192,13 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/camera/camera.o \
 	$(BUILD_DIR)/camera/camera_path_3d.o \
 	$(BUILD_DIR)/motion/runtime_motion_track_3d.o \
+	$(BUILD_DIR)/animation/timeline_clock.o \
+	$(BUILD_DIR)/animation/timeline_document.o \
+	$(BUILD_DIR)/animation/timeline_frame_snapshot.o \
+	$(BUILD_DIR)/animation/timeline_light_motion.o \
+	$(BUILD_DIR)/animation/timeline_property_registry.o \
+	$(BUILD_DIR)/animation/timeline_track.o \
+	$(BUILD_DIR)/animation/timeline_value.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
@@ -766,6 +774,7 @@ KIT_WORKSPACE_AUTHORING_OBJS := $(patsubst $(KIT_WORKSPACE_AUTHORING_DIR)/src/%.
 
 TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(CORE_PANE_MODULE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS) \
 	$(BUILD_DIR)/editor/scene_editor_pane_host.o \
+	$(BUILD_DIR)/editor/scene_editor_light_timeline.o \
 	$(BUILD_DIR)/ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.o \
 	$(BUILD_DIR)/ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.o
 
