@@ -1310,6 +1310,10 @@ Last updated: 2026-07-16
   machine does not match the selected platform, and requires `manifest.json`
   plus `package_manifest.json` to agree on the exact platform and advertised
   RayTracing worker capabilities.
+- The same self-test now binds `LINUX_WORKER_MAX_GLIBC` (default `2.39.0`) into
+  both manifests and independently rejects either native entrypoint when its
+  GLIBC symbol requirements are absent or exceed that ceiling. This is package
+  acceptance evidence; host runtime readback remains a separate release gate.
 - Linux PC package promotion requires the package manifest to report
   `platform=linux-x86_64`. The local Mac-side package lane can produce/stage
   Linux PC `x86_64` worker artifacts when the x86_64 package/toolchain mode is

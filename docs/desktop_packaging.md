@@ -292,7 +292,10 @@ Release and worker artifact hygiene:
 - `make -C ray_tracing package-linux-worker-self-test` validates the Linux
   worker tarball structure, rejects private/generated review lanes, suppresses
   macOS AppleDouble archive sidecars, and limits executable file bits to the
-  intended worker binaries and wrapper.
+  intended worker binaries and wrapper. It also requires both native worker
+  entrypoints and both package manifests to satisfy the selected
+  `LINUX_WORKER_MAX_GLIBC` ceiling (default `2.39.0`); missing or newer GLIBC
+  symbol requirements fail before the archive can be accepted.
 - `release-contract` reports whether signing/notary/team inputs are configured
   without printing identity, profile, or team values.
 - Signing, notarization, upload, and distribution targets remain explicit

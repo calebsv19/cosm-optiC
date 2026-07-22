@@ -22,24 +22,26 @@ REQUIRED_EXECUTABLES = (
 )
 
 
-def fake_elf(machine: int) -> bytes:
+def fake_elf(machine: int, glibc_version: str = "2.38") -> bytes:
     data = bytearray(64)
     data[:4] = b"\x7fELF"
     data[4] = 2
     data[5] = 1
     data[18:20] = struct.pack("<H", machine)
-    return bytes(data)
+    if not glibc_version:
+        return bytes(data)
+    return bytes(data) + b"\0GLIBC_2.17\0GLIBC_" + glibc_version.encode("ascii") + b"\0"
 
 
-def fixture_data(name: str, machine: int | None) -> bytes:
+def fixture_data(name: str, machine: int | None, glibc_version: str = "2.38") -> bytes:
     if name.endswith("/manifest.json") or name.endswith("/package_manifest.json"):
         return (
-            b'{"platform":"linux-x86_64","capabilities":['
+            b'{"platform":"linux-x86_64","max_glibc_version":"2.39.0","capabilities":['
             b'"trio-headless-v1","scene-project-portable-v1",'
             b'"ray-tracing-project-render-v1","platform-linux-x86_64-v1"]}\n'
         )
     if any(name.endswith("/" + relative) for relative in REQUIRED_EXECUTABLES[:2]):
-        return b"not-elf\n" if machine is None else fake_elf(machine)
+        return b"not-elf\n" if machine is None else fake_elf(machine, glibc_version)
     return b"#!/usr/bin/env bash\n" if name.endswith("/bin/run_worker.sh") else b"x\n"
 
 
@@ -50,11 +52,16 @@ def add_file(archive: tarfile.TarFile, name: str, mode: int = 0o644, data: bytes
     archive.addfile(info, io.BytesIO(data))
 
 
-def write_archive(path: Path, members: list[tuple[str, int]], machine: int | None = 62) -> None:
+def write_archive(
+    path: Path,
+    members: list[tuple[str, int]],
+    machine: int | None = 62,
+    glibc_version: str = "2.38",
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with tarfile.open(path, "w:gz") as archive:
         for name, mode in members:
-            add_file(archive, name, mode, fixture_data(name, machine))
+            add_file(archive, name, mode, fixture_data(name, machine, glibc_version))
 
 
 def valid_members() -> list[tuple[str, int]]:
@@ -81,6 +88,8 @@ def run_validator(root_dir: Path, archive: Path, package_root: str = PACKAGE_ROO
             package_root,
             "--platform",
             "linux-x86_64",
+            "--max-glibc",
+            "2.39.0",
         ],
         text=True,
         stdout=subprocess.PIPE,
@@ -168,6 +177,22 @@ def main() -> int:
         "non_elf_native_binary",
         run_validator(root_dir, non_elf),
         "native worker file is not ELF",
+    )
+
+    too_new_glibc = work_root / "too_new_glibc.tar.gz"
+    write_archive(too_new_glibc, valid_members(), glibc_version="2.40")
+    expect_fail(
+        "too_new_glibc",
+        run_validator(root_dir, too_new_glibc),
+        "requires GLIBC_2.40.0, selected maximum is GLIBC_2.39.0",
+    )
+
+    missing_glibc = work_root / "missing_glibc.tar.gz"
+    write_archive(missing_glibc, valid_members(), glibc_version="")
+    expect_fail(
+        "missing_glibc",
+        run_validator(root_dir, missing_glibc),
+        "native worker GLIBC requirements are absent",
     )
 
     print(f"ray tracing Linux worker package validator fixtures passed: {work_root}")
