@@ -239,7 +239,7 @@ static int test_timeline_track_vec3_and_validation(void) {
     assert_true("timeline_cubic_reserved_refused",
                 TimelineTrackAddKey(&track, 11,
                                     TimelineValueVec3(0.0, 0.0, 0.0),
-                                    TIMELINE_INTERPOLATION_CUBIC_RESERVED) ==
+                                    TIMELINE_INTERPOLATION_CUBIC_BEZIER) ==
                     TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION);
     corrupt = track;
     corrupt.keys[1].frame = -1;
@@ -251,6 +251,53 @@ static int test_timeline_track_vec3_and_validation(void) {
     assert_true("timeline_corrupt_duplicate_detected",
                 TimelineTrackValidate(&corrupt, &timeline_range) ==
                     TIMELINE_STATUS_DUPLICATE_KEY);
+    return 0;
+}
+
+static int test_timeline_track_scalar_cubic_temporal_handles(void) {
+    TimelineTrack track = make_scalar_track(
+        "track_light_progress", "light/key", "light/path_progress", 0, 0.0,
+        TIMELINE_INTERPOLATION_CUBIC_BEZIER, 20, 1.0);
+    TimelineRange range = make_range(0, 21u);
+    TimelineEvaluationContext middle =
+        context_at(make_rate(20u, 1u), range, 10, 0u, 1u);
+    TimelineEvaluationContext early =
+        context_at(make_rate(20u, 1u), range, 5, 0u, 1u);
+    TimelineEvaluationResult result;
+    TimelineTrack invalid;
+
+    assert_true("timeline_cubic_left_handles",
+                TimelineTrackSetScalarTemporalHandles(&track, 0u, 0.0, 0.0,
+                                                      4.0, 0.0) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("timeline_cubic_right_handles",
+                TimelineTrackSetScalarTemporalHandles(&track, 1u, -4.0, 0.0,
+                                                      0.0, 0.0) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("timeline_cubic_validate",
+                TimelineTrackValidate(&track, &range) == TIMELINE_STATUS_OK);
+    assert_true("timeline_cubic_middle",
+                TimelineTrackEvaluate(&track, &middle, &result) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("timeline_cubic_interpolated", result.interpolated);
+    assert_true("timeline_cubic_derivative_valid", result.derivative_valid);
+    assert_close("timeline_cubic_middle_value", result.value.as.scalar, 0.5,
+                 1e-9);
+    assert_true("timeline_cubic_early",
+                TimelineTrackEvaluate(&track, &early, &result) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("timeline_cubic_ease_in", result.value.as.scalar < 0.25);
+
+    invalid = track;
+    invalid.keys[0].outgoing_frame_offset = 15.0;
+    invalid.keys[1].incoming_frame_offset = -15.0;
+    assert_true("timeline_cubic_crossed_handles_refused",
+                TimelineTrackValidate(&invalid, &range) ==
+                    TIMELINE_STATUS_INVALID_TRACK);
+    assert_true("timeline_cubic_positive_incoming_refused",
+                TimelineTrackSetScalarTemporalHandles(&track, 1u, 1.0, 0.0,
+                                                      0.0, 0.0) ==
+                    TIMELINE_STATUS_INVALID_TRACK);
     return 0;
 }
 
@@ -330,6 +377,7 @@ int run_test_runtime_timeline_foundation_tests(void) {
     test_timeline_clock_invalid_inputs();
     test_timeline_track_scalar_step_and_linear();
     test_timeline_track_vec3_and_validation();
+    test_timeline_track_scalar_cubic_temporal_handles();
     test_timeline_document_multitrack_and_capacity();
     test_timeline_frame_rate_equivalence();
     return test_support_failures();

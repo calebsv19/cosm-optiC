@@ -38,7 +38,8 @@ typedef enum TimelineInvalidationDomain {
 typedef enum TimelineInterpolationMask {
     TIMELINE_INTERPOLATION_MASK_NONE = 0u,
     TIMELINE_INTERPOLATION_MASK_STEP = 1u << 0,
-    TIMELINE_INTERPOLATION_MASK_LINEAR = 1u << 1
+    TIMELINE_INTERPOLATION_MASK_LINEAR = 1u << 1,
+    TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER = 1u << 2
 } TimelineInterpolationMask;
 
 typedef struct TimelinePropertyDescriptor {

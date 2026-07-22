@@ -13,7 +13,7 @@
 typedef enum TimelineInterpolation {
     TIMELINE_INTERPOLATION_STEP = 0,
     TIMELINE_INTERPOLATION_LINEAR,
-    TIMELINE_INTERPOLATION_CUBIC_RESERVED
+    TIMELINE_INTERPOLATION_CUBIC_BEZIER
 } TimelineInterpolation;
 
 typedef enum TimelineChannelSource {
@@ -28,6 +28,10 @@ typedef struct TimelineKeyframe {
     int64_t frame;
     TimelineValue value;
     TimelineInterpolation interpolation_to_next;
+    double incoming_frame_offset;
+    double incoming_value_offset;
+    double outgoing_frame_offset;
+    double outgoing_value_offset;
 } TimelineKeyframe;
 
 typedef struct TimelineTrack {
@@ -56,6 +60,9 @@ typedef struct TimelineEvaluationResult {
     int64_t left_frame;
     int64_t right_frame;
     double alpha;
+    double curve_parameter;
+    double derivative_per_frame;
+    bool derivative_valid;
     TimelineStatus status;
 } TimelineEvaluationResult;
 
@@ -70,6 +77,13 @@ TimelineStatus TimelineTrackAddKey(TimelineTrack* track,
                                    int64_t frame,
                                    TimelineValue value,
                                    TimelineInterpolation interpolation_to_next);
+TimelineStatus TimelineTrackSetScalarTemporalHandles(
+    TimelineTrack* track,
+    size_t key_index,
+    double incoming_frame_offset,
+    double incoming_value_offset,
+    double outgoing_frame_offset,
+    double outgoing_value_offset);
 TimelineStatus TimelineTrackSetUnit(TimelineTrack* track, TimelineUnit unit);
 TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
                                      const TimelineRange* range);

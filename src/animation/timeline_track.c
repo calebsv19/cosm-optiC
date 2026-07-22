@@ -21,7 +21,7 @@ const char* TimelineInterpolationLabel(TimelineInterpolation interpolation) {
     switch (interpolation) {
         case TIMELINE_INTERPOLATION_STEP: return "step";
         case TIMELINE_INTERPOLATION_LINEAR: return "linear";
-        case TIMELINE_INTERPOLATION_CUBIC_RESERVED: return "cubic_reserved";
+        case TIMELINE_INTERPOLATION_CUBIC_BEZIER: return "cubic_bezier";
         default: return "unknown";
     }
 }
@@ -85,7 +85,12 @@ TimelineStatus TimelineTrackAddKey(TimelineTrack* track,
         return TIMELINE_STATUS_TYPE_MISMATCH;
     }
     if (interpolation_to_next != TIMELINE_INTERPOLATION_STEP &&
-        interpolation_to_next != TIMELINE_INTERPOLATION_LINEAR) {
+        interpolation_to_next != TIMELINE_INTERPOLATION_LINEAR &&
+        interpolation_to_next != TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
+        return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
+    }
+    if (interpolation_to_next == TIMELINE_INTERPOLATION_CUBIC_BEZIER &&
+        track->value_type != TIMELINE_VALUE_SCALAR) {
         return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
     }
     if (track->key_count > 0u) {
@@ -98,6 +103,50 @@ TimelineStatus TimelineTrackAddKey(TimelineTrack* track,
     key.value = value;
     key.interpolation_to_next = interpolation_to_next;
     track->keys[track->key_count++] = key;
+    return TIMELINE_STATUS_OK;
+}
+
+TimelineStatus TimelineTrackSetScalarTemporalHandles(
+    TimelineTrack* track,
+    size_t key_index,
+    double incoming_frame_offset,
+    double incoming_value_offset,
+    double outgoing_frame_offset,
+    double outgoing_value_offset) {
+    TimelineKeyframe candidate;
+    if (!track || key_index >= track->key_count) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    if (track->value_type != TIMELINE_VALUE_SCALAR ||
+        !isfinite(incoming_frame_offset) || !isfinite(incoming_value_offset) ||
+        !isfinite(outgoing_frame_offset) || !isfinite(outgoing_value_offset) ||
+        incoming_frame_offset > 0.0 || outgoing_frame_offset < 0.0) {
+        return TIMELINE_STATUS_INVALID_TRACK;
+    }
+    candidate = track->keys[key_index];
+    candidate.incoming_frame_offset = incoming_frame_offset;
+    candidate.incoming_value_offset = incoming_value_offset;
+    candidate.outgoing_frame_offset = outgoing_frame_offset;
+    candidate.outgoing_value_offset = outgoing_value_offset;
+    track->keys[key_index] = candidate;
+    return TIMELINE_STATUS_OK;
+}
+
+static TimelineStatus timeline_validate_cubic_segment(const TimelineKeyframe* left,
+                                                       const TimelineKeyframe* right) {
+    const double frame_span = (double)(right->frame - left->frame);
+    const double x1 = (double)left->frame + left->outgoing_frame_offset;
+    const double x2 = (double)right->frame + right->incoming_frame_offset;
+    if (!isfinite(left->outgoing_frame_offset) ||
+        !isfinite(left->outgoing_value_offset) ||
+        !isfinite(right->incoming_frame_offset) ||
+        !isfinite(right->incoming_value_offset) ||
+        left->outgoing_frame_offset < 0.0 ||
+        left->outgoing_frame_offset > frame_span ||
+        right->incoming_frame_offset > 0.0 ||
+        right->incoming_frame_offset < -frame_span || x1 > x2) {
+        return TIMELINE_STATUS_INVALID_TRACK;
+    }
     return TIMELINE_STATUS_OK;
 }
 
@@ -131,7 +180,12 @@ TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
             return TIMELINE_STATUS_TYPE_MISMATCH;
         }
         if (key->interpolation_to_next != TIMELINE_INTERPOLATION_STEP &&
-            key->interpolation_to_next != TIMELINE_INTERPOLATION_LINEAR) {
+            key->interpolation_to_next != TIMELINE_INTERPOLATION_LINEAR &&
+            key->interpolation_to_next != TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
+            return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
+        }
+        if (key->interpolation_to_next == TIMELINE_INTERPOLATION_CUBIC_BEZIER &&
+            track->value_type != TIMELINE_VALUE_SCALAR) {
             return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
         }
         if (i > 0u) {
@@ -142,8 +196,47 @@ TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
                 return TIMELINE_STATUS_UNSORTED_KEYS;
             }
         }
+        if (i + 1u < track->key_count &&
+            key->interpolation_to_next == TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
+            TimelineStatus cubic_status =
+                timeline_validate_cubic_segment(key, &track->keys[i + 1u]);
+            if (cubic_status != TIMELINE_STATUS_OK) return cubic_status;
+        }
     }
     return TIMELINE_STATUS_OK;
+}
+
+static double timeline_cubic_bezier(double p0, double p1, double p2, double p3,
+                                    double u) {
+    const double one_minus_u = 1.0 - u;
+    return one_minus_u * one_minus_u * one_minus_u * p0 +
+           3.0 * one_minus_u * one_minus_u * u * p1 +
+           3.0 * one_minus_u * u * u * p2 + u * u * u * p3;
+}
+
+static double timeline_cubic_bezier_derivative(double p0, double p1, double p2,
+                                               double p3, double u) {
+    const double one_minus_u = 1.0 - u;
+    return 3.0 * one_minus_u * one_minus_u * (p1 - p0) +
+           6.0 * one_minus_u * u * (p2 - p1) +
+           3.0 * u * u * (p3 - p2);
+}
+
+static double timeline_solve_cubic_frame_parameter(double x0, double x1,
+                                                   double x2, double x3,
+                                                   double sample_frame) {
+    double low = 0.0;
+    double high = 1.0;
+    for (int iteration = 0; iteration < 60; ++iteration) {
+        const double middle = (low + high) * 0.5;
+        const double x = timeline_cubic_bezier(x0, x1, x2, x3, middle);
+        if (x < sample_frame) {
+            low = middle;
+        } else {
+            high = middle;
+        }
+    }
+    return (low + high) * 0.5;
 }
 
 static void timeline_result_identity(TimelineEvaluationResult* result,
@@ -215,11 +308,44 @@ TimelineStatus TimelineTrackEvaluate(const TimelineTrack* track,
             if (left->interpolation_to_next == TIMELINE_INTERPOLATION_STEP) {
                 result.held = true;
                 result.value = left->value;
+                result.derivative_valid = true;
+                result.derivative_per_frame = 0.0;
             } else if (left->interpolation_to_next == TIMELINE_INTERPOLATION_LINEAR) {
                 status = TimelineValueInterpolateLinear(left->value, right->value,
                                                         alpha, &result.value);
                 if (status != TIMELINE_STATUS_OK) return status;
                 result.interpolated = true;
+                result.curve_parameter = alpha;
+                result.derivative_valid = true;
+                if (track->value_type == TIMELINE_VALUE_SCALAR) {
+                    result.derivative_per_frame =
+                        (right->value.as.scalar - left->value.as.scalar) /
+                        (double)(right->frame - left->frame);
+                }
+            } else if (left->interpolation_to_next ==
+                       TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
+                const double x0 = (double)left->frame;
+                const double x1 = x0 + left->outgoing_frame_offset;
+                const double x3 = (double)right->frame;
+                const double x2 = x3 + right->incoming_frame_offset;
+                const double y0 = left->value.as.scalar;
+                const double y1 = y0 + left->outgoing_value_offset;
+                const double y3 = right->value.as.scalar;
+                const double y2 = y3 + right->incoming_value_offset;
+                const double u = timeline_solve_cubic_frame_parameter(
+                    x0, x1, x2, x3, sample_frame);
+                const double dx_du =
+                    timeline_cubic_bezier_derivative(x0, x1, x2, x3, u);
+                const double dy_du =
+                    timeline_cubic_bezier_derivative(y0, y1, y2, y3, u);
+                result.value = TimelineValueScalar(
+                    timeline_cubic_bezier(y0, y1, y2, y3, u));
+                result.interpolated = true;
+                result.curve_parameter = u;
+                if (fabs(dx_du) > 1e-12) {
+                    result.derivative_valid = true;
+                    result.derivative_per_frame = dy_du / dx_du;
+                }
             } else {
                 return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
             }

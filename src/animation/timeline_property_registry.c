@@ -23,7 +23,8 @@ static bool timeline_property_access_is_valid(TimelinePropertyAccess access) {
 
 static bool timeline_property_interpolation_mask_is_valid(uint32_t mask) {
     const uint32_t supported = TIMELINE_INTERPOLATION_MASK_STEP |
-                               TIMELINE_INTERPOLATION_MASK_LINEAR;
+                               TIMELINE_INTERPOLATION_MASK_LINEAR |
+                               TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER;
     return mask != TIMELINE_INTERPOLATION_MASK_NONE && (mask & ~supported) == 0u;
 }
 
@@ -42,6 +43,8 @@ static uint32_t timeline_property_interpolation_bit(TimelineInterpolation interp
     switch (interpolation) {
         case TIMELINE_INTERPOLATION_STEP: return TIMELINE_INTERPOLATION_MASK_STEP;
         case TIMELINE_INTERPOLATION_LINEAR: return TIMELINE_INTERPOLATION_MASK_LINEAR;
+        case TIMELINE_INTERPOLATION_CUBIC_BEZIER:
+            return TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER;
         default: return TIMELINE_INTERPOLATION_MASK_NONE;
     }
 }
@@ -262,6 +265,7 @@ static TimelineStatus timeline_property_add_default(
     TimelinePropertyTargetKind target_kind,
     TimelineValueType value_type,
     TimelineUnit unit,
+    uint32_t interpolation_mask,
     uint32_t invalidation_domains,
     const TimelineValue* minimum,
     const TimelineValue* maximum) {
@@ -269,7 +273,7 @@ static TimelineStatus timeline_property_add_default(
     TimelineStatus status = TimelinePropertyDescriptorInit(
         &descriptor, property_id, target_kind, value_type, unit,
         TIMELINE_PROPERTY_ACCESS_AUTHORABLE,
-        TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR,
+        interpolation_mask,
         invalidation_domains);
     if (status != TIMELINE_STATUS_OK) return status;
     if (minimum || maximum) {
@@ -290,16 +294,34 @@ TimelineStatus TimelinePropertyRegistryInitFoundationDefaults(
     status = timeline_property_add_default(
         &candidate, "object/transform/position", TIMELINE_PROPERTY_TARGET_OBJECT,
         TIMELINE_VALUE_VEC3, TIMELINE_UNIT_WORLD_DISTANCE,
+        TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR,
         TIMELINE_INVALIDATION_RIGID_TRANSFORM, NULL, NULL);
     if (status != TIMELINE_STATUS_OK) return status;
     status = timeline_property_add_default(
         &candidate, "light/intensity", TIMELINE_PROPERTY_TARGET_LIGHT,
         TIMELINE_VALUE_SCALAR, TIMELINE_UNIT_RELATIVE_INTENSITY,
+        TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR |
+            TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER,
         TIMELINE_INVALIDATION_LIGHTING, &zero, NULL);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = timeline_property_add_default(
+        &candidate, "light/path_progress", TIMELINE_PROPERTY_TARGET_LIGHT,
+        TIMELINE_VALUE_SCALAR, TIMELINE_UNIT_UNITLESS,
+        TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR |
+            TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER,
+        TIMELINE_INVALIDATION_LIGHTING, &zero, &one);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = timeline_property_add_default(
+        &candidate, "light/position", TIMELINE_PROPERTY_TARGET_LIGHT,
+        TIMELINE_VALUE_VEC3, TIMELINE_UNIT_WORLD_DISTANCE,
+        TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR,
+        TIMELINE_INVALIDATION_LIGHTING, NULL, NULL);
     if (status != TIMELINE_STATUS_OK) return status;
     status = timeline_property_add_default(
         &candidate, "material/roughness", TIMELINE_PROPERTY_TARGET_MATERIAL,
         TIMELINE_VALUE_SCALAR, TIMELINE_UNIT_UNITLESS,
+        TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR |
+            TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER,
         TIMELINE_INVALIDATION_MATERIAL, &zero, &one);
     if (status != TIMELINE_STATUS_OK) return status;
     *registry = candidate;

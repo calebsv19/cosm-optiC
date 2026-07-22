@@ -70,7 +70,7 @@ static int test_registry_foundation_defaults(void) {
     assert_true("registry_defaults_init",
                 TimelinePropertyRegistryInitFoundationDefaults(&registry) ==
                     TIMELINE_STATUS_OK);
-    assert_true("registry_defaults_count", registry.descriptor_count == 3u);
+    assert_true("registry_defaults_count", registry.descriptor_count == 5u);
     assert_true("registry_find_position",
                 TimelinePropertyRegistryFind(
                     &registry, "object/transform/position", &descriptor) ==
@@ -86,6 +86,19 @@ static int test_registry_foundation_defaults(void) {
                 TimelinePropertyRegistryFind(&registry, "light/intensity",
                                              &descriptor) == TIMELINE_STATUS_OK);
     assert_true("registry_light_minimum", descriptor->has_minimum);
+    assert_true("registry_find_light_progress",
+                TimelinePropertyRegistryFind(&registry, "light/path_progress",
+                                             &descriptor) == TIMELINE_STATUS_OK);
+    assert_true("registry_light_progress_bounds",
+                descriptor->has_minimum && descriptor->has_maximum);
+    assert_true("registry_light_progress_cubic",
+                (descriptor->interpolation_mask &
+                 TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER) != 0u);
+    assert_true("registry_find_light_position",
+                TimelinePropertyRegistryFind(&registry, "light/position",
+                                             &descriptor) == TIMELINE_STATUS_OK);
+    assert_true("registry_light_position_type",
+                descriptor->value_type == TIMELINE_VALUE_VEC3);
     assert_true("registry_find_roughness",
                 TimelinePropertyRegistryFind(&registry, "material/roughness",
                                              &descriptor) == TIMELINE_STATUS_OK);

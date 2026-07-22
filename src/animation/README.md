@@ -29,7 +29,9 @@ claim an application or invalidation policy.
 - Stable bounded target, property, and track identifiers.
 - Scalar and vector values; rotation is reserved until its interpolation
   semantics are specified.
-- Step and linear interpolation; cubic is reserved and refused.
+- Step and linear interpolation for every supported value type. Scalar tracks
+  additionally support cubic Bezier temporal interpolation with monotonic
+  frame handles and evaluated derivatives.
 - Sorted, unique authored-frame keys.
 - Detached result evaluation with no access to scene or render state.
 - Fixed capacities and explicit status results; no hidden allocation.
@@ -43,8 +45,10 @@ documents or keyframe interpolation, so no shared module changed for this wave.
 `timeline_property_registry.*` adds bounded copied descriptors for stable
 property identity, target kind, value type, units, authoring ownership,
 per-component bounds, allowed interpolation, and renderer invalidation domains.
-The first registered meanings are object position, light intensity, and
-material roughness.
+The first registered meanings are object position, light intensity, light path
+progress, light position, and material roughness. `light/path_progress` is a
+bounded scalar from zero to one; its temporal curve controls how quickly a
+light advances along separately-authored spatial geometry.
 
 Registry validation refuses unknown properties, mismatched targets/types/units,
 non-authorable ownership, unsupported interpolation, out-of-range values, and
@@ -68,10 +72,32 @@ report no invalidation domains. Failed target resolution, snapshot validation,
 property application, or scene validation leaves the authored base, committed
 output, and application report unchanged.
 
-## Next boundary: TAF3 live integration
+## LTA0 light-first motion seam
 
-Define stable live target identity and the first explicit `SceneConfig`/runtime
-scene adapter, then map the descriptive camera/light/material/rigid-transform
-domains onto existing scene preparation, accumulation, and TLAS/BLAS cache
-owners. Object motion can become a compatibility consumer only after that
-identity and invalidation routing are proven. UI and persistence remain later.
+`timeline_light_motion.*` combines a `light/path_progress` scalar track with
+the existing 2D path plus `CameraPath3D` height controls. The path is sampled
+into deterministic 3D arc length, so equal changes in progress represent equal
+world-space distance even when the spatial Bezier parameterization is uneven.
+The result reports position, global path parameter, total path length,
+progress-per-frame, and world-units-per-second. Spatial handles therefore shape
+where the light travels while temporal handles independently shape when and how
+quickly it travels there.
+
+`runtime_scene_light_timeline_bridge.*` is the first runtime adapter. It
+resolves exact unique `light/<runtime-light-id>` identities and applies one
+evaluated result transactionally to a caller-owned light array. Missing and
+duplicate identities are refused without mutation. Renderer invalidation is
+reported as lighting-only metadata; the evaluator itself remains detached from
+live render state.
+
+The arc-length table is intentionally rebuilt by this initial pure evaluator.
+Interactive playback should cache it by spatial-path revision rather than add
+cache ownership to the authored timeline layer.
+
+## Next boundary: LTA1 persistence and headless parity
+
+Persist the authored timeline rate/range, stable light target, scalar progress
+keys, temporal handles, and spatial path in one versioned runtime-scene shape.
+The scene editor and headless importer must consume the same parser and produce
+the same evaluated light position for an authored frame. UI ownership and
+playback controls remain outside this low-level module.
