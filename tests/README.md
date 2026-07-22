@@ -314,6 +314,20 @@ proves exact identity, position, flux, PDF, and segment parity against the
 descriptor-trace adapters. It also proves transparent-receiver rejection before
 storage and reason-coded partial-store accounting when one target map rejects.
 
+The consolidated estimator and cache slice has ten focused stable groups:
+`runtime_light_radiometry_3d`, `runtime_caustic_photon_direct_consumer_3d`,
+`runtime_caustic_photon_estimator_3d`, `runtime_caustic_photon_provenance_3d`,
+`runtime_caustic_photon_surface_provenance_filter_3d`,
+`runtime_caustic_photon_volume_segment_normalization_3d`,
+`runtime_caustic_photon_ppm28_3d`, `runtime_caustic_photon_ppm29_3d`,
+`runtime_caustic_photon_ppm30_3d`, and
+`runtime_caustic_photon_sparse_cache_3d`. Together they cover physical
+radiometry, direct map consumption, convergent surface gathering, exact-once
+path/provenance ownership, receiver filtering, finite volume segments,
+kernel/proposal/phase normalization, and sparse/dense equivalence. They do not
+include recovery-report oracles, low-discrepancy emission experiments, PVA
+matrices, or rejected aperture/lens artifacts.
+
 `test-ray-tracing-spatial-caustic-phase6-surface-matrix` is the local Phase 6
 surface-calibration proof target. It renders off, analytic-only,
 transport-surface-cache-only, and combined transport+analytic cells on the

@@ -6,7 +6,7 @@ Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`
 
-Last audited: 2026-07-17.
+Last audited: 2026-07-22.
 
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
@@ -26,10 +26,12 @@ Current public focus:
   - `src/render/runtime_camera_3d_rays.c`
   - `src/render/runtime_ray_3d.c`
 - shipped native `3D` runtime ladder through `Disney`
-- default-off production photon mapping through PPM-23, including general
-  mixed-BSDF scene traversal, multi-object/TIR continuation, nested media,
-  measured attenuation, fail-closed boundary handling, transactional maps, and
-  headless product-matrix proof; PPM-24 estimator and product-toggle work remain
+- request-opt-in, default-off photon mapping now includes production estimator,
+  physical path-weight/support, provenance filtering, finite volume-segment
+  normalization, sparse beam-cache, authored light-radiometry, glass tint and
+  absorption, and ordinary runtime-mesh lens integration. Stable PPM28-30
+  contracts are included; diagnostic matrices, PVA expansion, and default
+  promotion remain separate
 - experimental `Disney v2` remains isolated behind `disney_v2` and now has
   bounded proof support for transparent camera-through accumulation,
   thin-walled/solid glass handling, medium-stack diagnostics, solid

@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-16
+Last updated: 2026-07-22
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -1166,15 +1166,18 @@ Last updated: 2026-07-16
 
 ## Production Photon Mapping
 
-- The production photon-mapper implementation is complete through PPM-23 on
-  current `main`. It includes deterministic light-backed emission, general
+- The request-opt-in photon mapper includes deterministic light-backed emission, general
   shared-TLAS/BLAS traversal, mixed diffuse/glossy/specular/transmission and
   emissive events, multi-object and multi-bounce continuation, continuing TIR,
   nested air/glass/water medium state, measured-distance Beer-Lambert
   attenuation, fail-closed malformed-boundary diagnostics, transactional
   surface-photon and volume-beam storage, accelerated radius queries, persistent
-  request-owned maps, and explicit energy/cost/readback ledgers.
-- Product integration currently exposes `off`, `reference`, and `production`
+  request-owned maps, explicit energy/cost/readback ledgers, physical
+  path-weight and sample-support ownership, convergent surface estimators,
+  provenance filtering, finite volume-segment normalization, sparse beam-cache
+  storage, and stable PPM28-30 contracts.
+- Product integration exposes `off`, `reference`, `production`, and
+  `photon_map`
   through headless request inspection fields. `production` selects the
   `photon_map` transport engine; contribution remains separately gated by
   `caustic_photon_render_contribution_enabled`, and native render-prep
@@ -1183,17 +1186,15 @@ Last updated: 2026-07-16
 - Production-map results currently reach Disney v2 through an explicit
   conversion into the existing display-facing surface and volume caustic
   caches. Disney v2 does not yet directly sample photon or beam maps.
-- The current menu has caustic controls but does not yet provide one settled
-  user-facing selector that makes existing caustics and production photon
-  mapping mutually exclusive. The proven comparison surface is the headless
-  PPM-10 product matrix with `off`, `reference`, `production`, populated, traced,
-  and render-prep cells plus request JSON, summaries, PNG frames, a contact
-  sheet, and numeric report output.
-- The next implementation boundary is PPM-24 estimator policy and convergence
-  diagnostics, followed by the deliberate product toggle/matrix connection,
-  direct integrator sampling decision in PPM-25, and production quality/default
-  gates in PPM-26. Current implementation must not be described as a promoted
-  production default.
+- The menu cycles the mutually exclusive caustic product identity through off,
+  analytic reference, transport reference, and photon map. This is selection
+  plumbing, not a production-default or release-readiness claim.
+- Ordinary runtime-scene authoring can carry mesh-dielectric lens descriptors,
+  physical light radiometry, and separate glass interface tint/absorption.
+  Photon mapping remains experimental, request-opt-in, and default-off.
+- Operator visual acceptance, quantitative optical certification, PVA-5,
+  professional readiness, scene-pointer promotion, production default-on, and
+  release readiness remain independent unproven gates.
 
 ## Recommended Scene-Authoring / Render Loop
 - Treat `line_drawing` as the canonical source for room/object/camera/light
