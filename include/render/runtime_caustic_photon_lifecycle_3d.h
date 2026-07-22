@@ -70,6 +70,7 @@ void RuntimeCausticPhotonMapLifecycle3D_Init(RuntimeCausticPhotonMapLifecycleSta
 void RuntimeCausticPhotonMapLifecycle3D_BuildInputFromScene(
     const RuntimeScene3D* scene,
     int sample_budget,
+    uint32_t emission_seed,
     int max_path_depth,
     double surface_query_radius,
     double volume_query_radius,

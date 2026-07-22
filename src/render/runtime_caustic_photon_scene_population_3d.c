@@ -199,6 +199,7 @@ bool RuntimeCausticPhotonScenePopulation3D_PopulateMaps(
     surface_hit.sceneObjectIndex = receiver_hit.sceneObjectIndex;
     surface_hit.primitiveIndex = receiver_hit.primitiveIndex;
     surface_hit.triangleIndex = receiver_hit.triangleIndex;
+    surface_hit.materialId = receiver_material.materialId;
     surface_hit.position = receiver_hit.position;
     surface_hit.normal = receiver_hit.normal;
     surface_hit.incidentDirection = scene_trace->trace.postExitDirection;

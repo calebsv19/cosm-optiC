@@ -46,6 +46,10 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->glassAbsorptionDistance =
         default_material ? default_material->absorption_distance : 1.0;
     obj->glassThinWalled = default_material ? default_material->thin_walled : false;
+    obj->hasGlassInterfaceTintOverride = false;
+    obj->glassInterfaceTint = obj->color & 0xFFFFFF;
+    obj->hasGlassAbsorptionColorOverride = false;
+    obj->glassAbsorptionColor = obj->color & 0xFFFFFF;
     obj->hasMirrorResponseOverride = false;
     obj->mirrorReflectivity = obj->reflectivity;
     obj->mirrorRoughness = obj->roughness;
@@ -288,6 +292,14 @@ void SceneObjectClearGlassTransportOverride(SceneObject* obj) {
     obj->glassIor = material ? material->ior : 1.0;
     obj->glassAbsorptionDistance = material ? material->absorption_distance : 1.0;
     obj->glassThinWalled = material ? material->thin_walled : false;
+}
+
+void SceneObjectClearGlassColorOverrides(SceneObject* obj) {
+    if (!obj) return;
+    obj->hasGlassInterfaceTintOverride = false;
+    obj->glassInterfaceTint = obj->color & 0xFFFFFF;
+    obj->hasGlassAbsorptionColorOverride = false;
+    obj->glassAbsorptionColor = obj->color & 0xFFFFFF;
 }
 
 void SceneObjectSeedGlassTransportOverrideFromMaterial(SceneObject* obj) {

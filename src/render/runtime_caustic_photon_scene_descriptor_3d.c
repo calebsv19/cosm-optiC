@@ -177,3 +177,20 @@ RuntimeCausticPhotonSceneDescriptor3D_SelectedMeshDielectric(
     if (!batch->descriptors[batch->selectedDescriptorIndex].valid) return NULL;
     return &batch->descriptors[batch->selectedDescriptorIndex];
 }
+
+uint32_t RuntimeCausticPhotonSceneDescriptor3D_CopyMeshDielectricShapes(
+    const RuntimeCausticPhotonSceneDescriptorBatch3D* batch,
+    RuntimeCausticLensShape3D* out_shapes,
+    uint32_t capacity) {
+    uint32_t count = 0u;
+    if (!batch || !out_shapes || capacity == 0u) return 0u;
+    for (int descriptor_index = 0;
+         descriptor_index < MAX_OBJECTS && count < capacity;
+         ++descriptor_index) {
+        const RuntimeCausticPhotonMeshDielectricDescriptor3D* descriptor =
+            &batch->descriptors[descriptor_index];
+        if (!descriptor->valid) continue;
+        out_shapes[count++] = descriptor->shape;
+    }
+    return count;
+}

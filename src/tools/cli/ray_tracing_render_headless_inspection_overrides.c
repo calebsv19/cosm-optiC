@@ -6,6 +6,7 @@
 #include "render/runtime_caustic_transport_debug_3d.h"
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_visibility_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_volume_3d_scatter.h"
 
@@ -18,6 +19,8 @@ void ray_tracing_headless_apply_inspection_overrides(
     RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
         request->caustic_photon_render_prep_population_enabled,
         &request->caustic_photon_integration_settings);
+    RuntimeVisibility3D_SetBlockSolidDielectricDirectPaths(
+        request->caustic_photon_block_solid_dielectric_direct_paths);
     RuntimeVolume3DScatter_ResetTuning();
     RuntimeVolume3DMaterial_ResetTuning();
     RuntimeRay3D_SetTraceRoute(request->trace_route);

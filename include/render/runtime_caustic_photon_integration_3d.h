@@ -4,8 +4,11 @@
 #include <stdbool.h>
 
 #include "render/runtime_caustic_beam_map_3d.h"
+#include "render/runtime_caustic_photon_distributed_beam_cache_3d.h"
 #include "render/runtime_caustic_photon_emit_3d.h"
+#include "render/runtime_caustic_photon_emission_proposal_3d.h"
 #include "render/runtime_caustic_photon_map_3d.h"
+#include "render/runtime_caustic_photon_volume_beam_estimator_3d.h"
 #include "render/runtime_caustic_settings_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_caustic_surface_cache_3d.h"
@@ -14,8 +17,13 @@
 
 typedef enum {
     RUNTIME_CAUSTIC_PRODUCT_MODE_OFF = 0,
-    RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE = 1,
-    RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION = 2
+    RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_ANALYTIC = 1,
+    RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT = 2,
+    RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP = 3,
+    RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE =
+        RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT,
+    RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION =
+        RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP
 } RuntimeCausticProductMode3D;
 
 typedef enum {
@@ -27,19 +35,39 @@ typedef enum {
 typedef enum {
     RUNTIME_CAUSTIC_PHOTON_POPULATION_SOURCE_NONE = 0,
     RUNTIME_CAUSTIC_PHOTON_POPULATION_SOURCE_SURFACE_PROXY = 1,
-    RUNTIME_CAUSTIC_PHOTON_POPULATION_SOURCE_TRACE_RECORDS = 2
+    RUNTIME_CAUSTIC_PHOTON_POPULATION_SOURCE_TRACE_RECORDS = 2,
+    RUNTIME_CAUSTIC_PHOTON_POPULATION_SOURCE_PATH_TRANSPORT = 3
 } RuntimeCausticPhotonPopulationSource3D;
+
+typedef enum {
+    RUNTIME_CAUSTIC_PHOTON_CONSUMER_CACHE_BRIDGE = 0,
+    RUNTIME_CAUSTIC_PHOTON_CONSUMER_DIRECT_MAP = 1
+} RuntimeCausticPhotonConsumer3D;
 
 typedef struct {
     RuntimeCausticProductMode3D productMode;
+    RuntimeCausticPhotonConsumer3D consumer;
+    RuntimeCausticDistributedBeamStorageBackend3D volumeCacheStorageBackend;
+    RuntimeCausticPhotonBudgetTier3D qualityTier;
+    RuntimeCausticPhotonEmissionProposalMode3D emissionProposalMode;
     bool surfaceQueryEnabled;
     bool volumeQueryEnabled;
     bool renderContributionEnabled;
+    RuntimeCausticPhotonEstimator3D surfaceEstimator;
+    uint64_t surfaceGatherNeighborCount;
+    RuntimeCausticPhotonSurfacePathFilter3D surfacePathFilter;
+    int surfaceReceiverSceneObjectIndex;
     int sampleBudget;
+    uint32_t emissionSeed;
     int maxPathDepth;
     double surfaceRadianceScale;
     double surfaceQueryRadius;
+    double surfaceGatherMaxRadius;
     double volumeQueryRadius;
+    int volumeMediumId;
+    double volumeScatteringCoefficient;
+    double volumeExtinctionCoefficient;
+    double volumePhaseAnisotropy;
 } RuntimeCausticPhotonIntegrationSettings3D;
 
 typedef struct {
@@ -66,6 +94,7 @@ typedef struct {
 typedef struct {
     RuntimeCausticProductMode3D productMode;
     RuntimeCausticPhotonIntegrationRoute3D route;
+    RuntimeCausticPhotonConsumer3D consumer;
     bool surfaceQueryEnabled;
     bool volumeQueryEnabled;
     bool renderContributionEnabled;
@@ -77,6 +106,15 @@ typedef struct {
     Vec3 combinedFlux;
     uint64_t surfaceCandidateCount;
     uint64_t surfaceContributingCount;
+    uint64_t surfaceReceiverObjectRejectCount;
+    uint64_t surfaceReceiverMaterialRejectCount;
+    uint64_t surfaceReceiverExactTriangleRejectCount;
+    double surfaceSupportRadius;
+    bool surfaceSupportAdaptive;
+    double surfaceKernelBoundaryWeight;
+    double surfaceDensityEstimate;
+    bool surfaceUndersampled;
+    bool surfaceFallbackUsed;
     uint64_t volumeCandidateCount;
     uint64_t volumeContributingCount;
 } RuntimeCausticPhotonIntegrationResult3D;
@@ -167,6 +205,7 @@ typedef struct {
     Vec3 physicalFlux;
     Vec3 displayFlux;
     Vec3 radiance;
+    RuntimeCausticDistributedBeamCacheReadback3D distributedCache;
 } RuntimeCausticPhotonBeamContributionReadback3D;
 
 typedef struct {
@@ -186,11 +225,42 @@ typedef struct {
     bool volumeBeamPopulated;
     RuntimeCausticPhotonPopulationSource3D populationSource;
     uint64_t requestedSampleBudget;
+    uint32_t emissionSeed;
     uint64_t emittedPhotonCount;
     uint64_t rejectedPhotonCount;
     uint64_t traceInputCount;
     uint64_t traceSolvedPathCount;
     uint64_t traceRecordCount;
+    uint64_t pathTransportAttemptCount;
+    uint64_t pathTransportSucceededCount;
+    uint64_t pathTransportRejectedCount;
+    uint64_t pathIntersectionCount;
+    uint64_t pathMaterialResolveFailureCount;
+    uint64_t pathMediumTransitionCount;
+    uint64_t pathMediumTransitionFailureCount;
+    uint64_t pathAttenuatedSegmentCount;
+    uint64_t pathTotalInternalReflectionCount;
+    uint64_t pathDielectricEntryCount;
+    uint64_t pathDielectricExitCount;
+    uint64_t pathSolidMediumReconciledCount;
+    uint64_t pathSolidMediumUnreconciledCount;
+    bool pathSolidMediumTransitionsReconciled;
+    uint64_t emissionGuidedSampleCount;
+    uint64_t emissionGuidedCorrectedCount;
+    uint64_t emissionGuidedUncorrectedCount;
+    uint64_t emissionUnbiasedSampleCount;
+    double emissionProposalPdfSum;
+    double emissionFluxCorrectionSum;
+    bool emissionFluxCompensationAppliedExactlyOnce;
+    uint64_t beamMediumIdRewriteCount;
+    uint64_t volumeBeamExaminedCount;
+    uint64_t volumeBeamClippedCount;
+    uint64_t volumeBeamEligibility[
+        RUNTIME_CAUSTIC_PHOTON_VOLUME_BEAM_REJECT_INVALID + 1];
+    RuntimeCausticPhotonRetentionReadback3D retention;
+    uint64_t pathPopulationSucceededCount;
+    uint64_t pathPopulationRejectedCount;
+    uint64_t pathPopulationCapacityRejectCount;
     uint64_t receiverLookupAttemptCount;
     uint64_t receiverDirectHitCount;
     uint64_t receiverCrossingProbeAttemptCount;
@@ -223,6 +293,9 @@ typedef struct {
     uint64_t volumeBeamStoreRejectedCount;
     uint64_t volumeBeamSegmentCount;
     uint64_t volumeBeamAccelerationInsertedCount;
+    uint64_t surfaceMapCapacity;
+    uint64_t volumeBeamCapacity;
+    uint64_t recordStorageCeilingBytes;
     Vec3 totalEmittedFlux;
     Vec3 totalStoredSurfaceFlux;
     Vec3 totalStoredVolumeFlux;
@@ -239,6 +312,7 @@ typedef struct {
 typedef struct {
     RuntimeCausticProductMode3D productMode;
     RuntimeCausticPhotonIntegrationRoute3D route;
+    RuntimeCausticPhotonConsumer3D consumer;
     bool queryAttempted;
     bool queryHit;
     bool contributionAttempted;
@@ -249,6 +323,15 @@ typedef struct {
     bool volumeDeposited;
     uint64_t surfaceCandidateCount;
     uint64_t surfaceContributingCount;
+    uint64_t surfaceReceiverObjectRejectCount;
+    uint64_t surfaceReceiverMaterialRejectCount;
+    uint64_t surfaceReceiverExactTriangleRejectCount;
+    double surfaceSupportRadius;
+    bool surfaceSupportAdaptive;
+    double surfaceKernelBoundaryWeight;
+    double surfaceDensityEstimate;
+    bool surfaceUndersampled;
+    bool surfaceFallbackUsed;
     uint64_t volumeCandidateCount;
     uint64_t volumeContributingCount;
     RuntimeCausticPhotonReceiverContributionReadback3D receiverContribution;
@@ -261,6 +344,8 @@ typedef struct {
 
 void RuntimeCausticPhotonIntegration3D_DefaultSettings(
     RuntimeCausticPhotonIntegrationSettings3D* settings);
+void RuntimeCausticPhotonIntegration3D_NormalizeSettings(
+    RuntimeCausticPhotonIntegrationSettings3D* settings);
 void RuntimeCausticPhotonIntegration3D_DefaultQuery(
     RuntimeCausticPhotonIntegrationQuery3D* query);
 RuntimeCausticProductMode3D RuntimeCausticProductMode3D_FromLabel(
@@ -270,6 +355,15 @@ const char* RuntimeCausticPhotonIntegrationRoute3D_Label(
     RuntimeCausticPhotonIntegrationRoute3D route);
 const char* RuntimeCausticPhotonPopulationSource3D_Label(
     RuntimeCausticPhotonPopulationSource3D source);
+const char* RuntimeCausticPhotonConsumer3D_Label(
+    RuntimeCausticPhotonConsumer3D consumer);
+RuntimeCausticPhotonConsumer3D RuntimeCausticPhotonConsumer3D_FromLabel(
+    const char* label);
+RuntimeCausticPhotonBudgetTier3D RuntimeCausticPhotonQualityTier3D_FromLabel(
+    const char* label);
+void RuntimeCausticPhotonIntegration3D_ApplyQualityTier(
+    RuntimeCausticPhotonIntegrationSettings3D* settings,
+    RuntimeCausticPhotonBudgetTier3D tier);
 RuntimeCausticPhotonIntegrationRoute3D
 RuntimeCausticPhotonIntegration3D_RouteForSettings(
     const RuntimeCausticPhotonIntegrationSettings3D* settings);

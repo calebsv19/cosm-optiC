@@ -30,6 +30,11 @@ typedef enum {
     RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED = 2
 } RuntimeLightSource3DEmissionProfile;
 
+typedef enum {
+    RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY = 0,
+    RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE = 1
+} RuntimeLightRadiometryMode3D;
+
 typedef struct {
     char id[RUNTIME_LIGHT_SOURCE_3D_MAX_ID];
     RuntimeLightSource3DKind kind;
@@ -45,6 +50,8 @@ typedef struct {
     double height;
     Vec3 color;
     double intensity;
+    RuntimeLightRadiometryMode3D radiometryMode;
+    double radiance;
     double falloffDistance;
     ForwardFalloffMode falloffMode;
     int emissiveCandidateCount;

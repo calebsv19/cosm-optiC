@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "material/material.h"
 #include "render/runtime_material_payload_3d.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
@@ -9,6 +10,7 @@
 static const double kRuntimeVisibility3DEpsilon = 1e-4;
 static const double kRuntimeVisibility3DMinimumTransmittance = 1e-4;
 static const int kRuntimeVisibility3DMaxTransparentSurfaceSkips = 24;
+static bool gRuntimeVisibility3DBlockSolidDielectricDirectPaths = false;
 
 static double runtime_visibility_3d_clamp(double value,
                                           double min_value,
@@ -43,6 +45,24 @@ static void runtime_visibility_3d_multiply_transmittance(
 RuntimeVisibility3DTransmittance RuntimeVisibility3D_UnitTransmittance(void) {
     RuntimeVisibility3DTransmittance result = {1.0, 1.0, 1.0, 1.0};
     return result;
+}
+
+void RuntimeVisibility3D_SetBlockSolidDielectricDirectPaths(bool enabled) {
+    gRuntimeVisibility3DBlockSolidDielectricDirectPaths = enabled;
+}
+
+bool RuntimeVisibility3D_BlockSolidDielectricDirectPathsEnabled(void) {
+    return gRuntimeVisibility3DBlockSolidDielectricDirectPaths;
+}
+
+bool RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(
+    const RuntimeMaterialPayload3D* payload) {
+    if (!gRuntimeVisibility3DBlockSolidDielectricDirectPaths || !payload ||
+        !payload->valid) {
+        return false;
+    }
+    return payload->materialId == MATERIAL_PRESET_TRANSPARENT &&
+           payload->transparency > 0.0 && !payload->thinWalled;
 }
 
 void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
@@ -279,6 +299,14 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
             return runtime_visibility_3d_zero_transmittance();
         }
         if (!(payload.transparency > 0.0)) {
+            return runtime_visibility_3d_zero_transmittance();
+        }
+        /* A straight next-event connection through a curved solid dielectric
+         * is not the refracted path. In the opt-in photon-map policy, block
+         * this biased shortcut and let the mapped specular transport carry
+         * energy into the geometric shadow. Thin sheets retain their authored
+         * straight-through transmittance behavior. */
+        if (RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(&payload)) {
             return runtime_visibility_3d_zero_transmittance();
         }
 

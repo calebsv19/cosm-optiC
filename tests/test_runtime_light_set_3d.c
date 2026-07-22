@@ -1,6 +1,12 @@
 #include "render/runtime_light_set_3d.h"
+#include "render/runtime_light_radiometry_3d.h"
 
+#include <math.h>
 #include <stdio.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 #include "test_support.h"
 
@@ -167,10 +173,88 @@ static int test_runtime_light_set_3d_copy_rgb_and_shape_contract(void) {
     return 0;
 }
 
+static int test_runtime_light_set_3d_rect_lambertian_radiometry_contract(void) {
+    RuntimeLightSource3D light;
+    RuntimeLightRadiometry3DEvaluation evaluation;
+    RuntimeCameraProjector3D projector = {0};
+    Vec3 direction;
+    double pdf = 0.0;
+    double footprint_area = 0.0;
+
+    RuntimeLightSource3D_Init(&light);
+    light.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_RECT;
+    light.emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED;
+    light.radiometryMode = RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE;
+    light.width = 2.0;
+    light.height = 1.0;
+    light.normal = vec3(0.0, 0.0, -1.0);
+    light.color = vec3(1.0, 0.5, 0.25);
+    light.radiance = 4.0;
+
+    assert_true("runtime_light_radiometry_rect_evaluate",
+                RuntimeLightRadiometry3D_Evaluate(&light, &evaluation));
+    assert_close("runtime_light_radiometry_rect_area", evaluation.areaM2, 2.0, 1e-12);
+    assert_close("runtime_light_radiometry_rect_angular_integral",
+                 evaluation.angularIntegralSr,
+                 M_PI,
+                 1e-12);
+    assert_close("runtime_light_radiometry_rect_total_power_r",
+                 evaluation.totalEmittedPower.x,
+                 8.0 * M_PI,
+                 1e-12);
+    assert_close("runtime_light_radiometry_rect_total_power_g",
+                 evaluation.totalEmittedPower.y,
+                 4.0 * M_PI,
+                 1e-12);
+    assert_true("runtime_light_radiometry_rect_sample_direction",
+                RuntimeLightRadiometry3D_SampleDirection(
+                    &light, 0.25, 0.75, &direction, &pdf));
+    assert_true("runtime_light_radiometry_rect_sample_front",
+                vec3_dot(direction, light.normal) > 0.0 && pdf > 0.0);
+    assert_close("runtime_light_radiometry_rect_sample_pdf",
+                 pdf,
+                 vec3_dot(direction, light.normal) / M_PI,
+                 1e-12);
+    assert_close("runtime_light_radiometry_rect_axis_irradiance",
+                 RuntimeLightRadiometry3D_RectIrradianceScale(
+                     &light, vec3(0.0, 0.0, 1.0), 2.0),
+                 2.0,
+                 1e-12);
+    light.emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED;
+    assert_true("runtime_light_radiometry_rect_two_sided_evaluate",
+                RuntimeLightRadiometry3D_Evaluate(&light, &evaluation));
+    assert_close("runtime_light_radiometry_rect_two_sided_power",
+                 evaluation.totalEmittedPower.x,
+                 16.0 * M_PI,
+                 1e-12);
+    projector.viewportWidth = 100;
+    projector.viewportHeight = 100;
+    projector.origin = vec3(0.0, 0.0, 0.0);
+    projector.forward = vec3(0.0, 0.0, 1.0);
+    projector.right = vec3(1.0, 0.0, 0.0);
+    projector.up = vec3(0.0, 1.0, 0.0);
+    projector.tanHalfFovX = 0.5;
+    projector.tanHalfFovY = 0.5;
+    assert_true("runtime_light_radiometry_receiver_footprint",
+                RuntimeLightRadiometry3D_PerspectivePixelFootprintArea(
+                    &projector,
+                    49.5,
+                    49.5,
+                    vec3(0.0, 0.0, 10.0),
+                    vec3(0.0, 0.0, -1.0),
+                    &footprint_area));
+    assert_close("runtime_light_radiometry_receiver_footprint_area",
+                 footprint_area,
+                 0.01,
+                 1.0e-12);
+    return 0;
+}
+
 int run_test_runtime_light_set_3d_tests(void) {
     test_runtime_light_set_3d_empty_contract();
     test_runtime_light_set_3d_append_disabled_and_enabled_contract();
     test_runtime_light_set_3d_compatibility_seed_contract();
     test_runtime_light_set_3d_copy_rgb_and_shape_contract();
+    test_runtime_light_set_3d_rect_lambertian_radiometry_contract();
     return 0;
 }

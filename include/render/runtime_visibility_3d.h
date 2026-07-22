@@ -15,6 +15,11 @@ typedef struct {
 
 RuntimeVisibility3DTransmittance RuntimeVisibility3D_UnitTransmittance(void);
 
+void RuntimeVisibility3D_SetBlockSolidDielectricDirectPaths(bool enabled);
+bool RuntimeVisibility3D_BlockSolidDielectricDirectPathsEnabled(void);
+bool RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(
+    const RuntimeMaterialPayload3D* payload);
+
 bool RuntimeVisibility3D_CanUseOpaqueNoVolumeFastPath(const RuntimeScene3D* scene);
 
 void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(

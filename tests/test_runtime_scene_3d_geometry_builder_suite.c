@@ -888,6 +888,9 @@ static int test_runtime_scene_3d_builder_imports_authored_light_set(void) {
             "\"position\":{\"x\":-1.0,\"y\":2.5,\"z\":4.0},"
             "\"width\":2.0,"
             "\"height\":1.0,"
+            "\"emission_profile\":\"one_sided\","
+            "\"radiometric_mode\":\"lambertian_radiance\","
+            "\"radiance\":3.5,"
             "\"color\":{\"x\":0.0,\"y\":0.0,\"z\":0.5},"
             "\"intensity\":1.5,"
             "\"enabled\":true"
@@ -960,6 +963,16 @@ static int test_runtime_scene_3d_builder_imports_authored_light_set(void) {
     assert_close("runtime_scene_3d_builder_light_set_rect_blue",
                  scene.lightSet.lights[1].color.z,
                  0.5,
+                 1e-9);
+    assert_true("runtime_scene_3d_builder_light_set_rect_one_sided",
+                scene.lightSet.lights[1].emissionProfile ==
+                    RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED);
+    assert_true("runtime_scene_3d_builder_light_set_rect_radiometry",
+                scene.lightSet.lights[1].radiometryMode ==
+                    RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE);
+    assert_close("runtime_scene_3d_builder_light_set_rect_radiance",
+                 scene.lightSet.lights[1].radiance,
+                 3.5,
                  1e-9);
     assert_true("runtime_scene_3d_builder_light_set_disabled_kept",
                 !scene.lightSet.lights[2].enabled);

@@ -14,6 +14,7 @@
 #include "render/runtime_caustic_transport_3d.h"
 #include "render/runtime_caustic_transport_debug_3d.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_volume_3d.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
@@ -2012,5 +2013,6 @@ int run_test_runtime_caustic_transport_3d_tests(void) {
     test_runtime_caustic_transport_render_samples_surface_cache();
     test_runtime_caustic_sidecar_uses_prepared_probe_snapshot();
 
+    RuntimeRay3D_ResetTraceRouteForTests();
     return test_support_failures() - before;
 }

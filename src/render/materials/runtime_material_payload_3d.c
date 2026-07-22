@@ -570,6 +570,35 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     payload.valid = true;
     runtime_material_payload_3d_apply_texture(&object_copy, hit, &payload);
     RuntimeWaterMaterial3D_ApplyToPayload(scene_object_index, &payload);
+    payload.hasGlassInterfaceTintOverride =
+        object_copy.hasGlassInterfaceTintOverride;
+    payload.hasGlassAbsorptionColorOverride =
+        object_copy.hasGlassAbsorptionColorOverride;
+    payload.glassInterfaceTintR = object_copy.hasGlassInterfaceTintOverride
+                                      ? (double)((object_copy.glassInterfaceTint >> 16) & 0xFF) /
+                                            255.0
+                                      : payload.baseColorR;
+    payload.glassInterfaceTintG = object_copy.hasGlassInterfaceTintOverride
+                                      ? (double)((object_copy.glassInterfaceTint >> 8) & 0xFF) /
+                                            255.0
+                                      : payload.baseColorG;
+    payload.glassInterfaceTintB = object_copy.hasGlassInterfaceTintOverride
+                                      ? (double)(object_copy.glassInterfaceTint & 0xFF) / 255.0
+                                      : payload.baseColorB;
+    payload.glassAbsorptionColorR = object_copy.hasGlassAbsorptionColorOverride
+                                        ? (double)((object_copy.glassAbsorptionColor >> 16) &
+                                                   0xFF) /
+                                              255.0
+                                        : payload.baseColorR;
+    payload.glassAbsorptionColorG = object_copy.hasGlassAbsorptionColorOverride
+                                        ? (double)((object_copy.glassAbsorptionColor >> 8) &
+                                                   0xFF) /
+                                              255.0
+                                        : payload.baseColorG;
+    payload.glassAbsorptionColorB = object_copy.hasGlassAbsorptionColorOverride
+                                        ? (double)(object_copy.glassAbsorptionColor & 0xFF) /
+                                              255.0
+                                        : payload.baseColorB;
 
     *out_payload = payload;
     return true;

@@ -1,4 +1,5 @@
 #include "import/runtime_scene_bridge_internal.h"
+#include "render/runtime_light_radiometry_3d.h"
 
 #include "camera/camera_path_3d.h"
 #include "import/runtime_scene_bridge_authoring_internal.h"
@@ -210,6 +211,8 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
         bool moving = false;
         const char *id = NULL;
         const char *kind = NULL;
+        const char *emission_profile = NULL;
+        const char *radiometric_mode = NULL;
         if (!light_obj || !json_object_is_type(light_obj, json_type_object)) continue;
         if (!runtime_scene_bridge_parse_position_or_transform_position(light_obj, &x, &y, &z)) {
             continue;
@@ -247,6 +250,33 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
                 source.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_POINT;
             }
         }
+        emission_profile = runtime_scene_bridge_json_string_field_or_null(
+            light_obj, "emission_profile");
+        if (!emission_profile || !emission_profile[0]) {
+            emission_profile = runtime_scene_bridge_json_string_field_or_null(
+                light_obj, "emissionProfile");
+        }
+        if (emission_profile) {
+            if (strcmp(emission_profile, "one_sided") == 0 ||
+                strcmp(emission_profile, "one-sided") == 0) {
+                source.emissionProfile =
+                    RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED;
+            } else if (strcmp(emission_profile, "two_sided") == 0 ||
+                       strcmp(emission_profile, "two-sided") == 0) {
+                source.emissionProfile =
+                    RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED;
+            } else {
+                source.emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI;
+            }
+        }
+        radiometric_mode = runtime_scene_bridge_json_string_field_or_null(
+            light_obj, "radiometric_mode");
+        if (!radiometric_mode || !radiometric_mode[0]) {
+            radiometric_mode = runtime_scene_bridge_json_string_field_or_null(
+                light_obj, "radiometricMode");
+        }
+        source.radiometryMode =
+            RuntimeLightRadiometryMode3D_FromLabel(radiometric_mode);
         source.origin = RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT;
         source.position = vec3(runtime_scene_bridge_authoring_scale_scene_length(x, world_scale),
                                runtime_scene_bridge_authoring_scale_scene_length(y, world_scale),
@@ -292,6 +322,9 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
         if (runtime_scene_bridge_parse_double_field(light_obj, "intensity", &x) ||
             runtime_scene_bridge_parse_double_field(light_obj, "brightness", &x)) {
             source.intensity = x;
+        }
+        if (runtime_scene_bridge_parse_double_field(light_obj, "radiance", &x)) {
+            source.radiance = x;
         }
         if (runtime_scene_bridge_parse_double_field(light_obj, "falloff_distance", &x) ||
             runtime_scene_bridge_parse_double_field(light_obj, "falloffDistance", &x)) {

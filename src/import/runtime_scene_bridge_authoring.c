@@ -584,6 +584,8 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         json_object *emissive_strength_obj = NULL;
         json_object *glass_transport_override_obj = NULL;
         json_object *glass_thin_walled_obj = NULL;
+        json_object *glass_interface_tint_obj = NULL;
+        json_object *glass_absorption_color_obj = NULL;
         const char *object_id = NULL;
         int material_id = MaterialManagerDefaultId();
         int object_color = 0xFFFFFF;
@@ -605,6 +607,10 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         bool has_glass_ior = false;
         bool has_glass_absorption_distance = false;
         bool has_glass_thin_walled = false;
+        bool has_glass_interface_tint = false;
+        bool has_glass_absorption_color = false;
+        int glass_interface_tint = 0xFFFFFF;
+        int glass_absorption_color = 0xFFFFFF;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
         if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
@@ -676,6 +682,30 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                                                         "glass_absorption_distance",
                                                         "glassAbsorptionDistance",
                                                         &glass_absorption_distance);
+        if ((json_object_object_get_ex(entry,
+                                       "glass_interface_tint",
+                                       &glass_interface_tint_obj) ||
+             json_object_object_get_ex(entry,
+                                       "glassInterfaceTint",
+                                       &glass_interface_tint_obj)) &&
+            (json_object_is_type(glass_interface_tint_obj, json_type_int) ||
+             json_object_is_type(glass_interface_tint_obj, json_type_double))) {
+            glass_interface_tint =
+                json_object_get_int(glass_interface_tint_obj) & 0xFFFFFF;
+            has_glass_interface_tint = true;
+        }
+        if ((json_object_object_get_ex(entry,
+                                       "glass_absorption_color",
+                                       &glass_absorption_color_obj) ||
+             json_object_object_get_ex(entry,
+                                       "glassAbsorptionColor",
+                                       &glass_absorption_color_obj)) &&
+            (json_object_is_type(glass_absorption_color_obj, json_type_int) ||
+             json_object_is_type(glass_absorption_color_obj, json_type_double))) {
+            glass_absorption_color =
+                json_object_get_int(glass_absorption_color_obj) & 0xFFFFFF;
+            has_glass_absorption_color = true;
+        }
         if ((json_object_object_get_ex(entry, "glass_thin_walled", &glass_thin_walled_obj) ||
              json_object_object_get_ex(entry, "glassThinWalled", &glass_thin_walled_obj)) &&
             json_object_is_type(glass_thin_walled_obj, json_type_boolean)) {
@@ -738,6 +768,16 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                     SceneObjectClearGlassTransportOverride(
                         &sceneSettings.sceneObjects[scene_index]);
                 }
+                sceneSettings.sceneObjects[scene_index]
+                    .hasGlassInterfaceTintOverride = has_glass_interface_tint;
+                sceneSettings.sceneObjects[scene_index].glassInterfaceTint =
+                    has_glass_interface_tint ? glass_interface_tint
+                                             : object_color;
+                sceneSettings.sceneObjects[scene_index]
+                    .hasGlassAbsorptionColorOverride = has_glass_absorption_color;
+                sceneSettings.sceneObjects[scene_index].glassAbsorptionColor =
+                    has_glass_absorption_color ? glass_absorption_color
+                                              : object_color;
                 apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
                 apply_ray_authoring_object_procedural_texture(entry, scene_index);
                 apply_ray_authoring_object_material_stack(entry, scene_index);

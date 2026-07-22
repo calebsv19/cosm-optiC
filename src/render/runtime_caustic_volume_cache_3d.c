@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "render/runtime_caustic_photon_sparse_brick_cache_3d.h"
+
 static uint64_t runtime_caustic_volume_cache_cell_index(
     const RuntimeVolumeGrid3D* grid,
     uint32_t cell_x,
@@ -116,6 +118,37 @@ void RuntimeCausticVolumeCache3D_Clear(RuntimeCausticVolumeCache3D* cache) {
     memset(cache->radianceR, 0, (size_t)cache->grid.cellCount * sizeof(float));
     memset(cache->radianceG, 0, (size_t)cache->grid.cellCount * sizeof(float));
     memset(cache->radianceB, 0, (size_t)cache->grid.cellCount * sizeof(float));
+    if (cache->beamDirectionX) {
+        memset(cache->beamDirectionX, 0, (size_t)cache->grid.cellCount * sizeof(float));
+    }
+    if (cache->beamDirectionY) {
+        memset(cache->beamDirectionY, 0, (size_t)cache->grid.cellCount * sizeof(float));
+    }
+    if (cache->beamDirectionZ) {
+        memset(cache->beamDirectionZ, 0, (size_t)cache->grid.cellCount * sizeof(float));
+    }
+    if (cache->beamDistanceWeighted) {
+        memset(cache->beamDistanceWeighted,
+               0,
+               (size_t)cache->grid.cellCount * sizeof(float));
+    }
+    if (cache->beamDirectionWeight) {
+        memset(cache->beamDirectionWeight,
+               0,
+               (size_t)cache->grid.cellCount * sizeof(float));
+    }
+    if (cache->beamSubvoxelRadianceR) {
+        memset(cache->beamSubvoxelRadianceR, 0,
+               (size_t)cache->grid.cellCount * 8u * sizeof(float));
+    }
+    if (cache->beamSubvoxelRadianceG) {
+        memset(cache->beamSubvoxelRadianceG, 0,
+               (size_t)cache->grid.cellCount * 8u * sizeof(float));
+    }
+    if (cache->beamSubvoxelRadianceB) {
+        memset(cache->beamSubvoxelRadianceB, 0,
+               (size_t)cache->grid.cellCount * 8u * sizeof(float));
+    }
     cache->depositAttemptCount = 0u;
     cache->depositAcceptedCount = 0u;
     cache->depositRejectedCount = 0u;
@@ -130,6 +163,9 @@ void RuntimeCausticVolumeCache3D_Clear(RuntimeCausticVolumeCache3D* cache) {
     cache->footprintDepositedRadianceR = 0.0;
     cache->footprintDepositedRadianceG = 0.0;
     cache->footprintDepositedRadianceB = 0.0;
+    cache->physicalBeamField = false;
+    cache->beamSubvoxelField = false;
+    RuntimeCausticPhotonSparseBrickCache3D_Clear(cache->sparseBeamField);
 }
 
 void RuntimeCausticVolumeCache3D_Free(RuntimeCausticVolumeCache3D* cache) {
@@ -137,6 +173,15 @@ void RuntimeCausticVolumeCache3D_Free(RuntimeCausticVolumeCache3D* cache) {
     free(cache->radianceR);
     free(cache->radianceG);
     free(cache->radianceB);
+    free(cache->beamDirectionX);
+    free(cache->beamDirectionY);
+    free(cache->beamDirectionZ);
+    free(cache->beamDistanceWeighted);
+    free(cache->beamDirectionWeight);
+    free(cache->beamSubvoxelRadianceR);
+    free(cache->beamSubvoxelRadianceG);
+    free(cache->beamSubvoxelRadianceB);
+    RuntimeCausticPhotonSparseBrickCache3D_Destroy(cache->sparseBeamField);
     RuntimeCausticVolumeCache3D_Init(cache);
 }
 

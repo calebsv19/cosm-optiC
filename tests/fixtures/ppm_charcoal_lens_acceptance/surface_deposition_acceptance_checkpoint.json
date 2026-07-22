@@ -1,0 +1,90 @@
+{
+  "schema": "ray_tracing_ppm_surface_deposition_acceptance_checkpoint/v1",
+  "recorded_date": "2026-07-19",
+  "status": "operator_accepted_surface_fixture_reference",
+  "scope": {
+    "accepted": [
+      "finite_source_lens_focus_behavior",
+      "surface_photon_transport_and_storage",
+      "sample_centered_surface_reconstruction",
+      "camera_receiver_area_convergence",
+      "raw_and_reconstructed_float_aov_transfer",
+      "reviewed_surface_product_image"
+    ],
+    "not_accepted": [
+      "volume_photon_deposition",
+      "general_scene_robustness",
+      "default_enablement",
+      "promotion",
+      "packaging_or_release"
+    ]
+  },
+  "frozen_contract": {
+    "source_kind": "rect",
+    "source_extent_m": [0.34, 0.34],
+    "radiometric_mode": "lambertian_radiance",
+    "authored_radiance": 4.0,
+    "aperture": "d024",
+    "aperture_clear_diameter_m": 0.24,
+    "lens_ior": 1.5,
+    "photon_budget": 4096,
+    "surface_support_radius_m": 0.07,
+    "surface_gain": 1.0,
+    "vf3d_enabled": false,
+    "surface_path_filter": "all",
+    "surface_reconstruction": "sample_centered_kde",
+    "camera_view": "oblique_beauty"
+  },
+  "acceptance_summary": {
+    "operator_judgment": "compact plausible finite-source lens behavior with no visible artifact",
+    "camera_to_receiver_oracle_1280x960": 1.0006386384196386,
+    "camera_ratio_change_640_to_1280": 0.007421059928327423,
+    "denoise_retained_fraction_640x480": 0.9544078847804306,
+    "display_core_positive_fraction_640x480": 0.980919343834663,
+    "display_positive_radius_p95_640x480": 0.012532301704808535,
+    "display_outside_core_positive_fraction_640x480": 0.01908065616533705,
+    "display_outer_frame_spill_fraction_640x480": 0.0
+  },
+  "evidence": [
+    {
+      "kind": "camera_area_base_report",
+      "path": "build/agent_runs/ray_tracing/ppm_charcoal_lens_acceptance/camera_area_convergence_160_320_640_t4/camera_area_convergence_report.json",
+      "sha256": "62bb626a907e2bff408d5e37704ed80bfee041cfd58293ccdc42443619ed8806",
+      "interpretation": "historical three-resolution rail remains rejected on its standalone successive-step gate"
+    },
+    {
+      "kind": "camera_area_confirmation_report",
+      "path": "build/agent_runs/ray_tracing/ppm_charcoal_lens_acceptance/camera_spatial_confirmation_640_1280/camera_spatial_confirmation_report.json",
+      "sha256": "d5a296cd88d7d24ce958e43b63d845b35075c4ac964be6b28daf23642ab356fa"
+    },
+    {
+      "kind": "resolved_image_transfer_report",
+      "path": "build/agent_runs/ray_tracing/ppm_charcoal_lens_acceptance/resolved_image_transfer_audit_160_320_640_t4/resolved_image_transfer_audit_report.json",
+      "sha256": "92860ae0a2f2a9087367cd225a7468988fe10e77f7406d5f4ca73de9270d7e9f"
+    },
+    {
+      "kind": "operator_review_contact_sheet",
+      "path": "build/agent_runs/ray_tracing/ppm_charcoal_lens_acceptance/resolved_image_transfer_audit_160_320_640_t4/review_sheet/review/ppm32_acceptance_matrix_contact_sheet.png",
+      "sha256": "d87211b7a67c96b421463859ab8b702196963ad2872f3610ccd0ae6f2ea018bc"
+    }
+  ],
+  "reuse_policy": {
+    "purpose": "immutable_surface_lens_path_control_for_volume_deposition_work",
+    "reopen_only_on": "new contradictory numeric or operator-visible evidence",
+    "forbidden_without_new_boundary": [
+      "source_radiance_tuning",
+      "aperture_or_ior_tuning",
+      "photon_budget_tuning",
+      "surface_support_tuning",
+      "surface_gain_tuning",
+      "camera_or_exposure_tuning",
+      "surface_reconstruction_tuning"
+    ]
+  },
+  "state_guards": {
+    "production_photon_mapping_default_off": true,
+    "promotion_eligible": false,
+    "scene_pointer_changed": false,
+    "latest_good_changed": false
+  }
+}

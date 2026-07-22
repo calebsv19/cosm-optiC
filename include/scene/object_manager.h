@@ -53,6 +53,10 @@ typedef struct {
     double glassIor;                // Bounded dielectric IOR override.
     double glassAbsorptionDistance; // Positive absorption distance override.
     bool glassThinWalled;           // Thin sheet versus solid glass override.
+    bool hasGlassInterfaceTintOverride; // Separate interface transmission tint.
+    int glassInterfaceTint;              // Packed RGB interface tint.
+    bool hasGlassAbsorptionColorOverride; // Separate solid-medium absorption color.
+    int glassAbsorptionColor;              // Packed RGB absorption color.
     bool hasMirrorResponseOverride; // Object-local mirror response edit.
     double mirrorReflectivity;      // 0..1 mirror reflection strength override.
     double mirrorRoughness;         // 0..1 mirror sharpness/roughness override.
@@ -108,6 +112,7 @@ Uint8 SceneObjectAlphaByte(const SceneObject* obj);
 double SceneObjectAlphaFromByte(Uint8 alpha);
 void SceneObjectClearGlassTransportOverride(SceneObject* obj);
 void SceneObjectSeedGlassTransportOverrideFromMaterial(SceneObject* obj);
+void SceneObjectClearGlassColorOverrides(SceneObject* obj);
 bool SceneObjectResolveGlassTransport(const SceneObject* obj,
                                       double* out_transmission,
                                       double* out_ior,

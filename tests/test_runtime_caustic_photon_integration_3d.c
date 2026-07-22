@@ -210,12 +210,27 @@ static int test_runtime_caustic_photon_integration_modes_and_settings(void) {
     assert_true("runtime_caustic_product_mode_label_production",
                 RuntimeCausticProductMode3D_FromLabel("production") ==
                     RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION);
+    assert_true("runtime_caustic_product_mode_canonical_labels",
+                RuntimeCausticProductMode3D_FromLabel("reference_analytic") ==
+                        RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_ANALYTIC &&
+                    RuntimeCausticProductMode3D_FromLabel("reference_transport") ==
+                        RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT &&
+                    RuntimeCausticProductMode3D_FromLabel("photon_map") ==
+                        RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP);
 
     RuntimeCausticPhotonIntegration3D_DefaultSettings(&integration);
     RuntimeCausticSettings3D_Default(&caustic);
-    assert_true("runtime_caustic_photon_integration_default_reference",
-                integration.productMode == RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE &&
+    assert_true("runtime_caustic_photon_integration_default_off",
+                integration.productMode == RUNTIME_CAUSTIC_PRODUCT_MODE_OFF &&
                     !integration.renderContributionEnabled);
+    RuntimeCausticPhotonIntegration3D_ApplyToCausticSettings(&integration, &caustic);
+    assert_true("runtime_caustic_photon_integration_default_off_route",
+                caustic.mode == RUNTIME_CAUSTIC_MODE_OFF);
+    integration.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_ANALYTIC;
+    RuntimeCausticPhotonIntegration3D_ApplyToCausticSettings(&integration, &caustic);
+    assert_true("runtime_caustic_photon_integration_analytic_route",
+                caustic.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC);
+    integration.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT;
     RuntimeCausticPhotonIntegration3D_ApplyToCausticSettings(&integration, &caustic);
     assert_true("runtime_caustic_photon_integration_reference_route",
                 caustic.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
@@ -258,6 +273,7 @@ static int test_runtime_caustic_photon_integration_queries_maps(void) {
     RuntimeCausticPhotonMap3D_Init(&surface_map);
     RuntimeCausticBeamMap3D_Init(&beam_map);
     RuntimeCausticPhotonIntegration3D_DefaultSettings(&settings);
+    settings.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT;
     RuntimeCausticPhotonIntegration3D_DefaultQuery(&query);
     settings.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION;
     settings.volumeQueryEnabled = true;
@@ -509,16 +525,16 @@ static int test_runtime_caustic_photon_integration_deposits_volume_beam_contribu
 
     query.mediumId = 4;
     query.direction = vec3(1.0, 0.0, 0.0);
-    assert_true("runtime_caustic_photon_integration_beam_contribution_direction_reject",
-                !RuntimeCausticPhotonIntegration3D_DepositVolumeContributionFromBeamMap(
+    assert_true("runtime_caustic_photon_integration_beam_irradiance_camera_independent",
+                RuntimeCausticPhotonIntegration3D_DepositVolumeContributionFromBeamMap(
                     &beam_map,
                     &volume_cache,
                     &volume,
                     &settings,
                     &query,
                     &readback) &&
-                    !readback.queryHit && readback.directionRejectCount == 1u &&
-                    readback.volumeDepositAcceptedCount == 0u);
+                    readback.queryHit && readback.directionRejectCount == 0u &&
+                    readback.volumeDepositAcceptedCount == 1u);
 
     RuntimeCausticVolumeCache3D_Free(&volume_cache);
     RuntimeVolumeAttachment3D_Free(&volume);
@@ -607,6 +623,7 @@ static int test_runtime_caustic_photon_integration_reference_does_not_query_maps
     RuntimeCausticPhotonMap3D_Init(&surface_map);
     RuntimeCausticBeamMap3D_Init(&beam_map);
     RuntimeCausticPhotonIntegration3D_DefaultSettings(&settings);
+    settings.productMode = RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT;
     RuntimeCausticPhotonIntegration3D_DefaultQuery(&query);
 
     assert_true("runtime_caustic_photon_integration_reference_surface_alloc",
@@ -833,7 +850,7 @@ static int test_runtime_caustic_photon_integration_populates_maps_from_trace_rec
     settings.volumeQueryRadius = 0.20;
 
     query.surface.position = trace.receiverCrossing;
-    query.surface.normal = vec3(0.0, 1.0, 0.0);
+    query.surface.normal = vec3(0.0, 0.0, -1.0);
     query.surface.radius = 0.15;
     query.surface.sceneObjectIndex = 12;
     query.surface.primitiveIndex = 13;
@@ -968,6 +985,7 @@ static int test_runtime_caustic_photon_scene_descriptor_harvests_mesh_dielectric
     RuntimeScene3D scene;
     RuntimeTriangle3D triangles[2];
     RuntimeCausticPhotonSceneDescriptorBatch3D batch;
+    RuntimeCausticLensShape3D shapes[2];
     const RuntimeCausticPhotonMeshDielectricDescriptor3D* selected = NULL;
 
     memset(&scene, 0, sizeof(scene));
@@ -1018,6 +1036,52 @@ static int test_runtime_caustic_photon_scene_descriptor_harvests_mesh_dielectric
                     selected->shape.height > 0.0 &&
                     selected->shape.payload.valid &&
                     selected->shape.payload.materialId == MATERIAL_PRESET_TRANSPARENT);
+    assert_true("runtime_caustic_photon_scene_descriptor_single_shape_copy",
+                RuntimeCausticPhotonSceneDescriptor3D_CopyMeshDielectricShapes(
+                    &batch, shapes, 2u) == 1u &&
+                    shapes[0].sceneObjectIndex == selected->sceneObjectIndex);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_scene_descriptor_copies_all_guidance_shapes(void) {
+    RuntimeScene3D scene;
+    RuntimeTriangle3D triangles[2];
+    RuntimeCausticPhotonSceneDescriptorBatch3D batch;
+    RuntimeCausticLensShape3D shapes[2];
+
+    memset(&scene, 0, sizeof(scene));
+    memset(triangles, 0, sizeof(triangles));
+    MaterialManagerResetDefaults();
+    sceneSettings.objectCount = 2;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[1].material_id = MATERIAL_PRESET_TRANSPARENT;
+
+    for (int i = 0; i < 2; ++i) {
+        const double x = i == 0 ? -1.0 : 1.0;
+        triangles[i].p0 = vec3(x - 0.4, 0.0, -0.4);
+        triangles[i].p1 = vec3(x + 0.4, 0.0, -0.4);
+        triangles[i].p2 = vec3(x, 0.0, 0.4);
+        triangles[i].normal = vec3(0.0, 1.0, 0.0);
+        triangles[i].sceneObjectIndex = i;
+        triangles[i].primitiveIndex = 20 + i;
+        triangles[i].localTriangleIndex = 0;
+    }
+    scene.triangleMesh.triangles = triangles;
+    scene.triangleMesh.triangleCount = 2;
+
+    assert_true("runtime_caustic_photon_scene_descriptor_multi_harvest",
+                RuntimeCausticPhotonSceneDescriptor3D_HarvestMeshDielectricBatch(
+                    &scene, &batch));
+    assert_true("runtime_caustic_photon_scene_descriptor_multi_candidates",
+                batch.meshDielectricCandidateCount == 2u &&
+                    batch.descriptorCount == 2 &&
+                    RuntimeCausticPhotonSceneDescriptor3D_SelectedMeshDielectric(
+                        &batch) != NULL);
+    assert_true("runtime_caustic_photon_scene_descriptor_multi_shape_copy",
+                RuntimeCausticPhotonSceneDescriptor3D_CopyMeshDielectricShapes(
+                    &batch, shapes, 2u) == 2u &&
+                    shapes[0].sceneObjectIndex == 0 &&
+                    shapes[1].sceneObjectIndex == 1);
     return 0;
 }
 
@@ -1143,6 +1207,8 @@ int run_test_runtime_caustic_photon_integration_3d_tests(void) {
     failures +=
         test_runtime_caustic_photon_integration_harvests_mesh_dielectric_fixture_traces();
     failures += test_runtime_caustic_photon_scene_descriptor_harvests_mesh_dielectric();
+    failures +=
+        test_runtime_caustic_photon_scene_descriptor_copies_all_guidance_shapes();
     failures += test_runtime_caustic_photon_lifecycle_classifies_rebuilds();
     failures += test_runtime_caustic_photon_map_store_reuses_owned_maps();
     return failures;

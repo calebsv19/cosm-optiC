@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "render/runtime_caustic_photon_estimator_3d.h"
 #include "render/runtime_caustic_photon_trace_3d.h"
 
 typedef struct {
@@ -13,6 +14,7 @@ typedef struct {
     uint64_t defaultQueryCandidateLimit;
     double physicalEnergyScale;
     double displayGain;
+    RuntimeCausticPhotonEstimatorSettings3D estimator;
 } RuntimeCausticBeamMapSettings3D;
 
 typedef struct {
@@ -21,14 +23,22 @@ typedef struct {
     double radius;
     int mediumId;
     bool requireMediumId;
+    RuntimeCausticPhotonSegmentStage3D segmentStage;
+    bool requireSegmentStage;
     double minDirectionDot;
     uint64_t candidateLimit;
     double physicalEnergyScale;
     double displayGain;
+    RuntimeCausticPhotonEstimatorSettings3D estimator;
 } RuntimeCausticBeamMapQuery3D;
 
 typedef struct {
     bool hit;
+    Vec3 queryPosition;
+    Vec3 queryDirection;
+    double queryRadius;
+    int queryMediumId;
+    RuntimeCausticPhotonSegmentStage3D querySegmentStage;
     Vec3 flux;
     Vec3 physicalFlux;
     Vec3 displayFlux;
@@ -36,16 +46,33 @@ typedef struct {
     uint64_t testedCount;
     uint64_t candidateCount;
     uint64_t contributingCount;
+    uint64_t contributingPhotonIdXor;
+    uint64_t contributingPhotonIdSum;
     uint64_t radiusRejectCount;
     uint64_t directionRejectCount;
     uint64_t mediumRejectCount;
+    uint64_t stageRejectCount;
     uint64_t candidateLimit;
     bool candidateLimitReached;
     double physicalEnergyScale;
     double displayGain;
     double nearestDistance;
+    double nearestContributionDistance;
+    double farthestContributionDistance;
     double nearestT;
     double nearestDirectionDot;
+    Vec3 meanBeamDirection;
+    double beamDirectionWeightSum;
+    double meanBeamDistance;
+    double kernelRadius;
+    double kernelBoundaryWeight;
+    double meanContributionDistance;
+    double varianceProxy;
+    uint64_t effectiveSampleCount;
+    Vec3 rejectedPhysicalFlux;
+    RuntimeCausticPhotonEstimatorSettings3D estimator;
+    const char* estimatorLabel;
+    bool estimatorImplemented;
 } RuntimeCausticBeamMapQueryResult3D;
 
 typedef struct {
@@ -65,8 +92,25 @@ typedef struct {
     bool lastQueryAccelerationUsed;
     uint64_t lastQueryGridCellVisitCount;
     double lastQueryNearestDistance;
+    double lastQueryNearestContributionDistance;
+    double lastQueryFarthestContributionDistance;
     double lastQueryNearestT;
     double lastQueryNearestDirectionDot;
+    double lastQueryMeanContributionDistance;
+    double lastQueryVarianceProxy;
+    uint64_t lastQueryEffectiveSampleCount;
+    uint64_t lastQueryRadiusRejectCount;
+    uint64_t lastQueryDirectionRejectCount;
+    uint64_t lastQueryMediumRejectCount;
+    uint64_t lastQueryStageRejectCount;
+    Vec3 lastQueryMeanBeamDirection;
+    double lastQueryMeanBeamDistance;
+    double lastQueryKernelRadius;
+    double lastQueryKernelBoundaryWeight;
+    Vec3 lastQueryRejectedPhysicalFlux;
+    RuntimeCausticPhotonEstimatorSettings3D lastQueryEstimator;
+    const char* lastQueryEstimatorLabel;
+    bool lastQueryEstimatorImplemented;
     Vec3 totalStoredFlux;
     Vec3 totalQueriedPhysicalFlux;
     Vec3 totalQueriedDisplayFlux;
@@ -84,6 +128,7 @@ typedef struct {
 
 typedef struct {
     RuntimeCausticPhotonVolumeBeamSegment3D* segments;
+    double* segmentFiniteNormalization;
     int64_t* accelerationBucketHeads;
     int64_t* accelerationSegmentNext;
     int64_t* accelerationSegmentCellX;
@@ -91,6 +136,11 @@ typedef struct {
     int64_t* accelerationSegmentCellZ;
     uint64_t segmentCapacity;
     uint64_t segmentCount;
+    bool finiteSegmentNormalizationPrepared;
+    uint64_t finiteSegmentNormalizationCount;
+    double finiteSegmentNormalizationScaleMinimum;
+    double finiteSegmentNormalizationScaleMaximum;
+    double finiteSegmentNormalizationScaleMean;
     uint64_t storeAttemptCount;
     uint64_t storeAcceptedCount;
     uint64_t storeRejectedCount;

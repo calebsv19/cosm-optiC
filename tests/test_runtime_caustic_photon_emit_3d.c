@@ -3,7 +3,12 @@
 #include "render/runtime_caustic_photon_emit_3d.h"
 #include "test_support.h"
 
+#include <math.h>
 #include <stdio.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 static RuntimeLightSet3D test_light_set(void) {
     RuntimeLightSet3D set;
@@ -210,10 +215,55 @@ static int test_runtime_caustic_photon_emit_map_capacity_rejects(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_emit_rect_radiance_power_contract(void) {
+    RuntimeLightSet3D set;
+    RuntimeLightSource3D light;
+    RuntimeCausticPhotonEmissionSettings3D settings;
+    RuntimeCausticPhotonEmissionBatch3D batch;
+    RuntimeCausticPhotonEmissionDiagnostics3D diag;
+
+    RuntimeLightSet3D_Init(&set);
+    RuntimeLightSource3D_Init(&light);
+    light.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_RECT;
+    light.emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED;
+    light.radiometryMode = RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE;
+    light.width = 0.5;
+    light.height = 0.25;
+    light.normal = vec3(0.0, 0.0, -1.0);
+    light.color = vec3(1.0, 0.5, 0.25);
+    light.radiance = 4.0;
+    assert_true("runtime_caustic_photon_emit_radiance_append",
+                RuntimeLightSet3D_Append(&set, &light, NULL));
+    RuntimeCausticPhotonEmission3D_DefaultSettings(&settings);
+    settings.sampleBudget = 64u;
+    RuntimeCausticPhotonEmission3D_InitBatch(&batch);
+    assert_true("runtime_caustic_photon_emit_radiance_allocate",
+                RuntimeCausticPhotonEmission3D_AllocateBatch(&batch, 64u));
+    assert_true("runtime_caustic_photon_emit_radiance_emit",
+                RuntimeCausticPhotonEmission3D_EmitFromLightSet(
+                    &batch, &set, &settings, &diag));
+    assert_close("runtime_caustic_photon_emit_radiance_total_r",
+                 diag.totalEmittedFlux.x,
+                 0.5 * M_PI,
+                 1e-12);
+    assert_close("runtime_caustic_photon_emit_radiance_total_g",
+                 diag.totalEmittedFlux.y,
+                 0.25 * M_PI,
+                 1e-12);
+    assert_true("runtime_caustic_photon_emit_radiance_cosine_samples",
+                batch.samples[0].directionPdf > 0.0 &&
+                    batch.samples[0].directionPdf < 1.0 / M_PI &&
+                    vec3_dot(batch.samples[0].direction, light.normal) > 0.0);
+    RuntimeCausticPhotonEmission3D_FreeBatch(&batch);
+    RuntimeLightSet3D_Free(&set);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_emit_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_emit_deterministic_samples();
     failures += test_runtime_caustic_photon_emit_populates_surface_map_proxy();
     failures += test_runtime_caustic_photon_emit_map_capacity_rejects();
+    failures += test_runtime_caustic_photon_emit_rect_radiance_power_contract();
     return failures;
 }

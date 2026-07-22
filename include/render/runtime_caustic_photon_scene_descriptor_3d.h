@@ -35,5 +35,9 @@ bool RuntimeCausticPhotonSceneDescriptor3D_HarvestMeshDielectricBatch(
 const RuntimeCausticPhotonMeshDielectricDescriptor3D*
 RuntimeCausticPhotonSceneDescriptor3D_SelectedMeshDielectric(
     const RuntimeCausticPhotonSceneDescriptorBatch3D* batch);
+uint32_t RuntimeCausticPhotonSceneDescriptor3D_CopyMeshDielectricShapes(
+    const RuntimeCausticPhotonSceneDescriptorBatch3D* batch,
+    RuntimeCausticLensShape3D* out_shapes,
+    uint32_t capacity);
 
 #endif

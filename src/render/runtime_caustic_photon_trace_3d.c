@@ -3,6 +3,8 @@
 #include <math.h>
 #include <string.h>
 
+#include "render/runtime_caustic_photon_path_weight_3d.h"
+
 static double photon_trace_clamp(double value, double min_value, double max_value) {
     if (value < min_value) return min_value;
     if (value > max_value) return max_value;
@@ -105,7 +107,7 @@ void RuntimeCausticPhotonTrace3D_DefaultSettings(
     if (!settings) return;
     memset(settings, 0, sizeof(*settings));
     settings->maxDepth = RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS;
-    settings->minFluxLuma = 0.0;
+    settings->minTransportWeightLuma = 0.0;
 }
 
 void RuntimeCausticPhotonTrace3D_InitPathState(
@@ -119,6 +121,7 @@ void RuntimeCausticPhotonTrace3D_InitPathState(
     out_state->photonId = sample->photonId;
     out_state->position = sample->position;
     out_state->direction = photon_trace_normalize_or_zero(sample->direction);
+    out_state->transportWeight = vec3(1.0, 1.0, 1.0);
     out_state->throughput = sample->flux;
     out_state->pathPdf = sample->emissionPdf > 1.0e-12 ? sample->emissionPdf : 1.0;
     out_state->active = true;
@@ -136,6 +139,7 @@ bool RuntimeCausticPhotonTrace3D_FromLensPath(
     RuntimeCausticPhotonDielectricEvent3D dielectric_event;
     RuntimeCausticPhotonPathState3D current;
     Vec3 current_flux = vec3(0.0, 0.0, 0.0);
+    Vec3 current_weight = vec3(1.0, 1.0, 1.0);
     double current_pdf = 1.0;
 
     if (out_trace) memset(out_trace, 0, sizeof(*out_trace));
@@ -212,6 +216,13 @@ bool RuntimeCausticPhotonTrace3D_FromLensPath(
             throughput_after = vec3(0.0, 0.0, 0.0);
             trace.debug.absorbedBranchCount++;
         }
+        if (!RuntimeCausticPhotonPathWeight3D_ApplyThroughputRatio(
+                current_weight,
+                current_flux,
+                throughput_after,
+                &current_weight)) {
+            return false;
+        }
         current_pdf *= branch_pdf > 1.0e-12 ? branch_pdf : 1.0;
 
         memset(&dielectric_event, 0, sizeof(dielectric_event));
@@ -264,10 +275,12 @@ bool RuntimeCausticPhotonTrace3D_FromLensPath(
     current.depth = lens_path->interfaceEventCount;
     current.position = lens_path->postExitOrigin;
     current.direction = photon_trace_normalize_or_zero(lens_path->postExitDirection);
+    current.transportWeight = current_weight;
     current.throughput = current_flux;
     current.pathPdf = current_pdf;
     current.active = true;
-    current.terminated = photon_trace_luma(current_flux) <= active_settings->minFluxLuma;
+    current.terminated = photon_trace_luma(current_weight) <=
+                         active_settings->minTransportWeightLuma;
     current.rejectReason = current.terminated
                                ? RUNTIME_CAUSTIC_PHOTON_REJECT_BELOW_FLUX_THRESHOLD
                                : RUNTIME_CAUSTIC_PHOTON_REJECT_NONE;

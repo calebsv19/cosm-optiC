@@ -90,6 +90,8 @@ typedef struct RayTracingHeadlessPreflight {
     int registered_light_emission_omni_count;
     int registered_light_emission_one_sided_count;
     int registered_light_emission_two_sided_count;
+    int registered_light_radiometry_legacy_count;
+    int registered_light_radiometry_lambertian_count;
     int registered_light_emissive_candidate_count;
     double registered_light_emissive_area;
     double registered_light_emissive_weight;
@@ -99,6 +101,10 @@ typedef struct RayTracingHeadlessPreflight {
     double registered_light_first_position_z;
     double registered_light_first_radius;
     double registered_light_first_intensity;
+    double registered_light_first_radiance;
+    double registered_light_first_total_power_r;
+    double registered_light_first_total_power_g;
+    double registered_light_first_total_power_b;
     double registered_light_first_color_r;
     double registered_light_first_color_g;
     double registered_light_first_color_b;

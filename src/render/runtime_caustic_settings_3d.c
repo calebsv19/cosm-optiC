@@ -191,6 +191,6 @@ RuntimeCausticReadback3D RuntimeCausticSettings3D_Phase0Readback(
         src->mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
         src->transportEngine == RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP &&
         (src->volumeCacheEnabled || src->surfaceCacheEnabled);
-    readback.photonMapImplemented = false;
+    readback.photonMapImplemented = readback.photonMapRequested;
     return readback;
 }

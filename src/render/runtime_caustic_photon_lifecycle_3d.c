@@ -25,6 +25,7 @@ void RuntimeCausticPhotonMapLifecycle3D_Init(RuntimeCausticPhotonMapLifecycleSta
 void RuntimeCausticPhotonMapLifecycle3D_BuildInputFromScene(
     const RuntimeScene3D* scene,
     int sample_budget,
+    uint32_t emission_seed,
     int max_path_depth,
     double surface_query_radius,
     double volume_query_radius,
@@ -75,6 +76,9 @@ void RuntimeCausticPhotonMapLifecycle3D_BuildInputFromScene(
     out_input->volumeKey = volume;
     out_input->budgetKey = ((uint64_t)(unsigned int)sample_budget << 32u) |
                          (uint32_t)max_path_depth;
+    out_input->budgetKey = lifecycle_hash_bytes(out_input->budgetKey,
+                                                &emission_seed,
+                                                sizeof(emission_seed));
     out_input->budgetKey = lifecycle_hash_bytes(out_input->budgetKey,
                                                 &surface_query_radius,
                                                 sizeof(surface_query_radius));

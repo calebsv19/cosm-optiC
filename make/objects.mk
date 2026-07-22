@@ -15,6 +15,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_light_set_3d.o \
 	$(BUILD_DIR)/render/runtime_light_set_3d.o \
+	$(BUILD_DIR)/render/runtime_light_radiometry_3d.o \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
@@ -26,24 +27,39 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_lens_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_lens_transport_shapes_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_emit_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_emission_proposal_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_estimator_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_integration_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_integration_population_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_lifecycle_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_map_store_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_medium_stack_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_path_transport_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_path_population_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_path_scheduler_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_path_weight_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_provenance_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_beam_contribution_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_direction_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_sampling_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_direct_consumer_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_bsdf_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_patch_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_sample_support_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_contribution_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_scene_descriptor_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_scene_population_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_scene_trace_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_sparse_brick_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_settings_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_surface_kernel_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_trace_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_volume_beam_estimator_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_volume_segment_normalization_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_distributed_beam_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_settings_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_sphere_lens_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_surface_cache_3d.o \
@@ -105,6 +121,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_render_output.o \
 	$(BUILD_DIR)/render/runtime_native_3d_prepared_scene_cache.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_prepare.o \
+	$(BUILD_DIR)/render/runtime_native_3d_render_photon_prepare.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_request_snapshot.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_stats.o \
@@ -280,11 +297,20 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_caustic_beam_map_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_lens_transport_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_emit_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_direct_consumer_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_estimator_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_integration_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_map_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_medium_acceptance_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_medium_stack_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_path_transport_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_ppm28_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_ppm29_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_ppm30_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_provenance_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_sparse_cache_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_surface_provenance_filter_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_volume_segment_normalization_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_bsdf_policy_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_bsdf_sampling_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_scene_population_3d.o \

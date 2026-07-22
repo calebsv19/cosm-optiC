@@ -40,6 +40,10 @@ static int test_runtime_caustic_photon_trace_defaults(void) {
                       state.direction,
                       vec3(0.0, 0.0, -1.0),
                       1e-9);
+    assert_vec3_close("runtime_caustic_photon_trace_state_transport_weight",
+                      state.transportWeight,
+                      vec3(1.0, 1.0, 1.0),
+                      1e-9);
     assert_close("runtime_caustic_photon_trace_state_pdf", state.pathPdf, 0.5, 1e-9);
     return 0;
 }

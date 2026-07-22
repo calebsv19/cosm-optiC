@@ -91,16 +91,21 @@ bool RuntimeCausticPhotonIntegration3D_SelectVolumeBeamQueryForVolume(
 
     RuntimeCausticBeamMap3D_DefaultQuery(&query);
     query.mediumId = medium_id;
-    query.requireMediumId = true;
+    query.requireMediumId = medium_id >= 0;
+    query.segmentStage = RUNTIME_CAUSTIC_PHOTON_SEGMENT_STAGE_POST_LENS;
+    query.requireSegmentStage = true;
     query.radius = beam_contribution_positive_or_default(radius, query.radius);
     for (i = 0u; i < beam_map->segmentCount; ++i) {
         const RuntimeCausticPhotonVolumeBeamSegment3D* segment = &beam_map->segments[i];
         Vec3 midpoint;
 
-        if (segment->mediumId != medium_id) continue;
+        if (query.requireMediumId && segment->mediumId != medium_id) continue;
+        if (segment->provenance.segmentStage != query.segmentStage) continue;
         if (!beam_contribution_segment_volume_midpoint(segment, volume, &midpoint)) continue;
         query.position = midpoint;
         query.direction = vec3_normalize(segment->direction);
+        query.mediumId = segment->mediumId;
+        query.requireMediumId = true;
         *out_query = query;
         return true;
     }

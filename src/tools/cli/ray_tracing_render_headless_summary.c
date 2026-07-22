@@ -228,10 +228,39 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"caustic_product_mode\": \"%s\",\n",
             RuntimeCausticProductMode3D_Label(
                 request->caustic_photon_integration_settings.productMode));
+    fprintf(file, "    \"caustic_photon_quality\": \"%s\",\n",
+            RuntimeCausticPhotonBudgetTier3D_Label(
+                request->caustic_photon_integration_settings.qualityTier));
+    fprintf(file, "    \"caustic_photon_consumer\": \"%s\",\n",
+            RuntimeCausticPhotonConsumer3D_Label(
+                request->caustic_photon_integration_settings.consumer));
+    fprintf(file, "    \"caustic_photon_surface_estimator\": \"%s\",\n",
+            RuntimeCausticPhotonEstimator3D_Label(
+                request->caustic_photon_integration_settings.surfaceEstimator));
+    fprintf(file,
+            "    \"caustic_photon_surface_gather_neighbors\": %llu,\n",
+            (unsigned long long)request->caustic_photon_integration_settings
+                .surfaceGatherNeighborCount);
+    fprintf(file,
+            "    \"caustic_photon_surface_gather_max_radius\": %.9f,\n",
+            request->caustic_photon_integration_settings.surfaceGatherMaxRadius);
+    fprintf(file, "    \"caustic_photon_volume_cache_backend\": \"%s\",\n",
+            RuntimeCausticDistributedBeamStorageBackend3D_Label(
+                request->caustic_photon_integration_settings
+                    .volumeCacheStorageBackend));
     fprintf(file, "    \"caustic_render_contribution_enabled\": %s,\n",
             request->caustic_photon_integration_settings.renderContributionEnabled
                 ? "true"
                 : "false");
+    fprintf(file,
+            "    \"caustic_photon_surface_path_filter\": \"%s\",\n",
+            RuntimeCausticPhotonSurfacePathFilter3D_Label(
+                request->caustic_photon_integration_settings
+                    .surfacePathFilter));
+    fprintf(file,
+            "    \"caustic_photon_surface_receiver_scene_object_index\": %d,\n",
+            request->caustic_photon_integration_settings
+                .surfaceReceiverSceneObjectIndex);
     fprintf(file, "    \"caustic_photon_render_prep_population_enabled\": %s,\n",
             request->caustic_photon_render_prep_population_enabled ? "true"
                                                                    : "false");
@@ -349,6 +378,9 @@ void ray_tracing_render_headless_write_summary(
             preflight->registered_light_emission_omni_count,
             preflight->registered_light_emission_one_sided_count,
             preflight->registered_light_emission_two_sided_count);
+    fprintf(file, "    \"radiometry_counts\": { \"legacy_intensity\": %d, \"lambertian_radiance\": %d },\n",
+            preflight->registered_light_radiometry_legacy_count,
+            preflight->registered_light_radiometry_lambertian_count);
     fprintf(file, "    \"emissive_candidate_count\": %d,\n",
             preflight->registered_light_emissive_candidate_count);
     fprintf(file, "    \"emissive_area\": %.9f,\n",
@@ -365,6 +397,12 @@ void ray_tracing_render_headless_write_summary(
             preflight->registered_light_first_radius);
     fprintf(file, "    \"first_intensity\": %.9f,\n",
             preflight->registered_light_first_intensity);
+    fprintf(file, "    \"first_radiance\": %.9f,\n",
+            preflight->registered_light_first_radiance);
+    fprintf(file, "    \"first_total_emitted_power\": [%.9f, %.9f, %.9f],\n",
+            preflight->registered_light_first_total_power_r,
+            preflight->registered_light_first_total_power_g,
+            preflight->registered_light_first_total_power_b);
     fprintf(file, "    \"first_color\": [%.9f, %.9f, %.9f]\n",
             preflight->registered_light_first_color_r,
             preflight->registered_light_first_color_g,

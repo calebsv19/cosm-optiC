@@ -1,4 +1,5 @@
 #include "render/runtime_caustic_photon_emit_3d.h"
+#include "render/runtime_light_radiometry_3d.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -72,8 +73,14 @@ static double photon_emit_light_area(const RuntimeLightSource3D* light) {
 }
 
 static double photon_emit_light_weight(const RuntimeLightSource3D* light) {
+    RuntimeLightRadiometry3DEvaluation radiometry;
     double color_luma = 0.0;
     if (!light || !light->enabled) return 0.0;
+    if (light->radiometryMode == RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE) {
+        return RuntimeLightRadiometry3D_Evaluate(light, &radiometry)
+                   ? photon_emit_luma(radiometry.totalEmittedPower)
+                   : 0.0;
+    }
     color_luma = photon_emit_luma(light->color);
     if (!(color_luma > 0.0)) color_luma = 1.0;
     return photon_emit_nonnegative(light->intensity) *
@@ -115,13 +122,15 @@ static Vec3 photon_emit_sample_unit_sphere(double u0, double u1) {
 
 static Vec3 photon_emit_sample_position(const RuntimeLightSource3D* light,
                                         double u0,
-                                        double u1) {
+                                        double u1,
+                                        double* out_pdf) {
     Vec3 axis_u;
     Vec3 axis_v;
     Vec3 normal;
     double radius = 0.0;
     double r = 0.0;
     double phi = 0.0;
+    if (out_pdf) *out_pdf = 1.0;
     if (!light) return vec3(0.0, 0.0, 0.0);
 
     axis_u = photon_emit_normalize_or(light->axisU, vec3(1.0, 0.0, 0.0));
@@ -131,20 +140,32 @@ static Vec3 photon_emit_sample_position(const RuntimeLightSource3D* light,
     switch (light->kind) {
         case RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE:
             radius = photon_emit_nonnegative(light->radius);
+            if (out_pdf && radius > 1.0e-12) {
+                *out_pdf = 1.0 / (4.0 * M_PI * radius * radius);
+            }
             return vec3_add(light->position,
                             vec3_scale(photon_emit_sample_unit_sphere(u0, u1), radius));
         case RUNTIME_LIGHT_SOURCE_3D_KIND_DISK:
             radius = photon_emit_nonnegative(light->radius);
+            if (out_pdf && radius > 1.0e-12) {
+                *out_pdf = 1.0 / (M_PI * radius * radius);
+            }
             r = sqrt(u0) * radius;
             phi = 2.0 * M_PI * u1;
             return vec3_add(light->position,
                             vec3_add(vec3_scale(axis_u, cos(phi) * r),
                                      vec3_scale(axis_v, sin(phi) * r)));
         case RUNTIME_LIGHT_SOURCE_3D_KIND_RECT:
+            if (out_pdf && light->width > 1.0e-12 && light->height > 1.0e-12) {
+                *out_pdf = 1.0 / (light->width * light->height);
+            }
             return vec3_add(light->position,
                             vec3_add(vec3_scale(axis_u, (u0 - 0.5) * light->width),
                                      vec3_scale(axis_v, (u1 - 0.5) * light->height)));
         case RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE:
+            if (out_pdf && light->emissiveArea > 1.0e-12) {
+                *out_pdf = 1.0 / light->emissiveArea;
+            }
             return light->emissiveArea > 0.0 ? light->emissiveCentroid : light->position;
         case RUNTIME_LIGHT_SOURCE_3D_KIND_POINT:
         default:
@@ -156,21 +177,36 @@ static Vec3 photon_emit_sample_position(const RuntimeLightSource3D* light,
 static Vec3 photon_emit_sample_direction(const RuntimeLightSource3D* light,
                                          Vec3 sampled_position,
                                          double u0,
-                                         double u1) {
+                                         double u1,
+                                         double* out_pdf) {
     Vec3 normal;
+    if (out_pdf) *out_pdf = 1.0 / (4.0 * M_PI);
     if (!light) return vec3(0.0, -1.0, 0.0);
-    normal = photon_emit_normalize_or(light->normal, vec3(0.0, -1.0, 0.0));
-    if (light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE) {
-        return photon_emit_normalize_or(vec3_sub(sampled_position, light->position),
-                                        normal);
+    {
+        Vec3 radiometric_direction;
+        double radiometric_pdf = 0.0;
+        if (RuntimeLightRadiometry3D_SampleDirection(light,
+                                                     u0,
+                                                     u1,
+                                                     &radiometric_direction,
+                                                     &radiometric_pdf)) {
+            if (out_pdf) *out_pdf = radiometric_pdf;
+            return radiometric_direction;
+        }
     }
-    if (light->emissionProfile == RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI) {
+    normal = photon_emit_normalize_or(light->normal, vec3(0.0, -1.0, 0.0));
+    if (light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE ||
+        light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_POINT ||
+        light->emissionProfile == RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI) {
         return photon_emit_sample_unit_sphere(u0, u1);
     }
     if (light->emissionProfile == RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED &&
         u0 < 0.5) {
+        if (out_pdf) *out_pdf = 0.5;
         return vec3_scale(normal, -1.0);
     }
+    if (out_pdf) *out_pdf = 1.0;
+    (void)sampled_position;
     return normal;
 }
 
@@ -305,6 +341,8 @@ bool RuntimeCausticPhotonEmission3D_EmitFromLightSet(
         const double source_u = photon_emit_unit(seed0);
         const double source_target = source_u * total_weight;
         double light_weight = 0.0;
+        double position_pdf = 1.0;
+        double direction_pdf = 1.0;
         int light_index = -1;
         const RuntimeLightSource3D* light =
             photon_emit_pick_enabled_light(light_set,
@@ -312,8 +350,15 @@ bool RuntimeCausticPhotonEmission3D_EmitFromLightSet(
                                            &light_weight,
                                            &light_index);
         const double source_pdf = light_weight > 0.0 ? light_weight / total_weight : 0.0;
+        RuntimeLightRadiometry3DEvaluation radiometry;
+        const bool physical_mode =
+            light && light->radiometryMode ==
+                         RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE;
+        const bool physical_radiometry =
+            light && RuntimeLightRadiometry3D_Evaluate(light, &radiometry);
         if (batch->sampleCount >= batch->sampleCapacity || !light ||
-            !(source_pdf > 1.0e-12)) {
+            !(source_pdf > 1.0e-12) ||
+            (physical_mode && !physical_radiometry)) {
             diag.rejectedPhotonCount += 1u;
             diag.lastRejectReason = RUNTIME_CAUSTIC_PHOTON_REJECT_MAP_CAPACITY;
             continue;
@@ -327,15 +372,37 @@ bool RuntimeCausticPhotonEmission3D_EmitFromLightSet(
         sample.wavelengthBucket = (int)(seed1 % 3u);
         sample.position = photon_emit_sample_position(light,
                                                       photon_emit_unit(seed1),
-                                                      photon_emit_unit(seed2));
+                                                      photon_emit_unit(seed2),
+                                                      &position_pdf);
         sample.direction = photon_emit_sample_direction(light,
                                                        sample.position,
                                                        photon_emit_unit(seed2),
-                                                       photon_emit_unit(seed3));
-        sample.emissionPdf = source_pdf;
-        sample.flux = vec3_scale(light->color,
-                                 photon_emit_nonnegative(light->intensity) /
-                                     (source_pdf * (double)requested));
+                                                       photon_emit_unit(seed3),
+                                                       &direction_pdf);
+        sample.sourceSelectionPdf = source_pdf;
+        sample.positionPdf = position_pdf;
+        sample.directionPdf = direction_pdf;
+        sample.baseDirectionPdf = direction_pdf;
+        sample.emissionPdf = source_pdf * position_pdf * direction_pdf;
+        sample.proposalDirection = sample.direction;
+        sample.proposalPdf = sample.emissionPdf;
+        sample.emissionFluxCorrection = 1.0;
+        sample.fluxPdfCompensated = true;
+        sample.guidingChangedSample = false;
+        sample.guidingPdfFluxCorrected = false;
+        if (physical_radiometry) {
+            /* Cosine sampling exactly integrates L_e cos(theta) over the
+             * authored emitting hemisphere, so every photon carries an equal
+             * share of the selected source's physical emitted power. */
+            sample.flux = vec3_scale(radiometry.totalEmittedPower,
+                                     1.0 / (source_pdf * (double)requested));
+        } else {
+            /* Compatibility contract for existing scenes. */
+            sample.flux = vec3_scale(light->color,
+                                     photon_emit_nonnegative(light->intensity) *
+                                         photon_emit_light_area(light) /
+                                         (source_pdf * (double)requested));
+        }
         batch->samples[batch->sampleCount++] = sample;
         diag.emittedPhotonCount += 1u;
         diag.sourcePdfSum += source_pdf;
@@ -382,7 +449,8 @@ bool RuntimeCausticPhotonEmission3D_StoreSurfaceProxyRecords(
         record.depth = 0u;
         record.position = sample->position;
         record.normal = normal;
-        record.incidentDirection = sample->direction;
+        /* Synthetic proxy records represent arrivals on the declared receiver. */
+        record.incidentDirection = vec3_scale(normal, -1.0);
         record.flux = sample->flux;
         record.pathPdf = sample->emissionPdf;
         record.queryRadius = active_query_radius;

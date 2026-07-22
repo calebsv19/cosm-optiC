@@ -96,6 +96,57 @@ static int test_scene_object_z_missing_fallback(void) {
     return 0;
 }
 
+static int test_scene_object_glass_colors_roundtrip(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeSceneConfigPath, &backup_size);
+    SceneConfig saved_scene = sceneSettings;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.windowWidth = 320;
+    sceneSettings.windowHeight = 240;
+    sceneSettings.camera.zoom = 1.0;
+    sceneSettings.cameraMargin = 24.0;
+    sceneSettings.rays = 128;
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0],
+               OBJECT_CIRCLE,
+               12.0,
+               34.0,
+               5.0,
+               0.0,
+               NULL,
+               0);
+    sceneSettings.sceneObjects[0].hasGlassInterfaceTintOverride = true;
+    sceneSettings.sceneObjects[0].glassInterfaceTint = 0xDDEEFF;
+    sceneSettings.sceneObjects[0].hasGlassAbsorptionColorOverride = true;
+    sceneSettings.sceneObjects[0].glassAbsorptionColor = 0x2A6B91;
+
+    SaveSceneConfig();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    LoadSceneConfig();
+
+    assert_true("scene_glass_color_roundtrip_object_count",
+                sceneSettings.objectCount >= 1);
+    if (sceneSettings.objectCount >= 1) {
+        assert_true("scene_glass_interface_tint_override_roundtrip",
+                    sceneSettings.sceneObjects[0]
+                        .hasGlassInterfaceTintOverride);
+        assert_true("scene_glass_interface_tint_roundtrip",
+                    sceneSettings.sceneObjects[0].glassInterfaceTint ==
+                        0xDDEEFF);
+        assert_true("scene_glass_absorption_color_override_roundtrip",
+                    sceneSettings.sceneObjects[0]
+                        .hasGlassAbsorptionColorOverride);
+        assert_true("scene_glass_absorption_color_roundtrip",
+                    sceneSettings.sceneObjects[0].glassAbsorptionColor ==
+                        0x2A6B91);
+    }
+
+    restore_runtime_scene_config(backup, backup_size);
+    sceneSettings = saved_scene;
+    return 0;
+}
+
 static int test_animation_scene_source_legacy_migration(void) {
     size_t backup_size = 0;
     char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
@@ -675,6 +726,7 @@ int run_test_config_animation_source_volume_suite(void) {
 
     test_scene_object_z_roundtrip();
     test_scene_object_z_missing_fallback();
+    test_scene_object_glass_colors_roundtrip();
     test_animation_scene_source_legacy_migration();
     test_animation_scene_source_roundtrip_runtime_lane();
     test_animation_volume_source_roundtrip_and_defaults();

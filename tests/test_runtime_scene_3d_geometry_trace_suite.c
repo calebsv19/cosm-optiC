@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "material/material.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_ray_3d.h"
@@ -591,6 +592,38 @@ static int test_runtime_visibility_3d_volume_transport_contract(void) {
     return 0;
 }
 
+static int test_runtime_visibility_3d_solid_dielectric_direct_path_policy(void) {
+    RuntimeMaterialPayload3D payload = {0};
+
+    payload.valid = true;
+    payload.materialId = MATERIAL_PRESET_TRANSPARENT;
+    payload.transparency = 0.9;
+    payload.thinWalled = false;
+
+    RuntimeVisibility3D_SetBlockSolidDielectricDirectPaths(false);
+    assert_true("runtime_visibility_solid_policy_default_off",
+                !RuntimeVisibility3D_BlockSolidDielectricDirectPathsEnabled());
+    assert_true("runtime_visibility_solid_policy_legacy_allows",
+                !RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(&payload));
+
+    RuntimeVisibility3D_SetBlockSolidDielectricDirectPaths(true);
+    assert_true("runtime_visibility_solid_policy_enabled",
+                RuntimeVisibility3D_BlockSolidDielectricDirectPathsEnabled());
+    assert_true("runtime_visibility_solid_policy_blocks_solid_glass",
+                RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(&payload));
+
+    payload.thinWalled = true;
+    assert_true("runtime_visibility_solid_policy_preserves_thin_sheet",
+                !RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(&payload));
+    payload.thinWalled = false;
+    payload.materialId = 0;
+    assert_true("runtime_visibility_solid_policy_preserves_alpha_layer",
+                !RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(&payload));
+
+    RuntimeVisibility3D_SetBlockSolidDielectricDirectPaths(false);
+    return 0;
+}
+
 static int test_runtime_camera_projector_3d_center_ray_contract(void) {
     RuntimeCamera3D camera = {0};
     RuntimeCameraProjector3D projector = {0};
@@ -704,6 +737,8 @@ int run_test_runtime_scene_3d_geometry_trace_suite(void) {
     test_runtime_visibility_3d_blocked_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_visibility_3d_volume_transport_contract");
     test_runtime_visibility_3d_volume_transport_contract();
+    test_runtime_scene_3d_geometry_trace("test_runtime_visibility_3d_solid_dielectric_direct_path_policy");
+    test_runtime_visibility_3d_solid_dielectric_direct_path_policy();
     test_runtime_scene_3d_geometry_trace("test_runtime_camera_projector_3d_center_ray_contract");
     test_runtime_camera_projector_3d_center_ray_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_camera_projector_3d_pitch_contract");

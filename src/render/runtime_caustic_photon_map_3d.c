@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "render/runtime_caustic_photon_surface_kernel_3d.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -14,10 +16,19 @@ enum {
     RUNTIME_CAUSTIC_PHOTON_MAP_MAX_CAPACITY = 262144,
     RUNTIME_CAUSTIC_PHOTON_MAP_DEFAULT_QUERY_CANDIDATE_LIMIT = 4096,
     RUNTIME_CAUSTIC_PHOTON_MAP_ACCEL_MIN_BUCKETS = 1024,
-    RUNTIME_CAUSTIC_PHOTON_MAP_ACCEL_MAX_BUCKETS = 65536
+    RUNTIME_CAUSTIC_PHOTON_MAP_ACCEL_MAX_BUCKETS = 65536,
+    RUNTIME_CAUSTIC_PHOTON_MAP_NEIGHBOR_GATHER_MAX = 256
 };
 
 static const double RUNTIME_CAUSTIC_PHOTON_MAP_ACCEL_CELL_SIZE = 0.25;
+
+static bool photon_map_estimator_uses_neighbor_gather(
+    RuntimeCausticPhotonEstimator3D estimator) {
+    return estimator == RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_NEIGHBOR_GATHER ||
+           estimator == RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_BUDGET_SCALED_GATHER ||
+           estimator ==
+               RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_POPULATION_SCALED_GATHER;
+}
 
 static double photon_map_clamp(double value, double min_value, double max_value) {
     if (value < min_value) return min_value;
@@ -32,12 +43,6 @@ static double photon_map_luma(Vec3 value) {
 static Vec3 photon_map_normalize_or_default(Vec3 value, Vec3 fallback) {
     if (!(vec3_length(value) > 1.0e-12)) return fallback;
     return vec3_normalize(value);
-}
-
-static double photon_map_kernel_area_normalization(double radius) {
-    const double area = M_PI * radius * radius;
-    if (!(area > 1.0e-12)) return 1.0;
-    return 1.0 / area;
 }
 
 static double photon_map_positive_or_default(double value, double fallback) {
@@ -190,23 +195,43 @@ static void photon_map_accel_insert(RuntimeCausticPhotonMap3D* map,
     map->accelerationInsertedCount += 1u;
 }
 
-static bool photon_map_receiver_identity_matches(
+static RuntimeCausticPhotonReceiverMatchReason3D photon_map_receiver_match(
     const RuntimeCausticPhotonMapRecord3D* record,
     const RuntimeCausticPhotonMapQuery3D* query) {
-    if (!record || !query || !query->requireReceiverIdentity) return true;
-    if (record->sceneObjectIndex >= 0 && query->sceneObjectIndex >= 0 &&
-        record->sceneObjectIndex != query->sceneObjectIndex) {
-        return false;
+    RuntimeCausticPhotonReceiverIdentity3D record_identity;
+    RuntimeCausticPhotonReceiverIdentity3D query_identity;
+    if (!record || !query || !query->requireReceiverIdentity) {
+        return RUNTIME_CAUSTIC_PHOTON_RECEIVER_MATCH;
     }
-    if (record->primitiveIndex >= 0 && query->primitiveIndex >= 0 &&
-        record->primitiveIndex != query->primitiveIndex) {
-        return false;
+    record_identity.sceneObjectIndex = record->sceneObjectIndex;
+    record_identity.materialId = record->materialId;
+    record_identity.primitiveIndex = record->primitiveIndex;
+    record_identity.triangleIndex = record->triangleIndex;
+    query_identity.sceneObjectIndex = query->sceneObjectIndex;
+    query_identity.materialId = query->materialId;
+    query_identity.primitiveIndex = query->primitiveIndex;
+    query_identity.triangleIndex = query->triangleIndex;
+    return RuntimeCausticPhotonReceiverPatch3D_Match(record_identity,
+                                                     query_identity,
+                                                     query->receiverDomain);
+}
+
+static void photon_map_count_receiver_reject(
+    RuntimeCausticPhotonMapQueryResult3D* result,
+    RuntimeCausticPhotonReceiverMatchReason3D reason,
+    Vec3 normalized_flux) {
+    if (!result || reason == RUNTIME_CAUSTIC_PHOTON_RECEIVER_MATCH) return;
+    result->receiverRejectCount += 1u;
+    if (reason == RUNTIME_CAUSTIC_PHOTON_RECEIVER_OBJECT_MISMATCH) {
+        result->receiverObjectRejectCount += 1u;
+    } else if (reason == RUNTIME_CAUSTIC_PHOTON_RECEIVER_MATERIAL_MISMATCH) {
+        result->receiverMaterialRejectCount += 1u;
+    } else if (reason ==
+               RUNTIME_CAUSTIC_PHOTON_RECEIVER_EXACT_TRIANGLE_MISMATCH) {
+        result->receiverExactTriangleRejectCount += 1u;
     }
-    if (record->triangleIndex >= 0 && query->triangleIndex >= 0 &&
-        record->triangleIndex != query->triangleIndex) {
-        return false;
-    }
-    return true;
+    result->rejectedPhysicalFlux =
+        vec3_add(result->rejectedPhysicalFlux, normalized_flux);
 }
 
 static bool photon_map_query_limit_reached(
@@ -219,6 +244,32 @@ static bool photon_map_query_limit_reached(
     return false;
 }
 
+static void photon_map_accumulate_classified_flux(
+    RuntimeCausticPhotonMapQueryResult3D* result,
+    const RuntimeCausticPhotonMapRecord3D* record,
+    Vec3 weighted_flux) {
+    if (!result || !record) return;
+    result->flux = vec3_add(result->flux, weighted_flux);
+    switch (record->provenance.surfacePathClass) {
+        case RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_DIRECT_TWO_INTERFACE:
+            result->directTwoInterfacePhysicalFlux = vec3_add(
+                result->directTwoInterfacePhysicalFlux, weighted_flux);
+            result->directTwoInterfaceContributingCount++;
+            break;
+        case RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_MULTIPATH:
+            result->multipathPhysicalFlux = vec3_add(
+                result->multipathPhysicalFlux, weighted_flux);
+            result->multipathContributingCount++;
+            break;
+        case RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_UNCLASSIFIED:
+        default:
+            result->unclassifiedPhysicalFlux = vec3_add(
+                result->unclassifiedPhysicalFlux, weighted_flux);
+            result->unclassifiedContributingCount++;
+            break;
+    }
+}
+
 static void photon_map_query_consider_record(
     RuntimeCausticPhotonMapQueryResult3D* result,
     const RuntimeCausticPhotonMapRecord3D* record,
@@ -227,36 +278,399 @@ static void photon_map_query_consider_record(
     double query_radius,
     double min_normal_dot) {
     Vec3 delta;
-    double radius;
     double d2;
     double distance;
     double normal_dot;
     double weight;
+    double distance_delta;
     Vec3 normalized_flux;
+    RuntimeCausticPhotonReceiverMatchReason3D receiver_match;
 
     if (!result || !record || !active_query) return;
     delta = vec3_sub(active_query->position, record->position);
-    radius = fmax(query_radius, record->queryRadius);
     d2 = vec3_dot(delta, delta);
     distance = sqrt(fmax(d2, 0.0));
-    normal_dot = fabs(vec3_dot(query_normal, record->normal));
+    normal_dot = vec3_dot(query_normal, record->normal);
     result->testedCount += 1u;
     if (result->candidateCount == 0u || distance < result->nearestDistance) {
         result->nearestDistance = distance;
         result->nearestNormalDot = normal_dot;
     }
     result->candidateCount += 1u;
-    if (d2 > radius * radius || normal_dot < min_normal_dot ||
-        !photon_map_receiver_identity_matches(record, active_query)) {
+    normalized_flux = record->flux;
+    if (distance >= query_radius) {
+        result->radiusRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, normalized_flux);
         return;
     }
-    weight = exp(-d2 / (2.0 * radius * radius)) *
-             photon_map_clamp(normal_dot, 0.0, 1.0) *
-             photon_map_kernel_area_normalization(radius);
-    normalized_flux = vec3_scale(record->flux, 1.0 / record->pathPdf);
-    result->flux = vec3_add(result->flux, vec3_scale(normalized_flux, weight));
+    if (normal_dot < min_normal_dot) {
+        result->normalRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, normalized_flux);
+        return;
+    }
+    {
+        const double incident_cosine =
+            -vec3_dot(record->incidentDirection, query_normal);
+        if (!(incident_cosine > 1.0e-9)) {
+            result->incidentHemisphereRejectCount += 1u;
+            result->rejectedPhysicalFlux =
+                vec3_add(result->rejectedPhysicalFlux, normalized_flux);
+            return;
+        }
+        result->meanIncidentCosine +=
+            (incident_cosine - result->meanIncidentCosine) /
+            (double)(result->contributingCount + 1u);
+    }
+    receiver_match = photon_map_receiver_match(record, active_query);
+    if (receiver_match != RUNTIME_CAUSTIC_PHOTON_RECEIVER_MATCH) {
+        photon_map_count_receiver_reject(result, receiver_match, normalized_flux);
+        return;
+    }
+    weight = RuntimeCausticPhotonSurfaceKernel3D_Weight(distance, query_radius) *
+             photon_map_clamp(normal_dot, 0.0, 1.0);
+    photon_map_accumulate_classified_flux(
+        result, record, vec3_scale(normalized_flux, weight));
     result->weightSum += weight;
     result->contributingCount += 1u;
+    result->effectiveSampleCount = result->contributingCount;
+    if (result->contributingCount == 1u ||
+        distance < result->nearestContributionDistance) {
+        result->nearestContributionDistance = distance;
+    }
+    if (distance > result->farthestContributionDistance) {
+        result->farthestContributionDistance = distance;
+    }
+    distance_delta = distance - result->meanContributionDistance;
+    result->meanContributionDistance +=
+        distance_delta / (double)result->contributingCount;
+    result->varianceProxy +=
+        distance_delta * (distance - result->meanContributionDistance);
+}
+
+static void photon_map_sample_centered_consider_record(
+    RuntimeCausticPhotonMapQueryResult3D* result,
+    const RuntimeCausticPhotonMapRecord3D* record,
+    const RuntimeCausticPhotonMapQuery3D* query,
+    Vec3 query_normal,
+    double query_radius,
+    double min_normal_dot) {
+    const Vec3 delta = vec3_sub(query->position, record->position);
+    const double d2 = vec3_dot(delta, delta);
+    const double distance = sqrt(fmax(d2, 0.0));
+    const double normal_dot = vec3_dot(query_normal, record->normal);
+    const double incident_cosine = -vec3_dot(record->incidentDirection, query_normal);
+    const Vec3 normalized_flux = record->flux;
+    const double support_radius =
+        record->sampleCenteredSupportPrepared &&
+                record->sampleCenteredSupportRadius > 0.0
+            ? fmin(record->sampleCenteredSupportRadius, query_radius)
+            : query_radius;
+    double weight;
+    double distance_delta;
+    RuntimeCausticPhotonReceiverMatchReason3D receiver_match;
+
+    result->testedCount += 1u;
+    if (result->candidateCount == 0u || distance < result->nearestDistance) {
+        result->nearestDistance = distance;
+        result->nearestNormalDot = normal_dot;
+    }
+    result->candidateCount += 1u;
+    if (distance >= support_radius) {
+        result->radiusRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, normalized_flux);
+        return;
+    }
+    if (normal_dot < min_normal_dot) {
+        result->normalRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, normalized_flux);
+        return;
+    }
+    if (!(incident_cosine > 1.0e-9)) {
+        result->incidentHemisphereRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, normalized_flux);
+        return;
+    }
+    receiver_match = photon_map_receiver_match(record, query);
+    if (receiver_match != RUNTIME_CAUSTIC_PHOTON_RECEIVER_MATCH) {
+        photon_map_count_receiver_reject(result, receiver_match, normalized_flux);
+        return;
+    }
+    weight = RuntimeCausticPhotonSurfaceKernel3D_Weight(distance, support_radius) *
+             photon_map_clamp(normal_dot, 0.0, 1.0);
+    photon_map_accumulate_classified_flux(
+        result, record, vec3_scale(normalized_flux, weight));
+    result->weightSum += weight;
+    result->contributingCount += 1u;
+    result->effectiveSampleCount = result->contributingCount;
+    if (result->contributingCount == 1u ||
+        distance < result->nearestContributionDistance) {
+        result->nearestContributionDistance = distance;
+    }
+    if (distance > result->farthestContributionDistance) {
+        result->farthestContributionDistance = distance;
+    }
+    if (support_radius > result->supportRadius) {
+        result->supportRadius = support_radius;
+    }
+    if (support_radius < query_radius) result->supportAdaptive = true;
+    if (!record->sampleCenteredSupportPrepared) result->fallbackUsed = true;
+    distance_delta = distance - result->meanContributionDistance;
+    result->meanContributionDistance +=
+        distance_delta / (double)result->contributingCount;
+    result->varianceProxy +=
+        distance_delta * (distance - result->meanContributionDistance);
+    result->meanIncidentCosine +=
+        (incident_cosine - result->meanIncidentCosine) /
+        (double)result->contributingCount;
+}
+
+static void photon_map_query_sample_centered(
+    RuntimeCausticPhotonMap3D* map,
+    RuntimeCausticPhotonMapQueryResult3D* result,
+    const RuntimeCausticPhotonMapQuery3D* query,
+    Vec3 query_normal,
+    double query_radius,
+    double min_normal_dot,
+    bool* out_acceleration_used,
+    uint64_t* out_grid_cell_visit_count) {
+    if (!map || !result || !query) return;
+    if (photon_map_accel_is_allocated(map) &&
+        map->accelerationInsertedCount == map->recordCount) {
+        const int64_t query_cell_x = photon_map_accel_cell_coord(
+            query->position.x, map->accelerationCellSize);
+        const int64_t query_cell_y = photon_map_accel_cell_coord(
+            query->position.y, map->accelerationCellSize);
+        const int64_t query_cell_z = photon_map_accel_cell_coord(
+            query->position.z, map->accelerationCellSize);
+        const int64_t cell_radius =
+            (int64_t)ceil(query_radius / map->accelerationCellSize);
+        bool stop = false;
+        if (out_acceleration_used) *out_acceleration_used = true;
+        for (int64_t z = query_cell_z - cell_radius;
+             z <= query_cell_z + cell_radius && !stop;
+             ++z) {
+            for (int64_t y = query_cell_y - cell_radius;
+                 y <= query_cell_y + cell_radius && !stop;
+                 ++y) {
+                for (int64_t x = query_cell_x - cell_radius;
+                     x <= query_cell_x + cell_radius;
+                     ++x) {
+                    const uint64_t bucket = photon_map_accel_hash_cell(
+                        x, y, z, map->accelerationBucketCount);
+                    int64_t record_index = map->accelerationBucketHeads[bucket];
+                    if (out_grid_cell_visit_count) (*out_grid_cell_visit_count)++;
+                    while (record_index >= 0) {
+                        const uint64_t index = (uint64_t)record_index;
+                        const int64_t next = map->accelerationRecordNext[index];
+                        if (map->accelerationRecordCellX[index] == x &&
+                            map->accelerationRecordCellY[index] == y &&
+                            map->accelerationRecordCellZ[index] == z) {
+                            if (photon_map_query_limit_reached(result)) {
+                                stop = true;
+                                break;
+                            }
+                            photon_map_sample_centered_consider_record(
+                                result, &map->records[index], query,
+                                query_normal, query_radius, min_normal_dot);
+                        }
+                        record_index = next;
+                    }
+                    if (stop) break;
+                }
+            }
+        }
+    } else {
+        map->accelerationFallbackLinearQueryCount += 1u;
+        for (uint64_t i = 0u; i < map->recordCount; ++i) {
+            if (photon_map_query_limit_reached(result)) break;
+            photon_map_sample_centered_consider_record(
+                result, &map->records[i], query, query_normal, query_radius,
+                min_normal_dot);
+        }
+    }
+}
+
+static void photon_map_neighbor_gather_consider_record(
+    RuntimeCausticPhotonMapQueryResult3D* result,
+    const RuntimeCausticPhotonMapRecord3D* record,
+    uint64_t storage_index,
+    const RuntimeCausticPhotonMapQuery3D* query,
+    Vec3 query_normal,
+    double maximum_radius,
+    double min_normal_dot,
+    RuntimeCausticPhotonEstimatorCandidate3D* candidates,
+    uint64_t* candidate_count,
+    uint64_t candidate_capacity) {
+    const Vec3 delta = vec3_sub(query->position, record->position);
+    const double distance = vec3_length(delta);
+    const double normal_dot = vec3_dot(query_normal, record->normal);
+    const double incident_cosine = -vec3_dot(record->incidentDirection, query_normal);
+    const RuntimeCausticPhotonReceiverMatchReason3D receiver_match =
+        photon_map_receiver_match(record, query);
+    RuntimeCausticPhotonEstimatorCandidate3D candidate;
+
+    result->testedCount += 1u;
+    if (result->candidateCount == 0u || distance < result->nearestDistance) {
+        result->nearestDistance = distance;
+        result->nearestNormalDot = normal_dot;
+    }
+    result->candidateCount += 1u;
+    if (!(distance < maximum_radius)) {
+        result->radiusRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, record->flux);
+        return;
+    }
+    if (normal_dot < min_normal_dot) {
+        result->normalRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, record->flux);
+        return;
+    }
+    if (!(incident_cosine > 1.0e-9)) {
+        result->incidentHemisphereRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, record->flux);
+        return;
+    }
+    if (receiver_match != RUNTIME_CAUSTIC_PHOTON_RECEIVER_MATCH) {
+        photon_map_count_receiver_reject(result, receiver_match, record->flux);
+        return;
+    }
+    candidate.distance = distance;
+    candidate.photonId = record->photonId;
+    candidate.storageIndex = storage_index;
+    (void)RuntimeCausticPhotonEstimator3D_InsertCandidate(
+        candidates, candidate_count, candidate_capacity, candidate);
+}
+
+static void photon_map_neighbor_gather_accumulate(
+    RuntimeCausticPhotonMap3D* map,
+    RuntimeCausticPhotonMapQueryResult3D* result,
+    Vec3 query_normal,
+    double maximum_radius,
+    const RuntimeCausticPhotonEstimatorCandidate3D* candidates,
+    uint64_t candidate_count) {
+    double support_radius;
+    if (!map || !result || !candidates || candidate_count == 0u) return;
+    support_radius = fmax(
+        0.001, candidates[candidate_count - 1u].distance * 1.05);
+    if (support_radius > maximum_radius) support_radius = maximum_radius;
+    result->supportRadius = support_radius;
+    result->supportAdaptive = support_radius < maximum_radius;
+    for (uint64_t i = 0u; i < candidate_count; ++i) {
+        const RuntimeCausticPhotonMapRecord3D* record =
+            &map->records[candidates[i].storageIndex];
+        const double normal_dot = vec3_dot(query_normal, record->normal);
+        const double incident_cosine =
+            -vec3_dot(record->incidentDirection, query_normal);
+        const double weight = RuntimeCausticPhotonSurfaceKernel3D_Weight(
+                                  candidates[i].distance, support_radius) *
+                              photon_map_clamp(normal_dot, 0.0, 1.0);
+        const double distance_delta =
+            candidates[i].distance - result->meanContributionDistance;
+        if (!(weight > 0.0)) continue;
+        photon_map_accumulate_classified_flux(
+            result, record, vec3_scale(record->flux, weight));
+        result->weightSum += weight;
+        result->contributingCount += 1u;
+        result->effectiveSampleCount = result->contributingCount;
+        if (result->contributingCount == 1u) {
+            result->nearestContributionDistance = candidates[i].distance;
+        }
+        result->farthestContributionDistance = candidates[i].distance;
+        result->meanContributionDistance +=
+            distance_delta / (double)result->contributingCount;
+        result->varianceProxy +=
+            distance_delta *
+            (candidates[i].distance - result->meanContributionDistance);
+        result->meanIncidentCosine +=
+            (incident_cosine - result->meanIncidentCosine) /
+            (double)result->contributingCount;
+    }
+}
+
+static void photon_map_query_neighbor_gather(
+    RuntimeCausticPhotonMap3D* map,
+    RuntimeCausticPhotonMapQueryResult3D* result,
+    const RuntimeCausticPhotonMapQuery3D* query,
+    Vec3 query_normal,
+    double maximum_radius,
+    double min_normal_dot,
+    bool* out_acceleration_used,
+    uint64_t* out_grid_cell_visit_count) {
+    RuntimeCausticPhotonEstimatorCandidate3D
+        candidates[RUNTIME_CAUSTIC_PHOTON_MAP_NEIGHBOR_GATHER_MAX];
+    uint64_t candidate_count = 0u;
+    uint64_t candidate_capacity = result->estimator.neighborLimit;
+    if (candidate_capacity > RUNTIME_CAUSTIC_PHOTON_MAP_NEIGHBOR_GATHER_MAX) {
+        candidate_capacity = RUNTIME_CAUSTIC_PHOTON_MAP_NEIGHBOR_GATHER_MAX;
+    }
+    memset(candidates, 0, sizeof(candidates));
+    if (photon_map_accel_is_allocated(map) &&
+        map->accelerationInsertedCount == map->recordCount) {
+        const int64_t query_cell_x = photon_map_accel_cell_coord(
+            query->position.x, map->accelerationCellSize);
+        const int64_t query_cell_y = photon_map_accel_cell_coord(
+            query->position.y, map->accelerationCellSize);
+        const int64_t query_cell_z = photon_map_accel_cell_coord(
+            query->position.z, map->accelerationCellSize);
+        const int64_t cell_radius =
+            (int64_t)ceil(maximum_radius / map->accelerationCellSize);
+        bool stop = false;
+        if (out_acceleration_used) *out_acceleration_used = true;
+        for (int64_t z = query_cell_z - cell_radius;
+             z <= query_cell_z + cell_radius && !stop;
+             ++z) {
+            for (int64_t y = query_cell_y - cell_radius;
+                 y <= query_cell_y + cell_radius && !stop;
+                 ++y) {
+                for (int64_t x = query_cell_x - cell_radius;
+                     x <= query_cell_x + cell_radius;
+                     ++x) {
+                    const uint64_t bucket = photon_map_accel_hash_cell(
+                        x, y, z, map->accelerationBucketCount);
+                    int64_t record_index = map->accelerationBucketHeads[bucket];
+                    if (out_grid_cell_visit_count) (*out_grid_cell_visit_count)++;
+                    while (record_index >= 0) {
+                        const uint64_t index = (uint64_t)record_index;
+                        const int64_t next = map->accelerationRecordNext[index];
+                        if (map->accelerationRecordCellX[index] == x &&
+                            map->accelerationRecordCellY[index] == y &&
+                            map->accelerationRecordCellZ[index] == z) {
+                            if (photon_map_query_limit_reached(result)) {
+                                stop = true;
+                                break;
+                            }
+                            photon_map_neighbor_gather_consider_record(
+                                result, &map->records[index], index, query,
+                                query_normal, maximum_radius, min_normal_dot,
+                                candidates, &candidate_count, candidate_capacity);
+                        }
+                        record_index = next;
+                    }
+                    if (stop) break;
+                }
+            }
+        }
+    } else {
+        map->accelerationFallbackLinearQueryCount += 1u;
+        for (uint64_t i = 0u; i < map->recordCount; ++i) {
+            if (photon_map_query_limit_reached(result)) break;
+            photon_map_neighbor_gather_consider_record(
+                result, &map->records[i], i, query, query_normal,
+                maximum_radius, min_normal_dot, candidates, &candidate_count,
+                candidate_capacity);
+        }
+    }
+    photon_map_neighbor_gather_accumulate(
+        map, result, query_normal, maximum_radius, candidates,
+        candidate_count);
 }
 
 void RuntimeCausticPhotonMap3D_DefaultSettings(
@@ -270,6 +684,7 @@ void RuntimeCausticPhotonMap3D_DefaultSettings(
         RUNTIME_CAUSTIC_PHOTON_MAP_DEFAULT_QUERY_CANDIDATE_LIMIT;
     settings->physicalEnergyScale = 1.0;
     settings->displayGain = 1.0;
+    RuntimeCausticPhotonEstimator3D_DefaultSettings(&settings->estimator);
 }
 
 void RuntimeCausticPhotonMap3D_DefaultQuery(RuntimeCausticPhotonMapQuery3D* query) {
@@ -280,11 +695,14 @@ void RuntimeCausticPhotonMap3D_DefaultQuery(RuntimeCausticPhotonMapQuery3D* quer
     query->sceneObjectIndex = -1;
     query->primitiveIndex = -1;
     query->triangleIndex = -1;
+    query->materialId = -1;
     query->requireReceiverIdentity = true;
+    query->receiverDomain = RUNTIME_CAUSTIC_PHOTON_RECEIVER_PATCH;
     query->minNormalDot = 0.25;
     query->candidateLimit = RUNTIME_CAUSTIC_PHOTON_MAP_DEFAULT_QUERY_CANDIDATE_LIMIT;
     query->physicalEnergyScale = 1.0;
     query->displayGain = 1.0;
+    RuntimeCausticPhotonEstimator3D_DefaultSettings(&query->estimator);
 }
 
 void RuntimeCausticPhotonMap3D_Init(RuntimeCausticPhotonMap3D* map) {
@@ -338,6 +756,7 @@ void RuntimeCausticPhotonMap3D_Clear(RuntimeCausticPhotonMap3D* map) {
     map->queryHitCount = 0u;
     map->totalQueriedPhysicalFlux = vec3(0.0, 0.0, 0.0);
     map->totalQueriedDisplayFlux = vec3(0.0, 0.0, 0.0);
+    memset(&map->sampleSupport, 0, sizeof(map->sampleSupport));
     photon_map_accel_clear(map);
     memset(&map->lastQuery, 0, sizeof(map->lastQuery));
 }
@@ -375,10 +794,15 @@ bool RuntimeCausticPhotonMap3D_StoreRecord(
     stored.incidentDirection =
         photon_map_normalize_or_default(stored.incidentDirection, vec3(0.0, -1.0, 0.0));
     stored.queryRadius = photon_map_clamp(stored.queryRadius, 0.001, 10.0);
+    stored.sampleCenteredSupportRadius = stored.queryRadius;
+    stored.sampleCenteredSupportNeighborCount = 0u;
+    stored.sampleCenteredSupportAdaptive = false;
+    stored.sampleCenteredSupportPrepared = false;
     map->records[map->recordCount] = stored;
     photon_map_accel_insert(map, map->recordCount, &stored);
     map->recordCount += 1u;
     map->storeAcceptedCount += 1u;
+    memset(&map->sampleSupport, 0, sizeof(map->sampleSupport));
     return true;
 }
 
@@ -408,6 +832,7 @@ bool RuntimeCausticPhotonMap3D_StoreSurfaceHit(
     record.sceneObjectIndex = hit->sceneObjectIndex;
     record.primitiveIndex = hit->primitiveIndex;
     record.triangleIndex = hit->triangleIndex;
+    record.materialId = hit->materialId;
     return RuntimeCausticPhotonMap3D_StoreRecord(map, &record);
 }
 
@@ -440,7 +865,26 @@ bool RuntimeCausticPhotonMap3D_StoreTraceReceiver(
     record.sceneObjectIndex = receiver_scene_object_index;
     record.primitiveIndex = receiver_primitive_index;
     record.triangleIndex = receiver_triangle_index;
+    record.materialId = -1;
     return RuntimeCausticPhotonMap3D_StoreRecord(map, &record);
+}
+
+bool RuntimeCausticPhotonMap3D_PrepareSampleCenteredSupports(
+    RuntimeCausticPhotonMap3D* map,
+    uint64_t neighbor_limit) {
+    RuntimeCausticPhotonSampleSupportReadback3D readback;
+    if (!RuntimeCausticPhotonMap3D_IsAllocated(map)) return false;
+    if (!RuntimeCausticPhotonSampleSupport3D_Prepare(
+            map->records,
+            map->recordCount,
+            neighbor_limit,
+            0.25,
+            &readback)) {
+        memset(&map->sampleSupport, 0, sizeof(map->sampleSupport));
+        return false;
+    }
+    map->sampleSupport = readback;
+    return true;
 }
 
 bool RuntimeCausticPhotonMap3D_Query(
@@ -475,6 +919,9 @@ bool RuntimeCausticPhotonMap3D_Query(
     query_normal =
         photon_map_normalize_or_default(active_query->normal, vec3(0.0, 1.0, 0.0));
     query_radius = photon_map_clamp(active_query->radius, 0.001, 10.0);
+    result.supportRadius = query_radius;
+    result.kernelBoundaryWeight =
+        RuntimeCausticPhotonSurfaceKernel3D_Weight(query_radius, query_radius);
     min_normal_dot = photon_map_clamp(active_query->minNormalDot, 0.0, 1.0);
     result.candidateLimit = active_query->candidateLimit;
     physical_energy_scale =
@@ -482,10 +929,48 @@ bool RuntimeCausticPhotonMap3D_Query(
     display_gain = photon_map_positive_or_default(active_query->displayGain, 1.0);
     result.physicalEnergyScale = physical_energy_scale;
     result.displayGain = display_gain;
+    result.estimator = active_query->estimator;
+    RuntimeCausticPhotonEstimator3D_NormalizeSettings(&result.estimator);
+    result.estimatorLabel =
+        RuntimeCausticPhotonEstimator3D_Label(result.estimator.estimator);
+    result.estimatorImplemented =
+        RuntimeCausticPhotonEstimator3D_IsImplemented(result.estimator.estimator);
+    if (!result.estimatorImplemented) {
+        map->lastQuery = result;
+        *out_result = result;
+        return false;
+    }
 
-    if (photon_map_accel_is_allocated(map) && map->accelerationInsertedCount == map->recordCount) {
-        const double search_radius =
-            query_radius + fmax(map->accelerationMaxRecordQueryRadius, 0.0);
+    if (photon_map_estimator_uses_neighbor_gather(
+            result.estimator.estimator)) {
+        result.supportRadius = 0.0;
+        photon_map_query_neighbor_gather(map,
+                                         &result,
+                                         active_query,
+                                         query_normal,
+                                         query_radius,
+                                         min_normal_dot,
+                                         &acceleration_used,
+                                         &grid_cell_visit_count);
+        if (result.contributingCount == 0u) {
+            result.supportRadius = query_radius;
+        }
+    } else if (result.estimator.estimator ==
+               RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_K_NEAREST) {
+        result.supportRadius = 0.0;
+        photon_map_query_sample_centered(map,
+                                         &result,
+                                         active_query,
+                                         query_normal,
+                                         query_radius,
+                                         min_normal_dot,
+                                         &acceleration_used,
+                                         &grid_cell_visit_count);
+        if (result.contributingCount == 0u) {
+            result.supportRadius = query_radius;
+        }
+    } else if (photon_map_accel_is_allocated(map) && map->accelerationInsertedCount == map->recordCount) {
+        const double search_radius = query_radius;
         const int64_t query_cell_x =
             photon_map_accel_cell_coord(active_query->position.x, map->accelerationCellSize);
         const int64_t query_cell_y =
@@ -542,11 +1027,32 @@ bool RuntimeCausticPhotonMap3D_Query(
 
     if (physical_energy_scale != 1.0) {
         result.flux = vec3_scale(result.flux, physical_energy_scale);
+        result.directTwoInterfacePhysicalFlux = vec3_scale(
+            result.directTwoInterfacePhysicalFlux, physical_energy_scale);
+        result.multipathPhysicalFlux = vec3_scale(
+            result.multipathPhysicalFlux, physical_energy_scale);
+        result.unclassifiedPhysicalFlux = vec3_scale(
+            result.unclassifiedPhysicalFlux, physical_energy_scale);
     }
+    result.rejectedPhysicalFlux =
+        vec3_scale(result.rejectedPhysicalFlux, physical_energy_scale);
+    if (result.effectiveSampleCount > 0u) {
+        result.varianceProxy /= (double)result.effectiveSampleCount;
+    }
+    result.densityEstimate = RuntimeCausticPhotonSurfaceKernel3D_Density(
+        result.effectiveSampleCount,
+        result.supportRadius);
+    result.storedFluxAlreadyPdfCompensated = true;
+    result.undersampled = result.effectiveSampleCount <
+                          result.estimator.minimumEffectiveSamples;
     result.physicalFlux = result.flux;
     result.displayFlux = vec3_scale(result.physicalFlux, display_gain);
-    result.hit = result.contributingCount > 0u &&
-                 (result.flux.x > 0.0 || result.flux.y > 0.0 || result.flux.z > 0.0);
+    result.hit =
+        (result.estimator.estimator == RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_K_NEAREST ||
+         photon_map_estimator_uses_neighbor_gather(
+             result.estimator.estimator) ||
+         result.effectiveSampleCount >= result.estimator.minimumEffectiveSamples) &&
+        (result.flux.x > 0.0 || result.flux.y > 0.0 || result.flux.z > 0.0);
     if (result.hit) map->queryHitCount += 1u;
     map->totalQueriedPhysicalFlux =
         vec3_add(map->totalQueriedPhysicalFlux, result.physicalFlux);
@@ -586,7 +1092,39 @@ void RuntimeCausticPhotonMap3D_SnapshotDiagnostics(
     diagnostics.lastQueryAccelerationUsed = map->lastQueryAccelerationUsed;
     diagnostics.lastQueryGridCellVisitCount = map->lastQueryGridCellVisitCount;
     diagnostics.lastQueryNearestDistance = map->lastQuery.nearestDistance;
+    diagnostics.lastQueryNearestContributionDistance =
+        map->lastQuery.nearestContributionDistance;
+    diagnostics.lastQueryFarthestContributionDistance =
+        map->lastQuery.farthestContributionDistance;
     diagnostics.lastQueryNearestNormalDot = map->lastQuery.nearestNormalDot;
+    diagnostics.lastQueryMeanContributionDistance =
+        map->lastQuery.meanContributionDistance;
+    diagnostics.lastQueryVarianceProxy = map->lastQuery.varianceProxy;
+    diagnostics.lastQueryEffectiveSampleCount = map->lastQuery.effectiveSampleCount;
+    diagnostics.lastQueryRadiusRejectCount = map->lastQuery.radiusRejectCount;
+    diagnostics.lastQueryNormalRejectCount = map->lastQuery.normalRejectCount;
+    diagnostics.lastQueryIncidentHemisphereRejectCount =
+        map->lastQuery.incidentHemisphereRejectCount;
+    diagnostics.lastQueryReceiverRejectCount = map->lastQuery.receiverRejectCount;
+    diagnostics.lastQueryReceiverObjectRejectCount =
+        map->lastQuery.receiverObjectRejectCount;
+    diagnostics.lastQueryReceiverMaterialRejectCount =
+        map->lastQuery.receiverMaterialRejectCount;
+    diagnostics.lastQueryReceiverExactTriangleRejectCount =
+        map->lastQuery.receiverExactTriangleRejectCount;
+    diagnostics.lastQuerySupportRadius = map->lastQuery.supportRadius;
+    diagnostics.lastQuerySupportAdaptive = map->lastQuery.supportAdaptive;
+    diagnostics.lastQueryKernelBoundaryWeight = map->lastQuery.kernelBoundaryWeight;
+    diagnostics.lastQueryDensityEstimate = map->lastQuery.densityEstimate;
+    diagnostics.lastQueryMeanIncidentCosine = map->lastQuery.meanIncidentCosine;
+    diagnostics.lastQueryStoredFluxAlreadyPdfCompensated =
+        map->lastQuery.storedFluxAlreadyPdfCompensated;
+    diagnostics.lastQueryUndersampled = map->lastQuery.undersampled;
+    diagnostics.lastQueryFallbackUsed = map->lastQuery.fallbackUsed;
+    diagnostics.lastQueryRejectedPhysicalFlux = map->lastQuery.rejectedPhysicalFlux;
+    diagnostics.lastQueryEstimator = map->lastQuery.estimator;
+    diagnostics.lastQueryEstimatorLabel = map->lastQuery.estimatorLabel;
+    diagnostics.lastQueryEstimatorImplemented = map->lastQuery.estimatorImplemented;
     diagnostics.lastQueryFlux = map->lastQuery.flux;
     diagnostics.lastQueryPhysicalFlux = map->lastQuery.physicalFlux;
     diagnostics.lastQueryDisplayFlux = map->lastQuery.displayFlux;
@@ -600,6 +1138,7 @@ void RuntimeCausticPhotonMap3D_SnapshotDiagnostics(
     diagnostics.accelerationInsertedCount = map->accelerationInsertedCount;
     diagnostics.accelerationFallbackLinearQueryCount =
         map->accelerationFallbackLinearQueryCount;
+    diagnostics.sampleSupport = map->sampleSupport;
     for (uint64_t i = 0u; i < map->recordCount; ++i) {
         diagnostics.totalStoredFlux =
             vec3_add(diagnostics.totalStoredFlux, map->records[i].flux);

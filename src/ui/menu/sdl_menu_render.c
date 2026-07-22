@@ -384,13 +384,23 @@ void menu_render_frame(SDL_Renderer* renderer,
         state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS) {
         char mode_label[96];
         char engine_label[96];
+        const char* product_label = "off";
+        if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
+            product_label = "reference_analytic";
+        } else if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+                   state->causticSettings.transportEngine ==
+                       RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP) {
+            product_label = "photon_map";
+        } else if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT) {
+            product_label = "reference_transport";
+        }
         (void)snprintf(mode_label,
                        sizeof(mode_label),
                        "Caustics: %s",
-                       RuntimeCausticMode3D_Label(state->causticSettings.mode));
+                       product_label);
         (void)snprintf(engine_label,
                        sizeof(engine_label),
-                       "Deposit: %s",
+                       "Producer: %s",
                        RuntimeCausticTransportEngine3D_Label(
                            state->causticSettings.transportEngine));
         menu_render_draw_button_rect(renderer, font, &buttons.causticModeRect,

@@ -112,6 +112,7 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
     RuntimeCausticPhotonBsdfPolicy3D* out_policy) {
     RuntimeCausticPhotonBsdfPolicy3D policy;
     Vec3 base_tint;
+    Vec3 transmission_tint;
     Vec3 white = vec3(1.0, 1.0, 1.0);
     double transparency;
     double surface_weight;
@@ -162,6 +163,12 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
         base_tint = photon_bsdf_clamp_vec01(vec3(material->baseColorR,
                                                  material->baseColorG,
                                                  material->baseColorB));
+        transmission_tint = photon_bsdf_clamp_vec01(
+            material->hasGlassInterfaceTintOverride
+                ? vec3(material->glassInterfaceTintR,
+                       material->glassInterfaceTintG,
+                       material->glassInterfaceTintB)
+                : base_tint);
 
         if (!photon_bsdf_append(&policy,
                                 RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_DIFFUSE,
@@ -179,7 +186,7 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
             !photon_bsdf_append(&policy,
                                 RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION,
                                 transmission_weight,
-                                base_tint,
+                                transmission_tint,
                                 false)) {
             policy.termination = RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_INVALID_MATERIAL;
             *out_policy = policy;

@@ -587,6 +587,84 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_path_transport_budget_invariant_delivery(void) {
+    RuntimeScene3D scene;
+    RuntimeCausticPhotonSample3D sample_4k = photon_path_transport_sample();
+    RuntimeCausticPhotonSample3D sample_64k;
+    RuntimeCausticPhotonPathTransportSettings3D settings;
+    RuntimeCausticPhotonSceneTrace3D trace_4k;
+    RuntimeCausticPhotonSceneTrace3D trace_64k;
+    PhotonPathTransportMultiMaterialFixture3D fixture;
+    RuntimeCausticPhotonBsdfSampleStream3D stream;
+    bool found_transmission_sample = false;
+
+    sample_4k.position = vec3(0.0, 0.0, 2.0);
+    for (uint64_t i = 0u; i < 128u; ++i) {
+        sample_4k.photonId = 26500u + i;
+        sample_4k.sampleIndex = i;
+        if (RuntimeCausticPhotonBsdfSampling3D_Generate(
+                &sample_4k, 1u, &stream) &&
+            stream.bsdfSample.lobeUnitSample > 0.2) {
+            found_transmission_sample = true;
+            break;
+        }
+    }
+    assert_true("runtime_caustic_photon_path_transport_budget_find_transmission",
+                found_transmission_sample);
+    sample_4k.flux = vec3_scale(vec3(1.0, 0.8, 0.6), 1.0 / 4096.0);
+    sample_64k = sample_4k;
+    sample_64k.flux = vec3_scale(vec3(1.0, 0.8, 0.6), 1.0 / 65536.0);
+
+    assert_true("runtime_caustic_photon_path_transport_budget_build",
+                photon_path_transport_build_two_object_scene(&scene, 0.0));
+    memset(&fixture, 0, sizeof(fixture));
+    fixture.object51 = photon_path_transport_glass();
+    fixture.object52 = photon_path_transport_diffuse();
+    RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
+    settings.sceneTrace.maxDepth = 2u;
+    settings.sceneTrace.minTransportWeightLuma = 0.5;
+    settings.sceneTrace.materialResolver = photon_path_transport_multi_material;
+    settings.sceneTrace.materialResolverUserData = &fixture;
+
+    assert_true("runtime_caustic_photon_path_transport_budget_trace_4k",
+                RuntimeCausticPhotonPathTransport3D_Trace(
+                    &scene, &sample_4k, &settings, &trace_4k));
+    fixture.calls = 0u;
+    assert_true("runtime_caustic_photon_path_transport_budget_trace_64k",
+                RuntimeCausticPhotonPathTransport3D_Trace(
+                    &scene, &sample_64k, &settings, &trace_64k));
+    assert_true("runtime_caustic_photon_path_transport_budget_delivery",
+                trace_4k.readback.hitEventCount == 2u &&
+                    trace_64k.readback.hitEventCount == 2u &&
+                    trace_4k.hitEvents[1].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_DIFFUSE &&
+                    trace_64k.hitEvents[1].bsdfSelection.lobe ==
+                        RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_DIFFUSE &&
+                    trace_4k.hitEvents[1].roulette.valid &&
+                    trace_64k.hitEvents[1].roulette.valid &&
+                    !trace_4k.hitEvents[1].roulette.evaluated &&
+                    !trace_64k.hitEvents[1].roulette.evaluated &&
+                    !trace_4k.hitEvents[1].roulette.terminated &&
+                    !trace_64k.hitEvents[1].roulette.terminated);
+    assert_close("runtime_caustic_photon_path_transport_budget_weight_r",
+                 trace_4k.trace.finalState.transportWeight.x,
+                 trace_64k.trace.finalState.transportWeight.x,
+                 1.0e-12);
+    assert_close("runtime_caustic_photon_path_transport_budget_weight_g",
+                 trace_4k.trace.finalState.transportWeight.y,
+                 trace_64k.trace.finalState.transportWeight.y,
+                 1.0e-12);
+    assert_close("runtime_caustic_photon_path_transport_budget_flux_ratio",
+                 trace_4k.hitEvents[1].bsdfSelection.throughputBefore.x /
+                     trace_64k.hitEvents[1].bsdfSelection.throughputBefore.x,
+                 16.0,
+                 1.0e-12);
+
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_runtime_caustic_photon_path_transport_nested_ior_replay(void) {
     static const int object_id[4] = {71, 72, 72, 71};
     static const int material_id[4] = {701, 702, 702, 701};
@@ -757,6 +835,11 @@ static int test_runtime_caustic_photon_path_population_transaction(void) {
     assert_true("runtime_caustic_photon_path_population_beam_alloc",
                 RuntimeCausticBeamMap3D_Allocate(&beam_map, 3u));
     RuntimeCausticPhotonPathPopulation3D_DefaultSettings(&population_settings);
+    /* This transaction test exercises atomic multi-record storage. PPM-30's
+       production post-lens/medium filters are covered by the focused group. */
+    population_settings.requireReconciledDielectricTransmissionForSurface = false;
+    population_settings.requireBeamMediumId = false;
+    population_settings.requireBeamStage = false;
     assert_true("runtime_caustic_photon_path_population_store",
                 RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
                     &trace,
@@ -884,6 +967,8 @@ int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
     failures += test_runtime_caustic_photon_path_transport_two_object_reflection();
     failures += test_runtime_caustic_photon_path_transport_two_object_transmission();
     failures += test_runtime_caustic_photon_path_transport_tir_continuation();
+    failures +=
+        test_runtime_caustic_photon_path_transport_budget_invariant_delivery();
     failures += test_runtime_caustic_photon_path_transport_nested_ior_replay();
     failures += test_runtime_caustic_photon_path_population_transaction();
     return failures;

@@ -969,6 +969,55 @@ static int test_runtime_material_payload_3d_authored_alpha_transparent_is_alpha_
     return 0;
 }
 
+static int test_runtime_material_payload_3d_separates_glass_color_ownership(void) {
+    SceneConfig saved_scene = sceneSettings;
+    RuntimeMaterialPayload3D payload = {0};
+    bool ok = false;
+
+    MaterialManagerResetDefaults();
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    sceneSettings.objectCount = 1;
+    InitObject(&sceneSettings.sceneObjects[0],
+               OBJECT_CIRCLE,
+               0.0,
+               0.0,
+               10.0,
+               0.0,
+               NULL,
+               0);
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_TRANSPARENT;
+    sceneSettings.sceneObjects[0].color = 0xFFB45A;
+    sceneSettings.sceneObjects[0].hasGlassInterfaceTintOverride = true;
+    sceneSettings.sceneObjects[0].glassInterfaceTint = 0xFFFFFF;
+    sceneSettings.sceneObjects[0].hasGlassAbsorptionColorOverride = true;
+    sceneSettings.sceneObjects[0].glassAbsorptionColor = 0xFFB45A;
+
+    ok = RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &payload);
+    assert_true("runtime_material_payload_glass_color_ownership_resolve", ok);
+    assert_true("runtime_material_payload_glass_color_ownership_flags",
+                payload.hasGlassInterfaceTintOverride &&
+                    payload.hasGlassAbsorptionColorOverride);
+    assert_close("runtime_material_payload_glass_interface_white_r",
+                 payload.glassInterfaceTintR,
+                 1.0,
+                 1e-12);
+    assert_close("runtime_material_payload_glass_interface_white_b",
+                 payload.glassInterfaceTintB,
+                 1.0,
+                 1e-12);
+    assert_close("runtime_material_payload_glass_absorption_warm_g",
+                 payload.glassAbsorptionColorG,
+                 180.0 / 255.0,
+                 1e-12);
+    assert_close("runtime_material_payload_glass_absorption_warm_b",
+                 payload.glassAbsorptionColorB,
+                 90.0 / 255.0,
+                 1e-12);
+
+    sceneSettings = saved_scene;
+    return 0;
+}
+
 static int test_runtime_material_payload_3d_glass_override_is_physical_transport(void) {
     SceneConfig saved_scene = sceneSettings;
     RuntimeMaterialPayload3D payload = {0};
@@ -4659,6 +4708,7 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_object_multipliers_contract();
     test_runtime_material_compatibility_bridges_are_explicit();
     test_runtime_material_payload_3d_authored_alpha_transparent_is_alpha_layer();
+    test_runtime_material_payload_3d_separates_glass_color_ownership();
     test_runtime_material_payload_3d_glass_override_is_physical_transport();
     test_runtime_material_payload_3d_water_override_contract();
     test_material_manager_default_presets_include_i4_entries();

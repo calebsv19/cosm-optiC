@@ -41,6 +41,8 @@ void RuntimeLightSource3D_Init(RuntimeLightSource3D* light) {
     light->normal = vec3(0.0, -1.0, 0.0);
     light->color = vec3(1.0, 1.0, 1.0);
     light->intensity = 1.0;
+    light->radiometryMode = RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY;
+    light->radiance = 0.0;
     light->falloffDistance = 1.0;
     light->falloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
     light->emissiveAverageNormal = vec3(0.0, 1.0, 0.0);
@@ -105,6 +107,11 @@ bool RuntimeLightSet3D_Append(RuntimeLightSet3D* set,
     stored.width = runtime_light_set_3d_nonnegative(stored.width);
     stored.height = runtime_light_set_3d_nonnegative(stored.height);
     stored.intensity = runtime_light_set_3d_nonnegative(stored.intensity);
+    stored.radiance = runtime_light_set_3d_nonnegative(stored.radiance);
+    if (stored.radiometryMode < RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY ||
+        stored.radiometryMode > RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE) {
+        stored.radiometryMode = RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY;
+    }
     stored.falloffDistance = runtime_light_set_3d_nonnegative(stored.falloffDistance);
     stored.color = runtime_light_set_3d_default_color(stored.color);
     if (stored.emissionProfile < RUNTIME_LIGHT_SOURCE_3D_EMISSION_OMNI ||

@@ -112,9 +112,16 @@ bool RuntimeCausticPhotonMediumEntry3D_FromMaterial(
     entry.sceneObjectIndex = scene_object_index;
     entry.materialId = material->materialId;
     entry.ior = ior;
-    entry.absorptionColor = vec3(photon_medium_clamp01(material->baseColorR),
-                                 photon_medium_clamp01(material->baseColorG),
-                                 photon_medium_clamp01(material->baseColorB));
+    entry.absorptionColor = vec3(
+        photon_medium_clamp01(material->hasGlassAbsorptionColorOverride
+                                  ? material->glassAbsorptionColorR
+                                  : material->baseColorR),
+        photon_medium_clamp01(material->hasGlassAbsorptionColorOverride
+                                  ? material->glassAbsorptionColorG
+                                  : material->baseColorG),
+        photon_medium_clamp01(material->hasGlassAbsorptionColorOverride
+                                  ? material->glassAbsorptionColorB
+                                  : material->baseColorB));
     entry.absorptionDistance = material->absorptionDistance;
     entry.density = density;
     *out_entry = entry;

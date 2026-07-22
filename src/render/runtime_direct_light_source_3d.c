@@ -1,4 +1,5 @@
 #include "render/runtime_direct_light_internal_3d.h"
+#include "render/runtime_light_radiometry_3d.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -739,6 +740,10 @@ void runtime_direct_light_3d_accumulate_source(
             double sample_ndotl = 0.0;
             double sample_source_facing = 1.0;
             double sample_emission_weight = 1.0;
+            double sample_light_scale = 0.0;
+            const bool physical_mode =
+                source->radiometryMode ==
+                RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE;
             Vec3 sample_dir = vec3(0.0, 0.0, 0.0);
 
             light_sample_evaluated_count += 1;
@@ -810,8 +815,13 @@ void runtime_direct_light_3d_accumulate_source(
             }
 
             sample_attenuation = runtime_direct_light_3d_attenuation(&light, sample_distance);
-            if (!runtime_direct_light_3d_sample_contributes(light.intensity * sample_emission_weight,
-                                                            sample_attenuation,
+            sample_light_scale = physical_mode
+                                     ? RuntimeLightRadiometry3D_RectIrradianceScale(
+                                           source, sample_dir, sample_distance)
+                                     : light.intensity * sample_attenuation *
+                                           sample_emission_weight;
+            if (!runtime_direct_light_3d_sample_contributes(sample_light_scale,
+                                                            1.0,
                                                             sample_ndotl)) {
                 clear_blocked_sample_count += 1;
                 if (runtime_direct_light_3d_area_light_update_stop_reason(
@@ -860,12 +870,12 @@ void runtime_direct_light_3d_accumulate_source(
             } else if (transmittance.luma <= kRuntimeDirectLight3DVisibilityBlockedLuma) {
                 clear_blocked_sample_count += 1;
             }
-            source_r += light.intensity * sample_attenuation * sample_ndotl *
-                        sample_emission_weight * transmittance.r * source->color.x;
-            source_g += light.intensity * sample_attenuation * sample_ndotl *
-                        sample_emission_weight * transmittance.g * source->color.y;
-            source_b += light.intensity * sample_attenuation * sample_ndotl *
-                        sample_emission_weight * transmittance.b * source->color.z;
+            source_r += sample_light_scale * sample_ndotl * transmittance.r *
+                        source->color.x;
+            source_g += sample_light_scale * sample_ndotl * transmittance.g *
+                        source->color.y;
+            source_b += sample_light_scale * sample_ndotl * transmittance.b *
+                        source->color.z;
             if (runtime_direct_light_3d_material_emitter_rect_can_stop_low_importance(
                     source,
                     light_sample_evaluated_count,

@@ -264,6 +264,8 @@ static int test_runtime_disney_v2_transmission_sample_uses_payload_ior_contract(
     RuntimePrincipledBSDF3D principled = {0};
     RuntimeDisneyV2_3DTransmissionSample straight = {0};
     RuntimeDisneyV2_3DTransmissionSample water = {0};
+    RuntimeDisneyV2_3DTransmissionSample separated = {0};
+    RuntimeDisneyV2_3DTransparentPolicy absorption = {0};
     HitInfo3D hit = {0};
     Vec3 view_dir = vec3_normalize(vec3(-0.22, 0.74, 0.64));
     Vec3 normal = vec3_normalize(vec3(0.34, 0.0, 0.94));
@@ -312,6 +314,35 @@ static int test_runtime_disney_v2_transmission_sample_uses_payload_ior_contract(
                                      vec3_scale(vec3_normalize(view_dir), -1.0))) < 1e-6);
     assert_true("runtime_disney_v2_transmission_sample_ior_changes_direction",
                 vec3_length(vec3_sub(straight.direction, water.direction)) > 1e-3);
+    payload.hasGlassInterfaceTintOverride = true;
+    payload.glassInterfaceTintR = 1.0;
+    payload.glassInterfaceTintG = 0.5;
+    payload.glassInterfaceTintB = 0.25;
+    payload.hasGlassAbsorptionColorOverride = true;
+    payload.glassAbsorptionColorR = 0.25;
+    payload.glassAbsorptionColorG = 0.5;
+    payload.glassAbsorptionColorB = 1.0;
+    payload.absorptionDistance = 1.0;
+    assert_true("runtime_disney_v2_transmission_sample_separated_tint_ok",
+                RuntimeDisneyV2_3D_SampleTransmission(&payload,
+                                                       &principled,
+                                                       &hit,
+                                                       view_dir,
+                                                       1.0,
+                                                       &separated));
+    assert_true("runtime_disney_v2_transmission_sample_uses_interface_tint",
+                separated.throughputR > separated.throughputG &&
+                    separated.throughputG > separated.throughputB);
+    absorption = runtime_disney_v2_3d_resolve_transparent_policy(
+        &payload, &principled, 1.0);
+    assert_close("runtime_disney_v2_transmission_policy_uses_absorption_r",
+                 absorption.tintR,
+                 0.25,
+                 1e-12);
+    assert_close("runtime_disney_v2_transmission_policy_uses_absorption_b",
+                 absorption.tintB,
+                 1.0,
+                 1e-12);
     return 0;
 }
 

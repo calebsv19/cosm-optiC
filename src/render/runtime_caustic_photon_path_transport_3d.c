@@ -3,6 +3,7 @@
 #include <math.h>
 #include <string.h>
 
+#include "render/runtime_caustic_photon_path_weight_3d.h"
 #include "render/runtime_scene_accel_3d.h"
 
 static double photon_path_transport_luma(Vec3 value) {
@@ -293,6 +294,21 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
     trace->finalState = state;
     trace->debug.photonId = sample->photonId;
     trace->debug.emittedFlux = sample->flux;
+    trace->provenance.originalMediumId =
+        RuntimeCausticPhotonMediumStack3D_Top(&medium_stack)->mediumId;
+    trace->provenance.segmentStage =
+        RUNTIME_CAUSTIC_PHOTON_SEGMENT_STAGE_SOURCE_TO_LENS;
+    trace->provenance.emittedProposalDirection = sample->proposalDirection;
+    trace->provenance.emittedProposalPdf = sample->proposalPdf;
+    trace->provenance.emittedSourceSelectionPdf = sample->sourceSelectionPdf;
+    trace->provenance.emittedPositionPdf = sample->positionPdf;
+    trace->provenance.emittedDirectionPdf = sample->directionPdf;
+    trace->provenance.emittedFluxCorrection = sample->emissionFluxCorrection;
+    trace->provenance.emittedFluxPdfCompensated = sample->fluxPdfCompensated;
+    trace->provenance.guidedDirection = sample->direction;
+    trace->provenance.guidingChangedSample = sample->guidingChangedSample;
+    trace->provenance.guidingPdfFluxCorrected =
+        sample->guidingPdfFluxCorrected;
 
     memset(&event, 0, sizeof(event));
     event.photonId = sample->photonId;
@@ -415,6 +431,8 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
             hard_failure = true;
             break;
         }
+        state.transportWeight = photon_path_transport_multiply(
+            state.transportWeight, hit_event->segmentTransmittance);
         throughput_before = state.throughput;
         geometric_normal = photon_path_transport_geometric_normal(scene, &hit);
         hit.normal = geometric_normal;
@@ -576,6 +594,14 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
             break;
         }
 
+        if (!RuntimeCausticPhotonPathWeight3D_ApplyThroughputRatio(
+                state.transportWeight,
+                state.throughput,
+                hit_event->bsdfSelection.throughputAfter,
+                &state.transportWeight)) {
+            hard_failure = true;
+            break;
+        }
         state.depth = depth;
         state.position = hit.position;
         state.throughput = hit_event->bsdfSelection.throughputAfter;
@@ -619,7 +645,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
             !RuntimeCausticPhotonBsdfSampling3D_EvaluateRoulette(
                 &active->depthPolicy,
                 depth,
-                state.throughput,
+                state.transportWeight,
                 stream.rouletteUnitSample,
                 &hit_event->roulette)) {
             hard_failure = true;
@@ -627,7 +653,14 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         }
         if (hit_event->roulette.valid) {
             state.pathPdf *= hit_event->roulette.branchPdf;
-            state.throughput = hit_event->roulette.throughputAfter;
+            if (hit_event->roulette.terminated) {
+                state.throughput = vec3(0.0, 0.0, 0.0);
+            } else if (hit_event->roulette.evaluated) {
+                state.throughput = vec3_scale(
+                    state.throughput,
+                    1.0 / hit_event->roulette.survivalProbability);
+            }
+            state.transportWeight = hit_event->roulette.throughputAfter;
         }
         hit_event->pathPdfAfter = state.pathPdf;
 
@@ -687,12 +720,12 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                 &result,
                 hit_event->termination,
                 RUNTIME_CAUSTIC_PHOTON_REJECT_RUSSIAN_ROULETTE,
-                hit_event->roulette.terminatedThroughput,
+                hit_event->bsdfSelection.throughputAfter,
                 true);
             break;
         }
-        if (photon_path_transport_luma(state.throughput) <=
-            active->sceneTrace.minFluxLuma) {
+        if (photon_path_transport_luma(state.transportWeight) <=
+            active->sceneTrace.minTransportWeightLuma) {
             hit_event->termination =
                 RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ABSORBED;
             photon_path_transport_mark_terminal(
@@ -739,6 +772,36 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
     result.readback.usedSharedSceneAccelerationRoute =
         result.readback.routeStats.tlasTraceCalls > 0u;
     result.finalMediumStack = medium_stack;
+    for (uint32_t i = 0u; i < result.readback.hitEventCount; ++i) {
+        const RuntimeCausticPhotonSceneHitEvent3D* hit_event =
+            &result.hitEvents[i];
+        if (hit_event->mediumTransition.succeeded &&
+            hit_event->mediumTransition.stackChanged) {
+            if (hit_event->mediumTransition.reason ==
+                RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_ENTER_PUSHED) {
+                trace->provenance.dielectricEntryCount++;
+            } else if (hit_event->mediumTransition.reason ==
+                       RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_EXIT_POPPED) {
+                trace->provenance.dielectricExitCount++;
+            }
+        }
+        if (hit_event->bsdfSelection.selected &&
+            (hit_event->bsdfSelection.lobe ==
+                 RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION ||
+             hit_event->bsdfSelection.lobe ==
+                 RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_SPECULAR ||
+             hit_event->bsdfSelection.lobe ==
+                 RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_GLOSSY)) {
+            trace->provenance.priorSpecularOrTransmission = true;
+        }
+    }
+    if (trace->provenance.dielectricExitCount > 0u) {
+        trace->provenance.segmentStage =
+            RUNTIME_CAUSTIC_PHOTON_SEGMENT_STAGE_POST_LENS;
+    } else if (RuntimeCausticPhotonMediumStack3D_Depth(&medium_stack) > 1u) {
+        trace->provenance.segmentStage =
+            RUNTIME_CAUSTIC_PHOTON_SEGMENT_STAGE_LENS_INTERIOR;
+    }
     trace->debug.eventCount = trace->eventCount;
     *out_trace = result;
     return result.readback.succeeded;

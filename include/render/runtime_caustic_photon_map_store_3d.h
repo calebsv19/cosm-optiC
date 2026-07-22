@@ -26,5 +26,4 @@ bool RuntimeCausticPhotonMapStore3D_Begin(
 void RuntimeCausticPhotonMapStore3D_CommitPopulation(
     RuntimeCausticPhotonMapStore3D* store,
     const RuntimeCausticPhotonMapPopulationReadback3D* population);
-
 #endif

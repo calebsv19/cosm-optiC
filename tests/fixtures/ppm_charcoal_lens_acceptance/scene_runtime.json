@@ -1,0 +1,242 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "ppm_charcoal_lens_acceptance_v1",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "receiver_floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 10.0,
+        "height": 8.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": 0.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "backdrop",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 3.35, "z": 2.0 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 12.0,
+        "height": 4.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": 3.35, "z": 2.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "backdrop_left_marker",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": -1.85, "y": 3.32, "z": 1.45 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 0.18,
+        "height": 2.45,
+        "frame": {
+          "origin": { "x": -1.85, "y": 3.32, "z": 1.45 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "backdrop_right_marker",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": -1.60, "y": 3.31, "z": 1.45 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 0.18,
+        "height": 2.45,
+        "frame": {
+          "origin": { "x": -1.60, "y": 3.31, "z": 1.45 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "glass_sphere",
+      "object_type": "mesh_asset_instance",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": 1.15 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 0.50, "y": 0.50, "z": 0.50 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asset_sphere_256x128_smooth_acceptance",
+        "variant": "runtime_default"
+      },
+      "extensions": {
+        "line_drawing": {
+          "runtime_mesh_path": "assets/mesh_assets/asset_sphere_256x128_smooth_acceptance.runtime.json"
+        }
+      },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    }
+  ],
+  "materials": [
+    {
+      "material_id": "mat_receiver_floor",
+      "kind": "lambert",
+      "albedo": [0.20, 0.23, 0.25]
+    },
+    {
+      "material_id": "mat_backdrop",
+      "kind": "lambert",
+      "albedo": [0.12, 0.15, 0.19]
+    },
+    {
+      "material_id": "mat_backdrop_left_marker",
+      "kind": "lambert",
+      "albedo": [0.22, 0.34, 0.42]
+    },
+    {
+      "material_id": "mat_backdrop_right_marker",
+      "kind": "lambert",
+      "albedo": [0.42, 0.31, 0.23]
+    },
+    {
+      "material_id": "mat_glass_sphere",
+      "kind": "dielectric",
+      "albedo": [0.86, 0.94, 1.0]
+    }
+  ],
+  "lights": [
+    {
+      "light_id": "visible_lens_key",
+      "kind": "rect",
+      "position": { "x": 0.0, "y": 0.0, "z": 3.318 },
+      "width": 0.34,
+      "height": 0.34,
+      "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+      "axis_v": { "x": 0.0, "y": -1.0, "z": 0.0 },
+      "normal": { "x": 0.0, "y": 0.0, "z": -1.0 },
+      "emission_profile": "one_sided",
+      "radiometric_mode": "lambertian_radiance",
+      "radiance": 4.0,
+      "intensity": 4.0,
+      "falloff_distance": 8.0,
+      "color": { "r": 1.0, "g": 0.94, "b": 0.78 },
+      "enabled": true,
+      "moving": false
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "acceptance_overview_camera",
+      "kind": "perspective",
+      "position": { "x": 4.35, "y": -7.60, "z": 3.15 },
+      "target": { "x": 0.0, "y": 0.20, "z": 1.55 },
+      "yaw": 0.0,
+      "look_pitch": -0.20
+    }
+  ],
+  "constraints": [],
+  "hierarchy": [],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "camera_focus_target": { "x": 0.0, "y": 0.20, "z": 1.55 },
+        "environment": {
+          "light_mode": 1,
+          "ambient_strength": 0.025,
+          "top_fill_strength": 0.005
+        },
+        "object_materials": [
+          {
+            "object_id": "receiver_floor",
+            "material_id": 0,
+            "object_color": 2041131,
+            "roughness": 0.78,
+            "reflectivity": 0.02,
+            "alpha": 1.0
+          },
+          {
+            "object_id": "backdrop",
+            "material_id": 0,
+            "object_color": 2107442,
+            "roughness": 0.72,
+            "reflectivity": 0.025,
+            "alpha": 1.0
+          },
+          {
+            "object_id": "backdrop_left_marker",
+            "material_id": 0,
+            "object_color": 3692139,
+            "roughness": 0.68,
+            "reflectivity": 0.02,
+            "alpha": 1.0
+          },
+          {
+            "object_id": "backdrop_right_marker",
+            "material_id": 0,
+            "object_color": 7032635,
+            "roughness": 0.68,
+            "reflectivity": 0.02,
+            "alpha": 1.0
+          },
+          {
+            "object_id": "glass_sphere",
+            "material_id": 5,
+            "object_color": 14479359,
+            "alpha": 0.16,
+            "roughness": 0.003,
+            "reflectivity": 0.04,
+            "glass_transport_override": true,
+            "glass_transmission": 0.985,
+            "glass_ior": 1.5,
+            "glass_absorption_distance": 8.0,
+            "glass_thin_walled": false
+          }
+        ]
+      }
+    }
+  }
+}

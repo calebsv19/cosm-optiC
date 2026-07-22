@@ -21,6 +21,7 @@
 #include "render/runtime_caustic_transport_3d.h"
 #include "render/runtime_caustic_transport_debug_3d.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
+#include "render/runtime_light_radiometry_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_volume_3d_scatter.h"
@@ -34,12 +35,22 @@ static void ray_tracing_headless_note_registered_lights(
     preflight->registered_enabled_light_count = frame->scene.lightSet.enabledCount;
     for (int i = 0; i < frame->scene.lightSet.lightCount; ++i) {
         const RuntimeLightSource3D* source = &frame->scene.lightSet.lights[i];
+        RuntimeLightRadiometry3DEvaluation radiometry = {0};
+        const bool physical_radiometry =
+            RuntimeLightRadiometry3D_Evaluate(source, &radiometry);
         if (i == 0) {
             preflight->registered_light_first_position_x = source->position.x;
             preflight->registered_light_first_position_y = source->position.y;
             preflight->registered_light_first_position_z = source->position.z;
             preflight->registered_light_first_radius = source->radius;
             preflight->registered_light_first_intensity = source->intensity;
+            preflight->registered_light_first_radiance = source->radiance;
+            preflight->registered_light_first_total_power_r =
+                radiometry.totalEmittedPower.x;
+            preflight->registered_light_first_total_power_g =
+                radiometry.totalEmittedPower.y;
+            preflight->registered_light_first_total_power_b =
+                radiometry.totalEmittedPower.z;
             preflight->registered_light_first_color_r = source->color.x;
             preflight->registered_light_first_color_g = source->color.y;
             preflight->registered_light_first_color_b = source->color.z;
@@ -88,6 +99,11 @@ static void ray_tracing_headless_note_registered_lights(
             default:
                 preflight->registered_light_emission_omni_count += 1;
                 break;
+        }
+        if (physical_radiometry) {
+            preflight->registered_light_radiometry_lambertian_count += 1;
+        } else {
+            preflight->registered_light_radiometry_legacy_count += 1;
         }
         if (source->meshAreaSamplerOnly) {
             preflight->registered_light_mesh_area_sampler_only_count += 1;

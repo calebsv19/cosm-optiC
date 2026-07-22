@@ -221,11 +221,20 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
             sample.cosTheta = runtime_disney_v2_transport_3d_clamp01(
                 fabs(vec3_dot(normal, sample.direction)));
             sample.pdf = fmax(transmission_probability, 1e-6);
-            sample.throughputR = (principled ? principled->baseColorR : 1.0) *
+            sample.throughputR =
+                (payload && payload->hasGlassInterfaceTintOverride
+                     ? payload->glassInterfaceTintR
+                     : principled ? principled->baseColorR : 1.0) *
                                  fmax(transmission_probability, 1e-6);
-            sample.throughputG = (principled ? principled->baseColorG : 1.0) *
+            sample.throughputG =
+                (payload && payload->hasGlassInterfaceTintOverride
+                     ? payload->glassInterfaceTintG
+                     : principled ? principled->baseColorG : 1.0) *
                                  fmax(transmission_probability, 1e-6);
-            sample.throughputB = (principled ? principled->baseColorB : 1.0) *
+            sample.throughputB =
+                (payload && payload->hasGlassInterfaceTintOverride
+                     ? payload->glassInterfaceTintB
+                     : principled ? principled->baseColorB : 1.0) *
                                  fmax(transmission_probability, 1e-6);
         }
     } else if (sample.lobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR) {

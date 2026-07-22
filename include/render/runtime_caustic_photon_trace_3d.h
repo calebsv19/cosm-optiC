@@ -14,7 +14,7 @@ enum {
 
 typedef struct {
     uint32_t maxDepth;
-    double minFluxLuma;
+    double minTransportWeightLuma;
 } RuntimeCausticPhotonTraceSettings3D;
 
 typedef struct {
@@ -22,6 +22,9 @@ typedef struct {
     uint32_t depth;
     Vec3 position;
     Vec3 direction;
+    /* Dimensionless accumulated transport response. Emitted photon power is
+     * carried separately by throughput and must not drive path roulette. */
+    Vec3 transportWeight;
     Vec3 throughput;
     double pathPdf;
     RuntimeCausticPhotonRejectReason3D rejectReason;
@@ -45,6 +48,7 @@ typedef struct {
     double receiverPlaneT;
     Vec3 receiverCrossing;
     RuntimeCausticPhotonDebugRecord3D debug;
+    RuntimeCausticPhotonPathProvenance3D provenance;
 } RuntimeCausticPhotonTrace3D;
 
 void RuntimeCausticPhotonTrace3D_DefaultSettings(

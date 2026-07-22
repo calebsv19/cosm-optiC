@@ -8,6 +8,9 @@
 #include "render/runtime_caustic_settings_3d.h"
 #include "render/runtime_volume_3d.h"
 
+typedef struct RuntimeCausticPhotonSparseBrickCache3D
+    RuntimeCausticPhotonSparseBrickCache3D;
+
 typedef struct {
     bool allocated;
     uint32_t gridW;
@@ -50,6 +53,14 @@ typedef struct {
     float* radianceR;
     float* radianceG;
     float* radianceB;
+    float* beamDirectionX;
+    float* beamDirectionY;
+    float* beamDirectionZ;
+    float* beamDistanceWeighted;
+    float* beamDirectionWeight;
+    float* beamSubvoxelRadianceR;
+    float* beamSubvoxelRadianceG;
+    float* beamSubvoxelRadianceB;
     uint64_t depositAttemptCount;
     uint64_t depositAcceptedCount;
     uint64_t depositRejectedCount;
@@ -64,7 +75,10 @@ typedef struct {
     double footprintDepositedRadianceR;
     double footprintDepositedRadianceG;
     double footprintDepositedRadianceB;
+    bool physicalBeamField;
+    bool beamSubvoxelField;
     bool ownsBuffers;
+    RuntimeCausticPhotonSparseBrickCache3D* sparseBeamField;
 } RuntimeCausticVolumeCache3D;
 
 void RuntimeCausticVolumeCache3D_Init(RuntimeCausticVolumeCache3D* cache);

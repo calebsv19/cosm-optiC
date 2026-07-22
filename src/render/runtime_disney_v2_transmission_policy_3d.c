@@ -238,12 +238,24 @@ RuntimeDisneyV2_3DTransparentPolicy runtime_disney_v2_3d_resolve_transparent_pol
 
     policy.transmissionWeight = runtime_disney_v2_3d_transparent_surface_weight(principled);
     policy.visibleWeight = runtime_disney_v2_3d_transparent_layer_visible_weight(principled);
-    policy.tintR = principled ? runtime_disney_v2_transmission_3d_clamp01(principled->baseColorR)
-                              : 1.0;
-    policy.tintG = principled ? runtime_disney_v2_transmission_3d_clamp01(principled->baseColorG)
-                              : 1.0;
-    policy.tintB = principled ? runtime_disney_v2_transmission_3d_clamp01(principled->baseColorB)
-                              : 1.0;
+    policy.tintR = payload && payload->hasGlassAbsorptionColorOverride
+                       ? runtime_disney_v2_transmission_3d_clamp01(
+                             payload->glassAbsorptionColorR)
+                       : principled ? runtime_disney_v2_transmission_3d_clamp01(
+                                          principled->baseColorR)
+                                    : 1.0;
+    policy.tintG = payload && payload->hasGlassAbsorptionColorOverride
+                       ? runtime_disney_v2_transmission_3d_clamp01(
+                             payload->glassAbsorptionColorG)
+                       : principled ? runtime_disney_v2_transmission_3d_clamp01(
+                                          principled->baseColorG)
+                                    : 1.0;
+    policy.tintB = payload && payload->hasGlassAbsorptionColorOverride
+                       ? runtime_disney_v2_transmission_3d_clamp01(
+                             payload->glassAbsorptionColorB)
+                       : principled ? runtime_disney_v2_transmission_3d_clamp01(
+                                          principled->baseColorB)
+                                    : 1.0;
     policy.thinWalled = payload ? payload->thinWalled : false;
     policy.physicalTransmission =
         runtime_disney_v2_3d_policy_is_physical_transmission(payload, principled);

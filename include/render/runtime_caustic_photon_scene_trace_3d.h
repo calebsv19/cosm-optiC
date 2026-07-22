@@ -41,7 +41,7 @@ typedef struct {
     double tMin;
     double tMax;
     double rayOffset;
-    double minFluxLuma;
+    double minTransportWeightLuma;
     RuntimeRay3DTraceRoute traceRoute;
     RuntimeCausticPhotonSceneMaterialResolver3D materialResolver;
     void* materialResolverUserData;

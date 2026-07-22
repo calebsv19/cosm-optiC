@@ -1,6 +1,10 @@
 #include "render/runtime_volume_3d_scatter.h"
 
+#include "render/runtime_caustic_photon_direct_consumer_3d.h"
+#include "render/runtime_caustic_photon_distributed_beam_cache_3d.h"
+
 #include <math.h>
+#include <string.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -260,6 +264,8 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     double epsilon = runtime_volume_3d_scatter_length_epsilon();
     const bool has_caustic_cache =
         RuntimeCausticVolumeCache3D_IsAllocated(caustic_cache);
+    const bool has_caustic_source =
+        has_caustic_cache || RuntimeCausticPhotonDirectConsumer3D_Active();
 
     if (!scene || !ray) {
         return result;
@@ -267,7 +273,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     if (!RuntimeVolume3D_HasActiveExtinction(&scene->volume)) {
         return result;
     }
-    if (!has_caustic_cache &&
+    if (!has_caustic_source &&
         (!scene->hasLight || !(scene->light.intensity > 0.0))) {
         return result;
     }
@@ -356,28 +362,136 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                 }
             }
 
-            if (has_caustic_cache) {
+            if (has_caustic_source) {
                 Vec3 caustic_radiance = vec3(0.0, 0.0, 0.0);
-                if (RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
-                        caustic_cache,
-                        sample_position,
-                        scene->volume.grid.voxelSize * 3.25,
-                        &caustic_radiance)) {
+                RuntimeCausticBeamMapQueryResult3D beam_query;
+                RuntimeCausticPhotonVolumeBeamEstimatorReadback3D beam_estimator;
+                const bool distributed_beam = caustic_cache &&
+                    caustic_cache->physicalBeamField;
+                const bool direct_beam = !distributed_beam &&
+                    RuntimeCausticPhotonDirectConsumer3D_Active();
+                const bool physical_beam = direct_beam || distributed_beam;
+                bool caustic_sampled;
+                memset(&beam_query, 0, sizeof(beam_query));
+                memset(&beam_estimator, 0, sizeof(beam_estimator));
+                if (physical_beam) {
+                    const double beam_radius =
+                        RuntimeCausticPhotonDirectConsumer3D_VolumeQueryRadius();
+                    const double max_beam_step = fmax(
+                        runtime_volume_3d_scatter_minimum_step(),
+                        beam_radius * 0.5);
+                    const int beam_substep_count = (int)fmax(
+                        1.0, ceil(segment_length / max_beam_step));
+                    const double beam_substep_length =
+                        segment_length / (double)beam_substep_count;
+                    int contributed_substeps = 0;
+                    caustic_sampled = false;
+                    for (int beam_step = 0;
+                         beam_step < beam_substep_count;
+                         ++beam_step) {
+                        const double beam_sample_t = t +
+                            ((double)beam_step + 0.5) * beam_substep_length;
+                        const Vec3 beam_sample_position = vec3_add(
+                            ray->origin,
+                            vec3_scale(ray->direction, beam_sample_t));
+                        const double beam_raw_density =
+                            (double)RuntimeVolume3D_SampleDensityAtPosition(
+                                &scene->volume, beam_sample_position);
+                        const double beam_density =
+                            RuntimeVolume3DMaterial_RemapDensity(beam_raw_density);
+                        const double beam_extinction_density =
+                            RuntimeVolume3DMaterial_ExtinctionDensity(
+                                beam_raw_density);
+                        const double beam_camera_transmittance =
+                            camera_transmittance * exp(
+                                -beam_extinction_density *
+                                ((double)beam_step + 0.5) *
+                                beam_substep_length);
+                        Vec3 beam_flux_density = vec3(0.0, 0.0, 0.0);
+                        Vec3 beam_radiance = vec3(0.0, 0.0, 0.0);
+                        RuntimeCausticBeamMapQueryResult3D substep_query;
+                        RuntimeCausticPhotonVolumeBeamEstimatorReadback3D
+                            substep_estimator;
+                        memset(&substep_query, 0, sizeof(substep_query));
+                        memset(&substep_estimator, 0, sizeof(substep_estimator));
+                        if (!(beam_density > 0.0) ||
+                            !(direct_beam
+                                  ? RuntimeCausticPhotonDirectConsumer3D_SampleBeam(
+                                        beam_sample_position,
+                                        ray->direction,
+                                        beam_radius,
+                                        -1,
+                                        &beam_flux_density,
+                                        &substep_query)
+                                  : RuntimeCausticDistributedBeamCache3D_Sample(
+                                        caustic_cache,
+                                        beam_sample_position,
+                                        &substep_query)) ||
+                            !RuntimeCausticPhotonDirectConsumer3D_EvaluateBeamRadiance(
+                                &substep_query,
+                                ray->direction,
+                                beam_density,
+                                beam_camera_transmittance,
+                                beam_substep_length,
+                                &beam_radiance,
+                                &substep_estimator)) {
+                            continue;
+                        }
+                        caustic_sampled = true;
+                        contributed_substeps++;
+                        caustic_radiance = vec3_add(caustic_radiance,
+                                                    beam_radiance);
+                        beam_estimator.evaluated = true;
+                        beam_estimator.contributed = true;
+                        beam_estimator.integrationWeight +=
+                            substep_estimator.integrationWeight;
+                        beam_estimator.scatterProbability +=
+                            substep_estimator.scatterProbability;
+                        beam_estimator.beamTransmittance +=
+                            substep_estimator.beamTransmittance;
+                        beam_estimator.cameraTransmittance +=
+                            substep_estimator.cameraTransmittance;
+                        beam_estimator.phaseValue += substep_estimator.phaseValue;
+                        beam_estimator.phaseCosine += substep_estimator.phaseCosine;
+                        beam_query = substep_query;
+                    }
+                    if (contributed_substeps > 0) {
+                        const double inverse_count =
+                            1.0 / (double)contributed_substeps;
+                        beam_estimator.beamTransmittance *= inverse_count;
+                        beam_estimator.cameraTransmittance *= inverse_count;
+                        beam_estimator.phaseValue *= inverse_count;
+                        beam_estimator.phaseCosine *= inverse_count;
+                    }
+                } else {
+                    caustic_sampled =
+                        RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
+                            caustic_cache,
+                            sample_position,
+                            scene->volume.grid.voxelSize * 3.25,
+                            &caustic_radiance);
+                }
+                if (caustic_sampled) {
                     const double caustic_peak =
                         runtime_volume_3d_scatter_peak(caustic_radiance.x,
                                                        caustic_radiance.y,
                                                        caustic_radiance.z);
                     result.causticSampleCount += 1;
                     if (caustic_peak > 0.0) {
-                        /*
-                         * The caustic cache stores transport-deposited beam energy, not an
-                         * ordinary unshaped light sample.  Keep density/transmittance gating,
-                         * but do not apply the direct-light isotropic phase attenuation again.
-                         */
-                        const double caustic_term =
-                            camera_transmittance * scatter_probability *
-                            kRuntimeVolume3DCausticScatterStrength *
-                            gRuntimeVolume3DCausticScatterStrengthGain;
+                        const double caustic_term = physical_beam
+                            ? gRuntimeVolume3DCausticScatterStrengthGain
+                            : camera_transmittance * scatter_probability *
+                                  kRuntimeVolume3DCausticScatterStrength *
+                                  gRuntimeVolume3DCausticScatterStrengthGain;
+                        const double caustic_visibility_term = physical_beam
+                            ? beam_estimator.integrationWeight
+                            : caustic_term;
+                        const double caustic_scatter_probability = physical_beam
+                            ? beam_estimator.scatterProbability
+                            : scatter_probability;
+                        const double caustic_camera_transmittance = physical_beam
+                            ? beam_estimator.cameraTransmittance
+                            : camera_transmittance;
                         const double caustic_r = caustic_radiance.x * caustic_term *
                                                  gRuntimeVolume3DScatterTintR;
                         const double caustic_g = caustic_radiance.y * caustic_term *
@@ -404,21 +518,31 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                         if (density > result.causticSampledDensityMax) {
                             result.causticSampledDensityMax = density;
                         }
-                        result.causticScatterProbabilitySum += scatter_probability;
-                        if (scatter_probability > result.causticScatterProbabilityMax) {
-                            result.causticScatterProbabilityMax = scatter_probability;
+                        result.causticScatterProbabilitySum +=
+                            caustic_scatter_probability;
+                        if (caustic_scatter_probability >
+                            result.causticScatterProbabilityMax) {
+                            result.causticScatterProbabilityMax =
+                                caustic_scatter_probability;
                         }
-                        result.causticCameraTransmittanceSum += camera_transmittance;
+                        result.causticCameraTransmittanceSum +=
+                            caustic_camera_transmittance;
                         if (result.causticContributingSampleCount == 1 ||
-                            camera_transmittance < result.causticCameraTransmittanceMin) {
-                            result.causticCameraTransmittanceMin = camera_transmittance;
+                            caustic_camera_transmittance <
+                                result.causticCameraTransmittanceMin) {
+                            result.causticCameraTransmittanceMin =
+                                caustic_camera_transmittance;
                         }
-                        if (camera_transmittance > result.causticCameraTransmittanceMax) {
-                            result.causticCameraTransmittanceMax = camera_transmittance;
+                        if (caustic_camera_transmittance >
+                            result.causticCameraTransmittanceMax) {
+                            result.causticCameraTransmittanceMax =
+                                caustic_camera_transmittance;
                         }
-                        result.causticVisibilityTermSum += caustic_term;
-                        if (caustic_term > result.causticVisibilityTermMax) {
-                            result.causticVisibilityTermMax = caustic_term;
+                        result.causticVisibilityTermSum += caustic_visibility_term;
+                        if (caustic_visibility_term >
+                            result.causticVisibilityTermMax) {
+                            result.causticVisibilityTermMax =
+                                caustic_visibility_term;
                         }
                     }
                 }

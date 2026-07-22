@@ -61,7 +61,7 @@ bool RuntimeCausticPhotonBsdfSampling3D_Generate(
 bool RuntimeCausticPhotonBsdfSampling3D_EvaluateRoulette(
     const RuntimePathDepthPolicy3D* policy,
     uint32_t depth,
-    Vec3 throughput,
+    Vec3 transport_weight,
     double unit_sample,
     RuntimeCausticPhotonRoulette3D* out_roulette) {
     RuntimeCausticPhotonRoulette3D roulette;
@@ -71,17 +71,19 @@ bool RuntimeCausticPhotonBsdfSampling3D_EvaluateRoulette(
     memset(&roulette, 0, sizeof(roulette));
     *out_roulette = roulette;
     if (depth == 0u || !isfinite(unit_sample) || unit_sample < 0.0 ||
-        unit_sample >= 1.0 || !isfinite(throughput.x) || throughput.x < 0.0 ||
-        !isfinite(throughput.y) || throughput.y < 0.0 ||
-        !isfinite(throughput.z) || throughput.z < 0.0) {
+        unit_sample >= 1.0 || !isfinite(transport_weight.x) ||
+        transport_weight.x < 0.0 || !isfinite(transport_weight.y) ||
+        transport_weight.y < 0.0 || !isfinite(transport_weight.z) ||
+        transport_weight.z < 0.0) {
         return false;
     }
 
     roulette.depth = depth;
     roulette.unitSample = unit_sample;
-    roulette.throughputBefore = throughput;
+    roulette.throughputBefore = transport_weight;
     roulette.throughputLuma =
-        0.2126 * throughput.x + 0.7152 * throughput.y + 0.0722 * throughput.z;
+        0.2126 * transport_weight.x + 0.7152 * transport_weight.y +
+        0.0722 * transport_weight.z;
     survival = RuntimePathDepthPolicy3D_SurvivalProbability(
         policy, (int)depth, roulette.throughputLuma);
     roulette.survivalProbability = survival;
@@ -93,17 +95,17 @@ bool RuntimeCausticPhotonBsdfSampling3D_EvaluateRoulette(
                                   roulette.throughputLuma,
                                   unit_sample,
                                   NULL);
-    roulette.expectedThroughput = throughput;
+    roulette.expectedThroughput = transport_weight;
     if (!roulette.evaluated) {
         roulette.branchPdf = 1.0;
-        roulette.throughputAfter = throughput;
+        roulette.throughputAfter = transport_weight;
     } else if (roulette.terminated) {
         roulette.branchPdf = 1.0 - survival;
-        roulette.terminatedThroughput = throughput;
+        roulette.terminatedThroughput = transport_weight;
         roulette.throughputAfter = vec3(0.0, 0.0, 0.0);
     } else {
         roulette.branchPdf = survival;
-        roulette.throughputAfter = vec3_scale(throughput, 1.0 / survival);
+        roulette.throughputAfter = vec3_scale(transport_weight, 1.0 / survival);
     }
     roulette.valid = true;
     *out_roulette = roulette;

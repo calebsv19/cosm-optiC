@@ -544,8 +544,8 @@ static int test_agent_render_request_caustic_photon_map_contract_only(void) {
                                                        request.caustic_sidecar_enabled);
     assert_true("agent_render_caustic_photon_map_requested",
                 readback.photonMapRequested);
-    assert_true("agent_render_caustic_photon_map_not_implemented",
-                !readback.photonMapImplemented);
+    assert_true("agent_render_caustic_photon_map_implemented",
+                readback.photonMapImplemented);
     assert_true("agent_render_caustic_photon_map_no_exploratory_path",
                 !readback.pathEmissionActive);
     assert_true("agent_render_caustic_photon_map_label",
@@ -565,15 +565,23 @@ static int test_agent_render_request_caustic_photon_product_mode_ppm6(void) {
         "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
         "  \"run_id\": \"caustic_photon_product_mode_ppm6_test\",\n"
         "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
-        "  \"render\": {\"integrator_3d\": \"direct_light\"},\n"
+        "  \"render\": {\"integrator_3d\": \"disney_v2\"},\n"
         "  \"inspection\": {\n"
         "    \"caustic_product_mode\": \"production\",\n"
         "    \"caustic_surface_query_enabled\": true,\n"
         "    \"caustic_volume_query_enabled\": true,\n"
         "    \"caustic_render_contribution_enabled\": true,\n"
+        "    \"caustic_photon_render_prep_population_enabled\": true,\n"
+        "    \"caustic_photon_block_solid_dielectric_direct_paths\": true,\n"
+        "    \"caustic_photon_surface_path_filter\": \"multipath\",\n"
+        "    \"caustic_photon_surface_receiver_scene_object_index\": 7,\n"
         "    \"caustic_photon_sample_budget\": 192,\n"
+        "    \"caustic_photon_emission_seed\": 211,\n"
         "    \"caustic_photon_max_path_depth\": 6,\n"
         "    \"caustic_photon_surface_radiance_scale\": 2.5,\n"
+        "    \"caustic_photon_surface_estimator\": \"neighbor_gather\",\n"
+        "    \"caustic_photon_surface_gather_neighbors\": 12,\n"
+        "    \"caustic_photon_surface_gather_max_radius\": 0.24,\n"
         "    \"caustic_photon_trace_populated_callsite_readback_enabled\": true\n"
         "  }\n"
         "}\n";
@@ -593,9 +601,24 @@ static int test_agent_render_request_caustic_photon_product_mode_ppm6(void) {
                 request.has_caustic_product_mode_override &&
                     request.has_caustic_mode_override);
     assert_true("agent_render_caustic_photon_product_mode_settings",
-                request.caustic_photon_integration_settings.productMode ==
+                    request.caustic_photon_integration_settings.productMode ==
                         RUNTIME_CAUSTIC_PRODUCT_MODE_PRODUCTION &&
                     request.caustic_photon_integration_settings.renderContributionEnabled &&
+                    request.caustic_photon_integration_settings
+                            .surfaceReceiverSceneObjectIndex == 7 &&
+                    request.caustic_photon_integration_settings
+                            .surfacePathFilter ==
+                        RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_FILTER_MULTIPATH &&
+                    request.caustic_photon_integration_settings.emissionSeed ==
+                        211u &&
+                    request.caustic_photon_integration_settings.surfaceEstimator ==
+                        RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_NEIGHBOR_GATHER &&
+                    request.caustic_photon_integration_settings
+                            .surfaceGatherNeighborCount == 12u &&
+                    fabs(request.caustic_photon_integration_settings
+                                 .surfaceGatherMaxRadius -
+                             0.24) < 1.0e-9 &&
+                    request.caustic_photon_block_solid_dielectric_direct_paths &&
                     request.caustic_photon_trace_populated_callsite_readback_enabled);
     assert_true("agent_render_caustic_photon_product_mode_caustic_settings",
                 request.caustic_settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
@@ -616,6 +639,65 @@ static int test_agent_render_request_caustic_photon_product_mode_ppm6(void) {
                     readback.transportEngine ==
                         RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP);
     unlink(request_path);
+    return 0;
+}
+
+static int test_agent_render_request_photon_image_contribution_contract(void) {
+    const char* wrong_integrator_path =
+        "/tmp/ray_tracing_agent_render_photon_wrong_integrator_request.json";
+    const char* missing_population_path =
+        "/tmp/ray_tracing_agent_render_photon_missing_population_request.json";
+    const char* wrong_integrator_json =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"photon_wrong_integrator_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"direct_light\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_product_mode\": \"photon_map\",\n"
+        "    \"caustic_surface_query_enabled\": true,\n"
+        "    \"caustic_render_contribution_enabled\": true,\n"
+        "    \"caustic_photon_render_prep_population_enabled\": true\n"
+        "  }\n"
+        "}\n";
+    const char* missing_population_json =
+        "{\n"
+        "  \"schema_version\": \"ray_tracing_agent_render_request_v1\",\n"
+        "  \"run_id\": \"photon_missing_population_test\",\n"
+        "  \"scene\": {\"runtime_scene_path\": \"scene_runtime.json\"},\n"
+        "  \"render\": {\"integrator_3d\": \"disney_v2\"},\n"
+        "  \"inspection\": {\n"
+        "    \"caustic_product_mode\": \"photon_map\",\n"
+        "    \"caustic_surface_query_enabled\": true,\n"
+        "    \"caustic_render_contribution_enabled\": true\n"
+        "  }\n"
+        "}\n";
+    RayTracingAgentRenderRequest request;
+    char diagnostics[512];
+
+    assert_true("agent_render_photon_wrong_integrator_request_write",
+                write_text_file(wrong_integrator_path, wrong_integrator_json));
+    assert_true("agent_render_photon_wrong_integrator_rejected",
+                !ray_tracing_agent_render_request_load_file(
+                    wrong_integrator_path,
+                    &request,
+                    diagnostics,
+                    sizeof(diagnostics)) &&
+                    strstr(diagnostics, "render.integrator_3d=disney_v2") != NULL);
+
+    assert_true("agent_render_photon_missing_population_request_write",
+                write_text_file(missing_population_path, missing_population_json));
+    assert_true("agent_render_photon_missing_population_rejected",
+                !ray_tracing_agent_render_request_load_file(
+                    missing_population_path,
+                    &request,
+                    diagnostics,
+                    sizeof(diagnostics)) &&
+                    strstr(diagnostics,
+                           "caustic_photon_render_prep_population_enabled") != NULL);
+
+    unlink(wrong_integrator_path);
+    unlink(missing_population_path);
     return 0;
 }
 
@@ -1963,6 +2045,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_agent_render_request_caustic_transport_volume_phase4_contract();
     test_agent_render_request_caustic_photon_map_contract_only();
     test_agent_render_request_caustic_photon_product_mode_ppm6();
+    test_agent_render_request_photon_image_contribution_contract();
     test_agent_render_request_caustic_lens_traversal_profile_override();
     test_agent_render_request_caustic_transport_surface_sidecar_combined_contract();
     test_agent_render_request_caustic_sidecar_rejects_non_disney_v2();

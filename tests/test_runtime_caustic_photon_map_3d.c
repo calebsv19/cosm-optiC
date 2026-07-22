@@ -4,6 +4,8 @@
 #include "render/runtime_caustic_sphere_lens_3d.h"
 #include "test_support.h"
 
+#include <string.h>
+
 static RuntimeCausticPhotonMapQuery3D test_query(Vec3 position, Vec3 normal) {
     RuntimeCausticPhotonMapQuery3D query;
     RuntimeCausticPhotonMap3D_DefaultQuery(&query);
@@ -13,6 +15,8 @@ static RuntimeCausticPhotonMapQuery3D test_query(Vec3 position, Vec3 normal) {
     query.sceneObjectIndex = 9;
     query.primitiveIndex = 8;
     query.triangleIndex = 7;
+    query.materialId = 6;
+    query.estimator.minimumEffectiveSamples = 1u;
     return query;
 }
 
@@ -37,6 +41,7 @@ static int test_runtime_caustic_photon_map_allocate_store_query(void) {
     hit.sceneObjectIndex = 9;
     hit.primitiveIndex = 8;
     hit.triangleIndex = 7;
+    hit.materialId = 6;
 
     assert_true("runtime_caustic_photon_map_store_hit",
                 RuntimeCausticPhotonMap3D_StoreSurfaceHit(&map, &hit, 0.5, 0.20));
@@ -134,6 +139,7 @@ static int test_runtime_caustic_photon_map_rejects_capacity_and_identity(void) {
     record.sceneObjectIndex = 9;
     record.primitiveIndex = 8;
     record.triangleIndex = 7;
+    record.materialId = 6;
 
     assert_true("runtime_caustic_photon_map_capacity_first",
                 RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
@@ -173,6 +179,7 @@ static int test_runtime_caustic_photon_map_query_cost_and_energy_ledgers(void) {
     record.sceneObjectIndex = 9;
     record.primitiveIndex = 8;
     record.triangleIndex = 7;
+    record.materialId = 6;
 
     record.photonId = 1u;
     record.position = vec3(0.0, 0.0, 0.0);
@@ -248,6 +255,7 @@ static int test_runtime_caustic_photon_map_grid_acceleration_prunes_sparse_recor
     record.sceneObjectIndex = 9;
     record.primitiveIndex = 8;
     record.triangleIndex = 7;
+    record.materialId = 6;
 
     for (uint64_t i = 0u; i < 12u; ++i) {
         record.photonId = i + 1u;
@@ -272,6 +280,183 @@ static int test_runtime_caustic_photon_map_grid_acceleration_prunes_sparse_recor
     return 0;
 }
 
+static int test_runtime_caustic_photon_map_ppm24a_estimator_contract(void) {
+    RuntimeCausticPhotonMap3D map;
+    RuntimeCausticPhotonMapRecord3D record = {0};
+    RuntimeCausticPhotonMapQuery3D query =
+        test_query(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+    RuntimeCausticPhotonMapQueryResult3D compatibility;
+    RuntimeCausticPhotonMapQueryResult3D explicit_radius;
+    RuntimeCausticPhotonMapQueryResult3D knn;
+    RuntimeCausticPhotonMapDiagnostics3D diagnostics;
+
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("runtime_caustic_photon_map_ppm24a_allocate",
+                RuntimeCausticPhotonMap3D_Allocate(&map, 4u));
+    record.normal = vec3(0.0, 1.0, 0.0);
+    record.incidentDirection = vec3(0.0, -1.0, 0.0);
+    record.flux = vec3(1.0, 0.5, 0.25);
+    record.pathPdf = 1.0;
+    record.queryRadius = 0.20;
+    record.sceneObjectIndex = 9;
+    record.primitiveIndex = 8;
+    record.triangleIndex = 7;
+    record.materialId = 6;
+    record.photonId = 1u;
+    record.position = vec3(0.01, 0.0, 0.0);
+    assert_true("runtime_caustic_photon_map_ppm24a_store_first",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    record.photonId = 2u;
+    record.position = vec3(0.08, 0.0, 0.0);
+    assert_true("runtime_caustic_photon_map_ppm24a_store_second",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    record.photonId = 3u;
+    record.position = vec3(0.12, 0.0, 0.0);
+    record.sceneObjectIndex = 99;
+    assert_true("runtime_caustic_photon_map_ppm24a_store_rejected_candidate",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+
+    assert_true("runtime_caustic_photon_map_ppm24a_compat_query",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &compatibility));
+    query.estimator.estimator = RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_RADIUS;
+    assert_true("runtime_caustic_photon_map_ppm24a_explicit_radius_query",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &explicit_radius));
+    assert_close("runtime_caustic_photon_map_ppm24a_radius_compat_x",
+                 explicit_radius.flux.x, compatibility.flux.x, 1e-12);
+    assert_close("runtime_caustic_photon_map_ppm24a_radius_compat_y",
+                 explicit_radius.flux.y, compatibility.flux.y, 1e-12);
+    assert_true("runtime_caustic_photon_map_ppm24a_readback",
+                explicit_radius.estimatorImplemented &&
+                    strcmp(explicit_radius.estimatorLabel, "radius") == 0 &&
+                    explicit_radius.effectiveSampleCount == 2u &&
+                    explicit_radius.receiverRejectCount == 1u &&
+                    explicit_radius.rejectedPhysicalFlux.x > 0.0 &&
+                    explicit_radius.nearestContributionDistance <=
+                        explicit_radius.farthestContributionDistance &&
+                    explicit_radius.varianceProxy >= 0.0);
+
+    query.estimator.estimator = RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_K_NEAREST;
+    query.estimator.neighborLimit = 1u;
+    query.estimator.minimumEffectiveSamples = 1u;
+    assert_true("runtime_caustic_photon_map_ppm24b_prepare_sample_support",
+                RuntimeCausticPhotonMap3D_PrepareSampleCenteredSupports(
+                    &map, 1u) && map.sampleSupport.valid &&
+                    map.sampleSupport.adaptiveRecordCount == 2u);
+    assert_true("runtime_caustic_photon_map_ppm24b_knn",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &knn) &&
+                    knn.estimatorImplemented &&
+                    strcmp(knn.estimatorLabel, "k_nearest") == 0 &&
+                    knn.testedCount == 3u && knn.effectiveSampleCount == 1u &&
+                    knn.nearestContributionDistance == 0.01 &&
+                    knn.farthestContributionDistance == 0.01 &&
+                    knn.receiverRejectCount == 1u);
+    RuntimeCausticPhotonMap3D_SnapshotDiagnostics(&map, &diagnostics);
+    assert_true("runtime_caustic_photon_map_ppm24b_diag",
+                diagnostics.lastQueryEstimatorImplemented &&
+                    diagnostics.lastQueryEffectiveSampleCount == 1u &&
+                    strcmp(diagnostics.lastQueryEstimatorLabel, "k_nearest") == 0);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_map_sample_centered_low_confidence_energy(void) {
+    RuntimeCausticPhotonMap3D map;
+    RuntimeCausticPhotonMapRecord3D record = {0};
+    RuntimeCausticPhotonMapQuery3D query =
+        test_query(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+    RuntimeCausticPhotonMapQueryResult3D result;
+
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("runtime_caustic_photon_map_sample_centered_allocate",
+                RuntimeCausticPhotonMap3D_Allocate(&map, 1u));
+    record.photonId = 1u;
+    record.position = vec3(0.0, 0.0, 0.0);
+    record.normal = vec3(0.0, 1.0, 0.0);
+    record.incidentDirection = vec3(0.0, -1.0, 0.0);
+    record.flux = vec3(1.0, 1.0, 1.0);
+    record.pathPdf = 1.0;
+    record.queryRadius = 0.2;
+    record.sceneObjectIndex = 9;
+    record.primitiveIndex = 8;
+    record.triangleIndex = 7;
+    record.materialId = 6;
+    assert_true("runtime_caustic_photon_map_sample_centered_store",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    assert_true("runtime_caustic_photon_map_sample_centered_prepare",
+                RuntimeCausticPhotonMap3D_PrepareSampleCenteredSupports(
+                    &map, 4u) && map.sampleSupport.valid &&
+                    map.sampleSupport.maximumRadiusRecordCount == 1u);
+    query.estimator.estimator = RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_K_NEAREST;
+    query.estimator.neighborLimit = 4u;
+    query.estimator.minimumEffectiveSamples = 4u;
+    assert_true("runtime_caustic_photon_map_sample_centered_energy_hit",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &result) &&
+                    result.hit && result.undersampled &&
+                    result.effectiveSampleCount == 1u && result.flux.x > 0.0);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
+static int test_runtime_caustic_photon_map_neighbor_gather(void) {
+    RuntimeCausticPhotonMap3D map;
+    RuntimeCausticPhotonMapRecord3D record = {0};
+    RuntimeCausticPhotonMapQuery3D query =
+        test_query(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+    RuntimeCausticPhotonMapQueryResult3D result;
+    const double distances[] = {0.01, 0.04, 0.08, 0.15};
+
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("runtime_caustic_photon_map_neighbor_gather_allocate",
+                RuntimeCausticPhotonMap3D_Allocate(&map, 5u));
+    record.normal = vec3(0.0, 1.0, 0.0);
+    record.incidentDirection = vec3(0.0, -1.0, 0.0);
+    record.flux = vec3(0.25, 0.25, 0.25);
+    record.pathPdf = 1.0;
+    record.queryRadius = 0.05;
+    record.sceneObjectIndex = 9;
+    record.primitiveIndex = 8;
+    record.triangleIndex = 7;
+    record.materialId = 6;
+    for (uint64_t i = 0u; i < 4u; ++i) {
+        record.photonId = i + 1u;
+        record.position = vec3(distances[i], 0.0, 0.0);
+        assert_true("runtime_caustic_photon_map_neighbor_gather_store",
+                    RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    }
+    record.photonId = 5u;
+    record.position = vec3(0.02, 0.0, 0.0);
+    record.sceneObjectIndex = 99;
+    assert_true("runtime_caustic_photon_map_neighbor_gather_store_mismatch",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+
+    query.radius = 0.20;
+    query.estimator.estimator =
+        RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_NEIGHBOR_GATHER;
+    query.estimator.neighborLimit = 3u;
+    query.estimator.minimumEffectiveSamples = 3u;
+    assert_true("runtime_caustic_photon_map_neighbor_gather_query",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &result) &&
+                    result.estimatorImplemented &&
+                    strcmp(result.estimatorLabel, "neighbor_gather") == 0 &&
+                    result.effectiveSampleCount == 3u && !result.undersampled &&
+                    result.receiverObjectRejectCount == 1u &&
+                    result.supportAdaptive && result.supportRadius > 0.08 &&
+                    result.supportRadius < 0.09 && result.flux.x > 0.0);
+    query.radius = 0.10;
+    query.estimator.estimator =
+        RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_POPULATION_SCALED_GATHER;
+    query.estimator.neighborLimit = 4u;
+    query.estimator.minimumEffectiveSamples = 4u;
+    assert_true(
+        "runtime_caustic_photon_map_population_gather_undersampled_adapts",
+        RuntimeCausticPhotonMap3D_Query(&map, &query, &result) &&
+            result.effectiveSampleCount == 3u && result.undersampled &&
+            result.supportAdaptive && result.supportRadius > 0.08 &&
+            result.supportRadius < 0.09);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_map_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_map_allocate_store_query();
@@ -279,5 +464,9 @@ int run_test_runtime_caustic_photon_map_3d_tests(void) {
     failures += test_runtime_caustic_photon_map_rejects_capacity_and_identity();
     failures += test_runtime_caustic_photon_map_query_cost_and_energy_ledgers();
     failures += test_runtime_caustic_photon_map_grid_acceleration_prunes_sparse_records();
+    failures += test_runtime_caustic_photon_map_ppm24a_estimator_contract();
+    failures +=
+        test_runtime_caustic_photon_map_sample_centered_low_confidence_energy();
+    failures += test_runtime_caustic_photon_map_neighbor_gather();
     return failures;
 }

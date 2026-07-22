@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "render/runtime_caustic_lens_transport_3d.h"
+#include "render/runtime_caustic_photon_path_weight_3d.h"
 #include "render/runtime_scene_accel_3d.h"
 
 static double photon_scene_trace_clamp(double value, double min_value, double max_value) {
@@ -94,7 +95,7 @@ void RuntimeCausticPhotonSceneTrace3D_DefaultSettings(
     settings->tMin = 1.0e-6;
     settings->tMax = 1.0e6;
     settings->rayOffset = 1.0e-5;
-    settings->minFluxLuma = 0.0;
+    settings->minTransportWeightLuma = 0.0;
     settings->traceRoute = RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
     settings->materialResolver = photon_scene_trace_default_material_resolver;
 }
@@ -353,6 +354,17 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicDielectric(
             throughput_before,
             fresnel,
             &profile);
+        if (!RuntimeCausticPhotonPathWeight3D_ApplyThroughputRatio(
+                state.transportWeight,
+                state.throughput,
+                throughput_after,
+                &state.transportWeight)) {
+            photon_scene_trace_set_terminal(
+                &result,
+                RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR,
+                RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM);
+            break;
+        }
         state.depth = depth;
         state.position = hit.position;
         state.direction = outgoing;
@@ -412,7 +424,8 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicDielectric(
         }
         trace->debug.refractedBranchCount++;
 
-        if (photon_scene_trace_luma(throughput_after) <= active->minFluxLuma) {
+        if (photon_scene_trace_luma(state.transportWeight) <=
+            active->minTransportWeightLuma) {
             photon_scene_trace_set_terminal(
                 &result,
                 RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_OPAQUE_SURFACE,
@@ -603,6 +616,17 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
         goto finish;
     }
 
+    if (!RuntimeCausticPhotonPathWeight3D_ApplyThroughputRatio(
+            state.transportWeight,
+            state.throughput,
+            hit_event->bsdfSelection.throughputAfter,
+            &state.transportWeight)) {
+        photon_scene_trace_set_terminal(
+            &result,
+            RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_TRACE_ERROR,
+            RUNTIME_CAUSTIC_PHOTON_REJECT_INVALID_MEDIUM);
+        goto finish;
+    }
     state.depth = 1u;
     state.position = hit.position;
     state.throughput = hit_event->bsdfSelection.throughputAfter;
@@ -703,6 +727,7 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
     RuntimeCausticPhotonSceneTrace3D* out_trace) {
     RuntimeCausticPhotonSceneHitEvent3D* hit_event;
     RuntimeCausticPhotonEvent3D* event;
+    Vec3 physical_throughput_before_roulette;
 
     if (!RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHit(
             scene, sample, depth, settings, out_trace)) {
@@ -720,17 +745,27 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
     if (!RuntimeCausticPhotonBsdfSampling3D_EvaluateRoulette(
             roulette_policy,
             depth,
-            out_trace->trace.finalState.throughput,
+            out_trace->trace.finalState.transportWeight,
             hit_event->bsdfSampleStream.rouletteUnitSample,
             &hit_event->roulette)) {
         return false;
     }
 
     event = &out_trace->trace.events[out_trace->trace.eventCount - 1u];
+    physical_throughput_before_roulette =
+        out_trace->trace.finalState.throughput;
     out_trace->trace.finalState.pathPdf *= hit_event->roulette.branchPdf;
-    out_trace->trace.finalState.throughput = hit_event->roulette.throughputAfter;
+    out_trace->trace.finalState.transportWeight =
+        hit_event->roulette.throughputAfter;
+    if (hit_event->roulette.terminated) {
+        out_trace->trace.finalState.throughput = vec3(0.0, 0.0, 0.0);
+    } else if (hit_event->roulette.evaluated) {
+        out_trace->trace.finalState.throughput = vec3_scale(
+            physical_throughput_before_roulette,
+            1.0 / hit_event->roulette.survivalProbability);
+    }
     event->pathPdf = out_trace->trace.finalState.pathPdf;
-    event->throughput = hit_event->roulette.throughputAfter;
+    event->throughput = out_trace->trace.finalState.throughput;
     if (!hit_event->roulette.terminated) {
         return true;
     }
@@ -743,7 +778,7 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceSeededBsdfHitWithRoulette(
     out_trace->trace.debug.rejectedPhotonCount = 1u;
     out_trace->trace.debug.lastRejectReason =
         RUNTIME_CAUSTIC_PHOTON_REJECT_RUSSIAN_ROULETTE;
-    out_trace->trace.debug.rejectedFlux = hit_event->roulette.terminatedThroughput;
+    out_trace->trace.debug.rejectedFlux = physical_throughput_before_roulette;
     hit_event->termination =
         RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_ROULETTE_TERMINATED;
     out_trace->readback.termination = hit_event->termination;

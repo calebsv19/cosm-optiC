@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "math/vec3.h"
+#include "render/runtime_caustic_photon_provenance_3d.h"
 
 typedef enum {
     RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT = 0,
@@ -48,6 +49,16 @@ typedef struct {
     Vec3 direction;
     Vec3 flux;
     double emissionPdf;
+    double sourceSelectionPdf;
+    double positionPdf;
+    double directionPdf;
+    double baseDirectionPdf;
+    double emissionFluxCorrection;
+    bool fluxPdfCompensated;
+    Vec3 proposalDirection;
+    double proposalPdf;
+    bool guidingChangedSample;
+    bool guidingPdfFluxCorrected;
 } RuntimeCausticPhotonSample3D;
 
 typedef struct {
@@ -94,6 +105,7 @@ typedef struct {
     int sceneObjectIndex;
     int primitiveIndex;
     int triangleIndex;
+    int materialId;
     Vec3 position;
     Vec3 normal;
     Vec3 incidentDirection;
@@ -114,6 +126,7 @@ typedef struct {
     double transmittance;
     double densityWeight;
     int mediumId;
+    RuntimeCausticPhotonPathProvenance3D provenance;
 } RuntimeCausticPhotonVolumeBeamSegment3D;
 
 typedef struct {
@@ -125,9 +138,15 @@ typedef struct {
     Vec3 flux;
     double pathPdf;
     double queryRadius;
+    double sampleCenteredSupportRadius;
+    uint64_t sampleCenteredSupportNeighborCount;
+    bool sampleCenteredSupportAdaptive;
+    bool sampleCenteredSupportPrepared;
     int sceneObjectIndex;
     int primitiveIndex;
     int triangleIndex;
+    int materialId;
+    RuntimeCausticPhotonPathProvenance3D provenance;
 } RuntimeCausticPhotonMapRecord3D;
 
 typedef struct {

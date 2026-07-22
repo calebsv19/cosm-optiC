@@ -769,8 +769,23 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.causticModeRect, x, y)) {
-        state->causticSettings.mode =
-            (RuntimeCausticMode3D)(((int)state->causticSettings.mode + 1) % 4);
+        if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_OFF) {
+            state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_ANALYTIC;
+            state->causticSettings.transportEngine =
+                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
+        } else if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
+            state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_TRANSPORT;
+            state->causticSettings.transportEngine =
+                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
+        } else if (state->causticSettings.transportEngine ==
+                   RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT) {
+            state->causticSettings.transportEngine =
+                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP;
+        } else {
+            state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_OFF;
+            state->causticSettings.transportEngine =
+                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
+        }
         if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_OFF ||
             state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
             state->causticSettings.surfaceCacheEnabled = false;
@@ -782,6 +797,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
     if (point_in_rect(&buttons.causticEngineRect, x, y)) {
+        state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_TRANSPORT;
         state->causticSettings.transportEngine =
             state->causticSettings.transportEngine ==
                     RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP

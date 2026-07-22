@@ -18,6 +18,14 @@ typedef struct {
     double transparency;
     double opticalIor;
     double absorptionDistance;
+    double glassInterfaceTintR;
+    double glassInterfaceTintG;
+    double glassInterfaceTintB;
+    double glassAbsorptionColorR;
+    double glassAbsorptionColorG;
+    double glassAbsorptionColorB;
+    bool hasGlassInterfaceTintOverride;
+    bool hasGlassAbsorptionColorOverride;
     bool thinWalled;
     bool hasGlassTransportOverride;
     double textureMask;

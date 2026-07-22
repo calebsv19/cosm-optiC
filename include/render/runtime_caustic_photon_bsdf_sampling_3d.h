@@ -43,7 +43,7 @@ bool RuntimeCausticPhotonBsdfSampling3D_Generate(
 bool RuntimeCausticPhotonBsdfSampling3D_EvaluateRoulette(
     const RuntimePathDepthPolicy3D* policy,
     uint32_t depth,
-    Vec3 throughput,
+    Vec3 transport_weight,
     double unit_sample,
     RuntimeCausticPhotonRoulette3D* out_roulette);
 

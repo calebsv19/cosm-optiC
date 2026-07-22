@@ -15,17 +15,26 @@
 #include "test_runtime_emission_transparency.h"
 #include "test_runtime_caustic_bootstrap_3d.h"
 #include "test_runtime_caustic_beam_map_3d.h"
+#include "test_runtime_caustic_photon_volume_segment_normalization_3d.h"
 #include "test_runtime_caustic_lens_transport_3d.h"
 #include "test_runtime_caustic_photon_emit_3d.h"
+#include "test_runtime_caustic_photon_direct_consumer_3d.h"
+#include "test_runtime_caustic_photon_estimator_3d.h"
 #include "test_runtime_caustic_photon_integration_3d.h"
 #include "test_runtime_caustic_photon_map_3d.h"
 #include "test_runtime_caustic_photon_medium_acceptance_3d.h"
 #include "test_runtime_caustic_photon_medium_stack_3d.h"
 #include "test_runtime_caustic_photon_path_transport_3d.h"
+#include "test_runtime_caustic_photon_provenance_3d.h"
+#include "test_runtime_caustic_photon_ppm28_3d.h"
+#include "test_runtime_caustic_photon_ppm29_3d.h"
+#include "test_runtime_caustic_photon_ppm30_3d.h"
+#include "test_runtime_caustic_photon_sparse_cache_3d.h"
 #include "test_runtime_caustic_photon_bsdf_policy_3d.h"
 #include "test_runtime_caustic_photon_bsdf_sampling_3d.h"
 #include "test_runtime_caustic_photon_scene_population_3d.h"
 #include "test_runtime_caustic_photon_scene_trace_3d.h"
+#include "test_runtime_caustic_photon_surface_provenance_filter_3d.h"
 #include "test_runtime_caustic_photon_trace_3d.h"
 #include "test_runtime_caustic_sphere_lens_3d.h"
 #include "test_runtime_caustic_surface_cache_3d.h"
@@ -132,8 +141,15 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_volume_3d", run_test_runtime_volume_3d_tests},
         {"runtime_caustic_bootstrap_3d", run_test_runtime_caustic_bootstrap_3d_tests},
         {"runtime_caustic_beam_map_3d", run_test_runtime_caustic_beam_map_3d_tests},
+        {"runtime_caustic_photon_volume_segment_normalization_3d",
+         run_test_runtime_caustic_photon_volume_segment_normalization_3d_tests},
         {"runtime_caustic_lens_transport_3d", run_test_runtime_caustic_lens_transport_3d_tests},
         {"runtime_caustic_photon_emit_3d", run_test_runtime_caustic_photon_emit_3d_tests},
+        {"runtime_light_radiometry_3d", run_test_runtime_light_set_3d_tests},
+        {"runtime_caustic_photon_direct_consumer_3d",
+         run_test_runtime_caustic_photon_direct_consumer_3d_tests},
+        {"runtime_caustic_photon_estimator_3d",
+         run_test_runtime_caustic_photon_estimator_3d_tests},
         {"runtime_caustic_photon_integration_3d",
          run_test_runtime_caustic_photon_integration_3d_tests},
         {"runtime_caustic_photon_map_3d", run_test_runtime_caustic_photon_map_3d_tests},
@@ -143,6 +159,16 @@ int test_runner_main(int argc, char** argv) {
          run_test_runtime_caustic_photon_medium_stack_3d_tests},
         {"runtime_caustic_photon_path_transport_3d",
          run_test_runtime_caustic_photon_path_transport_3d_tests},
+        {"runtime_caustic_photon_provenance_3d",
+         run_test_runtime_caustic_photon_provenance_3d_tests},
+        {"runtime_caustic_photon_ppm28_3d",
+         run_test_runtime_caustic_photon_ppm28_3d_tests},
+        {"runtime_caustic_photon_ppm29_3d",
+         run_test_runtime_caustic_photon_ppm29_3d_tests},
+        {"runtime_caustic_photon_ppm30_3d",
+         run_test_runtime_caustic_photon_ppm30_3d_tests},
+        {"runtime_caustic_photon_sparse_cache_3d",
+         run_test_runtime_caustic_photon_sparse_cache_3d_tests},
         {"runtime_caustic_photon_bsdf_policy_3d",
          run_test_runtime_caustic_photon_bsdf_policy_3d_tests},
         {"runtime_caustic_photon_bsdf_sampling_3d",
@@ -151,6 +177,8 @@ int test_runner_main(int argc, char** argv) {
          run_test_runtime_caustic_photon_scene_population_3d_tests},
         {"runtime_caustic_photon_scene_trace_3d",
          run_test_runtime_caustic_photon_scene_trace_3d_tests},
+        {"runtime_caustic_photon_surface_provenance_filter_3d",
+         run_test_runtime_caustic_photon_surface_provenance_filter_3d_tests},
         {"runtime_caustic_photon_trace_3d", run_test_runtime_caustic_photon_trace_3d_tests},
         {"runtime_caustic_sphere_lens_3d", run_test_runtime_caustic_sphere_lens_3d_tests},
         {"runtime_caustic_surface_cache_3d", run_test_runtime_caustic_surface_cache_3d_tests},

@@ -294,6 +294,28 @@ bool agent_render_request_finalize_loaded(RayTracingAgentRenderRequest* request,
         request->caustic_settings.mode = RUNTIME_CAUSTIC_MODE_OFF;
         request->caustic_sidecar_enabled = false;
     }
+    if (request->caustic_photon_integration_settings.productMode ==
+            RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP &&
+        request->caustic_photon_integration_settings.renderContributionEnabled) {
+        if (request->integrator_3d != RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) {
+            json_object_put(root);
+            agent_render_request_set_diagf(
+                out_diagnostics,
+                out_diagnostics_size,
+                "request=%s field=inspection.caustic_product_mode photon_map image contribution requires render.integrator_3d=disney_v2",
+                request_path);
+            return false;
+        }
+        if (!request->caustic_photon_render_prep_population_enabled) {
+            json_object_put(root);
+            agent_render_request_set_diagf(
+                out_diagnostics,
+                out_diagnostics_size,
+                "request=%s field=inspection.caustic_photon_render_prep_population_enabled must be true when photon_map image contribution is enabled",
+                request_path);
+            return false;
+        }
+    }
     if (request->caustic_settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
         !request->caustic_settings.volumeCacheEnabled &&
         !request->caustic_settings.surfaceCacheEnabled) {

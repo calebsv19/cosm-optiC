@@ -207,17 +207,26 @@ bool RuntimeDisneyV2_3D_SampleTransmission(
     sample.direction = vec3_normalize(sample.dielectric.refractionDir);
     sample.pdf = fmax(transmission_probability, 1e-6);
     sample.throughputR =
-        runtime_disney_v2_transmission_3d_clamp(principled->baseColorR *
+        runtime_disney_v2_transmission_3d_clamp(
+            (payload->hasGlassInterfaceTintOverride
+                 ? payload->glassInterfaceTintR
+                 : principled->baseColorR) *
                                                     transmission_weight / sample.pdf,
                                                 0.0,
                                                 2.0);
     sample.throughputG =
-        runtime_disney_v2_transmission_3d_clamp(principled->baseColorG *
+        runtime_disney_v2_transmission_3d_clamp(
+            (payload->hasGlassInterfaceTintOverride
+                 ? payload->glassInterfaceTintG
+                 : principled->baseColorG) *
                                                     transmission_weight / sample.pdf,
                                                 0.0,
                                                 2.0);
     sample.throughputB =
-        runtime_disney_v2_transmission_3d_clamp(principled->baseColorB *
+        runtime_disney_v2_transmission_3d_clamp(
+            (payload->hasGlassInterfaceTintOverride
+                 ? payload->glassInterfaceTintB
+                 : principled->baseColorB) *
                                                     transmission_weight / sample.pdf,
                                                 0.0,
                                                 2.0);

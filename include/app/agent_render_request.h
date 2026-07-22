@@ -111,6 +111,7 @@ typedef struct RayTracingAgentRenderRequest {
     RuntimeCausticSettings3D caustic_settings;
     bool has_caustic_product_mode_override;
     RuntimeCausticPhotonIntegrationSettings3D caustic_photon_integration_settings;
+    bool caustic_photon_block_solid_dielectric_direct_paths;
     bool caustic_photon_render_prep_population_enabled;
     bool caustic_photon_populated_callsite_readback_enabled;
     bool caustic_photon_trace_populated_callsite_readback_enabled;

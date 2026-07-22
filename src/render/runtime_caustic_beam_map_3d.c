@@ -5,9 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
+#include "render/runtime_caustic_photon_volume_beam_estimator_3d.h"
 
 enum {
     RUNTIME_CAUSTIC_BEAM_MAP_DEFAULT_CAPACITY = 4096,
@@ -38,12 +36,6 @@ static bool beam_map_medium_matches(const RuntimeCausticPhotonVolumeBeamSegment3
                                     const RuntimeCausticBeamMapQuery3D* query) {
     if (!segment || !query || !query->requireMediumId) return true;
     return segment->mediumId == query->mediumId;
-}
-
-static double beam_map_kernel_area_normalization(double radius) {
-    const double area = M_PI * radius * radius;
-    if (!(area > 1.0e-12)) return 1.0;
-    return 1.0 / area;
 }
 
 static double beam_map_positive_or_default(double value, double fallback) {
@@ -251,7 +243,8 @@ static void beam_map_query_consider_segment(
     const RuntimeCausticBeamMapQuery3D* active_query,
     Vec3 query_direction,
     double query_radius,
-    double min_direction_dot) {
+    double min_direction_dot,
+    double finite_segment_normalization) {
     Vec3 closest = vec3(0.0, 0.0, 0.0);
     double t = 0.0;
     double distance = 0.0;
@@ -259,9 +252,12 @@ static void beam_map_query_consider_segment(
     double d2 = 0.0;
     double direction_dot;
     double weight;
+    double direction_weight;
+    double beam_distance;
+    double distance_delta;
 
     if (!result || !segment || !active_query) return;
-    direction_dot = fabs(vec3_dot(query_direction, segment->direction));
+    direction_dot = vec3_dot(query_direction, segment->direction);
     result->testedCount += 1u;
     if (!beam_map_segment_closest_point(segment,
                                         active_query->position,
@@ -271,9 +267,7 @@ static void beam_map_query_consider_segment(
         return;
     }
     (void)closest;
-    radius = fmax(query_radius,
-                  segment->radiusStart +
-                      (segment->radiusEnd - segment->radiusStart) * t);
+    radius = query_radius;
     d2 = distance * distance;
     if (result->candidateCount == 0u || distance < result->nearestDistance) {
         result->nearestDistance = distance;
@@ -283,23 +277,199 @@ static void beam_map_query_consider_segment(
     result->candidateCount += 1u;
     if (d2 > radius * radius) {
         result->radiusRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, segment->flux);
         return;
     }
-    if (direction_dot < min_direction_dot) {
-        result->directionRejectCount += 1u;
-        return;
-    }
+    (void)min_direction_dot;
     if (!beam_map_medium_matches(segment, active_query)) {
         result->mediumRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, segment->flux);
         return;
     }
-    weight = exp(-d2 / (2.0 * radius * radius)) *
-             beam_map_clamp(direction_dot, 0.0, 1.0) *
-             beam_map_kernel_area_normalization(radius) *
-             segment->transmittance * segment->densityWeight;
+    if (active_query->requireSegmentStage &&
+        segment->provenance.segmentStage != active_query->segmentStage) {
+        result->stageRejectCount += 1u;
+        result->rejectedPhysicalFlux =
+            vec3_add(result->rejectedPhysicalFlux, segment->flux);
+        return;
+    }
+    weight = RuntimeCausticPhotonVolumeBeamEstimator3D_CompactKernel(
+                 distance, radius) * segment->transmittance *
+             finite_segment_normalization;
+    if (!(weight > 0.0)) return;
     result->flux = vec3_add(result->flux, vec3_scale(segment->flux, weight));
     result->weightSum += weight;
+    direction_weight = fmax(0.0, beam_map_luma(segment->flux)) * weight;
+    beam_distance = t * vec3_length(vec3_sub(segment->end, segment->start));
+    if (direction_weight > 0.0) {
+        const double next_weight =
+            result->beamDirectionWeightSum + direction_weight;
+        result->meanBeamDirection = vec3_add(
+            result->meanBeamDirection,
+            vec3_scale(segment->direction, direction_weight));
+        result->meanBeamDistance +=
+            (beam_distance - result->meanBeamDistance) *
+            (direction_weight / next_weight);
+        result->beamDirectionWeightSum = next_weight;
+    }
     result->contributingCount += 1u;
+    result->contributingPhotonIdXor ^= segment->photonId;
+    result->contributingPhotonIdSum += segment->photonId;
+    result->effectiveSampleCount = result->contributingCount;
+    if (result->contributingCount == 1u ||
+        distance < result->nearestContributionDistance) {
+        result->nearestContributionDistance = distance;
+    }
+    if (distance > result->farthestContributionDistance) {
+        result->farthestContributionDistance = distance;
+    }
+    distance_delta = distance - result->meanContributionDistance;
+    result->meanContributionDistance +=
+        distance_delta / (double)result->contributingCount;
+    result->varianceProxy +=
+        distance_delta * (distance - result->meanContributionDistance);
+}
+
+static void beam_map_query_k_nearest(
+    const RuntimeCausticBeamMap3D* map,
+    RuntimeCausticBeamMapQueryResult3D* result,
+    const RuntimeCausticBeamMapQuery3D* query,
+    Vec3 query_direction,
+    double query_radius,
+    double min_direction_dot) {
+    RuntimeCausticPhotonEstimatorCandidate3D* selected;
+    uint64_t selected_count = 0u;
+    double kernel_radius;
+
+    if (!map || !result || !query) return;
+    selected = (RuntimeCausticPhotonEstimatorCandidate3D*)calloc(
+        (size_t)result->estimator.neighborLimit,
+        sizeof(RuntimeCausticPhotonEstimatorCandidate3D));
+    if (!selected) {
+        result->estimatorImplemented = false;
+        return;
+    }
+    for (uint64_t i = 0u; i < map->segmentCount; ++i) {
+        const RuntimeCausticPhotonVolumeBeamSegment3D* segment = &map->segments[i];
+        Vec3 closest = vec3(0.0, 0.0, 0.0);
+        double t = 0.0;
+        double distance = 0.0;
+        double direction_dot;
+        RuntimeCausticPhotonEstimatorCandidate3D candidate;
+
+        if (beam_map_query_limit_reached(result)) break;
+        result->testedCount += 1u;
+        if (!beam_map_segment_closest_point(segment,
+                                            query->position,
+                                            &closest,
+                                            &t,
+                                            &distance)) {
+            continue;
+        }
+        (void)closest;
+        direction_dot = vec3_dot(query_direction, segment->direction);
+        if (result->candidateCount == 0u || distance < result->nearestDistance) {
+            result->nearestDistance = distance;
+            result->nearestT = t;
+            result->nearestDirectionDot = direction_dot;
+        }
+        result->candidateCount += 1u;
+        if (distance * distance > query_radius * query_radius) {
+            result->radiusRejectCount += 1u;
+            result->rejectedPhysicalFlux =
+                vec3_add(result->rejectedPhysicalFlux, segment->flux);
+            continue;
+        }
+        (void)direction_dot;
+        (void)min_direction_dot;
+        if (!beam_map_medium_matches(segment, query)) {
+            result->mediumRejectCount += 1u;
+            result->rejectedPhysicalFlux =
+                vec3_add(result->rejectedPhysicalFlux, segment->flux);
+            continue;
+        }
+        if (query->requireSegmentStage &&
+            segment->provenance.segmentStage != query->segmentStage) {
+            result->stageRejectCount += 1u;
+            result->rejectedPhysicalFlux =
+                vec3_add(result->rejectedPhysicalFlux, segment->flux);
+            continue;
+        }
+        candidate.distance = distance;
+        candidate.photonId = segment->photonId;
+        candidate.storageIndex = i;
+        (void)RuntimeCausticPhotonEstimator3D_InsertCandidate(
+            selected,
+            &selected_count,
+            result->estimator.neighborLimit,
+            candidate);
+    }
+
+    kernel_radius = selected_count == result->estimator.neighborLimit &&
+                            selected_count > 0u
+                        ? fmax(selected[selected_count - 1u].distance * 1.000001,
+                               0.001)
+                        : query_radius;
+    for (uint64_t i = 0u; i < selected_count; ++i) {
+        const RuntimeCausticPhotonVolumeBeamSegment3D* segment =
+            &map->segments[selected[i].storageIndex];
+        Vec3 closest = vec3(0.0, 0.0, 0.0);
+        double segment_t = 0.0;
+        double segment_distance = 0.0;
+        const double finite_segment_normalization =
+            map->finiteSegmentNormalizationPrepared
+                ? map->segmentFiniteNormalization[selected[i].storageIndex]
+                : 1.0;
+        const double weight =
+            RuntimeCausticPhotonVolumeBeamEstimator3D_CompactKernel(
+                selected[i].distance, kernel_radius) * segment->transmittance *
+            finite_segment_normalization;
+        const double direction_weight =
+            fmax(0.0, beam_map_luma(segment->flux)) * weight;
+        const double distance_delta =
+            selected[i].distance - result->meanContributionDistance;
+
+        (void)beam_map_segment_closest_point(segment,
+                                             query->position,
+                                             &closest,
+                                             &segment_t,
+                                             &segment_distance);
+        (void)closest;
+        (void)segment_distance;
+
+        result->flux = vec3_add(result->flux, vec3_scale(segment->flux, weight));
+        result->weightSum += weight;
+        if (direction_weight > 0.0) {
+            const double next_weight =
+                result->beamDirectionWeightSum + direction_weight;
+            const double beam_distance = segment_t *
+                vec3_length(vec3_sub(segment->end, segment->start));
+            result->meanBeamDirection = vec3_add(
+                result->meanBeamDirection,
+                vec3_scale(segment->direction, direction_weight));
+            result->meanBeamDistance +=
+                (beam_distance - result->meanBeamDistance) *
+                (direction_weight / next_weight);
+            result->beamDirectionWeightSum = next_weight;
+        }
+        result->contributingCount += 1u;
+        result->contributingPhotonIdXor ^= segment->photonId;
+        result->contributingPhotonIdSum += segment->photonId;
+        result->nearestContributionDistance = selected[0].distance;
+        result->farthestContributionDistance = selected[selected_count - 1u].distance;
+        result->meanContributionDistance +=
+            distance_delta / (double)result->contributingCount;
+        result->varianceProxy +=
+            distance_delta * (selected[i].distance - result->meanContributionDistance);
+    }
+    result->effectiveSampleCount = selected_count;
+    result->kernelRadius = kernel_radius;
+    result->kernelBoundaryWeight =
+        RuntimeCausticPhotonVolumeBeamEstimator3D_CompactKernel(
+            kernel_radius, kernel_radius);
+    free(selected);
 }
 
 void RuntimeCausticBeamMap3D_DefaultSettings(
@@ -313,6 +483,7 @@ void RuntimeCausticBeamMap3D_DefaultSettings(
         RUNTIME_CAUSTIC_BEAM_MAP_DEFAULT_QUERY_CANDIDATE_LIMIT;
     settings->physicalEnergyScale = 1.0;
     settings->displayGain = 1.0;
+    RuntimeCausticPhotonEstimator3D_DefaultSettings(&settings->estimator);
 }
 
 void RuntimeCausticBeamMap3D_DefaultQuery(RuntimeCausticBeamMapQuery3D* query) {
@@ -322,10 +493,13 @@ void RuntimeCausticBeamMap3D_DefaultQuery(RuntimeCausticBeamMapQuery3D* query) {
     query->radius = 0.10;
     query->mediumId = -1;
     query->requireMediumId = true;
-    query->minDirectionDot = 0.25;
+    query->segmentStage = RUNTIME_CAUSTIC_PHOTON_SEGMENT_STAGE_POST_LENS;
+    query->requireSegmentStage = false;
+    query->minDirectionDot = 0.0;
     query->candidateLimit = RUNTIME_CAUSTIC_BEAM_MAP_DEFAULT_QUERY_CANDIDATE_LIMIT;
     query->physicalEnergyScale = 1.0;
     query->displayGain = 1.0;
+    RuntimeCausticPhotonEstimator3D_DefaultSettings(&query->estimator);
 }
 
 void RuntimeCausticBeamMap3D_Init(RuntimeCausticBeamMap3D* map) {
@@ -357,7 +531,12 @@ bool RuntimeCausticBeamMap3D_Allocate(RuntimeCausticBeamMap3D* map,
     allocated.segments = (RuntimeCausticPhotonVolumeBeamSegment3D*)calloc(
         (size_t)segment_capacity,
         sizeof(RuntimeCausticPhotonVolumeBeamSegment3D));
-    if (!allocated.segments) return false;
+    allocated.segmentFiniteNormalization = (double*)calloc(
+        (size_t)segment_capacity, sizeof(double));
+    if (!allocated.segments || !allocated.segmentFiniteNormalization) {
+        RuntimeCausticBeamMap3D_Free(&allocated);
+        return false;
+    }
     allocated.segmentCapacity = segment_capacity;
     allocated.ownsSegments = true;
     (void)beam_map_accel_allocate(&allocated, segment_capacity);
@@ -373,7 +552,15 @@ void RuntimeCausticBeamMap3D_Clear(RuntimeCausticBeamMap3D* map) {
            0,
            (size_t)map->segmentCapacity *
                sizeof(RuntimeCausticPhotonVolumeBeamSegment3D));
+    memset(map->segmentFiniteNormalization,
+           0,
+           (size_t)map->segmentCapacity * sizeof(double));
     map->segmentCount = 0u;
+    map->finiteSegmentNormalizationPrepared = false;
+    map->finiteSegmentNormalizationCount = 0u;
+    map->finiteSegmentNormalizationScaleMinimum = 0.0;
+    map->finiteSegmentNormalizationScaleMaximum = 0.0;
+    map->finiteSegmentNormalizationScaleMean = 0.0;
     map->storeAttemptCount = 0u;
     map->storeAcceptedCount = 0u;
     map->storeRejectedCount = 0u;
@@ -388,6 +575,7 @@ void RuntimeCausticBeamMap3D_Clear(RuntimeCausticBeamMap3D* map) {
 void RuntimeCausticBeamMap3D_Free(RuntimeCausticBeamMap3D* map) {
     if (!map) return;
     free(map->segments);
+    free(map->segmentFiniteNormalization);
     free(map->accelerationBucketHeads);
     free(map->accelerationSegmentNext);
     free(map->accelerationSegmentCellX);
@@ -425,6 +613,7 @@ bool RuntimeCausticBeamMap3D_StoreSegment(
     stored.transmittance = beam_map_clamp(stored.transmittance, 0.0, 1.0);
     stored.densityWeight = beam_map_clamp(stored.densityWeight, 0.0, 1.0e6);
     map->segments[map->segmentCount] = stored;
+    map->segmentFiniteNormalization[map->segmentCount] = 1.0;
     beam_map_accel_insert(map, map->segmentCount, &stored);
     map->segmentCount += 1u;
     map->storeAcceptedCount += 1u;
@@ -495,13 +684,41 @@ bool RuntimeCausticBeamMap3D_Query(
     query_radius = beam_map_clamp(active_query->radius, 0.001, 10.0);
     min_direction_dot = beam_map_clamp(active_query->minDirectionDot, 0.0, 1.0);
     result.candidateLimit = active_query->candidateLimit;
+    result.queryPosition = active_query->position;
+    result.queryDirection = query_direction;
+    result.queryRadius = query_radius;
+    result.queryMediumId = active_query->mediumId;
+    result.querySegmentStage = active_query->segmentStage;
     physical_energy_scale =
         beam_map_positive_or_default(active_query->physicalEnergyScale, 1.0);
     display_gain = beam_map_positive_or_default(active_query->displayGain, 1.0);
     result.physicalEnergyScale = physical_energy_scale;
     result.displayGain = display_gain;
+    result.estimator = active_query->estimator;
+    RuntimeCausticPhotonEstimator3D_NormalizeSettings(&result.estimator);
+    result.estimatorLabel =
+        RuntimeCausticPhotonEstimator3D_Label(result.estimator.estimator);
+    result.estimatorImplemented =
+        RuntimeCausticPhotonEstimator3D_IsImplemented(result.estimator.estimator);
+    if (!result.estimatorImplemented) {
+        map->lastQuery = result;
+        *out_result = result;
+        return false;
+    }
+    result.kernelRadius = query_radius;
+    result.kernelBoundaryWeight =
+        RuntimeCausticPhotonVolumeBeamEstimator3D_CompactKernel(
+            query_radius, query_radius);
 
-    if (beam_map_accel_is_allocated(map) &&
+    if (result.estimator.estimator ==
+        RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_K_NEAREST) {
+        beam_map_query_k_nearest(map,
+                                 &result,
+                                 active_query,
+                                 query_direction,
+                                 query_radius,
+                                 min_direction_dot);
+    } else if (beam_map_accel_is_allocated(map) &&
         map->accelerationInsertedCount == map->segmentCount) {
         const double search_radius =
             query_radius + fmax(map->accelerationMaxSegmentRadius, 0.0) +
@@ -539,7 +756,10 @@ bool RuntimeCausticBeamMap3D_Query(
                                                             active_query,
                                                             query_direction,
                                                             query_radius,
-                                                            min_direction_dot);
+                                                            min_direction_dot,
+                                                            map->finiteSegmentNormalizationPrepared
+                                                                ? map->segmentFiniteNormalization[index]
+                                                                : 1.0);
                         }
                         segment_index = next;
                     }
@@ -556,16 +776,28 @@ bool RuntimeCausticBeamMap3D_Query(
                                             active_query,
                                             query_direction,
                                             query_radius,
-                                            min_direction_dot);
+                                            min_direction_dot,
+                                            map->finiteSegmentNormalizationPrepared
+                                                ? map->segmentFiniteNormalization[i]
+                                                : 1.0);
         }
     }
 
     if (physical_energy_scale != 1.0) {
         result.flux = vec3_scale(result.flux, physical_energy_scale);
     }
+    result.rejectedPhysicalFlux =
+        vec3_scale(result.rejectedPhysicalFlux, physical_energy_scale);
+    if (result.effectiveSampleCount > 0u) {
+        result.varianceProxy /= (double)result.effectiveSampleCount;
+    }
+    if (result.beamDirectionWeightSum > 0.0) {
+        result.meanBeamDirection = vec3_normalize(result.meanBeamDirection);
+    }
     result.physicalFlux = result.flux;
     result.displayFlux = vec3_scale(result.physicalFlux, display_gain);
-    result.hit = result.contributingCount > 0u &&
+    result.hit = result.effectiveSampleCount >=
+                     result.estimator.minimumEffectiveSamples &&
                  (result.flux.x > 0.0 || result.flux.y > 0.0 || result.flux.z > 0.0);
     if (result.hit) map->queryHitCount += 1u;
     map->totalQueriedPhysicalFlux =
@@ -606,8 +838,29 @@ void RuntimeCausticBeamMap3D_SnapshotDiagnostics(
     diagnostics.lastQueryAccelerationUsed = map->lastQueryAccelerationUsed;
     diagnostics.lastQueryGridCellVisitCount = map->lastQueryGridCellVisitCount;
     diagnostics.lastQueryNearestDistance = map->lastQuery.nearestDistance;
+    diagnostics.lastQueryNearestContributionDistance =
+        map->lastQuery.nearestContributionDistance;
+    diagnostics.lastQueryFarthestContributionDistance =
+        map->lastQuery.farthestContributionDistance;
     diagnostics.lastQueryNearestT = map->lastQuery.nearestT;
     diagnostics.lastQueryNearestDirectionDot = map->lastQuery.nearestDirectionDot;
+    diagnostics.lastQueryMeanContributionDistance =
+        map->lastQuery.meanContributionDistance;
+    diagnostics.lastQueryVarianceProxy = map->lastQuery.varianceProxy;
+    diagnostics.lastQueryEffectiveSampleCount = map->lastQuery.effectiveSampleCount;
+    diagnostics.lastQueryRadiusRejectCount = map->lastQuery.radiusRejectCount;
+    diagnostics.lastQueryDirectionRejectCount = map->lastQuery.directionRejectCount;
+    diagnostics.lastQueryMediumRejectCount = map->lastQuery.mediumRejectCount;
+    diagnostics.lastQueryStageRejectCount = map->lastQuery.stageRejectCount;
+    diagnostics.lastQueryMeanBeamDirection = map->lastQuery.meanBeamDirection;
+    diagnostics.lastQueryMeanBeamDistance = map->lastQuery.meanBeamDistance;
+    diagnostics.lastQueryKernelRadius = map->lastQuery.kernelRadius;
+    diagnostics.lastQueryKernelBoundaryWeight =
+        map->lastQuery.kernelBoundaryWeight;
+    diagnostics.lastQueryRejectedPhysicalFlux = map->lastQuery.rejectedPhysicalFlux;
+    diagnostics.lastQueryEstimator = map->lastQuery.estimator;
+    diagnostics.lastQueryEstimatorLabel = map->lastQuery.estimatorLabel;
+    diagnostics.lastQueryEstimatorImplemented = map->lastQuery.estimatorImplemented;
     diagnostics.lastQueryFlux = map->lastQuery.flux;
     diagnostics.lastQueryPhysicalFlux = map->lastQuery.physicalFlux;
     diagnostics.lastQueryDisplayFlux = map->lastQuery.displayFlux;
