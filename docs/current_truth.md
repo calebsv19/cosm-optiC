@@ -1186,9 +1186,14 @@ Last updated: 2026-07-22
 - Production-map results currently reach Disney v2 through an explicit
   conversion into the existing display-facing surface and volume caustic
   caches. Disney v2 does not yet directly sample photon or beam maps.
-- The menu cycles the mutually exclusive caustic product identity through off,
-  analytic reference, transport reference, and photon map. This is selection
-  plumbing, not a production-default or release-readiness claim.
+- The desktop menu cycles the mutually exclusive caustic product identity
+  through `Off`, `Reference Analytic`, `Reference Transport`, and
+  `Photon Map (Experimental)`. The existing persisted caustic settings select
+  surface/volume queries, sample budget, path depth, and radiance scale. When a
+  render recipe is applied, only the photon product enables native render-prep
+  population and render contribution; all other products disable that photon
+  route, and ordinary defaults remain off. This is usable opt-in desktop
+  integration, not a production-default or release-readiness claim.
 - Ordinary runtime-scene authoring can carry mesh-dielectric lens descriptors,
   physical light radiometry, and separate glass interface tint/absorption.
   Photon mapping remains experimental, request-opt-in, and default-off.

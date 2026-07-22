@@ -286,6 +286,13 @@ cell. PPM-19 coverage additionally proves persistent owner generation and reuse,
 retained map/population state, invalidation on geometry/light/material/volume/
 budget or explicit rebuild changes, and preview/inspection/final budget labels.
 
+`TEST_RUNNER_GROUP=ui_menu_contracts make -C ray_tracing test` includes the
+desktop caustic-product contract. It proves the default-off cycle across both
+retained reference products and `Photon Map (Experimental)`, the legacy
+spatial-cache compatibility mapping, surface/volume selection, persisted
+budget/depth/scale transfer, and that only the photon product produces an
+enabled native render-prep population/contribution plan.
+
 `test-ray-tracing-ppm10-product-ab-fixture` is the compact PPM-10 through PPM-19
 product A/B fixture. It renders generated `off`, `reference`, explicit opt-in
 `production`, explicit `production_populated`, and explicit

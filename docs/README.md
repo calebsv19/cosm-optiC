@@ -30,8 +30,11 @@ Current public focus:
   physical path-weight/support, provenance filtering, finite volume-segment
   normalization, sparse beam-cache, authored light-radiometry, glass tint and
   absorption, and ordinary runtime-mesh lens integration. Stable PPM28-30
-  contracts are included; diagnostic matrices, PVA expansion, and default
-  promotion remain separate
+  contracts are included. The desktop Caustics selector retains the analytic
+  and transport reference modes and adds `Photon Map (Experimental)`; its
+  existing persisted settings now drive the photon render-prep lifecycle when
+  selected. Diagnostic matrices, PVA expansion, and default promotion remain
+  separate
 - experimental `Disney v2` remains isolated behind `disney_v2` and now has
   bounded proof support for transparent camera-through accumulation,
   thin-walled/solid glass handling, medium-stack diagnostics, solid

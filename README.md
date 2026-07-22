@@ -33,7 +33,10 @@ Identity note:
 - a default-off production photon-mapping lane is implemented through PPM-23,
   with deterministic emission, general mixed-BSDF scene traversal, multi-bounce
   and nested-medium transport, measured attenuation, transactional surface/beam
-  maps, and headless comparison proof; it is not yet a promoted product default
+  maps, and headless comparison proof; the desktop Caustics control now exposes
+  `Off`, both retained reference modes, and `Photon Map (Experimental)`, with
+  the photon render-prep population/contribution route applied only when that
+  product is selected; it is not yet a promoted product default
 - native `3D` config now persists a dedicated `3D` integrator lane plus bounded temporal-frame, bounce-depth, roulette, denoise, top-fill, and atmosphere-source settings independently of legacy `2D` state
 - native `3D` support layers include:
   - tile preview
