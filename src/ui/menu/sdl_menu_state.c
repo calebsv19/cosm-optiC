@@ -1,6 +1,7 @@
 #include "ui/sdl_menu_state.h"
 
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_caustic_product.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -891,6 +892,7 @@ void menu_state_apply_effective_render_recipe(const MenuRuntimeState* state) {
     RuntimeDisneyV2_3D_SetCausticMode(disney_mode, 1.0);
     RuntimeCausticBootstrap3D_SetRequestState(&state->causticSettings);
     RuntimeCausticTransport3D_SetRequestState(&state->causticSettings);
+    menu_caustic_product_apply_runtime(&state->causticSettings);
 }
 
 void menu_state_reset_defaults(MenuRuntimeState* state) {

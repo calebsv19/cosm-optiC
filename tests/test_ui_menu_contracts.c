@@ -15,6 +15,7 @@
 #include "render/render_helper.h"
 #include "test_support.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_caustic_product.h"
 #include "ui/menu_layout.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu_resume_panel.h"
@@ -879,6 +880,86 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     return 0;
 }
 
+static int test_menu_caustic_product_cycle_and_runtime_plan(void) {
+    RuntimeCausticSettings3D settings;
+    MenuCausticProductRuntimePlan plan;
+
+    RuntimeCausticSettings3D_Default(&settings);
+    menu_caustic_product_select(&settings, RUNTIME_CAUSTIC_PRODUCT_MODE_OFF);
+    assert_true("menu_caustic_product_default_off",
+                menu_caustic_product_mode(&settings) ==
+                    RUNTIME_CAUSTIC_PRODUCT_MODE_OFF);
+    assert_true("menu_caustic_product_off_label",
+                strcmp(menu_caustic_product_label(&settings), "Off") == 0);
+    assert_true("menu_caustic_product_off_next_analytic",
+                menu_caustic_product_next_mode(&settings) ==
+                    RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_ANALYTIC);
+
+    menu_caustic_product_select(
+        &settings, RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_ANALYTIC);
+    assert_true("menu_caustic_product_analytic_selected",
+                settings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC &&
+                    !settings.surfaceCacheEnabled && !settings.volumeCacheEnabled);
+    assert_true("menu_caustic_product_analytic_next_transport",
+                menu_caustic_product_next_mode(&settings) ==
+                    RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT);
+
+    menu_caustic_product_select(
+        &settings, RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT);
+    assert_true("menu_caustic_product_reference_transport_selected",
+                settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+                    settings.transportEngine ==
+                        RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT &&
+                    settings.surfaceCacheEnabled);
+    assert_true("menu_caustic_product_transport_next_photon",
+                menu_caustic_product_next_mode(&settings) ==
+                    RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP);
+
+    settings.surfaceCacheEnabled = false;
+    settings.volumeCacheEnabled = true;
+    settings.sampleBudget = 4096;
+    settings.maxPathDepth = 8;
+    settings.surfaceRadianceScale = 0.5;
+    menu_caustic_product_select(&settings, RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP);
+    menu_caustic_product_build_runtime_plan(&settings, &plan);
+    assert_true("menu_caustic_product_photon_selected",
+                settings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
+                    settings.transportEngine == RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP);
+    assert_true("menu_caustic_product_photon_experimental_label",
+                strcmp(menu_caustic_product_label(&settings),
+                       "Photon Map (Experimental)") == 0);
+    assert_true("menu_caustic_product_photon_plan_active",
+                plan.productMode == RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP &&
+                    plan.photonPopulationEnabled &&
+                    plan.photonSettings.renderContributionEnabled);
+    assert_true("menu_caustic_product_photon_plan_volume_only",
+                !plan.photonSettings.surfaceQueryEnabled &&
+                    plan.photonSettings.volumeQueryEnabled);
+    assert_true("menu_caustic_product_photon_plan_budget_depth",
+                plan.photonSettings.sampleBudget == 4096 &&
+                    plan.photonSettings.maxPathDepth == 8);
+    assert_true("menu_caustic_product_photon_plan_scale",
+                plan.photonSettings.surfaceRadianceScale == 0.5);
+    assert_true("menu_caustic_product_photon_next_off",
+                menu_caustic_product_next_mode(&settings) ==
+                    RUNTIME_CAUSTIC_PRODUCT_MODE_OFF);
+
+    menu_caustic_product_select(&settings, RUNTIME_CAUSTIC_PRODUCT_MODE_OFF);
+    menu_caustic_product_build_runtime_plan(&settings, &plan);
+    assert_true("menu_caustic_product_off_clears_caches",
+                !settings.surfaceCacheEnabled && !settings.volumeCacheEnabled);
+    assert_true("menu_caustic_product_off_disables_population",
+                plan.productMode == RUNTIME_CAUSTIC_PRODUCT_MODE_OFF &&
+                    !plan.photonPopulationEnabled &&
+                    !plan.photonSettings.renderContributionEnabled);
+
+    settings.mode = RUNTIME_CAUSTIC_MODE_SPATIAL_CACHE;
+    assert_true("menu_caustic_product_legacy_spatial_is_reference_transport",
+                menu_caustic_product_mode(&settings) ==
+                    RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT);
+    return 0;
+}
+
 static int test_menu_slider_layout_includes_environment_control(void) {
     AnimationConfig saved_anim = animSettings;
     MenuRuntimeState state;
@@ -1737,6 +1818,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_batch_panel_layout_centers_inside_batch_zone();
     test_menu_batch_panel_header_does_not_overlap_route_rows();
     test_integrator_catalog_menu_routes_by_space_mode();
+    test_menu_caustic_product_cycle_and_runtime_plan();
     test_menu_slider_layout_includes_environment_control();
     test_menu_slider_layout_routes_bounce_controls_by_space_mode();
     test_integrator_catalog_cycle_preserves_inactive_mode();

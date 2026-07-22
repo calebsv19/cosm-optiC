@@ -18,6 +18,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_caustic_product.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -769,40 +770,18 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.causticModeRect, x, y)) {
-        if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_OFF) {
-            state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_ANALYTIC;
-            state->causticSettings.transportEngine =
-                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
-        } else if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
-            state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_TRANSPORT;
-            state->causticSettings.transportEngine =
-                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
-        } else if (state->causticSettings.transportEngine ==
-                   RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT) {
-            state->causticSettings.transportEngine =
-                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP;
-        } else {
-            state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_OFF;
-            state->causticSettings.transportEngine =
-                RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
-        }
-        if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_OFF ||
-            state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
-            state->causticSettings.surfaceCacheEnabled = false;
-            state->causticSettings.volumeCacheEnabled = false;
-        } else if (!state->causticSettings.surfaceCacheEnabled &&
-                   !state->causticSettings.volumeCacheEnabled) {
-            state->causticSettings.surfaceCacheEnabled = true;
-        }
+        menu_caustic_product_select(
+            &state->causticSettings,
+            menu_caustic_product_next_mode(&state->causticSettings));
         return;
     }
     if (point_in_rect(&buttons.causticEngineRect, x, y)) {
-        state->causticSettings.mode = RUNTIME_CAUSTIC_MODE_TRANSPORT;
-        state->causticSettings.transportEngine =
-            state->causticSettings.transportEngine ==
-                    RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP
-                ? RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT
-                : RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP;
+        menu_caustic_product_select(
+            &state->causticSettings,
+            menu_caustic_product_mode(&state->causticSettings) ==
+                    RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP
+                ? RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT
+                : RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP);
         return;
     }
     if (point_in_rect(&buttons.causticSurfaceRect, x, y)) {

@@ -16,6 +16,7 @@
 #include "render/text_draw.h"
 #include "render/text_upload_policy.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_caustic_product.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
@@ -384,16 +385,7 @@ void menu_render_frame(SDL_Renderer* renderer,
         state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS) {
         char mode_label[96];
         char engine_label[96];
-        const char* product_label = "off";
-        if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_ANALYTIC) {
-            product_label = "reference_analytic";
-        } else if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT &&
-                   state->causticSettings.transportEngine ==
-                       RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP) {
-            product_label = "photon_map";
-        } else if (state->causticSettings.mode == RUNTIME_CAUSTIC_MODE_TRANSPORT) {
-            product_label = "reference_transport";
-        }
+        const char* product_label = menu_caustic_product_label(&state->causticSettings);
         (void)snprintf(mode_label,
                        sizeof(mode_label),
                        "Caustics: %s",

@@ -610,6 +610,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/ui/menu/menu_resume_panel.o \
 	$(BUILD_DIR)/ui/menu/menu_scene_project_summary.o \
 	$(BUILD_DIR)/ui/menu/menu_worker_export.o \
+	$(BUILD_DIR)/ui/menu/menu_caustic_product.o \
 	$(BUILD_DIR)/ui/menu/scene_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/volume_source_catalog.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_state.o \
