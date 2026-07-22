@@ -54,6 +54,7 @@
 #include "test_runtime_timeline_property_registry.h"
 #include "test_runtime_timeline_frame_snapshot.h"
 #include "test_runtime_timeline_light_motion.h"
+#include "test_runtime_timeline_light_persistence.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_runtime_mesh_asset_loader.h"
@@ -227,6 +228,8 @@ int test_runner_main(int argc, char** argv) {
          run_test_runtime_timeline_frame_snapshot_tests},
         {"runtime_timeline_light_motion",
          run_test_runtime_timeline_light_motion_tests},
+        {"runtime_timeline_light_persistence",
+         run_test_runtime_timeline_light_persistence_tests},
         {"runtime_and_editor", run_test_runner_runtime_tests},
         {"fluid_volume_import_3d", run_test_fluid_volume_import_3d_tests},
         {"fluid_volume_pack_import_3d", run_test_fluid_volume_pack_import_3d_tests},

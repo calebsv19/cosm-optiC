@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_TIMELINE_LIGHT_PERSISTENCE_H
+#define TEST_RUNTIME_TIMELINE_LIGHT_PERSISTENCE_H
+
+int run_test_runtime_timeline_light_persistence_tests(void);
+
+#endif

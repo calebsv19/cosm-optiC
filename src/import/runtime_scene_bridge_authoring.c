@@ -8,6 +8,8 @@
 #include "editor/scene_editor_material_stack.h"
 #include "import/runtime_scene_bridge_authoring_environment.h"
 #include "import/runtime_scene_bridge_authoring_internal.h"
+#include "import/runtime_scene_light_timeline_io.h"
+#include "import/runtime_scene_light_timeline_bridge.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "material/material_manager.h"
@@ -971,4 +973,25 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
     runtime_scene_bridge_apply_ray_authoring_light_settings(authoring, world_scale);
     apply_ray_authoring_object_materials(authoring);
     runtime_scene_motion_bridge_apply_authoring(authoring, world_scale);
+    {
+        char timeline_diagnostics[96];
+        TimelineStatus timeline_status = RuntimeSceneLightTimelineApplyAuthoring(
+            authoring, world_scale, timeline_diagnostics,
+            sizeof(timeline_diagnostics));
+        if (timeline_status == TIMELINE_STATUS_OK) {
+            RuntimeSceneLightTimelineDocument timeline_document;
+            RuntimeSceneLightTimelineTarget timeline_target;
+            if (!RuntimeSceneLightTimelineGetLast(&timeline_document) ||
+                timeline_document.progress_track_index >=
+                    timeline_document.timeline.track_count ||
+                RuntimeSceneLightTimelineResolveTarget(
+                    g_last_3d_light_seeds.lights,
+                    (size_t)g_last_3d_light_seeds.light_count,
+                    timeline_document.timeline
+                        .tracks[timeline_document.progress_track_index].target_id,
+                    &timeline_target) != TIMELINE_STATUS_OK) {
+                RuntimeSceneLightTimelineResetLast();
+            }
+        }
+    }
 }

@@ -3,6 +3,7 @@
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_motion_bridge.h"
+#include "import/runtime_scene_light_timeline_io.h"
 
 #include "camera/camera_path_3d.h"
 #include "core_scene_overlay_merge_shared.h"
@@ -54,6 +55,7 @@ static void scene_defaults_reset(void) {
     SceneEditorMaterialGraphResetAll();
     RuntimeMaterialAuthoredTextureResetAll();
     runtime_scene_motion_bridge_reset();
+    RuntimeSceneLightTimelineResetLast();
     memset(g_last_runtime_object_ids, 0, sizeof(g_last_runtime_object_ids));
     g_last_runtime_object_id_count = 0;
 }

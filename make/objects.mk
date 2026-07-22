@@ -179,6 +179,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_paths.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_file.o \
 	$(BUILD_DIR)/import/runtime_scene_motion_bridge.o \
+	$(BUILD_DIR)/import/runtime_scene_light_timeline_io.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
@@ -311,6 +312,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_timeline_property_registry.o \
 	$(BUILD_DIR)/tests/test_runtime_timeline_frame_snapshot.o \
 	$(BUILD_DIR)/tests/test_runtime_timeline_light_motion.o \
+	$(BUILD_DIR)/tests/test_runtime_timeline_light_persistence.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
