@@ -13,6 +13,16 @@ static const RuntimeRay3DTraceRoute kRuntimeRay3DDefaultTraceRoute =
 static RuntimeRay3DTraceContext gRuntimeRay3DDefaultTraceContext;
 static bool gRuntimeRay3DDefaultTraceContextInitialized = false;
 
+static void runtime_ray_3d_counter_increment(uint64_t* counter) {
+    if (!counter) return;
+    (void)__atomic_fetch_add(counter, 1u, __ATOMIC_RELAXED);
+}
+
+static uint64_t runtime_ray_3d_counter_load(const uint64_t* counter) {
+    if (!counter) return 0u;
+    return __atomic_load_n(counter, __ATOMIC_RELAXED);
+}
+
 typedef enum RuntimeSceneAcceleration3DTraceStatusForRayRoute {
     RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY = 0,
     RUNTIME_RAY_3D_ACCEL_TRACE_MISS = 1,
@@ -94,12 +104,43 @@ void RuntimeRay3DTraceContext_SnapshotRouteStats(
     if (!out_stats) return;
     memset(out_stats, 0, sizeof(*out_stats));
     if (!context) return;
-    *out_stats = context->routeStats;
     out_stats->requestedRoute = context->requestedRoute;
     out_stats->activeRoute = context->activeRoute;
     out_stats->traceContextStatsOwned = true;
     out_stats->sceneAccelerationTraceCallbackBound =
         context->sceneAccelerationTraceFirstHit != NULL;
+    out_stats->traceCalls =
+        runtime_ray_3d_counter_load(&context->routeStats.traceCalls);
+    out_stats->flattenedTraceCalls =
+        runtime_ray_3d_counter_load(&context->routeStats.flattenedTraceCalls);
+    out_stats->tlasTraceCalls =
+        runtime_ray_3d_counter_load(&context->routeStats.tlasTraceCalls);
+    out_stats->tlasTraceHits =
+        runtime_ray_3d_counter_load(&context->routeStats.tlasTraceHits);
+    out_stats->tlasTraceMisses =
+        runtime_ray_3d_counter_load(&context->routeStats.tlasTraceMisses);
+    out_stats->tlasTraceUnready =
+        runtime_ray_3d_counter_load(&context->routeStats.tlasTraceUnready);
+    out_stats->tlasTraceUnsupported =
+        runtime_ray_3d_counter_load(&context->routeStats.tlasTraceUnsupported);
+    out_stats->tlasTraceErrors =
+        runtime_ray_3d_counter_load(&context->routeStats.tlasTraceErrors);
+    out_stats->accelerationFailureCalls =
+        runtime_ray_3d_counter_load(&context->routeStats.accelerationFailureCalls);
+    out_stats->flattenedFallbackCalls =
+        runtime_ray_3d_counter_load(&context->routeStats.flattenedFallbackCalls);
+    out_stats->parityCheckedRays =
+        runtime_ray_3d_counter_load(&context->routeStats.parityCheckedRays);
+    out_stats->parityMismatches =
+        runtime_ray_3d_counter_load(&context->routeStats.parityMismatches);
+    snprintf(out_stats->lastAccelerationFailureStatus,
+             sizeof(out_stats->lastAccelerationFailureStatus),
+             "%s",
+             context->routeStats.lastAccelerationFailureStatus);
+    snprintf(out_stats->lastParityMismatchReason,
+             sizeof(out_stats->lastParityMismatchReason),
+             "%s",
+             context->routeStats.lastParityMismatchReason);
 }
 
 static Vec3 runtime_ray_3d_triangle_normal(const RuntimeTriangle3D* triangle) {
@@ -486,23 +527,23 @@ static void runtime_ray_3d_record_tlas_status(
     RuntimeSceneAcceleration3DTraceStatusForRayRoute status) {
     RuntimeRay3DRouteStats* stats = context ? &context->routeStats : NULL;
     if (!stats) return;
-    stats->tlasTraceCalls += 1u;
+    runtime_ray_3d_counter_increment(&stats->tlasTraceCalls);
     switch (status) {
         case RUNTIME_RAY_3D_ACCEL_TRACE_HIT:
-            stats->tlasTraceHits += 1u;
+            runtime_ray_3d_counter_increment(&stats->tlasTraceHits);
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_MISS:
-            stats->tlasTraceMisses += 1u;
+            runtime_ray_3d_counter_increment(&stats->tlasTraceMisses);
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_UNREADY:
-            stats->tlasTraceUnready += 1u;
+            runtime_ray_3d_counter_increment(&stats->tlasTraceUnready);
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_UNSUPPORTED:
-            stats->tlasTraceUnsupported += 1u;
+            runtime_ray_3d_counter_increment(&stats->tlasTraceUnsupported);
             break;
         case RUNTIME_RAY_3D_ACCEL_TRACE_ERROR:
         default:
-            stats->tlasTraceErrors += 1u;
+            runtime_ray_3d_counter_increment(&stats->tlasTraceErrors);
             break;
     }
 }
@@ -518,7 +559,7 @@ static void runtime_ray_3d_record_acceleration_failure(
     } else if (status == RUNTIME_RAY_3D_ACCEL_TRACE_UNSUPPORTED) {
         label = "unsupported";
     }
-    stats->accelerationFailureCalls += 1u;
+    runtime_ray_3d_counter_increment(&stats->accelerationFailureCalls);
     snprintf(stats->lastAccelerationFailureStatus,
              sizeof(stats->lastAccelerationFailureStatus),
              "%s",
@@ -620,15 +661,15 @@ static bool runtime_ray_3d_trace_scene_first_hit_parity(
     runtime_ray_3d_record_tlas_status(context, tlas_status);
     tlas_found = tlas_status == RUNTIME_RAY_3D_ACCEL_TRACE_HIT;
 
-    stats->flattenedTraceCalls += 1u;
+    runtime_ray_3d_counter_increment(&stats->flattenedTraceCalls);
     flattened_found = runtime_ray_3d_trace_scene_first_hit_flattened(scene,
                                                                      ray,
                                                                      t_min,
                                                                      t_max,
                                                                      &flattened_hit);
-    stats->parityCheckedRays += 1u;
+    runtime_ray_3d_counter_increment(&stats->parityCheckedRays);
     if (flattened_found != tlas_found) {
-        stats->parityMismatches += 1u;
+        runtime_ray_3d_counter_increment(&stats->parityMismatches);
         if (flattened_found) {
             snprintf(reason,
                      sizeof(reason),
@@ -651,7 +692,7 @@ static bool runtime_ray_3d_trace_scene_first_hit_parity(
                                            &tlas_hit,
                                            reason,
                                            sizeof(reason))) {
-        stats->parityMismatches += 1u;
+        runtime_ray_3d_counter_increment(&stats->parityMismatches);
         runtime_ray_3d_set_parity_mismatch(context, reason);
     }
 
@@ -723,15 +764,14 @@ bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* contex
                                                 [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
                                                 HitInfo3D* out_hit) {
     RuntimeRay3DRouteStats* stats = NULL;
+    RuntimeRay3DTraceRoute active_route;
     if (!context) context = runtime_ray_3d_default_trace_context();
     if (!scene || !ray || !out_hit) return false;
-    context->requestedRoute = runtime_ray_3d_sanitize_trace_route(context->requestedRoute);
-    context->activeRoute = runtime_ray_3d_sanitize_trace_route(context->activeRoute);
-    runtime_ray_3d_trace_context_refresh_stats_header(context);
+    active_route = runtime_ray_3d_sanitize_trace_route(context->activeRoute);
     stats = &context->routeStats;
-    stats->traceCalls += 1u;
+    runtime_ray_3d_counter_increment(&stats->traceCalls);
 
-    if (context->activeRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY) {
+    if (active_route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY) {
         return runtime_ray_3d_trace_scene_first_hit_parity(context,
                                                            scene,
                                                            ray,
@@ -739,7 +779,7 @@ bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* contex
                                                            t_max,
                                                            out_hit);
     }
-    if (context->activeRoute == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+    if (active_route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
         return runtime_ray_3d_trace_scene_first_hit_tlas_blas(context,
                                                               scene,
                                                               ray,
@@ -748,6 +788,6 @@ bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* contex
                                                               out_hit);
     }
 
-    stats->flattenedTraceCalls += 1u;
+    runtime_ray_3d_counter_increment(&stats->flattenedTraceCalls);
     return runtime_ray_3d_trace_scene_first_hit_flattened(scene, ray, t_min, t_max, out_hit);
 }
