@@ -58,6 +58,41 @@ static void photon_direct_bsdf_unlock(void) {
     atomic_flag_clear_explicit(&g_receiver_bsdf_lock, memory_order_release);
 }
 
+static void photon_direct_reset_diagnostics(void) {
+    photon_direct_bsdf_lock();
+    memset(&g_receiver_bsdf_readback, 0, sizeof(g_receiver_bsdf_readback));
+    photon_direct_bsdf_unlock();
+    memset(g_surface_diagnostic_samples, 0, sizeof(g_surface_diagnostic_samples));
+    atomic_store_explicit(&g_surface_diagnostic_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_surface_query_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_surface_positive_query_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(
+        &g_surface_undersampled_positive_query_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(
+        &g_surface_effective_sample_count_sum, 0u, memory_order_relaxed);
+    for (uint64_t i = 0u; i < 5u; ++i) {
+        atomic_store_explicit(
+            &g_surface_effective_sample_histogram[i], 0u, memory_order_relaxed);
+    }
+    memset(g_volume_diagnostic_samples, 0, sizeof(g_volume_diagnostic_samples));
+    atomic_store_explicit(&g_volume_diagnostic_count, 0u, memory_order_relaxed);
+}
+
+void RuntimeCausticPhotonDirectConsumer3D_ResetSurfaceDiagnostics(void) {
+    memset(g_surface_diagnostic_samples, 0, sizeof(g_surface_diagnostic_samples));
+    atomic_store_explicit(&g_surface_diagnostic_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_surface_query_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(&g_surface_positive_query_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(
+        &g_surface_undersampled_positive_query_count, 0u, memory_order_relaxed);
+    atomic_store_explicit(
+        &g_surface_effective_sample_count_sum, 0u, memory_order_relaxed);
+    for (uint64_t i = 0u; i < 5u; ++i) {
+        atomic_store_explicit(
+            &g_surface_effective_sample_histogram[i], 0u, memory_order_relaxed);
+    }
+}
+
 static Vec3 photon_direct_selected_surface_flux(
     const RuntimeCausticPhotonMapQueryResult3D* result) {
     if (!result) return vec3(0.0, 0.0, 0.0);
@@ -214,6 +249,7 @@ void RuntimeCausticPhotonDirectConsumer3D_Bind(
     g_surface_path_filter =
         settings ? settings->surfacePathFilter
                  : RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_FILTER_ALL;
+    photon_direct_reset_diagnostics();
     RuntimeCausticPhotonVolumeBeamEstimator3D_DefaultSettings(
         &g_volume_beam_estimator_settings);
     if (settings) {
@@ -262,23 +298,7 @@ void RuntimeCausticPhotonDirectConsumer3D_Reset(void) {
     g_surface_path_filter = RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_FILTER_ALL;
     RuntimeCausticPhotonVolumeBeamEstimator3D_DefaultSettings(
         &g_volume_beam_estimator_settings);
-    photon_direct_bsdf_lock();
-    memset(&g_receiver_bsdf_readback, 0, sizeof(g_receiver_bsdf_readback));
-    photon_direct_bsdf_unlock();
-    memset(g_surface_diagnostic_samples, 0, sizeof(g_surface_diagnostic_samples));
-    atomic_store_explicit(&g_surface_diagnostic_count, 0u, memory_order_relaxed);
-    atomic_store_explicit(&g_surface_query_count, 0u, memory_order_relaxed);
-    atomic_store_explicit(&g_surface_positive_query_count, 0u, memory_order_relaxed);
-    atomic_store_explicit(
-        &g_surface_undersampled_positive_query_count, 0u, memory_order_relaxed);
-    atomic_store_explicit(
-        &g_surface_effective_sample_count_sum, 0u, memory_order_relaxed);
-    for (uint64_t i = 0u; i < 5u; ++i) {
-        atomic_store_explicit(
-            &g_surface_effective_sample_histogram[i], 0u, memory_order_relaxed);
-    }
-    memset(g_volume_diagnostic_samples, 0, sizeof(g_volume_diagnostic_samples));
-    atomic_store_explicit(&g_volume_diagnostic_count, 0u, memory_order_relaxed);
+    photon_direct_reset_diagnostics();
 }
 
 bool RuntimeCausticPhotonDirectConsumer3D_Active(void) {

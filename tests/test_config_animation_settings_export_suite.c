@@ -575,6 +575,8 @@ static int test_agent_render_request_caustic_photon_product_mode_ppm6(void) {
         "    \"caustic_photon_block_solid_dielectric_direct_paths\": true,\n"
         "    \"caustic_photon_surface_path_filter\": \"multipath\",\n"
         "    \"caustic_photon_surface_receiver_scene_object_index\": 7,\n"
+        "    \"caustic_photon_surface_allow_active_medium_receiver\": true,\n"
+        "    \"caustic_photon_surface_diagnostics_enabled\": true,\n"
         "    \"caustic_photon_sample_budget\": 192,\n"
         "    \"caustic_photon_emission_seed\": 211,\n"
         "    \"caustic_photon_max_path_depth\": 6,\n"
@@ -606,6 +608,9 @@ static int test_agent_render_request_caustic_photon_product_mode_ppm6(void) {
                     request.caustic_photon_integration_settings.renderContributionEnabled &&
                     request.caustic_photon_integration_settings
                             .surfaceReceiverSceneObjectIndex == 7 &&
+                    request.caustic_photon_integration_settings
+                            .surfaceAllowActiveMediumReceiver &&
+                    request.caustic_photon_surface_diagnostics_enabled &&
                     request.caustic_photon_integration_settings
                             .surfacePathFilter ==
                         RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_FILTER_MULTIPATH &&

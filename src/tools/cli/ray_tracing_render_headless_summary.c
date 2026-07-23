@@ -261,9 +261,18 @@ void ray_tracing_render_headless_write_summary(
             "    \"caustic_photon_surface_receiver_scene_object_index\": %d,\n",
             request->caustic_photon_integration_settings
                 .surfaceReceiverSceneObjectIndex);
+    fprintf(file,
+            "    \"caustic_photon_surface_allow_active_medium_receiver\": %s,\n",
+            request->caustic_photon_integration_settings
+                    .surfaceAllowActiveMediumReceiver
+                ? "true"
+                : "false");
     fprintf(file, "    \"caustic_photon_render_prep_population_enabled\": %s,\n",
             request->caustic_photon_render_prep_population_enabled ? "true"
                                                                    : "false");
+    fprintf(file, "    \"caustic_photon_surface_diagnostics_enabled\": %s,\n",
+            request->caustic_photon_surface_diagnostics_enabled ? "true"
+                                                                 : "false");
     fprintf(file, "    \"caustic_photon_populated_callsite_readback_enabled\": %s,\n",
             request->caustic_photon_populated_callsite_readback_enabled ? "true"
                                                                         : "false");

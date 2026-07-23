@@ -82,6 +82,8 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     population_settings.storeDiffuseSurfaces = settings->surfaceQueryEnabled;
     population_settings.storeTraversedBeams = settings->volumeQueryEnabled;
     population_settings.surfaceQueryRadius = settings->surfaceQueryRadius;
+    population_settings.allowActiveMediumSurfaceReceiver =
+        settings->surfaceAllowActiveMediumReceiver;
     population_settings.beamRadiusStart = settings->volumeQueryRadius;
     population_settings.beamRadiusEnd = settings->volumeQueryRadius;
     population_settings.requireBeamMediumId = true;

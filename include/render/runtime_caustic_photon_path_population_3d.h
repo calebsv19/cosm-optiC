@@ -28,6 +28,7 @@ typedef struct {
     bool storeTraversedBeams;
     bool requirePriorSpecularOrTransmission;
     bool requireReconciledDielectricTransmissionForSurface;
+    bool allowActiveMediumSurfaceReceiver;
     double surfaceQueryRadius;
     double beamRadiusStart;
     double beamRadiusEnd;

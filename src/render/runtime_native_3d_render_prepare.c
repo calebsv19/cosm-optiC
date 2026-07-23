@@ -226,7 +226,7 @@ static void runtime_native_3d_render_apply_focus_target(RuntimeCamera3D* io_came
     Vec3 to_target = vec3(0.0, 0.0, 0.0);
     double horizontal = 0.0;
     double pitch = 0.0;
-    const double max_pitch = 70.0 * M_PI / 180.0;
+    const double max_pitch = 89.0 * M_PI / 180.0;
 
     if (!io_camera) return;
     to_target = vec3_sub(target, io_camera->position);

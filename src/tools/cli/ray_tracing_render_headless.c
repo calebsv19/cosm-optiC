@@ -809,6 +809,15 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             *out_preflight = preflight;
             return frame_status;
         }
+        if (!ray_tracing_headless_write_photon_surface_diagnostics(
+                request, frame_index)) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "failed to write photon surface diagnostics");
+            free(pixels);
+            *out_preflight = preflight;
+            return 12;
+        }
     }
 
     free(pixels);

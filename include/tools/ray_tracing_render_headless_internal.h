@@ -355,6 +355,9 @@ int ray_tracing_headless_write_rendered_frame_output(
     const char *job_status_path,
     const char *job_id,
     const char *request_path);
+bool ray_tracing_headless_write_photon_surface_diagnostics(
+    const RayTracingAgentRenderRequest* request,
+    int frame_index);
 void ray_tracing_headless_write_render_trace_cost_ledger(
     FILE* file,
     const RayTracingHeadlessPreflight* preflight);

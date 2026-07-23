@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "render/runtime_caustic_photon_direct_consumer_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
 
 RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
@@ -177,9 +178,17 @@ void runtime_native_3d_render_apply_transmitted_surface_caustic_cache(
         return;
     }
     stats->causticSurfaceCacheSampleLookupCount += 1;
-    if (!RuntimeCausticSurfaceCache3D_SampleAtHit(surface_cache,
-                                                  &result->primaryTransmissionPathState.hitInfo,
-                                                  &radiance)) {
+    if (RuntimeCausticPhotonDirectConsumer3D_Active()) {
+        if (!RuntimeCausticPhotonDirectConsumer3D_SampleSurface(
+                &result->primaryTransmissionPathState.hitInfo,
+                &radiance,
+                NULL)) {
+            return;
+        }
+    } else if (!RuntimeCausticSurfaceCache3D_SampleAtHit(
+                   surface_cache,
+                   &result->primaryTransmissionPathState.hitInfo,
+                   &radiance)) {
         return;
     }
     throughput_r = fmax(result->primaryTransmissionCameraThroughputR,

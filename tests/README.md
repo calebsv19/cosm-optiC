@@ -127,8 +127,49 @@ make -C ray_tracing test-ray-tracing-spatial-caustic-phase9-transmitted-receiver
 make -C ray_tracing test-ray-tracing-spatial-caustic-phase10-tangent-receiver-matrix
 make -C ray_tracing test-ray-tracing-spatial-caustic-visual-sphere-mist-matrix
 make -C ray_tracing test-ray-tracing-ppm10-product-ab-fixture
+make -C ray_tracing test-ray-tracing-animated-water-photon-caustics
 make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 ```
+
+`test-ray-tracing-animated-water-photon-caustics` is the bounded native
+animated-fluid photon acceptance lane. It imports a deterministic 96-by-96
+water heightfield as more than 18,000 real triangles, emits 16,384 photons from
+an authored rectangle light, proves an opaque underwater receiver without the
+fixture dielectric fallback, and compares contribution-off versus direct-map
+near-overhead beauty output. Its eight-frame pass also requires changing raw
+landing fields, reconstructed receiver gathers, and beauty frames, and writes
+JSONL diagnostics, per-frame PNGs, contact sheets, and
+`acceptance_report.json` under
+`build/agent_runs/ray_tracing/animated_water_photon_caustics/`. The driver also
+accepts `--water-manifest PATH` for compatible local PhysicsSim aquarium water;
+it records the chosen source frame indices and retargets the cache into the
+fixture without modifying the source artifact. The optional
+`--capillary-review` mode resamples the PhysicsSim macro surface to a
+144-by-144 mesh and layers deterministic multi-direction capillary detail onto
+it. The generated bundle labels this source
+`physics_sim_macro_plus_capillary_review`; use it to isolate the surface
+frequency needed for cellular pool-caustic review, not as raw PhysicsSim
+evidence or a production-water acceptance claim.
+
+Use the sibling
+`tests/integration/run_ray_tracing_pool_caustic_temporal_review.py` for the
+more expensive pool-motion review. It requires an explicit compatible
+`--water-manifest`, selects eight contiguous source frames, and renders one
+frame-zero contribution-off control plus one eight-frame contribution-on
+sequence. It reports source/playback frame provenance, water-height deltas,
+photon-record stability, pairwise raw/gather spatial correlation, and beauty
+frame deltas, and produces MP4 comparisons when `ffmpeg` is available. This
+driver is intentionally not part of the ordinary broad test gate because each
+moving high-resolution water frame requires a new photon-map build.
+
+`tests/integration/plan_ray_tracing_pool_caustic_quality_sweep.py` is the
+generation/preflight gate for the static water-density comparison. It resamples
+one fixed PhysicsSim/capillary phase at 72, 96, 144, 192, and 256 samples per
+axis, records capillary samples-per-wavelength and nominal triangle counts, and
+preflights identical 1280-by-768/65,536-photon requests. It writes no render
+frames and does not make the comparison promotion-eligible. Generated scene,
+water, output, and progress paths are request-relative for worker-payload
+portability.
 
 `test-ray-tracing-caustic-probe-matrix` is the local L4 caustic-readiness proof
 target. It renders the canonical overhead-light, glass-sphere, matte-receiver

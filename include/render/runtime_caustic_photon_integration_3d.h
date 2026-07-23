@@ -57,6 +57,7 @@ typedef struct {
     uint64_t surfaceGatherNeighborCount;
     RuntimeCausticPhotonSurfacePathFilter3D surfacePathFilter;
     int surfaceReceiverSceneObjectIndex;
+    bool surfaceAllowActiveMediumReceiver;
     int sampleBudget;
     uint32_t emissionSeed;
     int maxPathDepth;

@@ -37,6 +37,20 @@ fields rather than implied defaults. See
 [`headless_agent_render_cli.md`](headless_agent_render_cli.md) and the accepted
 field parsing in `src/app/agent_render_request.c` before authoring a request.
 
+For an opaque receiver beneath a single open refractive water surface, set
+`inspection.caustic_photon_surface_allow_active_medium_receiver = true`. This
+request-only switch accepts the floor hit after one dielectric entry without a
+matching exit; it remains false by default so closed solid-dielectric
+provenance continues to require reconciled entry/exit counts.
+
+When render-prep population and
+`inspection.caustic_photon_surface_diagnostics_enabled` are both active, the
+headless renderer writes per-frame `photon_surface_records_NNNN.jsonl` landing
+records and `photon_surface_queries_NNNN.jsonl` direct-consumer reconstruction samples.
+These diagnostics expose receiver position, identity, flux, support, query
+radius, contributing sample counts, and rejection counters without changing
+the rendered result.
+
 ## Implementation Map
 
 - `src/ui/menu/menu_caustic_product.c` owns desktop product selection and the
@@ -60,10 +74,43 @@ TEST_RUNNER_GROUP=ui_menu_contracts make test
 TEST_RUNNER_GROUP=runtime_caustic_photon_integration_3d make test
 TEST_RUNNER_GROUP=runtime_caustic_photon_direct_consumer_3d make test
 TEST_RUNNER_GROUP=runtime_caustic_photon_sparse_brick_cache_3d make test
+make test-ray-tracing-animated-water-photon-caustics
 ```
 
 Additional transport, map, estimator, medium-stack, provenance, and scene
 population groups are indexed in [`../tests/README.md`](../tests/README.md).
+The animated-water target builds a deterministic 96-by-96 imported heightfield,
+uses an authored rectangle light and near-overhead inspection camera, renders a
+static contribution control and an eight-frame moving-water sequence, and
+produces raw-landing, reconstructed floor-light, and beauty-image review
+artifacts under `build/agent_runs/ray_tracing/`. Pass `--water-manifest` to its
+Python driver to retarget a compatible local
+`physics_sim_water_manifest_v1` sequence into the same bounded 4-by-2-meter
+floor fixture without changing the source cache. Pass `--capillary-review` to
+resample that macro surface to a 144-by-144 review mesh and add a deterministic
+multi-direction capillary spectrum. This review-only hybrid is useful for
+checking whether the photon optics can form pool-like cellular ridges; it is
+explicitly not a claim that the added detail came from PhysicsSim or that it is
+the final production water model.
+
+For the bounded motion review, run
+`tests/integration/run_ray_tracing_pool_caustic_temporal_review.py` with an
+explicit `--water-manifest`. It uses eight contiguous PhysicsSim samples,
+advances the capillary modes with a shared dispersion-based clock, and retains
+the distant-light/tight-gather static reference. The review emits beauty,
+raw-landing, and reconstructed floor-light contact sheets and videos plus
+pairwise spatial continuity metrics. It is local diagnostic proof and remains
+promotion-ineligible.
+
+Before scheduling the expensive static quality comparison, use
+`tests/integration/plan_ray_tracing_pool_caustic_quality_sweep.py` with an
+explicit PhysicsSim `--water-manifest`. The planner generates 72-, 96-, 144-,
+192-, and 256-square samples of the same water phase, freezes the accepted
+distant-light/photon/gather/camera settings, and runs headless preflight for
+each cell without rendering frames. Its `quality_sweep_plan.json` is the
+auditable input manifest for the later local or worker-backed still sweep; the
+generated request paths are payload-relative so the frozen sweep can move
+between the Mac producer root and a worker package without path rewriting.
 
 ## Current Boundary
 

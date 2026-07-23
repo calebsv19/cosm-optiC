@@ -47,6 +47,20 @@ void RuntimeNative3DRender_ResetCausticPhotonMapStore(void) {
     RuntimeCausticPhotonMapStore3D_Free(&gRuntimeNative3DCausticPhotonMapStore);
 }
 
+uint64_t RuntimeNative3DRender_CausticPhotonSurfaceRecordCount(void) {
+    return gRuntimeNative3DCausticPhotonMapStore.surfaceMap.recordCount;
+}
+
+bool RuntimeNative3DRender_CausticPhotonSurfaceRecordAt(
+    uint64_t index,
+    RuntimeCausticPhotonMapRecord3D* out_record) {
+    const RuntimeCausticPhotonMap3D* map =
+        &gRuntimeNative3DCausticPhotonMapStore.surfaceMap;
+    if (!out_record || !map->records || index >= map->recordCount) return false;
+    *out_record = map->records[index];
+    return true;
+}
+
 static uint32_t runtime_native_3d_prepare_harvest_photon_mesh_dielectric(
     const RuntimeScene3D* scene,
     RuntimeCausticLensShape3D* out_shapes,

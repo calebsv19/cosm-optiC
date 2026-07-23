@@ -659,9 +659,24 @@ frames. The summary reports:
 - `inspection.transmission_samples_3d`
 - `inspection.caustic_mode` (`disney_v2` only; `analytic` default, `off`,
   `transport` for explicit caustic cache transport)
-- `inspection.caustic_transport_engine` (`transport` only;
-  `exploratory_lens_transport` default, `photon_map` accepted/read back as the
-  PPM-0A production photon-mapper contract state without photon tracing yet)
+- `inspection.caustic_transport_engine` (`exploratory_lens_transport` default;
+  `photon_map` selects the explicit photon population/query route)
+- `inspection.caustic_product_mode` (`off`, reference modes, or explicit
+  `production`/`photon_map`)
+- `inspection.caustic_photon_consumer` (`direct_map` or `cache_bridge`)
+- `inspection.caustic_photon_render_prep_population_enabled`
+- `inspection.caustic_photon_render_contribution_enabled`
+- `inspection.caustic_photon_surface_diagnostics_enabled` (default false;
+  writes per-frame landing and reconstructed-query JSONL)
+- `inspection.caustic_photon_sample_budget`
+- `inspection.caustic_photon_max_path_depth`
+- `inspection.caustic_photon_surface_query_radius`
+- `inspection.caustic_photon_surface_gather_max_radius`
+- `inspection.caustic_photon_surface_gather_neighbors`
+- `inspection.caustic_photon_surface_radiance_scale`
+- `inspection.caustic_photon_surface_allow_active_medium_receiver` (default
+  false; opt in for an opaque receiver reached beneath a single open water
+  interface)
 - `inspection.caustic_sidecar_enabled` (`disney_v2` legacy alias)
 - `inspection.caustic_sidecar_strength` (`disney_v2` only)
 - `inspection.volume_tint`

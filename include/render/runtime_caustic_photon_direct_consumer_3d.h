@@ -72,6 +72,7 @@ bool RuntimeCausticPhotonDirectConsumer3D_Active(void);
 double RuntimeCausticPhotonDirectConsumer3D_VolumeQueryRadius(void);
 void RuntimeCausticPhotonDirectConsumer3D_SnapshotReceiverBsdf(
     RuntimeCausticPhotonReceiverBsdfReadback3D* out_readback);
+void RuntimeCausticPhotonDirectConsumer3D_ResetSurfaceDiagnostics(void);
 uint64_t RuntimeCausticPhotonDirectConsumer3D_SurfaceDiagnosticCount(void);
 void RuntimeCausticPhotonDirectConsumer3D_SnapshotSurfaceDiagnosticAggregate(
     RuntimeCausticPhotonSurfaceDiagnosticAggregate3D* out_aggregate);

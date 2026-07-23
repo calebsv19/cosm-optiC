@@ -682,6 +682,14 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.caustic_photon_integration_settings
                 .surfaceReceiverSceneObjectIndex = int_value;
         }
+        if (RayTracingJsonGetBool(
+                inspection,
+                "caustic_photon_surface_allow_active_medium_receiver",
+                &bool_value)) {
+            request.has_caustic_product_mode_override = true;
+            request.caustic_photon_integration_settings
+                .surfaceAllowActiveMediumReceiver = bool_value;
+        }
         if (RayTracingJsonGetBool(inspection,
                                   "caustic_photon_render_prep_population_enabled",
                                   &bool_value) ||
@@ -772,6 +780,12 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.has_caustic_product_mode_override = true;
             request.caustic_photon_integration_settings.volumePhaseAnisotropy =
                 double_value;
+        }
+        if (RayTracingJsonGetBool(
+                inspection,
+                "caustic_photon_surface_diagnostics_enabled",
+                &bool_value)) {
+            request.caustic_photon_surface_diagnostics_enabled = bool_value;
         }
         if (RayTracingJsonGetBool(inspection,
                                   "caustic_photon_populated_callsite_readback_enabled",

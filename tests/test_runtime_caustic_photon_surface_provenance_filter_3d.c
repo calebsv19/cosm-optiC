@@ -264,6 +264,40 @@ static int test_surface_provenance_filter_retains_first_diffuse_receiver_only(
     return 0;
 }
 
+static int test_surface_provenance_filter_active_medium_receiver_opt_in(void) {
+    RuntimeCausticPhotonSceneTrace3D trace =
+        surface_provenance_trace(SURFACE_PROVENANCE_FIXTURE_UNRECONCILED);
+    RuntimeCausticPhotonPathPopulationSettings3D settings;
+    RuntimeCausticPhotonPathPopulationReadback3D readback;
+    RuntimeCausticPhotonMap3D map;
+
+    RuntimeCausticPhotonPathPopulation3D_DefaultSettings(&settings);
+    assert_true("surface_provenance_active_medium_default_off",
+                !settings.allowActiveMediumSurfaceReceiver);
+    settings.storeTraversedBeams = false;
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("surface_provenance_active_medium_allocate",
+                RuntimeCausticPhotonMap3D_Allocate(&map, 2u));
+    assert_true(
+        "surface_provenance_active_medium_default_rejects",
+        !RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
+            &trace, &settings, &map, NULL, &readback) &&
+            readback.dielectricEntryCount == 1u &&
+            readback.dielectricExitCount == 0u &&
+            map.recordCount == 0u);
+    settings.allowActiveMediumSurfaceReceiver = true;
+    assert_true(
+        "surface_provenance_active_medium_opt_in_accepts",
+        RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
+            &trace, &settings, &map, NULL, &readback) &&
+            readback.dielectricEntryCount == 1u &&
+            readback.dielectricExitCount == 0u &&
+            readback.storedSurfaceCount == 1u &&
+            map.recordCount == 1u);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
 static int test_surface_provenance_filter_labels_receiver_bounce_multipath(
     void) {
     RuntimeCausticPhotonSceneTrace3D trace =
@@ -290,6 +324,8 @@ int run_test_runtime_caustic_photon_surface_provenance_filter_3d_tests(void) {
     failures += test_surface_provenance_filter_cohorts();
     failures +=
         test_surface_provenance_filter_retains_first_diffuse_receiver_only();
+    failures +=
+        test_surface_provenance_filter_active_medium_receiver_opt_in();
     failures +=
         test_surface_provenance_filter_labels_receiver_bounce_multipath();
     return failures;

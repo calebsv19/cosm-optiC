@@ -52,6 +52,7 @@ void RuntimeCausticPhotonIntegration3D_DefaultSettings(
     settings->surfacePathFilter =
         RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_FILTER_ALL;
     settings->surfaceReceiverSceneObjectIndex = -1;
+    settings->surfaceAllowActiveMediumReceiver = false;
     settings->sampleBudget = RUNTIME_CAUSTIC_PHOTON_INTEGRATION_DEFAULT_SAMPLE_BUDGET;
     settings->emissionSeed = UINT32_C(0x9e3779b9);
     settings->maxPathDepth = RUNTIME_CAUSTIC_PHOTON_INTEGRATION_DEFAULT_MAX_DEPTH;

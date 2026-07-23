@@ -662,6 +662,9 @@ test-ray-tracing-render-headless-water-object-coupling-review: $(RAY_TRACING_REN
 test-ray-tracing-render-headless-water-object-coupling-long-review: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	bash tests/integration/run_ray_tracing_render_headless_water_object_coupling_long_review.sh
 
+test-ray-tracing-animated-water-photon-caustics: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_ray_tracing_animated_water_photon_caustics.py
+
 test-ray-tracing-job-runner-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	tests/integration/run_ray_tracing_job_runner_smoke.sh
 

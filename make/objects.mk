@@ -246,6 +246,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_motion_accel_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_prepare.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_summary.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_surface_diagnostics.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_callbacks.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_status.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_render_budget.o \

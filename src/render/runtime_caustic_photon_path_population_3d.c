@@ -357,7 +357,9 @@ bool RuntimeCausticPhotonPathPopulation3D_PopulateMaps(
             last_receiver_index = i;
             if (active->storeDiffuseSurfaces &&
                 active->requireReconciledDielectricTransmissionForSurface &&
-                !(entry_count > 0u && entry_count == exit_count)) {
+                !(entry_count > 0u && entry_count == exit_count) &&
+                !(active->allowActiveMediumSurfaceReceiver &&
+                  entry_count == exit_count + 1u)) {
                 if (entry_count == 0u && exit_count == 0u) {
                     if (!saw_reflection_only_surface) {
                         readback.retention.surfaceRejected[

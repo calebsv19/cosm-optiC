@@ -125,6 +125,14 @@ static int test_runtime_caustic_photon_direct_consumer_surface_and_beam(void) {
                     surface_aggregate.undersampledPositiveQueryCount == 0u &&
                     surface_aggregate.effectiveSampleCountSum == 4u &&
                     surface_aggregate.effectiveSampleHistogram[4] == 1u);
+    RuntimeCausticPhotonDirectConsumer3D_ResetSurfaceDiagnostics();
+    RuntimeCausticPhotonDirectConsumer3D_SnapshotSurfaceDiagnosticAggregate(
+        &surface_aggregate);
+    assert_true("runtime_caustic_photon_surface_diagnostic_explicit_reset",
+                RuntimeCausticPhotonDirectConsumer3D_SurfaceDiagnosticCount() == 0u &&
+                    surface_aggregate.queryCount == 0u &&
+                    surface_aggregate.positiveQueryCount == 0u &&
+                    surface_aggregate.effectiveSampleCountSum == 0u);
     RuntimeCausticPhotonDirectConsumer3D_SnapshotReceiverBsdf(&receiver_bsdf);
     assert_true("runtime_caustic_photon_surface_flux_compensated_once",
                 surface_query.storedFluxAlreadyPdfCompensated &&
@@ -143,6 +151,8 @@ static int test_runtime_caustic_photon_direct_consumer_surface_and_beam(void) {
         RUNTIME_CAUSTIC_PHOTON_SURFACE_PATH_FILTER_DIRECT_TWO_INTERFACE;
     RuntimeCausticPhotonDirectConsumer3D_Bind(
         RUNTIME_CAUSTIC_PHOTON_CONSUMER_DIRECT_MAP, &surface, &beam, &settings);
+    assert_true("runtime_caustic_photon_direct_rebind_resets_frame_diagnostics",
+                RuntimeCausticPhotonDirectConsumer3D_SurfaceDiagnosticCount() == 0u);
     assert_true("runtime_caustic_photon_direct_class_surface_sample",
                 RuntimeCausticPhotonDirectConsumer3D_SampleSurface(
                     &hit, &radiance, &surface_query) && radiance.x > 0.0);

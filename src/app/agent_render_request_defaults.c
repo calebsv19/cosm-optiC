@@ -71,6 +71,7 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
         &request->caustic_photon_integration_settings);
     request->caustic_photon_block_solid_dielectric_direct_paths = false;
     request->caustic_photon_render_prep_population_enabled = false;
+    request->caustic_photon_surface_diagnostics_enabled = false;
     request->caustic_photon_populated_callsite_readback_enabled = false;
     request->caustic_photon_trace_populated_callsite_readback_enabled = false;
     request->has_caustic_sidecar_enabled_override = false;
