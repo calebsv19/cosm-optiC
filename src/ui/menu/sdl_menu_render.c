@@ -378,7 +378,7 @@ void menu_render_frame(SDL_Renderer* renderer,
         menu_render_draw_button_rect(renderer,
                                      font,
                                      &buttons.rendererCausticsTabRect,
-                                     "Caustics",
+                                     "Caustic / Photon",
                                      state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS);
     }
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
@@ -388,11 +388,11 @@ void menu_render_frame(SDL_Renderer* renderer,
         const char* product_label = menu_caustic_product_label(&state->causticSettings);
         (void)snprintf(mode_label,
                        sizeof(mode_label),
-                       "Caustics: %s",
+                       "System: %s",
                        product_label);
         (void)snprintf(engine_label,
                        sizeof(engine_label),
-                       "Producer: %s",
+                       "Transport: %s",
                        RuntimeCausticTransportEngine3D_Label(
                            state->causticSettings.transportEngine));
         menu_render_draw_button_rect(renderer, font, &buttons.causticModeRect,
@@ -506,7 +506,7 @@ void menu_render_frame(SDL_Renderer* renderer,
 
         snprintf(summary,
                  sizeof(summary),
-                 "Recipe: %s | Caustics: %s",
+                 "Recipe: %s | Focused Light: %s",
                  RayTracingModeBackend_IntegratorStatusLabel(&route),
                  RuntimeCausticMode3D_Label(state->causticSettings.mode));
         menu_render_fit_text_to_width(font, summary, summary_w, fitted, sizeof(fitted));

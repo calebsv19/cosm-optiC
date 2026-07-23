@@ -811,10 +811,10 @@ void menu_render_build_button_layout(TTF_Font* font,
             state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS) {
             layout.causticModeRect = build_adaptive_button_rect(
                 font, content_left, first_row_y, content_width,
-                RENDERER_CONTROL_BUTTON_HEIGHT, "Caustics", content_width);
+                RENDERER_CONTROL_BUTTON_HEIGHT, "System", content_width);
             layout.causticEngineRect = build_adaptive_button_rect(
                 font, content_left, second_row_y, content_width,
-                RENDERER_CONTROL_BUTTON_HEIGHT, "Deposition", content_width);
+                RENDERER_CONTROL_BUTTON_HEIGHT, "Transport", content_width);
             layout.causticSurfaceRect = build_adaptive_button_rect(
                 font, centerLeftX,
                 second_row_y + RENDERER_CONTROL_BUTTON_HEIGHT + RENDERER_CONTROL_ROW_GAP,
