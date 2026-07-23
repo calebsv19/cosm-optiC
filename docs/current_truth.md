@@ -1166,6 +1166,10 @@ Last updated: 2026-07-22
 
 ## Production Photon Mapping
 
+The operator-facing opt-in, retained reference modes, implementation map, and
+focused verification commands are collected in
+[`photon_mapping.md`](photon_mapping.md).
+
 - The request-opt-in photon mapper includes deterministic light-backed emission, general
   shared-TLAS/BLAS traversal, mixed diffuse/glossy/specular/transmission and
   emissive events, multi-object and multi-bounce continuation, continuing TIR,

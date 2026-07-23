@@ -163,6 +163,7 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 - agent-control guide: `docs/AGENT_CONTROL.md`
 - canonical agent demo pack: `docs/AGENT_DEMO_PACK.md`
 - runtime controls: `docs/KEYBINDS.md`
+- photon mapping opt-in and verification: `docs/photon_mapping.md`
 - current-state contract: `docs/current_truth.md`
 - near-term direction: `docs/future_intent.md`
 

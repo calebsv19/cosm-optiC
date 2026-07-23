@@ -91,6 +91,8 @@ Current public focus:
 - `docs/AGENT_DEMO_PACK.md`: canonical RT-R2 demo pack with stable fixtures,
   expected outputs, and the local queue-bundle dry run.
 - `docs/current_truth.md`: current runtime contract and active boundaries.
+- `docs/photon_mapping.md`: desktop/headless photon opt-in, retained reference
+  caustic modes, implementation map, focused tests, and promotion boundaries.
 - `docs/future_intent.md`: near-term renderer and workflow direction.
 - `docs/headless_agent_render_cli.md`: `ray_tracing_agent_render_request_v1`
   request schema, preflight/render CLI command, PhysicsSim VF3D handoff,
