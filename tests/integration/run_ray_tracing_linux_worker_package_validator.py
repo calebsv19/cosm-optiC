@@ -18,6 +18,7 @@ from pathlib import Path
 PACKAGE_ROOT = "ray_tracing-test-worker"
 WORKER_VERSION = "0.4.0"
 SOURCE_PROGRAM_VERSION = "0.10.0"
+SOURCE_COMMIT = "0123456789abcdef0123456789abcdef01234567"
 REQUIRED_EXECUTABLES = (
     "bin/ray_tracing_render_headless",
     "bin/ray_tracing_job_runner",
@@ -44,6 +45,7 @@ def fixture_data(name: str, machine: int | None, glibc_version: str = "2.38") ->
                 {
                     "version": WORKER_VERSION,
                     "source_program_version": SOURCE_PROGRAM_VERSION,
+                    "source_commit": SOURCE_COMMIT,
                     "platform": "linux-x86_64",
                     "max_glibc_version": "2.39.0",
                     "capabilities": [
@@ -119,6 +121,8 @@ def run_validator(root_dir: Path, archive: Path, package_root: str = PACKAGE_ROO
             WORKER_VERSION,
             "--source-program-version",
             SOURCE_PROGRAM_VERSION,
+            "--source-commit",
+            SOURCE_COMMIT,
         ],
         text=True,
         stdout=subprocess.PIPE,
@@ -239,6 +243,22 @@ def main() -> int:
             check=False,
         ),
         "worker version does not match WORKER_VERSION",
+    )
+
+    wrong_source_commit = work_root / "wrong_source_commit.tar.gz"
+    write_archive(wrong_source_commit, valid_members())
+    command = run_validator(root_dir, wrong_source_commit).args
+    command[command.index(SOURCE_COMMIT)] = "f" * 40
+    expect_fail(
+        "wrong_source_commit",
+        subprocess.run(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        ),
+        "source commit does not match the authenticated source",
     )
 
     print(f"ray tracing Linux worker package validator fixtures passed: {work_root}")

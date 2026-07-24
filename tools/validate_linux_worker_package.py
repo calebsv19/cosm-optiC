@@ -44,6 +44,7 @@ PLATFORM_CAPABILITY_BY_PLATFORM = {
 
 GLIBC_SYMBOL_RE = re.compile(rb"GLIBC_([0-9]+)\.([0-9]+)(?:\.([0-9]+))?")
 SEMVER_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+SOURCE_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 EXPECTED_COMPATIBILITY = {
     "worker_protocol_min": 1,
     "worker_protocol_max": 1,
@@ -92,6 +93,7 @@ def validate_archive(
     max_glibc: str,
     worker_version: str,
     source_program_version: str,
+    source_commit: str,
 ) -> int:
     expected_machine = ELF_MACHINE_BY_PLATFORM.get(platform)
     if expected_machine is None:
@@ -100,6 +102,8 @@ def validate_archive(
         return fail("expected worker version is not canonical MAJOR.MINOR.PATCH")
     if SEMVER_RE.fullmatch(source_program_version) is None:
         return fail("expected source program version is not canonical MAJOR.MINOR.PATCH")
+    if SOURCE_COMMIT_RE.fullmatch(source_commit) is None:
+        return fail("expected source commit is not a 40-character lowercase Git commit")
     try:
         max_glibc_numeric = numeric_version(max_glibc)
     except ValueError as exc:
@@ -184,6 +188,8 @@ def validate_archive(
             return fail("manifest.json worker version does not match WORKER_VERSION")
         if manifest.get("source_program_version") != source_program_version:
             return fail("manifest.json source program version does not match VERSION")
+        if manifest.get("source_commit") != source_commit:
+            return fail("manifest.json source commit does not match the authenticated source")
         if manifest.get("compatibility") != EXPECTED_COMPATIBILITY:
             return fail("manifest.json compatibility does not match the desktop contract")
         if manifest.get("max_glibc_version") != max_glibc:
@@ -225,6 +231,10 @@ def validate_archive(
             return fail(
                 "package_manifest.json source program version does not match VERSION"
             )
+        if package_manifest.get("source_commit") != source_commit:
+            return fail(
+                "package_manifest.json source commit does not match the authenticated source"
+            )
         if package_manifest.get("compatibility") != EXPECTED_COMPATIBILITY:
             return fail(
                 "package_manifest.json compatibility does not match the desktop contract"
@@ -243,6 +253,7 @@ def validate_archive(
                 "status": "compatible",
                 "worker_version": worker_version,
                 "source_program_version": source_program_version,
+                "source_commit": source_commit,
                 "platform": platform,
                 "max_allowed_glibc": max_glibc,
                 "native_binaries": native_abi,
@@ -261,6 +272,7 @@ def main() -> int:
     parser.add_argument("--max-glibc", required=True)
     parser.add_argument("--worker-version", required=True)
     parser.add_argument("--source-program-version", required=True)
+    parser.add_argument("--source-commit", required=True)
     args = parser.parse_args()
     return validate_archive(
         args.archive,
@@ -269,6 +281,7 @@ def main() -> int:
         args.max_glibc,
         args.worker_version,
         args.source_program_version,
+        args.source_commit,
     )
 
 
