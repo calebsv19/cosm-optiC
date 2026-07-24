@@ -28,7 +28,15 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-render-headless-tlas-blas-repeated-instance-stress \
 	test-ray-tracing-material-preview-headless \
 	test-ray-tracing-job-runner-smoke \
-	test-ray-tracing-job-runner-bundle-smoke \
+		test-ray-tracing-job-runner-bundle-smoke \
+		test-ray-tracing-durable-frame-recovery \
+		test-ray-tracing-recovery-authority \
+		test-ray-tracing-worker-protocol \
+		test-ray-tracing-worker-version-contract \
+	test-ray-tracing-worker-protocol-phase-b \
+		test-ray-tracing-temporal-checkpoint-phase-c \
+		test-ray-tracing-tile-batch-checkpoint-phase-d \
+		test-ray-tracing-fleet-recovery-phase-e \
 	test-ray-tracing-publish-helper-validation \
 	test-ray-tracing-repo-doc-redaction \
 	test-ray-tracing-linux-worker-package-validator \
@@ -57,6 +65,70 @@ $(STARTER_SCENE_PROFILE_TEST_BIN): $(STARTER_SCENE_PROFILE_TEST_SRCS)
 
 test-starter-scene-profile-contract: $(STARTER_SCENE_PROFILE_TEST_BIN)
 	@$(STARTER_SCENE_PROFILE_TEST_BIN)
+
+RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_BIN := \
+	$(BUILD_DIR)/tests/ray_tracing_durable_frame_recovery_test
+RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_SRCS := \
+	$(TEST_DIR)/test_ray_tracing_durable_frame_recovery.c \
+	$(SRC_DIR)/app/ray_tracing_durable_io.c \
+	$(SRC_DIR)/app/ray_tracing_recovery_authority.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(SRC_DIR)/app/ray_tracing_frame_recovery.c
+
+$(RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_BIN): \
+	$(RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_SRCS) $(JSON_LIBS)
+
+test-ray-tracing-durable-frame-recovery: \
+	$(RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_BIN)
+	@$(RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_BIN)
+
+RAY_TRACING_RECOVERY_AUTHORITY_TEST_BIN := \
+	$(BUILD_DIR)/tests/ray_tracing_recovery_authority_test
+RAY_TRACING_RECOVERY_AUTHORITY_TEST_SRCS := \
+	$(TEST_DIR)/test_ray_tracing_recovery_authority.c \
+	$(SRC_DIR)/app/ray_tracing_recovery_authority.c \
+	$(SRC_DIR)/app/ray_tracing_durable_io.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(RAY_TRACING_RECOVERY_AUTHORITY_TEST_BIN): \
+	$(RAY_TRACING_RECOVERY_AUTHORITY_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(RAY_TRACING_RECOVERY_AUTHORITY_TEST_SRCS) $(JSON_LIBS)
+
+test-ray-tracing-recovery-authority: \
+	$(RAY_TRACING_RECOVERY_AUTHORITY_TEST_BIN)
+	@$(RAY_TRACING_RECOVERY_AUTHORITY_TEST_BIN)
+
+RAY_TRACING_WORKER_PROTOCOL_TEST_BIN := \
+	$(BUILD_DIR)/tests/ray_tracing_worker_protocol_test
+RAY_TRACING_WORKER_PROTOCOL_TEST_SRCS := \
+	$(TEST_DIR)/test_ray_tracing_worker_protocol.c \
+	$(SRC_DIR)/app/ray_tracing_worker_protocol.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(SRC_DIR)/app/ray_tracing_recovery_authority.c \
+	$(SRC_DIR)/app/ray_tracing_durable_io.c
+
+$(RAY_TRACING_WORKER_PROTOCOL_TEST_BIN): \
+	$(RAY_TRACING_WORKER_PROTOCOL_TEST_SRCS) $(WORKER_VERSION_HEADER)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(RAY_TRACING_WORKER_PROTOCOL_TEST_SRCS) $(JSON_LIBS)
+
+test-ray-tracing-worker-protocol: $(RAY_TRACING_WORKER_PROTOCOL_TEST_BIN)
+	@$(RAY_TRACING_WORKER_PROTOCOL_TEST_BIN)
+
+test-ray-tracing-worker-version-contract: worker-version-contract
+	@python3 tests/integration/run_ray_tracing_worker_version_contract.py
 
 SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN := \
 	$(BUILD_DIR)/tests/scene_editor_mesh_preview_outline_test
@@ -673,6 +745,24 @@ test-ray-tracing-job-runner-bundle-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(R
 
 test-ray-tracing-job-runner-policy: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	tests/integration/run_ray_tracing_job_runner_policy.sh
+
+test-ray-tracing-worker-protocol-phase-b: \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN) \
+	$(RAY_TRACING_WORKER_RUNTIME_BIN) \
+	$(RAY_TRACING_JOB_RUNNER_BIN)
+	bash tests/integration/run_ray_tracing_worker_protocol_phase_b.sh
+
+test-ray-tracing-temporal-checkpoint-phase-c: \
+	ray-tracing-render-headless ray-tracing-job-runner ray-tracing-worker-runtime
+	bash tests/integration/run_ray_tracing_temporal_checkpoint_phase_c.sh
+
+test-ray-tracing-tile-batch-checkpoint-phase-d: \
+	ray-tracing-render-headless ray-tracing-job-runner ray-tracing-worker-runtime
+	bash tests/integration/run_ray_tracing_tile_batch_checkpoint_phase_d.sh
+
+test-ray-tracing-fleet-recovery-phase-e: \
+	ray-tracing-job-runner ray-tracing-worker-runtime test-ray-tracing-recovery-authority
+	bash tests/integration/run_ray_tracing_fleet_recovery_phase_e.sh
 
 test-ray-tracing-wtr66-preview-matrix-planner-dry-run:
 	bash tests/integration/run_ray_tracing_wtr66_preview_matrix_planner_dry_run.sh

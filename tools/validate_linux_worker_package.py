@@ -22,12 +22,14 @@ FORBIDDEN_SUBSTRINGS = (
 ALLOWED_EXECUTABLE_FILES = {
     "bin/ray_tracing_render_headless",
     "bin/ray_tracing_job_runner",
+    "bin/ray_tracing_worker_runtime",
     "bin/run_worker.sh",
 }
 
 NATIVE_EXECUTABLE_FILES = (
     "bin/ray_tracing_render_headless",
     "bin/ray_tracing_job_runner",
+    "bin/ray_tracing_worker_runtime",
 )
 
 ELF_MACHINE_BY_PLATFORM = {
@@ -41,6 +43,13 @@ PLATFORM_CAPABILITY_BY_PLATFORM = {
 }
 
 GLIBC_SYMBOL_RE = re.compile(rb"GLIBC_([0-9]+)\.([0-9]+)(?:\.([0-9]+))?")
+SEMVER_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+EXPECTED_COMPATIBILITY = {
+    "worker_protocol_min": 1,
+    "worker_protocol_max": 1,
+    "checkpoint_schema_min": 2,
+    "checkpoint_schema_max": 2,
+}
 
 
 def fail(message: str) -> int:
@@ -76,10 +85,21 @@ def glibc_requirements(data: bytes) -> list[str]:
     return [".".join(str(part) for part in version) for version in sorted(versions)]
 
 
-def validate_archive(path: str, package_root: str, platform: str, max_glibc: str) -> int:
+def validate_archive(
+    path: str,
+    package_root: str,
+    platform: str,
+    max_glibc: str,
+    worker_version: str,
+    source_program_version: str,
+) -> int:
     expected_machine = ELF_MACHINE_BY_PLATFORM.get(platform)
     if expected_machine is None:
         return fail(f"unsupported worker package platform: {platform}")
+    if SEMVER_RE.fullmatch(worker_version) is None:
+        return fail("expected worker version is not canonical MAJOR.MINOR.PATCH")
+    if SEMVER_RE.fullmatch(source_program_version) is None:
+        return fail("expected source program version is not canonical MAJOR.MINOR.PATCH")
     try:
         max_glibc_numeric = numeric_version(max_glibc)
     except ValueError as exc:
@@ -160,12 +180,20 @@ def validate_archive(path: str, package_root: str, platform: str, max_glibc: str
                 f"worker manifest platform expected {platform!r}, "
                 f"got {manifest.get('platform')!r}"
             )
+        if manifest.get("version") != worker_version:
+            return fail("manifest.json worker version does not match WORKER_VERSION")
+        if manifest.get("source_program_version") != source_program_version:
+            return fail("manifest.json source program version does not match VERSION")
+        if manifest.get("compatibility") != EXPECTED_COMPATIBILITY:
+            return fail("manifest.json compatibility does not match the desktop contract")
         if manifest.get("max_glibc_version") != max_glibc:
             return fail("manifest.json GLIBC ceiling does not match the selected package contract")
         expected_capabilities = {
             "trio-headless-v1",
             "scene-project-portable-v1",
             "ray-tracing-project-render-v1",
+            "ray-tracing-worker-protocol-v1",
+            "ray-tracing-recovery-fence-v1",
             PLATFORM_CAPABILITY_BY_PLATFORM[platform],
         }
         if set(manifest.get("capabilities") or []) != expected_capabilities:
@@ -189,6 +217,18 @@ def validate_archive(path: str, package_root: str, platform: str, max_glibc: str
                 f"worker package manifest platform expected {platform!r}, "
                 f"got {package_manifest.get('platform')!r}"
             )
+        if package_manifest.get("version") != worker_version:
+            return fail(
+                "package_manifest.json worker version does not match WORKER_VERSION"
+            )
+        if package_manifest.get("source_program_version") != source_program_version:
+            return fail(
+                "package_manifest.json source program version does not match VERSION"
+            )
+        if package_manifest.get("compatibility") != EXPECTED_COMPATIBILITY:
+            return fail(
+                "package_manifest.json compatibility does not match the desktop contract"
+            )
         if package_manifest.get("max_glibc_version") != max_glibc:
             return fail(
                 "package_manifest.json GLIBC ceiling does not match the selected package contract"
@@ -201,6 +241,8 @@ def validate_archive(path: str, package_root: str, platform: str, max_glibc: str
         json.dumps(
             {
                 "status": "compatible",
+                "worker_version": worker_version,
+                "source_program_version": source_program_version,
                 "platform": platform,
                 "max_allowed_glibc": max_glibc,
                 "native_binaries": native_abi,
@@ -217,8 +259,17 @@ def main() -> int:
     parser.add_argument("--package-root", required=True)
     parser.add_argument("--platform", required=True)
     parser.add_argument("--max-glibc", required=True)
+    parser.add_argument("--worker-version", required=True)
+    parser.add_argument("--source-program-version", required=True)
     args = parser.parse_args()
-    return validate_archive(args.archive, args.package_root, args.platform, args.max_glibc)
+    return validate_archive(
+        args.archive,
+        args.package_root,
+        args.platform,
+        args.max_glibc,
+        args.worker_version,
+        args.source_program_version,
+    )
 
 
 if __name__ == "__main__":

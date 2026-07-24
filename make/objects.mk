@@ -229,6 +229,12 @@ NATIVE3D_AUDIT_DEPS = \
 	$(KIT_RUNTIME_DIAG_OBJS)
 
 RAY_TRACING_RENDER_HEADLESS_DEPS = \
+	$(BUILD_DIR)/app/ray_tracing_checkpoint_reference.o \
+	$(BUILD_DIR)/app/ray_tracing_checkpoint_transaction.o \
+	$(BUILD_DIR)/app/ray_tracing_durable_io.o \
+	$(BUILD_DIR)/app/ray_tracing_recovery_authority.o \
+	$(BUILD_DIR)/app/ray_tracing_sha256.o \
+	$(BUILD_DIR)/app/ray_tracing_temporal_checkpoint.o \
 	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/agent_render_request.o \
 	$(BUILD_DIR)/app/agent_render_request_defaults.o \
@@ -265,11 +271,23 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 
 RAY_TRACING_JOB_RUNNER_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_job_runner.o \
+	$(BUILD_DIR)/app/ray_tracing_frame_recovery.o \
 	$(BUILD_DIR)/app/ray_tracing_headless_job_bundle.o \
+	$(BUILD_DIR)/app/ray_tracing_job_recovery.o \
 	$(BUILD_DIR)/app/ray_tracing_job_runner_paths.o \
 	$(BUILD_DIR)/app/ray_tracing_job_runner_status.o \
+	$(BUILD_DIR)/app/ray_tracing_worker_client.o \
+	$(BUILD_DIR)/app/ray_tracing_worker_protocol.o \
 	$(patsubst $(CORE_HEADLESS_JOB_DIR)/src/%.c,$(BUILD_DIR)/core_headless_job/%.o,$(CORE_HEADLESS_JOB_SRCS)) \
 	$(RAY_TRACING_RENDER_HEADLESS_DEPS)
+
+RAY_TRACING_WORKER_RUNTIME_DEPS = \
+	$(BUILD_DIR)/app/ray_tracing_worker_runtime.o \
+	$(BUILD_DIR)/app/ray_tracing_worker_protocol.o \
+	$(BUILD_DIR)/app/ray_tracing_checkpoint_reference.o \
+	$(BUILD_DIR)/app/ray_tracing_sha256.o \
+	$(BUILD_DIR)/app/ray_tracing_durable_io.o \
+	$(BUILD_DIR)/app/ray_tracing_recovery_authority.o
 
 RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
@@ -759,5 +777,7 @@ DEP := $(sort \
 	$(RAY_TRACING_RENDER_HEADLESS_DEPS:.o=.d) \
 	$(RAY_TRACING_JOB_RUNNER_OBJ:.o=.d) \
 	$(RAY_TRACING_JOB_RUNNER_DEPS:.o=.d) \
+	$(RAY_TRACING_WORKER_RUNTIME_OBJ:.o=.d) \
+	$(RAY_TRACING_WORKER_RUNTIME_DEPS:.o=.d) \
 	$(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_OBJ:.o=.d) \
 	$(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS:.o=.d))

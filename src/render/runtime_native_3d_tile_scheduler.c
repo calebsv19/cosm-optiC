@@ -308,9 +308,7 @@ static bool runtime_native_3d_tile_scheduler_flush_progress_tiles(
     progress.dirtyTileCount = dirty_count;
     progress.startedSubpasses = subpass_index + 1;
     progress.completedSubpasses =
-        (completed_tiles_in_subpass >= total_tiles_in_subpass)
-            ? subpass_index + 1
-            : subpass_index;
+        scheduler ? scheduler->committedSubpasses : subpass_index;
     progress.totalSubpasses = temporal_frames;
     progress.completedTilesInSubpass = completed_tiles_in_subpass;
     progress.totalTilesInSubpass = total_tiles_in_subpass;
@@ -352,6 +350,8 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
     RuntimeNative3DTileScheduler* scheduler,
     CoreQueueMutex* completion_queue,
     size_t expected_completions,
+    size_t completed_before_batch,
+    size_t total_completions,
     uint8_t* pixel_buffer,
     int pixel_width,
     int subpass_index,
@@ -383,7 +383,8 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
                                                     &job->inactiveTileCount);
         RuntimeNative3DRenderStats_Accumulate(&scheduler->stats, &job->subpassStats);
         if (tile_progress_callback && pixel_buffer && pixel_width > 0) {
-            const size_t completed_tiles_in_subpass = completions + 1u;
+            const size_t completed_tiles_in_subpass =
+                completed_before_batch + completions + 1u;
             bool black_geometry_hit_tile = false;
             bool hold_underconverged_adaptive_progress = false;
             const bool may_hold_underconverged_adaptive_progress =
@@ -427,7 +428,7 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
                         subpass_index,
                         temporal_frames,
                         completed_tiles_in_subpass,
-                        expected_completions,
+                        total_completions,
                         tile_progress_callback,
                         tile_progress_user_data)) {
                     return false;
@@ -443,8 +444,9 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
                                                                    dirty_count,
                                                                    subpass_index,
                                                                    temporal_frames,
-                                                                   expected_completions,
-                                                                   expected_completions,
+                                                                   completed_before_batch +
+                                                                       expected_completions,
+                                                                   total_completions,
                                                                    tile_progress_callback,
                                                                    tile_progress_user_data)) {
             return false;
@@ -468,7 +470,14 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
     RuntimeNative3DTileSchedulerProgressCallback tile_progress_callback,
     void* tile_progress_user_data) {
     size_t dispatched = 0u;
-    uint64_t subpass_wait_start_ticks = 0u;
+    size_t completed = 0u;
+    size_t restored_completed = 0u;
+    size_t total_tiles_in_subpass = 0u;
+    size_t cursor = 0u;
+    size_t batch_budget = 0u;
+    size_t max_batch_budget = 0u;
+    uint64_t max_interval_ticks = 0u;
+    const RuntimeNative3DTileSchedulerCheckpointControl* checkpoint = NULL;
 
     if (scheduler->jobCount > 1u) {
         qsort(scheduler->jobs,
@@ -478,18 +487,30 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
                   ? runtime_native_3d_tile_scheduler_compare_first_subpass_priority
                   : runtime_native_3d_tile_scheduler_compare_dispatch_priority);
     }
+    if (scheduler->checkpointTiles) {
+        for (size_t i = 0u; i < scheduler->jobCount; ++i) {
+            scheduler->checkpointTiles[i].tile = scheduler->jobs[i].tile;
+            scheduler->checkpointTiles[i].renderUnit =
+                &scheduler->jobs[i].renderUnit;
+        }
+    }
 
     for (size_t i = 0; i < scheduler->jobCount; ++i) {
         RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
         job->dispatched = RuntimeNative3DRenderUnit_ShouldRenderSubpass(&job->renderUnit,
                                                                         subpass_index);
         if (!job->dispatched) {
+            if (job->renderUnit.committedSubpasses > subpass_index) {
+                restored_completed += 1u;
+            }
             continue;
         }
         job->subpassIndex = subpass_index;
         job->ok = false;
         dispatched += 1u;
     }
+    completed = restored_completed;
+    total_tiles_in_subpass = restored_completed + dispatched;
     scheduler->dispatchedTileJobCount += (int)dispatched;
 
     if (dispatched == 0u) {
@@ -508,48 +529,106 @@ static bool runtime_native_3d_tile_scheduler_dispatch_subpass(
                           progress_user_data);
     }
 
-    for (size_t i = 0; i < scheduler->jobCount; ++i) {
-        RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
-        if (!job->dispatched) {
-            continue;
-        }
-        if (!core_workers_submit(workers, runtime_native_3d_tile_scheduler_run_job, job)) {
-            return false;
-        }
+    checkpoint = scheduler->control ? scheduler->control->checkpoint : NULL;
+    batch_budget = checkpoint && checkpoint->tileBatchSize > 0u
+                       ? checkpoint->tileBatchSize
+                       : dispatched;
+    max_batch_budget = checkpoint && checkpoint->maxTileBatchSize >= batch_budget
+                           ? checkpoint->maxTileBatchSize
+                           : batch_budget;
+    if (checkpoint && checkpoint->maxIntervalMilliseconds > 0u) {
+        max_interval_ticks =
+            (uint64_t)((double)SDL_GetPerformanceFrequency() *
+                       ((double)checkpoint->maxIntervalMilliseconds / 1000.0));
     }
 
-    subpass_wait_start_ticks = (uint64_t)SDL_GetPerformanceCounter();
-    if (!runtime_native_3d_tile_scheduler_wait_for_subpass(scheduler,
-                                                           completion_queue,
-                                                           dispatched,
-                                                           pixel_buffer,
-                                                           pixel_width,
-                                                           subpass_index,
-                                                           temporal_frames,
-                                                           tile_progress_callback,
-                                                           tile_progress_user_data)) {
-        return false;
-    }
-    timer_hud_record_duration_ms(
-        "Tile Subpass",
-        runtime_native_3d_tile_scheduler_ticks_to_ms((uint64_t)SDL_GetPerformanceCounter() -
-                                                     subpass_wait_start_ticks));
-
-    for (size_t i = 0; i < scheduler->jobCount; ++i) {
-        RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
-        if (!job->dispatched) {
-            continue;
+    while (completed < total_tiles_in_subpass) {
+        size_t batch_count = 0u;
+        uint64_t render_started = (uint64_t)SDL_GetPerformanceCounter();
+        uint64_t render_ticks = 0u;
+        uint64_t checkpoint_started = 0u;
+        uint64_t checkpoint_ticks = 0u;
+        while (cursor < scheduler->jobCount && batch_count < batch_budget) {
+            RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[cursor++];
+            if (!job->dispatched) continue;
+            if (!core_workers_submit(workers,
+                                     runtime_native_3d_tile_scheduler_run_job,
+                                     job)) {
+                return false;
+            }
+            batch_count += 1u;
         }
-        if (!job->ok) {
+        if (batch_count == 0u) return false;
+        if (!runtime_native_3d_tile_scheduler_wait_for_subpass(
+                scheduler,
+                completion_queue,
+                batch_count,
+                completed,
+                total_tiles_in_subpass,
+                pixel_buffer,
+                pixel_width,
+                subpass_index,
+                temporal_frames,
+                tile_progress_callback,
+                tile_progress_user_data)) {
             return false;
         }
+        completed += batch_count;
+        render_ticks =
+            (uint64_t)SDL_GetPerformanceCounter() - render_started;
+        timer_hud_record_duration_ms(
+            "Tile Batch",
+            runtime_native_3d_tile_scheduler_ticks_to_ms(render_ticks));
+        for (size_t i = 0; i < cursor; ++i) {
+            RuntimeNative3DTileSchedulerJob* job = &scheduler->jobs[i];
+            if (job->dispatched && !job->ok) return false;
+        }
+        if (completed == total_tiles_in_subpass) {
+            scheduler->committedSubpasses += 1;
+        }
+        if (checkpoint && checkpoint->commit) {
+            checkpoint_started = (uint64_t)SDL_GetPerformanceCounter();
+            if (!checkpoint->commit(scheduler->checkpointTiles,
+                                    scheduler->jobCount,
+                                    scheduler->committedSubpasses,
+                                    subpass_index,
+                                    completed,
+                                    total_tiles_in_subpass,
+                                    temporal_frames,
+                                    checkpoint->userData)) {
+                return false;
+            }
+            checkpoint_ticks =
+                (uint64_t)SDL_GetPerformanceCounter() - checkpoint_started;
+            if (max_interval_ticks > 0u &&
+                render_ticks > max_interval_ticks && batch_budget > 1u) {
+                batch_budget = (batch_budget + 1u) / 2u;
+            } else if (checkpoint_ticks > render_ticks / 5u &&
+                       batch_budget < max_batch_budget) {
+                size_t doubled = batch_budget > SIZE_MAX / 2u
+                                     ? max_batch_budget
+                                     : batch_budget * 2u;
+                batch_budget =
+                    doubled > max_batch_budget ? max_batch_budget : doubled;
+            }
+        }
     }
-    scheduler->committedSubpasses += 1;
     if (progress_callback) {
         progress_callback(subpass_index + 1,
                           scheduler->committedSubpasses,
                           temporal_frames,
                           progress_user_data);
+    }
+    if (tile_progress_callback) {
+        RuntimeNative3DTileSchedulerProgress progress = {0};
+        progress.startedSubpasses = subpass_index + 1;
+        progress.completedSubpasses = scheduler->committedSubpasses;
+        progress.totalSubpasses = temporal_frames;
+        progress.completedTilesInSubpass = total_tiles_in_subpass;
+        progress.totalTilesInSubpass = total_tiles_in_subpass;
+        if (!tile_progress_callback(&progress, tile_progress_user_data)) {
+            return false;
+        }
     }
     return true;
 }
@@ -649,6 +728,7 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
     CoreQueueMutex completion_queue = {0};
     CoreWorkers workers = {0};
     size_t worker_count = 0u;
+    RuntimeNative3DCheckpointTile* checkpoint_tiles = NULL;
 
     if (out_stats) {
         memset(out_stats, 0, sizeof(*out_stats));
@@ -687,6 +767,34 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
         goto finalize;
     }
 
+    if (scheduler_control && scheduler_control->checkpoint) {
+        const RuntimeNative3DTileSchedulerCheckpointControl* checkpoint =
+            scheduler_control->checkpoint;
+        checkpoint_tiles = (RuntimeNative3DCheckpointTile*)calloc(
+            scheduler.jobCount, sizeof(*checkpoint_tiles));
+        if (!checkpoint_tiles) {
+            goto finalize;
+        }
+        for (size_t i = 0; i < scheduler.jobCount; ++i) {
+            checkpoint_tiles[i].tile = scheduler.jobs[i].tile;
+            checkpoint_tiles[i].renderUnit = &scheduler.jobs[i].renderUnit;
+        }
+        scheduler.checkpointTiles = checkpoint_tiles;
+        if (checkpoint->restore) {
+            int restored_subpasses = 0;
+            if (!checkpoint->restore(checkpoint_tiles,
+                                     scheduler.jobCount,
+                                     effective_temporal_frames,
+                                     &restored_subpasses,
+                                     checkpoint->userData) ||
+                restored_subpasses < 0 ||
+                restored_subpasses > effective_temporal_frames) {
+                goto finalize;
+            }
+            scheduler.committedSubpasses = restored_subpasses;
+        }
+    }
+
     worker_count = RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
         scheduler.jobCount,
         SDL_GetCPUCount(),
@@ -717,7 +825,9 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
     scheduler.workerPoolOwnerCount = 1;
 
     ok = true;
-    for (int subpass = 0; ok && subpass < effective_temporal_frames; ++subpass) {
+    for (int subpass = scheduler.committedSubpasses;
+         ok && subpass < effective_temporal_frames;
+         ++subpass) {
         ok = runtime_native_3d_tile_scheduler_dispatch_subpass(&scheduler,
                                                                &workers,
                                                                &completion_queue,
@@ -877,5 +987,6 @@ finalize:
     free(thread_slots);
     free(task_slots);
     free(completion_slots);
+    free(checkpoint_tiles);
     return ok;
 }

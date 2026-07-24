@@ -6,7 +6,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app/ray_tracing_durable_io.h"
+#include "app/ray_tracing_frame_recovery.h"
 #include "app/ray_tracing_headless_job_bundle.h"
+#include "app/ray_tracing_worker_protocol.h"
 
 const char *ray_tracing_job_runner_shared_report_state_label(const char *state) {
     if (!state || !state[0]) return "queued";
@@ -24,6 +27,10 @@ void ray_tracing_detached_job_record_defaults(RayTracingDetachedJobRecord *recor
     snprintf(record->diagnostics, sizeof(record->diagnostics), "queued");
     record->pid = 0;
     record->exit_code = -1;
+    record->resume_from_frame = 0;
+    record->resume_available = false;
+    record->worker_protocol_version = 0;
+    snprintf(record->execution_mode, sizeof(record->execution_mode), "%s", "pending");
 }
 
 static bool ray_tracing_detached_job_record_set_paths(RayTracingDetachedJobRecord *record,
@@ -81,6 +88,9 @@ bool ray_tracing_detached_job_record_init_queued(RayTracingDetachedJobRecord *re
     record->temporal_subpasses_started = 0;
     record->temporal_subpasses_completed = 0;
     record->temporal_subpasses_total = temporal_subpasses_total > 0 ? temporal_subpasses_total : 1;
+    record->durable_frames_completed = 0;
+    record->resume_from_frame = requested_start_frame;
+    record->resume_available = false;
     snprintf(record->state, sizeof(record->state), "queued");
     snprintf(record->stage, sizeof(record->stage), "queued");
     snprintf(record->diagnostics, sizeof(record->diagnostics), "queued for detached render");
@@ -145,11 +155,12 @@ void ray_tracing_detached_job_record_mark_cancelled(RayTracingDetachedJobRecord 
 
 bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPaths *paths,
                                                   const RayTracingDetachedJobRecord *record) {
+    RayTracingDurableOutput output;
     FILE *file = NULL;
     if (!paths || !record) return false;
     if (!ray_tracing_job_runner_ensure_parent_directory_exists(paths->job_status_path)) return false;
-    file = fopen(paths->job_status_path, "wb");
-    if (!file) return false;
+    if (!ray_tracing_durable_output_begin(&output, paths->job_status_path)) return false;
+    file = output.stream;
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_version\": ");
     json_write_string(file, RAY_TRACING_DETACHED_JOB_STATUS_SCHEMA);
@@ -197,6 +208,21 @@ bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPat
     fprintf(file, "  \"temporal_subpasses_started\": %d,\n", record->temporal_subpasses_started);
     fprintf(file, "  \"temporal_subpasses_completed\": %d,\n", record->temporal_subpasses_completed);
     fprintf(file, "  \"temporal_subpasses_total\": %d,\n", record->temporal_subpasses_total);
+    fprintf(file, "  \"durable_frames_completed\": %d,\n", record->durable_frames_completed);
+    fprintf(file, "  \"resume_from_frame\": %d,\n", record->resume_from_frame);
+    fprintf(file,
+            "  \"resume_available\": %s,\n",
+            record->resume_available ? "true" : "false");
+    fprintf(file, "  \"worker_protocol_version\": %d,\n", record->worker_protocol_version);
+    fprintf(file, "  \"execution_mode\": ");
+    json_write_string(file, record->execution_mode);
+    fprintf(file, ",\n");
+    fprintf(file, "  \"immutable_request_sha256\": ");
+    json_write_string(file, record->immutable_request_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "  \"renderer_build_sha256\": ");
+    json_write_string(file, record->renderer_build_sha256);
+    fprintf(file, ",\n");
     fprintf(file,
             "  \"progress_ratio\": %.6f,\n",
             RayTracingProgressRatioCompleted(record->frames_completed,
@@ -218,8 +244,7 @@ bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPat
     fprintf(file, "  \"diagnostics\": ");
     json_write_string(file, record->diagnostics);
     fprintf(file, "\n}\n");
-    fclose(file);
-    return true;
+    return ray_tracing_durable_output_commit(&output);
 }
 
 bool ray_tracing_job_runner_write_shared_report_file(const RayTracingDetachedJobPaths *paths,
@@ -402,6 +427,21 @@ bool ray_tracing_job_runner_load_job_status_record(const RayTracingDetachedJobPa
     if (ray_tracing_job_runner_json_get_string(root, "diagnostics", &text_value)) {
         copy_string(out_record->diagnostics, sizeof(out_record->diagnostics), text_value);
     }
+    if (ray_tracing_job_runner_json_get_string(root, "execution_mode", &text_value)) {
+        copy_string(out_record->execution_mode, sizeof(out_record->execution_mode), text_value);
+    }
+    if (ray_tracing_job_runner_json_get_string(root,
+                                               "immutable_request_sha256",
+                                               &text_value)) {
+        copy_string(out_record->immutable_request_sha256,
+                    sizeof(out_record->immutable_request_sha256),
+                    text_value);
+    }
+    if (ray_tracing_job_runner_json_get_string(root, "renderer_build_sha256", &text_value)) {
+        copy_string(out_record->renderer_build_sha256,
+                    sizeof(out_record->renderer_build_sha256),
+                    text_value);
+    }
     if (ray_tracing_job_runner_json_get_int(root, "pid", &int_value)) out_record->pid = (pid_t)int_value;
     if (ray_tracing_job_runner_json_get_int(root, "exit_code", &int_value)) out_record->exit_code = int_value;
     if (ray_tracing_job_runner_json_get_int(root, "requested_start_frame", &int_value)) out_record->requested_start_frame = int_value;
@@ -419,7 +459,73 @@ bool ray_tracing_job_runner_load_job_status_record(const RayTracingDetachedJobPa
     if (ray_tracing_job_runner_json_get_int(root, "temporal_subpasses_total", &int_value)) {
         out_record->temporal_subpasses_total = int_value;
     }
+    if (ray_tracing_job_runner_json_get_int(root, "durable_frames_completed", &int_value)) {
+        out_record->durable_frames_completed = int_value;
+    }
+    if (ray_tracing_job_runner_json_get_int(root, "resume_from_frame", &int_value)) {
+        out_record->resume_from_frame = int_value;
+    }
+    if (ray_tracing_job_runner_json_get_int(root, "worker_protocol_version", &int_value)) {
+        out_record->worker_protocol_version = int_value;
+    }
+    {
+        json_object *resume_value = NULL;
+        if (json_object_object_get_ex(root, "resume_available", &resume_value) &&
+            json_object_is_type(resume_value, json_type_boolean)) {
+            out_record->resume_available = json_object_get_boolean(resume_value) != 0;
+        }
+    }
     json_object_put(root);
+    if (ray_tracing_job_runner_file_exists(paths->worker_client_state_path)) {
+        json_object *client_state = json_object_from_file(paths->worker_client_state_path);
+        if (client_state && json_object_is_type(client_state, json_type_object)) {
+            if (ray_tracing_job_runner_json_get_string(client_state,
+                                                       "execution_mode",
+                                                       &text_value)) {
+                copy_string(out_record->execution_mode,
+                            sizeof(out_record->execution_mode),
+                            text_value);
+            }
+            if (ray_tracing_job_runner_json_get_string(client_state,
+                                                       "immutable_request_sha256",
+                                                       &text_value)) {
+                copy_string(out_record->immutable_request_sha256,
+                            sizeof(out_record->immutable_request_sha256),
+                            text_value);
+            }
+            if (ray_tracing_job_runner_json_get_string(client_state,
+                                                       "renderer_build_sha256",
+                                                       &text_value)) {
+                copy_string(out_record->renderer_build_sha256,
+                            sizeof(out_record->renderer_build_sha256),
+                            text_value);
+            }
+            if (ray_tracing_job_runner_json_get_int(client_state,
+                                                    "worker_protocol_version",
+                                                    &int_value)) {
+                out_record->worker_protocol_version = int_value;
+            }
+        }
+        if (client_state) json_object_put(client_state);
+    } else if (ray_tracing_job_runner_file_exists(paths->worker_request_path)) {
+        RayTracingWorkerRequest worker_request;
+        char protocol_diagnostics[128];
+        if (ray_tracing_worker_request_load_file(paths->worker_request_path,
+                                                 &worker_request,
+                                                 protocol_diagnostics,
+                                                 sizeof(protocol_diagnostics))) {
+            out_record->worker_protocol_version = worker_request.protocol_version;
+            copy_string(out_record->execution_mode,
+                        sizeof(out_record->execution_mode),
+                        "worker_protocol");
+            copy_string(out_record->immutable_request_sha256,
+                        sizeof(out_record->immutable_request_sha256),
+                        worker_request.request_sha256);
+            copy_string(out_record->renderer_build_sha256,
+                        sizeof(out_record->renderer_build_sha256),
+                        worker_request.renderer_build_sha256);
+        }
+    }
     return true;
 }
 
@@ -505,8 +611,20 @@ bool ray_tracing_job_runner_parse_utc_timestamp(const char *text, time_t *out_ti
     return true;
 }
 
+static bool ray_tracing_job_runner_summary_is_valid(const char *path) {
+    json_object *root = NULL;
+    bool valid = false;
+    if (!path || !path[0]) return false;
+    root = json_object_from_file(path);
+    if (!root) return false;
+    valid = json_object_is_type(root, json_type_object);
+    json_object_put(root);
+    return valid;
+}
+
 bool ray_tracing_job_runner_refresh_job_status_record(const RayTracingDetachedJobPaths *paths,
                                                       RayTracingDetachedJobRecord *record) {
+    RayTracingFrameRecoveryScan recovery_scan;
     char now_utc[32] = {0};
     time_t now_time = (time_t)-1;
     time_t updated_time = (time_t)-1;
@@ -517,13 +635,16 @@ bool ray_tracing_job_runner_refresh_job_status_record(const RayTracingDetachedJo
         changed = true;
     }
     alive = ray_tracing_job_runner_pid_is_alive(record->pid);
-    if ((strcmp(record->state, "starting") == 0 || strcmp(record->state, "running") == 0) &&
+    if ((strcmp(record->state, "starting") == 0 ||
+         strcmp(record->state, "running") == 0 ||
+         strcmp(record->state, "stalled") == 0) &&
         !alive) {
         utc_now_string(now_utc, sizeof(now_utc));
-        if (ray_tracing_job_runner_file_exists(record->summary_path)) {
+        if (ray_tracing_job_runner_summary_is_valid(record->summary_path)) {
             snprintf(record->state, sizeof(record->state), "completed");
             snprintf(record->stage, sizeof(record->stage), "completed");
             record->exit_code = 0;
+            record->resume_available = false;
             if (record->finished_at_utc[0] == '\0') {
                 copy_string(record->finished_at_utc, sizeof(record->finished_at_utc), now_utc);
             }
@@ -531,17 +652,45 @@ bool ray_tracing_job_runner_refresh_job_status_record(const RayTracingDetachedJo
                 copy_string(record->updated_at_utc, sizeof(record->updated_at_utc), now_utc);
             }
         } else {
-            snprintf(record->state, sizeof(record->state), "failed");
-            if (record->stage[0] == '\0' || strcmp(record->stage, "starting") == 0) {
-                snprintf(record->stage, sizeof(record->stage), "failed");
-            }
-            if (record->exit_code < 0) record->exit_code = 1;
-            copy_string(record->finished_at_utc, sizeof(record->finished_at_utc), now_utc);
+            const bool recovery_scanned =
+                ray_tracing_frame_recovery_scan(record->output_root,
+                                                record->requested_start_frame,
+                                                record->requested_frame_count,
+                                                0,
+                                                0,
+                                                &recovery_scan);
+            snprintf(record->state, sizeof(record->state), "interrupted");
+            record->exit_code = -1;
+            record->finished_at_utc[0] = '\0';
             copy_string(record->updated_at_utc, sizeof(record->updated_at_utc), now_utc);
-            if (record->diagnostics[0] == '\0') {
+            if (recovery_scanned) {
+                record->durable_frames_completed = recovery_scan.durable_prefix_count;
+                record->resume_from_frame = recovery_scan.resume_from_frame;
+                record->resume_available =
+                    recovery_scan.first_invalid_frame < 0 &&
+                    recovery_scan.first_noncontiguous_frame < 0 &&
+                    recovery_scan.durable_prefix_count < record->requested_frame_count;
+                snprintf(record->stage,
+                         sizeof(record->stage),
+                         "%s",
+                         record->resume_available ? "resumable" : "recovery_required");
+                if (record->resume_available) {
+                    snprintf(record->diagnostics,
+                             sizeof(record->diagnostics),
+                             "worker process ended without completion metadata; %d durable frame(s), resume from frame %d",
+                             record->durable_frames_completed,
+                             record->resume_from_frame);
+                } else {
+                    snprintf(record->diagnostics,
+                             sizeof(record->diagnostics),
+                             "worker process ended without completion metadata; durable output requires reconciliation");
+                }
+            } else {
+                snprintf(record->stage, sizeof(record->stage), "recovery_required");
+                record->resume_available = false;
                 snprintf(record->diagnostics,
                          sizeof(record->diagnostics),
-                         "process exited without completion summary");
+                         "worker process ended and durable output could not be scanned");
             }
         }
         changed = true;

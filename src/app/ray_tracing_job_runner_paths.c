@@ -105,6 +105,23 @@ bool ray_tracing_job_runner_derive_render_cli_path(const char *argv0,
     return ray_tracing_job_runner_file_exists(out_path);
 }
 
+bool ray_tracing_job_runner_derive_worker_runtime_path(const char *argv0,
+                                                      char *out_path,
+                                                      size_t out_path_size) {
+    char binary_path[PATH_MAX];
+    char dir_path[PATH_MAX];
+    if (!resolve_real_path(argv0, binary_path, sizeof(binary_path))) return false;
+    if (!parent_dir_of(binary_path, dir_path, sizeof(dir_path))) return false;
+    if (snprintf(out_path,
+                 out_path_size,
+                 "%s/ray_tracing_worker_runtime",
+                 dir_path) >= (int)out_path_size) {
+        out_path[0] = '\0';
+        return false;
+    }
+    return true;
+}
+
 bool ray_tracing_job_runner_default_jobs_root(const char *argv0,
                                               char *out_path,
                                               size_t out_path_size) {
@@ -185,7 +202,46 @@ bool ray_tracing_job_runner_build_job_paths(const char *jobs_root,
         snprintf(out_paths->result_summary_path,
                  sizeof(out_paths->result_summary_path),
                  "%s/result_summary.json",
-                 out_paths->job_root) >= (int)sizeof(out_paths->result_summary_path)) {
+                 out_paths->job_root) >= (int)sizeof(out_paths->result_summary_path) ||
+        snprintf(out_paths->worker_capabilities_path,
+                 sizeof(out_paths->worker_capabilities_path),
+                 "%s/worker_capabilities.json",
+                 out_paths->job_root) >=
+            (int)sizeof(out_paths->worker_capabilities_path) ||
+        snprintf(out_paths->worker_request_path,
+                 sizeof(out_paths->worker_request_path),
+                 "%s/worker_request.json",
+                 out_paths->job_root) >= (int)sizeof(out_paths->worker_request_path) ||
+        snprintf(out_paths->worker_event_directory,
+                 sizeof(out_paths->worker_event_directory),
+                 "%s/worker_events",
+                 out_paths->job_root) >=
+            (int)sizeof(out_paths->worker_event_directory) ||
+        snprintf(out_paths->worker_client_state_path,
+                 sizeof(out_paths->worker_client_state_path),
+                 "%s/worker_client_state.json",
+                 out_paths->job_root) >=
+            (int)sizeof(out_paths->worker_client_state_path) ||
+        snprintf(out_paths->worker_cancellation_path,
+                 sizeof(out_paths->worker_cancellation_path),
+                 "%s/worker_cancel.json",
+                 out_paths->job_root) >=
+            (int)sizeof(out_paths->worker_cancellation_path) ||
+        snprintf(out_paths->recovery_descriptor_path,
+                 sizeof(out_paths->recovery_descriptor_path),
+                 "%s/ray_tracing_recovery_descriptor.json",
+                 out_paths->job_root) >=
+            (int)sizeof(out_paths->recovery_descriptor_path) ||
+        snprintf(out_paths->resume_authority_path,
+                 sizeof(out_paths->resume_authority_path),
+                 "%s/resume_authority.json",
+                 out_paths->job_root) >=
+            (int)sizeof(out_paths->resume_authority_path) ||
+        snprintf(out_paths->resume_receipt_path,
+                 sizeof(out_paths->resume_receipt_path),
+                 "%s/resume_authority.receipt.json",
+                 out_paths->job_root) >=
+            (int)sizeof(out_paths->resume_receipt_path)) {
         memset(out_paths, 0, sizeof(*out_paths));
         return false;
     }

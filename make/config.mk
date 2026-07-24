@@ -63,6 +63,13 @@ RELEASE_VERSION ?= $(strip $(shell cat "$(RELEASE_VERSION_FILE)" 2>/dev/null))
 ifeq ($(RELEASE_VERSION),)
 RELEASE_VERSION := 0.1.0
 endif
+WORKER_VERSION_FILE ?= WORKER_VERSION
+WORKER_VERSION ?= $(strip $(shell cat "$(WORKER_VERSION_FILE)" 2>/dev/null))
+ifeq ($(WORKER_VERSION),)
+$(error Missing canonical worker version in $(WORKER_VERSION_FILE))
+endif
+WORKER_VERSION_GENERATED_DIR ?= build/generated
+WORKER_VERSION_HEADER := $(WORKER_VERSION_GENERATED_DIR)/app/ray_tracing_worker_version.h
 RELEASE_CHANNEL ?= stable
 RELEASE_PRODUCT_NAME := optiC
 RELEASE_PROGRAM_KEY := ray_tracing

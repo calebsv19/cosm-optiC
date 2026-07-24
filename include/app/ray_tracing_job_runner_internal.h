@@ -27,6 +27,14 @@ typedef struct RayTracingDetachedJobPaths {
     char stderr_log_path[PATH_MAX];
     char pid_path[PATH_MAX];
     char result_summary_path[PATH_MAX];
+    char worker_capabilities_path[PATH_MAX];
+    char worker_request_path[PATH_MAX];
+    char worker_event_directory[PATH_MAX];
+    char worker_client_state_path[PATH_MAX];
+    char worker_cancellation_path[PATH_MAX];
+    char recovery_descriptor_path[PATH_MAX];
+    char resume_authority_path[PATH_MAX];
+    char resume_receipt_path[PATH_MAX];
 } RayTracingDetachedJobPaths;
 
 typedef struct RayTracingDetachedJobRecord {
@@ -55,6 +63,13 @@ typedef struct RayTracingDetachedJobRecord {
     int temporal_subpasses_started;
     int temporal_subpasses_completed;
     int temporal_subpasses_total;
+    int durable_frames_completed;
+    int resume_from_frame;
+    bool resume_available;
+    int worker_protocol_version;
+    char execution_mode[32];
+    char immutable_request_sha256[65];
+    char renderer_build_sha256[65];
     char diagnostics[256];
 } RayTracingDetachedJobRecord;
 
@@ -71,6 +86,9 @@ bool ray_tracing_job_runner_ensure_parent_directory_exists(const char *path);
 bool ray_tracing_job_runner_derive_render_cli_path(const char *argv0,
                                                    char *out_path,
                                                    size_t out_path_size);
+bool ray_tracing_job_runner_derive_worker_runtime_path(const char *argv0,
+                                                      char *out_path,
+                                                      size_t out_path_size);
 bool ray_tracing_job_runner_build_jobs_root(const char *argv0,
                                             const char *jobs_root_override,
                                             char *out_jobs_root,
@@ -130,5 +148,8 @@ bool ray_tracing_job_runner_pid_is_alive(pid_t pid);
 bool ray_tracing_job_runner_parse_utc_timestamp(const char *text, time_t *out_time);
 bool ray_tracing_job_runner_refresh_job_status_record(const RayTracingDetachedJobPaths *paths,
                                                       RayTracingDetachedJobRecord *record);
+bool ray_tracing_job_runner_write_recovery_descriptor(
+    const RayTracingDetachedJobPaths *paths,
+    const RayTracingDetachedJobRecord *record);
 
 #endif

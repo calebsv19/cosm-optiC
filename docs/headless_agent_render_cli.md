@@ -1182,13 +1182,68 @@ Phase 2 truth additions:
   active subpass/tile counters
 - `--resume` is contiguous-frame resume, not blind overwrite:
   - if no target frames exist, it behaves like a normal clean submit
-  - if a contiguous prefix exists, the runner stages a reduced effective frame
-    window and preserves normalized-time sampling through a `sampling` block in
-    the staged request
-  - if all requested frames already exist, submit fails with an explicit
+  - if a structurally valid contiguous prefix exists, the runner stages a
+    reduced effective frame window and preserves normalized-time sampling
+    through a `sampling` block in the staged request
+  - each completed BMP is published through a same-directory temporary file,
+    structural BMP validation, durable file sync, atomic rename, and
+    parent-directory sync before it counts as resumable evidence
+  - corrupt completed-frame candidates or later frames beyond a missing gap
+    are rejected as recovery-required rather than silently skipped
+  - if all requested frames are valid, submit fails with an explicit
     "nothing to resume" error
   - if outputs already exist and neither `--overwrite` nor `--resume` is set,
     submit fails explicitly instead of silently clobbering or guessing
+- recovery-critical request, progress, status, envelope, report, and completion
+  metadata are also published atomically through the durable-write boundary
+- a job whose recorded worker PID is dead without a valid result summary is
+  reconciled as `interrupted`; its status exposes
+  `durable_frames_completed`, `resume_from_frame`, and `resume_available`, with
+  stage `resumable` only when a valid completed prefix can be continued
+- the runner does not automatically restart interrupted jobs. An operator
+  submits the recovery attempt explicitly with `--resume`
+- every runner invocation first scans the selected persistent jobs root without
+  starting work. Interrupted jobs publish
+  `ray_tracing_recovery_descriptor.json` with exact request and recovery-anchor
+  SHA-256 values for coordinator reconciliation
+- `RAY_TRACING_FLEET_JOB=1` makes `--resume` require the coordinator-provided
+  `RAY_TRACING_RECOVERY_DESCRIPTOR_PATH`,
+  `RAY_TRACING_RESUME_AUTHORITY_PATH`, and
+  `RAY_TRACING_RECOVERY_WORKER_ID`; ordinary local explicit resume remains
+  available without pretending to hold a fleet lease
+- a fleet authority token is consumed once before renderer spawn and binds the
+  source job, worker, lease, request/checkpoint digests, expiry, and output
+  generation. The worker and all durable render commits fail closed when the
+  output fence is revoked or superseded
+- multi-subpass native `3D` jobs now enable schema-2 tile-batch checkpoints
+  under `<output.root>/checkpoints`. Every quiescent committed batch preserves
+  exact tile accumulation, sample counts, and adaptive state behind immutable
+  input, runtime, renderer, and sampling identities
+- `--resume` restores the newest compatible complete generation. If that
+  generation is corrupt or incomplete, restore falls back to the prior
+  committed generation; acceleration structures are rebuilt from the bound
+  inputs
+- direct request authors can opt in with `checkpoint.enabled`,
+  `checkpoint.resume`, an absolute `checkpoint.root`, and bounded cadence via
+  `tile_batch_size`, `max_tile_batch_size`, and `max_interval_ms`; see
+  `docs/temporal_subpass_checkpoints.md`
+- detached submissions now use RayTracing worker protocol v1 by default. The
+  runner negotiates the sibling `ray_tracing_worker_runtime`, hashes the
+  canonical staged request and selected renderer executable, and then launches
+  the worker with a durable `worker_request.json`
+- restart-visible `job_status.json` includes `worker_protocol_version`,
+  `execution_mode`, `request_sha256`, and `renderer_build_sha256`; these are
+  rehydrated from durable client/request state even when the renderer updates
+  the shared status file
+- protocol events are immutable JSON files under `worker_events/`, including
+  progress, full-frame dirty-region notices, completed-frame checkpoint
+  references for completed frames and temporal-subpass generations,
+  completion, interruption, and cooperative cancellation
+- `RAY_TRACING_WORKER_PROTOCOL_MODE=direct` is the explicit compatibility
+  fallback. A missing worker executable may also fall back; a present worker
+  that fails negotiation or digest validation fails closed
+- see `docs/worker_protocol_v1.md` for the complete version-1 message and
+  compatibility contract
 
 Submit creates:
 
@@ -1201,7 +1256,16 @@ ray_tracing/build/agent_runs/jobs/<job_id>/
   stderr.log
   pid.txt
   result_summary.json
+  worker_capabilities.json
+  worker_request.json
+  worker_client_state.json
+  worker_cancel.json
+  worker_events/
 ```
+
+The `worker_*` paths are protocol-mode artifacts. `worker_cancel.json` exists
+only after cancellation is requested, and the explicit direct fallback does
+not create a worker request or event directory.
 
 The staged `job_request.json` is canonicalized to absolute scene/volume/output
 paths so detached execution does not break on rebased relative paths inside the

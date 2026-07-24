@@ -67,7 +67,13 @@ make -C ray_tracing test-scene-editor-pane-host-contract
 make -C ray_tracing test-scene-editor-viewport3d-bridge-contract
 make -C ray_tracing test-scene-editor-viewport-nav-contract
 make -C ray_tracing test-scene-editor-primitive-preview-geometry
+make -C ray_tracing test-ray-tracing-worker-version-contract
 ```
+
+The worker-version contract target is non-packaging proof. It verifies the
+canonical `WORKER_VERSION`, generated compile-time identity, separate
+desktop/source `VERSION`, and package dry-run projection without creating a
+worker archive.
 
 The primitive-preview geometry target pins editor-only plane tessellation and
 rect-prism face coverage, including the rule that guide primitives stay
@@ -552,6 +558,9 @@ Job-runner, publish, package, and release probes:
 make -C ray_tracing test-ray-tracing-job-runner-smoke
 make -C ray_tracing test-ray-tracing-job-runner-bundle-smoke
 make -C ray_tracing test-ray-tracing-job-runner-policy
+make -C ray_tracing test-ray-tracing-temporal-checkpoint-phase-c
+make -C ray_tracing test-ray-tracing-tile-batch-checkpoint-phase-d
+make -C ray_tracing test-ray-tracing-fleet-recovery-phase-e
 make -C ray_tracing test-ray-tracing-publish-helper-validation
 make -C ray_tracing test-ray-tracing-repo-doc-redaction
 make -C ray_tracing test-ray-tracing-linux-worker-package-validator

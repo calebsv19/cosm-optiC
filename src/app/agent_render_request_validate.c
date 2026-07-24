@@ -431,6 +431,42 @@ bool agent_render_request_finalize_loaded(RayTracingAgentRenderRequest* request,
     if (request->object_audit_max_dimension > 2048) {
         request->object_audit_max_dimension = 2048;
     }
+    if (request->checkpoint_resume && !request->checkpoint_enabled) {
+        json_object_put(root);
+        agent_render_request_set_diagf(
+            out_diagnostics,
+            out_diagnostics_size,
+            "request=%s field=checkpoint.resume requires checkpoint.enabled",
+            request_path);
+        return false;
+    }
+    if (request->checkpoint_enabled && request->checkpoint_root[0] == '\0') {
+        json_object_put(root);
+        agent_render_request_set_diagf(
+            out_diagnostics,
+            out_diagnostics_size,
+            "request=%s field=checkpoint.root required when checkpointing is enabled",
+            request_path);
+        return false;
+    }
+    if (request->checkpoint_tile_batch_size < 1 ||
+        request->checkpoint_tile_batch_size > 4096 ||
+        request->checkpoint_max_tile_batch_size <
+            request->checkpoint_tile_batch_size ||
+        request->checkpoint_max_tile_batch_size > 4096 ||
+        request->checkpoint_max_interval_ms < 100 ||
+        request->checkpoint_max_interval_ms > 600000) {
+        json_object_put(root);
+        agent_render_request_set_diagf(
+            out_diagnostics,
+            out_diagnostics_size,
+            "request=%s field=checkpoint cadence is outside supported bounds batch=%d max_batch=%d interval_ms=%d",
+            request_path,
+            request->checkpoint_tile_batch_size,
+            request->checkpoint_max_tile_batch_size,
+            request->checkpoint_max_interval_ms);
+        return false;
+    }
 
     if (RayTracingJsonGetBool(root, "overwrite", &bool_value)) {
         request->overwrite = bool_value;

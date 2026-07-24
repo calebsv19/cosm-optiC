@@ -1059,6 +1059,106 @@ Last updated: 2026-07-22
     `scene_bundle.json` exists
   - `test-ray-tracing-job-runner-smoke` proves one detached `diffuse_bounce` render can complete from file-backed status alone without holding a live PTY
   - detached Phase 2 truth now adds explicit submit policies (`fail_if_exists`, `overwrite`, `resume`), truthful `job_status.json` timing/frame fields, state/stage reconciliation on `status`, and contiguous-frame resume for already-rendered prefix frames via a staged `sampling` window that preserves normalized-time sampling
+  - Tier A durable recovery hardens that prefix contract: each completed BMP is
+    exported to a same-directory temporary path, structurally validated,
+    durably synced, and atomically renamed before it counts as recovery
+    evidence; canonical request, job status, progress, envelope, report, and
+    completion metadata use the same durable-publication boundary
+  - resume discovery now scans for a structurally valid contiguous frame
+    prefix rather than filename presence alone; corrupt frames and
+    noncontiguous later frames fail closed, while a fully valid requested range
+    reports that there is nothing left to resume
+  - when a recorded local worker PID is no longer alive and no valid completion
+    summary exists, status reconciliation reports `state=interrupted` with
+    `stage=resumable` or `stage=recovery_required`, plus
+    `durable_frames_completed`, `resume_from_frame`, and `resume_available`
+  - Tier A recovery remains frame-granular and operator-directed: it does not
+    restore an in-progress frame, automatically restart jobs, reconcile remote
+    leases, or independently distribute worker binaries
+  - Phase B adds RayTracing worker protocol version `1`: the detached runner
+    now negotiates a spawned `ray_tracing_worker_runtime`, binds SHA-256
+    identities for the canonical request and renderer executable, and exchanges
+    durable request, capability, progress, dirty-region, cancellation,
+    checkpoint-reference, completion, and interruption messages
+  - protocol events are immutable sequence-named files under
+    `worker_events/`; the client also persists `worker_capabilities.json`,
+    `worker_request.json`, and `worker_client_state.json`, while cancellation
+    first publishes `worker_cancel.json` before signaling the worker
+  - negotiation is fail closed: future versions, missing capabilities,
+    malformed messages, request tampering, or a changed renderer digest are
+    rejected rather than silently using another execution path
+  - exact fixture output matches the explicit direct fallback byte-for-byte;
+    completion diagnostics and timing schema also match, cancellation is
+    durable, and forced worker-process death returns through the existing
+    `interrupted` plus `resumable`/`recovery_required` state model
+  - `RAY_TRACING_WORKER_PROTOCOL_MODE=direct` preserves the legacy spawned
+    renderer path; synchronous and desktop in-process rendering remain
+    available, and desktop default adoption is intentionally not part of Phase
+    B
+  - the Linux worker package source includes the runtime entrypoint and
+    `ray-tracing-worker-protocol-v1` and
+    `ray-tracing-recovery-fence-v1` capabilities, but no package,
+    installation, Registry, fleet, or independent-release action has occurred
+  - the stable protocol contract is documented in
+    `docs/worker_protocol_v1.md`
+  - Phase D advances checkpoint recovery to schema `2` at quiescent native
+    `3D` tile-batch boundaries inside a temporal subpass. Detached
+    multi-subpass jobs write monotonic immutable generations under
+    `<output.root>/checkpoints/frame_NNNN/`, then durably replace a small
+    newest/previous `current.json` pointer before pruning to two generations
+  - each generation binds normalized request, scene, resolved-asset,
+    worker-runtime, renderer-binary, and sampling identities plus dimensions,
+    tile layout, integrator, subpass count, radiance/sample accumulation, and
+    adaptive-sampling state. Prepared frames and acceleration structures are
+    rebuilt rather than serialized
+  - resume scans compatible generations newest to oldest, so a corrupt newest
+    generation falls back to the prior complete boundary. A worker
+    `checkpoint_reference` event carries the immutable path and SHA-256 without
+    granting automatic restart or fleet lease authority
+  - injected termination before write, during temporary write, after file
+    sync, after rename, and before directory sync selects only a previous or
+    new complete generation; resumed output remains byte-identical in
+    `test-ray-tracing-tile-batch-checkpoint-phase-d`
+  - the schema-2 contract is documented in
+    `docs/temporal_subpass_checkpoints.md`
+  - Phase E adds non-executing boot/invocation reconciliation across persistent
+    job roots. Interrupted jobs emit
+    `ray_tracing_recovery_descriptor.json`, binding the original request and
+    exact completed-frame, tile-batch, or empty-prefix recovery anchor digests
+  - fleet resume remains manual and fails closed without a coordinator-issued
+    token bound to source job, worker, lease, request/checkpoint digests, expiry,
+    and monotonically increasing output generation. Token consumption is
+    durable and create-only
+  - authorized recovery installs an output-generation fence in the worker and
+    renderer environment. Every durable rename revalidates that fence, while
+    the worker supervisor stops the renderer when ownership is revoked or
+    superseded
+  - the VPS coordinator source now projects `interrupted`, `resumable`, and
+    `recovery_required`, issues one-use manual tokens, and rejects stale-holder,
+    duplicate-host, digest-drift, replay, and reassigned-generation updates.
+    The managed `system-dashboard-api` process was restarted after the validated
+    source writes and post-restart process/hash readback plus the recovery
+    authority probe pass. Automatic resume remains disabled
+  - worker runtime `0.5.0` retains protocol version `1` and checkpoint schema
+    `2..2`, adding the recovery-fence capability and portable authority fields
+  - Phase F makes worker release identity independent: root `WORKER_VERSION`
+    owns `ray_tracing_headless_worker` artifacts and runtime capabilities,
+    while root `VERSION` continues to own the desktop/source package line
+  - desktop/worker compatibility no longer means equal package versions. The
+    client requires protocol `1`, checkpoint-schema overlap with `2..2`, the
+    complete capability bit set, and an exact renderer digest; mismatch fails
+    closed
+  - both Linux worker manifests now project worker version, source app version,
+    protocol/checkpoint compatibility, platform, and capabilities. The package
+    basename and manifest `version` use `WORKER_VERSION`
+  - read-only `versionctl worker-status` and `worker-plan` preserve the current
+    `0.10.0` worker package as legacy app-coupled history and plan a new
+    immutable independent worker release; existing bytes are never relabeled
+  - selected-surface completion requires package-catalog, every selected-host
+    distribution and installed-runtime receipt, the coordinator-facing
+    worker-submission Registry receipt, and the Production Registry
+    worker-current compare-and-swap. Desktop packaging and cleanup remain
+    separate authorities
   - detached live-job supervision now also refreshes `job_status.json` directly
     on render-stage transitions (`loading_scene`, `preflight_ready`,
     `rendering_frame`, `writing_frame`, `completed`, `failed`) instead of only
@@ -1381,7 +1481,10 @@ focused verification commands are collected in
   picking, SDL upload, overlays, and final rendering remain RayTracing-owned;
   allocation or upload failure falls back to the prior uniform GPU fill.
 - Keep the next material/material-authoring slice focused on authoring-side layer-role conventions, then coexistence polish between procedural overlays and authored bitmap bindings, plus durable group/preset controls on top of the now-live manifest path.
-- Keep deep-render start/resume behavior stable while adjacent runtime-scene buckets settle.
+- Preserve the completed Phase A-F resumable worker contract. The next boundary
+  is the first exact independent worker release decision; do not edit
+  `WORKER_VERSION`, build/distribute a package, or promote worker current
+  without that typed authorization.
 - Keep the new menu-render, digest-pick, and native `3D` test-family seams aligned with their current helper/file boundaries while larger file-split work continues.
 - Defer VF3D / `physics_sim` ingestion expansion until the next internal renderer boundary is chosen.
 

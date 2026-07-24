@@ -1,4 +1,5 @@
 #include "app/ray_tracing_headless_job_bundle.h"
+#include "app/ray_tracing_durable_io.h"
 #include "app/ray_tracing_request_utils.h"
 
 #include <json-c/json.h>
@@ -221,6 +222,7 @@ bool ray_tracing_headless_job_bundle_write(const char *job_json_path,
                                            const CoreHeadlessJobEnvelope *envelope,
                                            char *out_diagnostics,
                                            size_t out_diagnostics_size) {
+    RayTracingDurableOutput output;
     FILE *file = NULL;
 
     RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "invalid input");
@@ -234,11 +236,11 @@ bool ray_tracing_headless_job_bundle_write(const char *job_json_path,
         return false;
     }
 
-    file = fopen(job_json_path, "wb");
-    if (!file) {
+    if (!ray_tracing_durable_output_begin(&output, job_json_path)) {
         RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "failed to open job.json");
         return false;
     }
+    file = output.stream;
 
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_family\": ");
@@ -313,7 +315,10 @@ bool ray_tracing_headless_job_bundle_write(const char *job_json_path,
     RayTracingJsonWriteString(file, envelope->metadata.created_at);
     fprintf(file, "\n  }\n");
     fprintf(file, "}\n");
-    fclose(file);
+    if (!ray_tracing_durable_output_commit(&output)) {
+        RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "failed to durably commit job.json");
+        return false;
+    }
 
     RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "ok");
     return true;
@@ -325,6 +330,7 @@ bool ray_tracing_headless_job_report_write(const char *report_path,
                                            size_t artifact_count,
                                            char *out_diagnostics,
                                            size_t out_diagnostics_size) {
+    RayTracingDurableOutput output;
     FILE *file = NULL;
 
     RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "invalid input");
@@ -338,11 +344,11 @@ bool ray_tracing_headless_job_report_write(const char *report_path,
         return false;
     }
 
-    file = fopen(report_path, "wb");
-    if (!file) {
+    if (!ray_tracing_durable_output_begin(&output, report_path)) {
         RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "failed to open report.json");
         return false;
     }
+    file = output.stream;
 
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_family\": ");
@@ -387,7 +393,10 @@ bool ray_tracing_headless_job_report_write(const char *report_path,
     }
     fprintf(file, "  ]\n");
     fprintf(file, "}\n");
-    fclose(file);
+    if (!ray_tracing_durable_output_commit(&output)) {
+        RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "failed to durably commit report.json");
+        return false;
+    }
 
     RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "ok");
     return true;

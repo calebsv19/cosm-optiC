@@ -1,6 +1,7 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include "app/ray_tracing_request_utils.h"
+#include "app/ray_tracing_temporal_checkpoint.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -71,6 +72,57 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  \"prepared_frame\": %s,\n", preflight->prepared_frame ? "true" : "false");
     fprintf(file, "  \"rendered_frames\": %s,\n", preflight->rendered_frames ? "true" : "false");
     fprintf(file, "  \"frames_rendered\": %d,\n", preflight->frames_rendered);
+    fprintf(file, "  \"checkpoint\": {\n");
+    fprintf(file,
+            "    \"schema_version\": %d,\n",
+            preflight->checkpoint_enabled
+                ? RAY_TRACING_TEMPORAL_CHECKPOINT_SCHEMA_VERSION
+                : 0);
+    fprintf(file,
+            "    \"enabled\": %s,\n",
+            preflight->checkpoint_enabled ? "true" : "false");
+    fprintf(file,
+            "    \"resumed\": %s,\n",
+            preflight->checkpoint_resumed ? "true" : "false");
+    fprintf(file,
+            "    \"resumed_subpasses\": %d,\n",
+            preflight->checkpoint_resumed_subpasses);
+    fprintf(file,
+            "    \"resumed_active_subpass\": %d,\n",
+            preflight->checkpoint_resumed_active_subpass);
+    fprintf(file,
+            "    \"resumed_tiles_in_subpass\": %zu,\n",
+            preflight->checkpoint_resumed_tiles_in_subpass);
+    fprintf(file,
+            "    \"generations_written\": %d,\n",
+            preflight->checkpoints_written);
+    fprintf(file,
+            "    \"tile_batch_generations_written\": %d,\n",
+            preflight->tile_batch_checkpoints_written);
+    fprintf(file,
+            "    \"tile_batch_size\": %d,\n",
+            request->checkpoint_tile_batch_size);
+    fprintf(file,
+            "    \"max_tile_batch_size\": %d,\n",
+            request->checkpoint_max_tile_batch_size);
+    fprintf(file,
+            "    \"max_interval_ms\": %d,\n",
+            request->checkpoint_max_interval_ms);
+    fprintf(file,
+            "    \"total_write_ms\": %.3f,\n",
+            (double)preflight->checkpoint_total_write_nanoseconds / 1000000.0);
+    fprintf(file,
+            "    \"last_write_ms\": %.3f,\n",
+            (double)preflight->checkpoint_last_write_nanoseconds / 1000000.0);
+    fprintf(file,
+            "    \"maximum_write_ms\": %.3f,\n",
+            (double)preflight->checkpoint_maximum_write_nanoseconds / 1000000.0);
+    fprintf(file, "    \"latest_path\": ");
+    RayTracingJsonWriteString(file, preflight->checkpoint_latest_path);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"latest_sha256\": ");
+    RayTracingJsonWriteString(file, preflight->checkpoint_latest_sha256);
+    fprintf(file, "\n  },\n");
     fprintf(file, "  \"runtime_scene_path\": ");
     RayTracingJsonWriteString(file, request->runtime_scene_path);
     fprintf(file, ",\n");

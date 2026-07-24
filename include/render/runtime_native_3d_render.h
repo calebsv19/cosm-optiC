@@ -357,6 +357,8 @@ typedef struct {
     int reserveCpuCount;
 } RuntimeNative3DResourceBudget;
 
+struct RuntimeNative3DTileSchedulerControl;
+
 typedef void (*RuntimeNative3DTemporalProgressCallback)(int started_subpasses,
                                                         int completed_subpasses,
                                                         int total_subpasses,
@@ -536,6 +538,24 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
     RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
     void* tile_progress_user_data,
     const RuntimeNative3DResourceBudget* resource_budget,
+    RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledAtFrameIndex(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    const struct RuntimeNative3DTileSchedulerControl* scheduler_control,
     RuntimeNative3DRenderStats* out_stats);
 uint8_t RuntimeNative3DResolveEnvironmentByte(void);
 void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pixel_count);

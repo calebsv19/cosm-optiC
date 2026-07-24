@@ -7,6 +7,7 @@
 
 #include "render/integrators/integrator_common.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_render_unit.h"
 
 typedef struct RuntimeNative3DTileSchedulerProgress {
     const IntegratorTile* dirtyTiles;
@@ -38,8 +39,40 @@ typedef struct RuntimeNative3DTileSchedulerCancelToken {
     uint64_t generation;
 } RuntimeNative3DTileSchedulerCancelToken;
 
+typedef struct RuntimeNative3DCheckpointTile {
+    IntegratorTile tile;
+    RuntimeNative3DRenderUnit* renderUnit;
+} RuntimeNative3DCheckpointTile;
+
+typedef bool (*RuntimeNative3DCheckpointRestoreCallback)(
+    RuntimeNative3DCheckpointTile* tiles,
+    size_t tile_count,
+    int temporal_frames,
+    int* out_completed_subpasses,
+    void* user_data);
+
+typedef bool (*RuntimeNative3DCheckpointCommitCallback)(
+    const RuntimeNative3DCheckpointTile* tiles,
+    size_t tile_count,
+    int completed_subpasses,
+    int active_subpass,
+    size_t completed_tiles_in_subpass,
+    size_t total_tiles_in_subpass,
+    int temporal_frames,
+    void* user_data);
+
+typedef struct RuntimeNative3DTileSchedulerCheckpointControl {
+    RuntimeNative3DCheckpointRestoreCallback restore;
+    RuntimeNative3DCheckpointCommitCallback commit;
+    size_t tileBatchSize;
+    size_t maxTileBatchSize;
+    uint64_t maxIntervalMilliseconds;
+    void* userData;
+} RuntimeNative3DTileSchedulerCheckpointControl;
+
 typedef struct RuntimeNative3DTileSchedulerControl {
     const RuntimeNative3DTileSchedulerCancelToken* cancelToken;
+    const RuntimeNative3DTileSchedulerCheckpointControl* checkpoint;
 } RuntimeNative3DTileSchedulerControl;
 
 bool RuntimeNative3DTileSchedulerCancelToken_IsRequested(

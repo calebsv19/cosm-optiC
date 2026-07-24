@@ -87,5 +87,10 @@ void ray_tracing_agent_render_request_defaults(RayTracingAgentRenderRequest *req
     request->object_audit_enabled = true;
     request->object_audit_max_dimension = 160;
     request->render_trace_cost_ledger_enabled = false;
+    request->checkpoint_enabled = false;
+    request->checkpoint_resume = false;
+    request->checkpoint_tile_batch_size = 8;
+    request->checkpoint_max_tile_batch_size = 64;
+    request->checkpoint_max_interval_ms = 2000;
     request->overwrite = false;
 }

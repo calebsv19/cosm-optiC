@@ -164,6 +164,10 @@ Current verification contract:
   default (`linux-x86_64` or `linux-aarch64`)
 - Linux worker package self-test validates native ELF architecture and exact
   platform/capability parity across both worker manifests
+- `WORKER_VERSION` independently owns worker artifact/runtime identity;
+  `VERSION` remains the desktop/source package identity
+- `docs/independent_worker_release.md` defines the read-only plan, compatibility
+  contract, two typed decisions, host receipt set, and completion gate
 - Linux PC worker refreshes must use a package whose manifest reports
   `platform=linux-x86_64`; do not treat an Apple Silicon Mac as limited to
   `linux-aarch64` worker artifacts when the x86_64 package/toolchain lane is

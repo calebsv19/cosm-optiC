@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import shutil
 import struct
@@ -15,9 +16,12 @@ from pathlib import Path
 
 
 PACKAGE_ROOT = "ray_tracing-test-worker"
+WORKER_VERSION = "0.4.0"
+SOURCE_PROGRAM_VERSION = "0.10.0"
 REQUIRED_EXECUTABLES = (
     "bin/ray_tracing_render_headless",
     "bin/ray_tracing_job_runner",
+    "bin/ray_tracing_worker_runtime",
     "bin/run_worker.sh",
 )
 
@@ -36,11 +40,32 @@ def fake_elf(machine: int, glibc_version: str = "2.38") -> bytes:
 def fixture_data(name: str, machine: int | None, glibc_version: str = "2.38") -> bytes:
     if name.endswith("/manifest.json") or name.endswith("/package_manifest.json"):
         return (
-            b'{"platform":"linux-x86_64","max_glibc_version":"2.39.0","capabilities":['
-            b'"trio-headless-v1","scene-project-portable-v1",'
-            b'"ray-tracing-project-render-v1","platform-linux-x86_64-v1"]}\n'
-        )
-    if any(name.endswith("/" + relative) for relative in REQUIRED_EXECUTABLES[:2]):
+            json.dumps(
+                {
+                    "version": WORKER_VERSION,
+                    "source_program_version": SOURCE_PROGRAM_VERSION,
+                    "platform": "linux-x86_64",
+                    "max_glibc_version": "2.39.0",
+                    "capabilities": [
+                        "trio-headless-v1",
+                        "scene-project-portable-v1",
+                        "ray-tracing-project-render-v1",
+                        "ray-tracing-worker-protocol-v1",
+                        "ray-tracing-recovery-fence-v1",
+                        "platform-linux-x86_64-v1",
+                    ],
+                    "compatibility": {
+                        "worker_protocol_min": 1,
+                        "worker_protocol_max": 1,
+                        "checkpoint_schema_min": 2,
+                        "checkpoint_schema_max": 2,
+                    },
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        ).encode("utf-8")
+    if any(name.endswith("/" + relative) for relative in REQUIRED_EXECUTABLES[:3]):
         return b"not-elf\n" if machine is None else fake_elf(machine, glibc_version)
     return b"#!/usr/bin/env bash\n" if name.endswith("/bin/run_worker.sh") else b"x\n"
 
@@ -90,6 +115,10 @@ def run_validator(root_dir: Path, archive: Path, package_root: str = PACKAGE_ROO
             "linux-x86_64",
             "--max-glibc",
             "2.39.0",
+            "--worker-version",
+            WORKER_VERSION,
+            "--source-program-version",
+            SOURCE_PROGRAM_VERSION,
         ],
         text=True,
         stdout=subprocess.PIPE,
@@ -145,6 +174,7 @@ def main() -> int:
             [
                 (f"{PACKAGE_ROOT}/bin/ray_tracing_render_headless", 0o755),
                 (f"{PACKAGE_ROOT}/bin/ray_tracing_job_runner", 0o755),
+                (f"{PACKAGE_ROOT}/bin/ray_tracing_worker_runtime", 0o755),
                 (f"{PACKAGE_ROOT}/bin/run_worker.sh", 0o644),
                 (f"{PACKAGE_ROOT}/manifest.json", 0o644),
             ],
@@ -193,6 +223,22 @@ def main() -> int:
         "missing_glibc",
         run_validator(root_dir, missing_glibc),
         "native worker GLIBC requirements are absent",
+    )
+
+    wrong_worker_version = work_root / "wrong_worker_version.tar.gz"
+    write_archive(wrong_worker_version, valid_members())
+    command = run_validator(root_dir, wrong_worker_version).args
+    command[command.index(WORKER_VERSION)] = "0.4.1"
+    expect_fail(
+        "wrong_worker_version",
+        subprocess.run(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        ),
+        "worker version does not match WORKER_VERSION",
     )
 
     print(f"ray tracing Linux worker package validator fixtures passed: {work_root}")

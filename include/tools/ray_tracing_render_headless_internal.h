@@ -193,6 +193,18 @@ typedef struct RayTracingHeadlessPreflight {
     char frame_dir[PATH_MAX];
     char first_frame_path[PATH_MAX];
     char last_frame_path[PATH_MAX];
+    bool checkpoint_enabled;
+    bool checkpoint_resumed;
+    int checkpoint_resumed_subpasses;
+    int checkpoint_resumed_active_subpass;
+    size_t checkpoint_resumed_tiles_in_subpass;
+    int checkpoints_written;
+    int tile_batch_checkpoints_written;
+    uint64_t checkpoint_total_write_nanoseconds;
+    uint64_t checkpoint_last_write_nanoseconds;
+    uint64_t checkpoint_maximum_write_nanoseconds;
+    char checkpoint_latest_path[PATH_MAX];
+    char checkpoint_latest_sha256[65];
     int object_audit_count;
     bool object_audit_enabled;
     int object_audit_width;

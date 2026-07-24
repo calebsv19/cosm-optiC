@@ -39,6 +39,7 @@ typedef struct RuntimeNative3DTileSchedulerParentMetric {
 
 typedef struct RuntimeNative3DTileScheduler {
     RuntimeNative3DTileSchedulerJob* jobs;
+    RuntimeNative3DCheckpointTile* checkpointTiles;
     RuntimeNative3DTileSchedulerParentMetric* parentMetrics;
     IntegratorTile* progressTiles;
     size_t jobCount;

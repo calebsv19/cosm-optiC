@@ -1,3 +1,7 @@
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -7,6 +11,8 @@
 #include <time.h>
 
 #include "app/agent_render_request.h"
+#include "app/ray_tracing_sha256.h"
+#include "app/ray_tracing_temporal_checkpoint.h"
 #include "config/config_file_io.h"
 #include "app/animation.h"
 #include "config/config_manager.h"
@@ -16,6 +22,7 @@
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_native_3d_adaptive_sampling.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_caustic_bootstrap_3d.h"
 #include "render/runtime_caustic_transport_3d.h"
@@ -709,6 +716,18 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         char frame_path[PATH_MAX];
         RuntimeNative3DRenderStats stats = {0};
         RayTracingTemporalProgressContext temporal_progress = {0};
+        RayTracingTemporalCheckpointSession checkpoint_session;
+        RuntimeNative3DTileSchedulerCheckpointControl checkpoint_callbacks = {0};
+        RuntimeNative3DTileSchedulerControl scheduler_control = {0};
+        const RuntimeNative3DTileSchedulerControl* active_scheduler_control = NULL;
+        const char* checkpoint_asset_paths[6] = {
+            request->volume_source_path,
+            preflight.volume_selected_first_frame_path,
+            preflight.volume_selected_last_frame_path,
+            preflight.water_surface_manifest_path,
+            preflight.water_surface_selected_first_frame_path,
+            preflight.water_surface_selected_last_frame_path
+        };
         const int frame_index = request->start_frame + i;
         const double t = ray_tracing_headless_frame_normalized_t(request, i);
         int frame_status = 0;
@@ -745,9 +764,41 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         RuntimeNative3DResourceBudget resource_budget = {0};
         const RuntimeNative3DResourceBudget *active_resource_budget =
             ray_tracing_headless_request_resource_budget(request, &resource_budget);
+        if (!ray_tracing_temporal_checkpoint_configure_frame(
+                &checkpoint_session,
+                request,
+                request_path,
+                frame_index,
+                preflight.route.integratorMode3D,
+                RuntimeNative3DTileSchedulerResolveTileSizeForScale(
+                    animSettings.tileSize,
+                    animSettings.renderScale3D),
+                checkpoint_asset_paths,
+                sizeof(checkpoint_asset_paths) / sizeof(checkpoint_asset_paths[0]))) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "checkpoint setup failed: %.900s",
+                     checkpoint_session.diagnostics);
+            free(pixels);
+            *out_preflight = preflight;
+            return 13;
+        }
+        if (checkpoint_session.enabled) {
+            checkpoint_callbacks.restore = ray_tracing_temporal_checkpoint_restore;
+            checkpoint_callbacks.commit = ray_tracing_temporal_checkpoint_commit;
+            checkpoint_callbacks.tileBatchSize =
+                (size_t)request->checkpoint_tile_batch_size;
+            checkpoint_callbacks.maxTileBatchSize =
+                (size_t)request->checkpoint_max_tile_batch_size;
+            checkpoint_callbacks.maxIntervalMilliseconds =
+                (uint64_t)request->checkpoint_max_interval_ms;
+            checkpoint_callbacks.userData = &checkpoint_session;
+            scheduler_control.checkpoint = &checkpoint_callbacks;
+            active_scheduler_control = &scheduler_control;
+        }
 
         (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedAtFrameIndex(
+        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledAtFrameIndex(
                 pixels,
                 preflight.route.integratorMode3D,
                 request->width,
@@ -763,6 +814,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                 ray_tracing_tile_progress_callback,
                 &temporal_progress,
                 active_resource_budget,
+                active_scheduler_control,
                 &stats)) {
             frame_status = ray_tracing_headless_note_render_frame_failed(request,
                                                                         &preflight,
@@ -775,6 +827,36 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             free(pixels);
             *out_preflight = preflight;
             return frame_status;
+        }
+        if (checkpoint_session.enabled) {
+            preflight.checkpoint_enabled = true;
+            preflight.checkpoint_resumed =
+                preflight.checkpoint_resumed || checkpoint_session.resumed;
+            preflight.checkpoint_resumed_subpasses += checkpoint_session.resumedSubpasses;
+            preflight.checkpoint_resumed_active_subpass =
+                checkpoint_session.resumedActiveSubpass;
+            preflight.checkpoint_resumed_tiles_in_subpass =
+                checkpoint_session.resumedTilesInSubpass;
+            preflight.checkpoints_written += checkpoint_session.checkpointsWritten;
+            preflight.tile_batch_checkpoints_written +=
+                checkpoint_session.tileBatchCheckpointsWritten;
+            preflight.checkpoint_total_write_nanoseconds +=
+                checkpoint_session.totalWriteNanoseconds;
+            preflight.checkpoint_last_write_nanoseconds =
+                checkpoint_session.lastWriteNanoseconds;
+            if (checkpoint_session.maximumWriteNanoseconds >
+                preflight.checkpoint_maximum_write_nanoseconds) {
+                preflight.checkpoint_maximum_write_nanoseconds =
+                    checkpoint_session.maximumWriteNanoseconds;
+            }
+            snprintf(preflight.checkpoint_latest_path,
+                     sizeof(preflight.checkpoint_latest_path),
+                     "%s",
+                     checkpoint_session.latestPath);
+            snprintf(preflight.checkpoint_latest_sha256,
+                     sizeof(preflight.checkpoint_latest_sha256),
+                     "%s",
+                     checkpoint_session.latestSha256);
         }
         preflight.render_trace_ms += ray_tracing_elapsed_ms_since(&stage_started_at);
         preflight.render_frames_ms += ray_tracing_elapsed_ms_since(&stage_started_at);
@@ -894,6 +976,26 @@ int main(int argc, char **argv) {
                                                     sizeof(diagnostics))) {
         fprintf(stderr, "ray_tracing_render_headless: %s\n", diagnostics);
         return 2;
+    }
+    {
+        char executable_sha256[RAY_TRACING_SHA256_HEX_SIZE];
+        char request_sha256[RAY_TRACING_SHA256_HEX_SIZE];
+        if (!getenv("RAY_TRACING_RENDERER_BUILD_SHA256") &&
+            ray_tracing_sha256_file(argv[0], executable_sha256)) {
+            (void)setenv("RAY_TRACING_RENDERER_BUILD_SHA256",
+                         executable_sha256,
+                         0);
+        }
+        if (!getenv("RAY_TRACING_WORKER_RUNTIME_SHA256") &&
+            ray_tracing_sha256_file(argv[0], executable_sha256)) {
+            (void)setenv("RAY_TRACING_WORKER_RUNTIME_SHA256",
+                         executable_sha256,
+                         0);
+        }
+        if (!getenv("RAY_TRACING_REQUEST_SHA256") &&
+            ray_tracing_sha256_file(request_path, request_sha256)) {
+            (void)setenv("RAY_TRACING_REQUEST_SHA256", request_sha256, 0);
+        }
     }
     if (summary_override && summary_override[0]) {
         snprintf(request.summary_path, sizeof(request.summary_path), "%s", summary_override);

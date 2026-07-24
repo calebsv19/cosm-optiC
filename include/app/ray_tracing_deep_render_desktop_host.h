@@ -3,6 +3,8 @@
 
 #include <SDL2/SDL.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 typedef enum RayTracingDeepRenderDesktopSelection {
     RAY_TRACING_DEEP_RENDER_DESKTOP_NOT_REQUESTED = 0,
@@ -18,6 +20,11 @@ RayTracingDeepRenderDesktopHost_AssessSelection(bool deep_render,
                                                 bool tiled,
                                                 bool dynamic_dependency);
 
+bool RayTracingDeepRenderDesktopHost_ProbeOutputDirectory(
+    const char* frame_directory,
+    uint64_t generation,
+    char* diagnostic,
+    size_t diagnostic_size);
 bool RayTracingDeepRenderDesktopHost_BeginRun(int start_frame_index,
                                               int frame_count);
 bool RayTracingDeepRenderDesktopHost_SubmitFrame(SDL_Window* window,

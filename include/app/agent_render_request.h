@@ -131,6 +131,12 @@ typedef struct RayTracingAgentRenderRequest {
     bool object_audit_enabled;
     int object_audit_max_dimension;
     bool render_trace_cost_ledger_enabled;
+    bool checkpoint_enabled;
+    bool checkpoint_resume;
+    int checkpoint_tile_batch_size;
+    int checkpoint_max_tile_batch_size;
+    int checkpoint_max_interval_ms;
+    char checkpoint_root[PATH_MAX];
     bool overwrite;
 } RayTracingAgentRenderRequest;
 

@@ -468,6 +468,31 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
     void* tile_progress_user_data,
     const RuntimeNative3DResourceBudget* resource_budget,
     RuntimeNative3DRenderStats* out_stats) {
+    return RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledAtFrameIndex(
+        pixel_buffer, integrator_id, width, height, normalized_t, frame_index,
+        live_light_x, live_light_y, sampling, temporal_frames, progress_callback,
+        progress_user_data, tile_progress_callback, tile_progress_user_data,
+        resource_budget, NULL, out_stats);
+}
+
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledAtFrameIndex(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    double normalized_t,
+    int frame_index,
+    double live_light_x,
+    double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    const RuntimeNative3DTileSchedulerControl* scheduler_control,
+    RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DTileProgressAdapter tile_progress_adapter = {0};
     bool ok = false;
@@ -495,11 +520,11 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
                                              height,
                                              &frame.scene,
                                              &frame.projector);
-    if (runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
+    if (scheduler_control || runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
         if (tile_progress_callback) {
             tile_progress_adapter.callback = tile_progress_callback;
             tile_progress_adapter.user_data = tile_progress_user_data;
-            ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
+            ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl(
                 pixel_buffer,
                 integrator_id,
                 &frame,
@@ -509,9 +534,10 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
                 runtime_native_3d_render_tile_progress_adapter,
                 &tile_progress_adapter,
                 resource_budget,
+                scheduler_control,
                 out_stats);
         } else {
-            ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressAndBudget(
+            ok = RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl(
                 pixel_buffer,
                 integrator_id,
                 &frame,
@@ -521,6 +547,7 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
                 NULL,
                 NULL,
                 resource_budget,
+                scheduler_control,
                 out_stats);
         }
     } else {

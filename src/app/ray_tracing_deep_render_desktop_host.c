@@ -1,14 +1,19 @@
 #include "app/ray_tracing_deep_render_desktop_host.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "app/animation.h"
 #include "app/data_paths.h"
 #include "app/ray_tracing_deep_render_cancellation.h"
 #include "app/ray_tracing_deep_render_completion.h"
 #include "app/ray_tracing_deep_render_desktop_render_internal.h"
+#include "config/config_file_io.h"
 #include "config/config_manager.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/pipeline/ray_tracing2_preview_present.h"
@@ -138,6 +143,128 @@ static bool deep_render_desktop_resolve_output(int absolute_frame_index,
     return true;
 }
 
+static void deep_render_desktop_set_probe_diagnostic(char* diagnostic,
+                                                     size_t diagnostic_size,
+                                                     const char* stage,
+                                                     int error_number) {
+    if (!diagnostic || diagnostic_size == 0u) return;
+    if (error_number != 0) {
+        (void)snprintf(diagnostic,
+                       diagnostic_size,
+                       "%s: %s",
+                       stage ? stage : "unknown stage",
+                       strerror(error_number));
+    } else {
+        (void)snprintf(diagnostic,
+                       diagnostic_size,
+                       "%s",
+                       stage ? stage : "unknown stage");
+    }
+}
+
+bool RayTracingDeepRenderDesktopHost_ProbeOutputDirectory(
+    const char* frame_directory,
+    uint64_t generation,
+    char* diagnostic,
+    size_t diagnostic_size) {
+    static const char probe_bytes[] = "optiC frame output preflight\n";
+    char probe_path[PATH_MAX];
+    const char* failed_stage = NULL;
+    size_t bytes_written = 0u;
+    int fd = -1;
+    int failure_errno = 0;
+    int directory_errno = 0;
+    bool created = false;
+    bool directory_ready = false;
+
+    if (diagnostic && diagnostic_size > 0u) diagnostic[0] = '\0';
+    if (!frame_directory || !frame_directory[0]) {
+        deep_render_desktop_set_probe_diagnostic(
+            diagnostic, diagnostic_size, "invalid frame directory", EINVAL);
+        return false;
+    }
+
+    errno = 0;
+    directory_ready = config_io_ensure_directory_exists(frame_directory);
+    directory_errno = errno;
+    if (!directory_ready ||
+        !config_io_directory_exists(frame_directory)) {
+        deep_render_desktop_set_probe_diagnostic(
+            diagnostic,
+            diagnostic_size,
+            "create frame directory",
+            directory_ready ? ENOTDIR
+                            : (directory_errno != 0 ? directory_errno : EIO));
+        return false;
+    }
+    if (snprintf(probe_path,
+                 sizeof(probe_path),
+                 "%s/.optic-frame-write-probe-%llu-XXXXXX",
+                 frame_directory,
+                 (unsigned long long)generation) >= (int)sizeof(probe_path)) {
+        deep_render_desktop_set_probe_diagnostic(
+            diagnostic, diagnostic_size, "build probe path", ENAMETOOLONG);
+        return false;
+    }
+
+    fd = mkstemp(probe_path);
+    if (fd < 0) {
+        deep_render_desktop_set_probe_diagnostic(
+            diagnostic, diagnostic_size, "create probe", errno);
+        return false;
+    }
+    created = true;
+
+    while (bytes_written < sizeof(probe_bytes) - 1u) {
+        ssize_t result = write(fd,
+                               probe_bytes + bytes_written,
+                               sizeof(probe_bytes) - 1u - bytes_written);
+        if (result > 0) {
+            bytes_written += (size_t)result;
+            continue;
+        }
+        if (result < 0 && errno == EINTR) continue;
+        failed_stage = "write probe";
+        failure_errno = result < 0 ? errno : EIO;
+        goto cleanup;
+    }
+    while (fsync(fd) != 0) {
+        if (errno == EINTR) continue;
+        failed_stage = "flush probe";
+        failure_errno = errno;
+        goto cleanup;
+    }
+    if (close(fd) != 0) {
+        fd = -1;
+        failed_stage = "close probe";
+        failure_errno = errno;
+        goto cleanup;
+    }
+    fd = -1;
+    if (unlink(probe_path) != 0) {
+        failed_stage = "remove probe";
+        failure_errno = errno;
+        goto cleanup;
+    }
+    created = false;
+    if (diagnostic && diagnostic_size > 0u) {
+        (void)snprintf(diagnostic, diagnostic_size, "passed");
+    }
+    return true;
+
+cleanup:
+    if (fd >= 0) {
+        (void)close(fd);
+        fd = -1;
+    }
+    if (created) {
+        (void)unlink(probe_path);
+    }
+    deep_render_desktop_set_probe_diagnostic(
+        diagnostic, diagnostic_size, failed_stage, failure_errno);
+    return false;
+}
+
 static void deep_render_desktop_mark_failed(
     RayTracingDeepRenderDesktopHostState* state,
     const char* reason,
@@ -226,6 +353,7 @@ static bool deep_render_desktop_start_current_frame(
     char output_root[PATH_MAX];
     char frame_directory[PATH_MAX];
     char final_path[PATH_MAX];
+    char preflight_diagnostic[256];
     if (!state || state->session.state != RAY_TRACING_DEEP_RENDER_SESSION_PREPARING) {
         return false;
     }
@@ -240,6 +368,23 @@ static bool deep_render_desktop_start_current_frame(
         deep_render_desktop_mark_failed(state, "invalid output identity", running);
         return false;
     }
+    if (!RayTracingDeepRenderDesktopHost_ProbeOutputDirectory(
+            frame_directory,
+            state->session.generation,
+            preflight_diagnostic,
+            sizeof(preflight_diagnostic))) {
+        fprintf(stderr,
+                "[deep_render_async] output preflight failed: directory='%s' "
+                "reason='%s'\n",
+                frame_directory,
+                preflight_diagnostic);
+        deep_render_desktop_mark_failed(
+            state, "frame output preflight failed", running);
+        return false;
+    }
+    fprintf(stderr,
+            "[deep_render_async] output preflight passed: directory='%s'\n",
+            frame_directory);
     desc.generation = state->session.generation;
     desc.localFrameIndex = state->session.currentLocalFrameIndex;
     desc.absoluteFrameIndex = state->session.currentAbsoluteFrameIndex;

@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "app/ray_tracing_durable_io.h"
 #include "render/pipeline/ray_tracing2_native3d_overlay.h"
 
 static void deep_render_completion_set_result(
@@ -126,36 +127,23 @@ bool RayTracingDeepRenderCompletion_WriteFrameBMP(
     const RayTracingDeepRenderPresentationView* view,
     void* user_data) {
     char temporary_path[RAY_TRACING_DEEP_RENDER_PATH_MAX];
-    struct stat st;
-    int written = 0;
-    bool exported = false;
     (void)user_data;
     if (!path || !view || !view->valid || !view->pixels ||
         !deep_render_completion_prepare_output_path(path)) {
         return false;
     }
-    written = snprintf(temporary_path,
-                       sizeof(temporary_path),
-                       "%s.tmp.%ld.%llu",
-                       path,
-                       (long)getpid(),
-                       (unsigned long long)view->generation);
-    if (written <= 0 || written >= (int)sizeof(temporary_path)) return false;
-    if (lstat(temporary_path, &st) == 0) {
-        if (!S_ISREG(st.st_mode) || unlink(temporary_path) != 0) return false;
-    } else if (errno != ENOENT) {
-        return false;
-    }
-    exported = RayTracing2Native3DOverlay_ExportFrameBMP(temporary_path,
-                                                         view->hostWidth,
-                                                         view->hostHeight,
-                                                         view->pixels,
-                                                         NULL);
-    if (!exported) {
-        (void)unlink(temporary_path);
-        return false;
-    }
-    if (rename(temporary_path, path) != 0) {
+    if (!ray_tracing_durable_prepare_external_write(path,
+                                                    temporary_path,
+                                                    sizeof(temporary_path)) ||
+        !RayTracing2Native3DOverlay_ExportFrameBMP(temporary_path,
+                                                   view->hostWidth,
+                                                   view->hostHeight,
+                                                   view->pixels,
+                                                   NULL) ||
+        !ray_tracing_durable_validate_bmp(temporary_path,
+                                          view->hostWidth,
+                                          view->hostHeight) ||
+        !ray_tracing_durable_commit_external_write(temporary_path, path)) {
         (void)unlink(temporary_path);
         return false;
     }

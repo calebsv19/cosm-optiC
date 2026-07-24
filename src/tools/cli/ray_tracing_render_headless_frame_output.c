@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "app/ray_tracing_durable_io.h"
 #include "render/pipeline/ray_tracing2_native3d_overlay.h"
 
 int ray_tracing_headless_prepare_frame_output(
@@ -114,6 +115,7 @@ int ray_tracing_headless_write_rendered_frame_output(
     const char *job_id,
     const char *request_path) {
     struct timespec stage_started_at = {0};
+    char temporary_frame_path[PATH_MAX] = {0};
     uint8_t frame_max_r = 0u;
     uint8_t frame_max_g = 0u;
     uint8_t frame_max_b = 0u;
@@ -134,15 +136,23 @@ int ray_tracing_headless_write_rendered_frame_output(
     preflight->frame_analysis_ms += ray_tracing_elapsed_ms_since(&stage_started_at);
 
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-    if (!RayTracing2Native3DOverlay_ExportFrameBMP(frame_path,
+    if (!ray_tracing_durable_prepare_external_write(frame_path,
+                                                    temporary_frame_path,
+                                                    sizeof(temporary_frame_path)) ||
+        !RayTracing2Native3DOverlay_ExportFrameBMP(temporary_frame_path,
                                                    request->width,
                                                    request->height,
                                                    pixels,
-                                                   NULL)) {
+                                                   NULL) ||
+        !ray_tracing_durable_validate_bmp(temporary_frame_path,
+                                          request->width,
+                                          request->height) ||
+        !ray_tracing_durable_commit_external_write(temporary_frame_path, frame_path)) {
+        if (temporary_frame_path[0]) (void)unlink(temporary_frame_path);
         preflight->frame_write_ms += ray_tracing_elapsed_ms_since(&stage_started_at);
         snprintf(preflight->diagnostics,
                  sizeof(preflight->diagnostics),
-                 "failed to write frame bmp");
+                 "failed to durably commit frame bmp");
         RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight->bvh_trace_stats);
         ray_tracing_render_headless_write_progress_and_job_status(
             request->progress_path,

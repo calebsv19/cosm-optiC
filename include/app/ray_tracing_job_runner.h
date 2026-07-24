@@ -30,5 +30,11 @@ bool ray_tracing_job_runner_cancel(const char *argv0,
                                    const char *jobs_root_override,
                                    char *out_diagnostics,
                                    size_t out_diagnostics_size);
+bool ray_tracing_job_runner_reconcile(const char *argv0,
+                                      const char *jobs_root_override,
+                                      size_t *out_jobs_scanned,
+                                      size_t *out_recovery_descriptors,
+                                      char *out_diagnostics,
+                                      size_t out_diagnostics_size);
 
 #endif

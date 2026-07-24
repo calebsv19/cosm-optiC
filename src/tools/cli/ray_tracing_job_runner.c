@@ -6,7 +6,7 @@
 
 static void usage(const char *argv0) {
     fprintf(stderr,
-            "usage: %s <submit|status|cancel> [--request <request.json|job.json>|--job-id <job_id>] [--jobs-root <path>]\n",
+            "usage: %s <submit|status|cancel|reconcile> [--request <request.json|job.json>|--job-id <job_id>] [--jobs-root <path>]\n",
             argv0 ? argv0 : "ray_tracing_job_runner");
 }
 
@@ -42,6 +42,27 @@ int main(int argc, char **argv) {
         } else {
             usage(argv[0]);
             return 2;
+        }
+    }
+
+    {
+        size_t jobs_scanned = 0u;
+        size_t recovery_descriptors = 0u;
+        if (!ray_tracing_job_runner_reconcile(argv[0],
+                                              jobs_root,
+                                              &jobs_scanned,
+                                              &recovery_descriptors,
+                                              diagnostics,
+                                              sizeof(diagnostics))) {
+            fprintf(stderr, "ray_tracing_job_runner reconcile: %s\n", diagnostics);
+            return 1;
+        }
+        if (strcmp(mode, "reconcile") == 0) {
+            printf("{\"status\":\"reconciled\",\"jobs_scanned\":%zu,"
+                   "\"recovery_descriptors\":%zu}\n",
+                   jobs_scanned,
+                   recovery_descriptors);
+            return 0;
         }
     }
 

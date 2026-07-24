@@ -46,6 +46,10 @@ grep -q '"temporal_subpasses_started": 2' "$STATUS_FILE"
 grep -q '"temporal_subpasses_completed": 2' "$STATUS_FILE"
 grep -q '"temporal_subpasses_total": 2' "$STATUS_FILE"
 grep -q '"progress_ratio": 1.000000' "$STATUS_FILE"
+grep -q '"worker_protocol_version": 1' "$STATUS_FILE"
+grep -q '"execution_mode": "worker_protocol"' "$STATUS_FILE"
+grep -Eq '"immutable_request_sha256": "[0-9a-f]{64}"' "$STATUS_FILE"
+grep -Eq '"renderer_build_sha256": "[0-9a-f]{64}"' "$STATUS_FILE"
 grep -q '"schema_version": "ray_tracing_headless_summary_v1"' "$SUMMARY_FILE"
 grep -q '"rendered_frames": true' "$SUMMARY_FILE"
 grep -q '"stage": "completed"' "$PROGRESS_FILE"
@@ -55,4 +59,11 @@ grep -q '"temporal_subpasses_total": 2' "$PROGRESS_FILE"
 test -f "$JOB_ROOT/stdout.log"
 test -f "$JOB_ROOT/stderr.log"
 test -f "$JOB_ROOT/pid.txt"
+test -f "$JOB_ROOT/worker_capabilities.json"
+test -f "$JOB_ROOT/worker_request.json"
+test -d "$JOB_ROOT/worker_events"
+grep -q '"message_type":"progress"' "$JOB_ROOT"/worker_events/*.json
+grep -q '"message_type":"dirty_region"' "$JOB_ROOT"/worker_events/*.json
+grep -q '"message_type":"checkpoint_reference"' "$JOB_ROOT"/worker_events/*.json
+grep -q '"message_type":"completion"' "$JOB_ROOT"/worker_events/*.json
 test -f "$FRAME_FILE"

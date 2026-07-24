@@ -106,14 +106,27 @@ dump-sema-runtime-ray-3d:
 	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_ray_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_ray_3d.o" > "$(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)"
 
-all: $(APP_TARGET)
+$(WORKER_VERSION_HEADER): $(WORKER_VERSION_FILE) tools/generate_worker_version_header.py
+	@python3 tools/generate_worker_version_header.py \
+		--version-file "$(WORKER_VERSION_FILE)" \
+		--output "$@"
+
+worker-version-contract: $(WORKER_VERSION_HEADER)
+	@python3 tools/generate_worker_version_header.py \
+		--version-file "$(WORKER_VERSION_FILE)" \
+		--output "$(WORKER_VERSION_HEADER)" \
+		--check
+	@echo "RayTracing worker version: $(WORKER_VERSION)"
+	@echo "RayTracing desktop/source version: $(RELEASE_VERSION)"
+
+all: $(WORKER_VERSION_HEADER) $(APP_TARGET)
 
 $(APP_TARGET): $(OBJ)
 	@mkdir -p $(dir $@)
 	$(CC) $(OBJ) -o $@ $(LDFLAGS) $(FISICS_MEMCHECK_LINK_LIBS)
 
 
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(WORKER_VERSION_HEADER)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 

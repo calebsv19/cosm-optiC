@@ -1,0 +1,52 @@
+{
+  "schema_version": "ray-tracing/independent-worker-release-contract/v1",
+  "program": "ray_tracing",
+  "worker_slug": "ray_tracing_headless_worker",
+  "app_version_file": "VERSION",
+  "worker_version_file": "WORKER_VERSION",
+  "package_target": "package-linux-worker-self-test",
+  "package_platforms": [
+    "linux-x86_64"
+  ],
+  "registry_target_key": "worker_package",
+  "compatibility": {
+    "worker_protocol_min": 1,
+    "worker_protocol_max": 1,
+    "checkpoint_schema_min": 2,
+    "checkpoint_schema_max": 2,
+    "required_capabilities": [
+      "ray-tracing-worker-protocol-v1",
+      "ray-tracing-recovery-fence-v1"
+    ]
+  },
+  "host_policy": "all-compatible-canonical-inventory-nodes",
+  "required_receipt_types": [
+    "worker-package-catalog",
+    "host-distribution",
+    "installed-runtime",
+    "worker-submission-registry"
+  ],
+  "authority_boundaries": {
+    "decision_one": [
+      "worker_version_transition",
+      "source_commit",
+      "fixed_gates",
+      "worker_package_build",
+      "worker_artifact_authentication"
+    ],
+    "decision_two": [
+      "worker_package_catalog",
+      "selected_host_distribution",
+      "selected_host_installed_runtime_readback",
+      "worker_submission_registry_projection",
+      "production_registry_worker_current",
+      "completion_readback"
+    ],
+    "separate": [
+      "desktop_app_version_transition",
+      "desktop_app_package",
+      "desktop_app_publication",
+      "cleanup"
+    ]
+  }
+}

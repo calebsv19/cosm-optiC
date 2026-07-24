@@ -123,6 +123,24 @@ grep -q '"overwrite_policy": "fail_if_exists"' "$JOBS_ROOT/$JOB_ID/job_status.js
 test -f "$RENDER_OUTPUT_ROOT/frames/frame_0000.bmp"
 test -f "$RENDER_OUTPUT_ROOT/frames/frame_0001.bmp"
 test -f "$RENDER_OUTPUT_ROOT/frames/frame_0002.bmp"
+test ! -e "$RENDER_OUTPUT_ROOT/frames/frame_0000.bmp.tmp.$$"
+
+cp "$RENDER_OUTPUT_ROOT/frames/frame_0001.bmp" "$WORK_ROOT/frame_0001.valid.bmp"
+printf 'BM' >"$RENDER_OUTPUT_ROOT/frames/frame_0001.bmp"
+if "$RUNNER" submit --request "$REQUEST" --jobs-root "$JOBS_ROOT" --resume >"$ERR_DIR/corrupt_resume.out" 2>"$ERR_DIR/corrupt_resume.err"; then
+  echo "expected resume to reject a truncated frame" >&2
+  exit 1
+fi
+grep -q 'frame_0001.bmp is invalid' "$ERR_DIR/corrupt_resume.err"
+cp "$WORK_ROOT/frame_0001.valid.bmp" "$RENDER_OUTPUT_ROOT/frames/frame_0001.bmp"
+
+rm -f "$RENDER_OUTPUT_ROOT/frames/frame_0001.bmp"
+if "$RUNNER" submit --request "$REQUEST" --jobs-root "$JOBS_ROOT" --resume >"$ERR_DIR/noncontiguous_resume.out" 2>"$ERR_DIR/noncontiguous_resume.err"; then
+  echo "expected resume to reject a noncontiguous frame set" >&2
+  exit 1
+fi
+grep -q 'frame_0002.bmp is noncontiguous' "$ERR_DIR/noncontiguous_resume.err"
+cp "$WORK_ROOT/frame_0001.valid.bmp" "$RENDER_OUTPUT_ROOT/frames/frame_0001.bmp"
 
 if "$RUNNER" submit --request "$REQUEST" --jobs-root "$JOBS_ROOT" >"$ERR_DIR/submit.out" 2>"$ERR_DIR/submit.err"; then
   echo "expected submit without overwrite/resume to fail on existing outputs" >&2
@@ -145,6 +163,55 @@ JOB_ID="$(submit_job --overwrite)"
 [[ -n "$JOB_ID" ]]
 wait_for_job "$JOB_ID"
 grep -q '"overwrite_policy": "overwrite"' "$JOBS_ROOT/$JOB_ID/job_status.json"
+
+FAKE_INTERRUPTED_JOB_ID="rtjob_fake_interrupted"
+FAKE_INTERRUPTED_ROOT="$JOBS_ROOT/$FAKE_INTERRUPTED_JOB_ID"
+rm -rf "$FAKE_INTERRUPTED_ROOT"
+mkdir -p "$FAKE_INTERRUPTED_ROOT"
+rm -f "$RENDER_OUTPUT_ROOT/frames/frame_0002.bmp"
+
+cat >"$FAKE_INTERRUPTED_ROOT/job_status.json" <<EOF
+{
+  "schema_version": "ray_tracing_detached_job_status_v1",
+  "program": "ray_tracing",
+  "tool": "ray_tracing_render_headless",
+  "job_id": "$FAKE_INTERRUPTED_JOB_ID",
+  "state": "running",
+  "stage": "rendering_frame",
+  "request_path": "$ROOT_DIR/tests/fixtures/agent_render_job_runner_resume_request.json",
+  "output_root": "$RENDER_OUTPUT_ROOT",
+  "progress_path": "$FAKE_INTERRUPTED_ROOT/render_progress.json",
+  "summary_path": "$FAKE_INTERRUPTED_ROOT/result_summary.json",
+  "stdout_path": "$FAKE_INTERRUPTED_ROOT/stdout.log",
+  "stderr_path": "$FAKE_INTERRUPTED_ROOT/stderr.log",
+  "pid": 0,
+  "exit_code": -1,
+  "overwrite_policy": "fail_if_exists",
+  "requested_start_frame": 0,
+  "requested_frame_count": 3,
+  "effective_start_frame": 0,
+  "effective_frame_count": 3,
+  "frame_index": 2,
+  "frames_completed": 2,
+  "temporal_subpasses_started": 0,
+  "temporal_subpasses_completed": 0,
+  "temporal_subpasses_total": 2,
+  "submitted_at_utc": "2026-07-24T00:00:00Z",
+  "started_at_utc": "2026-07-24T00:00:00Z",
+  "finished_at_utc": "",
+  "updated_at_utc": "2026-07-24T00:00:00Z",
+  "diagnostics": "rendering frame"
+}
+EOF
+
+INTERRUPTED_STATUS="$("$RUNNER" status --job-id "$FAKE_INTERRUPTED_JOB_ID" --jobs-root "$JOBS_ROOT")"
+printf '%s' "$INTERRUPTED_STATUS" | grep -q '"state": "interrupted"'
+printf '%s' "$INTERRUPTED_STATUS" | grep -q '"stage": "resumable"'
+printf '%s' "$INTERRUPTED_STATUS" | grep -q '"durable_frames_completed": 2'
+printf '%s' "$INTERRUPTED_STATUS" | grep -q '"resume_from_frame": 2'
+printf '%s' "$INTERRUPTED_STATUS" | grep -q '"resume_available": true'
+printf '%s' "$INTERRUPTED_STATUS" | grep -q 'resume from frame 2'
+cp "$WORK_ROOT/frame_0001.valid.bmp" "$RENDER_OUTPUT_ROOT/frames/frame_0002.bmp"
 
 FAKE_JOB_ID="rtjob_fake_stalled"
 FAKE_JOB_ROOT="$JOBS_ROOT/$FAKE_JOB_ID"

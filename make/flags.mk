@@ -91,7 +91,7 @@ ifeq ($(UNAME_S),Linux)
 POSIX_FEATURE_CFLAGS := -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700
 endif
 
-CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
 LDFLAGS := $(ARCH_FLAGS)
 ifneq ($(strip $(SDL_TTF_LIBS)),)
 LDFLAGS += $(SDL_TTF_LIBS) $(SDL_LIBS)
@@ -100,7 +100,7 @@ LDFLAGS += -lSDL2_ttf $(SDL_LIBS)
 endif
 LDFLAGS += $(JSON_LIBS) $(PNG_LIBS) -lm
 
-CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -O3 $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -O3 $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
 	-ffast-math -fno-math-errno -march=native
 ifeq ($(UNAME_S),Darwin)
 CFLAGS += -DVK_USE_PLATFORM_METAL_EXT

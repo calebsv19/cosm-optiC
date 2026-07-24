@@ -3,7 +3,6 @@
 #include "app/ray_tracing_request_utils.h"
 
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -13,14 +12,16 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
 #include <json-c/json.h>
 
 #include "app/agent_render_request.h"
+#include "app/ray_tracing_durable_io.h"
+#include "app/ray_tracing_frame_recovery.h"
 #include "app/ray_tracing_headless_job_bundle.h"
+#include "app/ray_tracing_worker_client.h"
 
 static void diag_set(char *out, size_t out_size, const char *message) {
     RayTracingRequestSetDiag(out, out_size, message);
@@ -36,17 +37,14 @@ bool read_text_file(const char *path, char **out_text) {
 }
 
 bool write_text_file(const char *path, const char *text) {
-    FILE *file = NULL;
+    RayTracingDurableOutput output;
     if (!path || !path[0] || !text) return false;
-    if (!ray_tracing_job_runner_ensure_parent_directory_exists(path)) return false;
-    file = fopen(path, "wb");
-    if (!file) return false;
-    if (fputs(text, file) < 0) {
-        fclose(file);
+    if (!ray_tracing_durable_output_begin(&output, path)) return false;
+    if (fputs(text, output.stream) < 0) {
+        ray_tracing_durable_output_abort(&output);
         return false;
     }
-    fclose(file);
-    return true;
+    return ray_tracing_durable_output_commit(&output);
 }
 
 void json_write_string(FILE *file, const char *value) {
@@ -87,54 +85,29 @@ static bool generate_job_id(char *out_job_id, size_t out_job_id_size) {
                     (unsigned)(salt % 1000000u)) < (int)out_job_id_size;
 }
 
-
-static bool spawn_detached_render(const char *render_cli_path,
-                                  const RayTracingDetachedJobPaths *paths,
-                                  const char *job_id,
-                                  pid_t *out_pid) {
-    pid_t pid = 0;
-    FILE *stdout_file = NULL;
-    FILE *stderr_file = NULL;
-    if (out_pid) *out_pid = 0;
-    if (!render_cli_path || !paths || !job_id) return false;
-    if (!ray_tracing_job_runner_ensure_directory_exists(paths->job_root)) return false;
-
-    pid = fork();
-    if (pid < 0) {
+static bool write_worker_client_state(
+    const RayTracingDetachedJobPaths *paths,
+    const RayTracingWorkerClientSpawnResult *result) {
+    char text[512];
+    if (!paths || !result ||
+        snprintf(text,
+                 sizeof(text),
+                 "{\n"
+                 "  \"schema_version\": \"ray_tracing_worker_client_state_v1\",\n"
+                 "  \"execution_mode\": \"%s\",\n"
+                 "  \"worker_protocol_version\": %d,\n"
+                 "  \"immutable_request_sha256\": \"%s\",\n"
+                 "  \"renderer_build_sha256\": \"%s\"\n"
+                 "}\n",
+                 result->execution_mode,
+                 result->protocol_version,
+                 result->request_sha256,
+                 result->renderer_build_sha256) >= (int)sizeof(text)) {
         return false;
     }
-    if (pid == 0) {
-        char *const argv[] = {
-            (char *)render_cli_path,
-            (char *)"--request",
-            (char *)paths->job_request_path,
-            (char *)"--render",
-            (char *)"--summary",
-            (char *)paths->result_summary_path,
-            (char *)"--job-id",
-            (char *)job_id,
-            (char *)"--job-status",
-            (char *)paths->job_status_path,
-            NULL
-        };
-        int null_fd = -1;
-        if (setsid() < 0) _exit(126);
-        stdout_file = fopen(paths->stdout_log_path, "ab");
-        stderr_file = fopen(paths->stderr_log_path, "ab");
-        if (!stdout_file || !stderr_file) _exit(126);
-        if (dup2(fileno(stdout_file), STDOUT_FILENO) < 0) _exit(126);
-        if (dup2(fileno(stderr_file), STDERR_FILENO) < 0) _exit(126);
-        null_fd = open("/dev/null", O_RDONLY);
-        if (null_fd >= 0) {
-            (void)dup2(null_fd, STDIN_FILENO);
-            close(null_fd);
-        }
-        execv(render_cli_path, argv);
-        _exit(127);
-    }
-    if (out_pid) *out_pid = pid;
-    return true;
+    return write_text_file(paths->worker_client_state_path, text);
 }
+
 
 static bool load_request_for_job(const char *request_path,
                                  RayTracingAgentRenderRequest *out_request,
@@ -245,6 +218,7 @@ static bool build_default_shared_job_envelope(const RayTracingAgentRenderRequest
 static bool write_canonical_request_file(const char *path,
                                          const RayTracingAgentRenderRequest *request,
                                          const RayTracingDetachedJobPaths *paths) {
+    RayTracingDurableOutput output;
     FILE *file = NULL;
     char progress_path[PATH_MAX];
     bool wrote_field = false;
@@ -255,9 +229,8 @@ static bool write_canonical_request_file(const char *path,
                  paths->job_root) >= (int)sizeof(progress_path)) {
         return false;
     }
-    if (!ray_tracing_job_runner_ensure_parent_directory_exists(path)) return false;
-    file = fopen(path, "wb");
-    if (!file) return false;
+    if (!ray_tracing_durable_output_begin(&output, path)) return false;
+    file = output.stream;
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_version\": ");
     json_write_string(file, request->schema_version);
@@ -316,6 +289,25 @@ static bool write_canonical_request_file(const char *path,
     fprintf(file, ",\n");
     fprintf(file, "    \"overwrite\": %s\n", request->overwrite ? "true" : "false");
     fprintf(file, "  },\n");
+    if (request->checkpoint_enabled) {
+        fprintf(file, "  \"checkpoint\": {\n");
+        fprintf(file, "    \"enabled\": true,\n");
+        fprintf(file,
+                "    \"resume\": %s,\n",
+                request->checkpoint_resume ? "true" : "false");
+        fprintf(file,
+                "    \"tile_batch_size\": %d,\n",
+                request->checkpoint_tile_batch_size);
+        fprintf(file,
+                "    \"max_tile_batch_size\": %d,\n",
+                request->checkpoint_max_tile_batch_size);
+        fprintf(file,
+                "    \"max_interval_ms\": %d,\n",
+                request->checkpoint_max_interval_ms);
+        fprintf(file, "    \"root\": ");
+        json_write_string(file, request->checkpoint_root);
+        fprintf(file, "\n  },\n");
+    }
     fprintf(file, "  \"progress\": {\n");
     fprintf(file, "    \"summary_path\": ");
     json_write_string(file, paths->result_summary_path);
@@ -486,27 +478,7 @@ static bool write_canonical_request_file(const char *path,
     }
     fprintf(file, "  }\n");
     fprintf(file, "}\n");
-    fclose(file);
-    return true;
-}
-
-static int count_contiguous_existing_frames(const RayTracingAgentRenderRequest *request) {
-    int existing = 0;
-    char frame_path[PATH_MAX];
-    if (!request || request->frame_count <= 0) return 0;
-    for (int i = 0; i < request->frame_count; ++i) {
-        if (!ray_tracing_job_runner_build_frame_path(request->output_root,
-                                                     request->start_frame + i,
-                                                     frame_path,
-                                                     sizeof(frame_path))) {
-            break;
-        }
-        if (!ray_tracing_job_runner_file_exists(frame_path)) {
-            break;
-        }
-        existing += 1;
-    }
-    return existing;
+    return ray_tracing_durable_output_commit(&output);
 }
 
 bool ray_tracing_job_runner_submit(const char *argv0,
@@ -525,9 +497,19 @@ bool ray_tracing_job_runner_submit(const char *argv0,
     CoreHeadlessJobEnvelope shared_job;
     char jobs_root[PATH_MAX];
     char render_cli_path[PATH_MAX];
+    char worker_runtime_path[PATH_MAX];
     char diagnostics[256];
+    RayTracingFrameRecoveryScan recovery_scan;
+    RayTracingWorkerClientSpawnRequest worker_spawn_request;
+    RayTracingWorkerClientSpawnResult worker_spawn_result;
+    const char *protocol_mode = getenv("RAY_TRACING_WORKER_PROTOCOL_MODE");
+    const char *fleet_job = getenv("RAY_TRACING_FLEET_JOB");
+    const char *recovery_descriptor_path =
+        getenv("RAY_TRACING_RECOVERY_DESCRIPTOR_PATH");
+    const char *resume_authority_path =
+        getenv("RAY_TRACING_RESUME_AUTHORITY_PATH");
+    const char *recovery_worker_id = getenv("RAY_TRACING_RECOVERY_WORKER_ID");
     pid_t pid = 0;
-    int contiguous_existing = 0;
     bool is_shared_bundle = false;
 
     diag_set(out_diagnostics, out_diagnostics_size, "invalid input");
@@ -547,6 +529,24 @@ bool ray_tracing_job_runner_submit(const char *argv0,
         diag_set(out_diagnostics, out_diagnostics_size, "overwrite and resume are mutually exclusive");
         return false;
     }
+    if ((recovery_descriptor_path && recovery_descriptor_path[0]) ||
+        (resume_authority_path && resume_authority_path[0]) ||
+        (recovery_worker_id && recovery_worker_id[0])) {
+        if (!resume || !recovery_descriptor_path ||
+            !recovery_descriptor_path[0] || !resume_authority_path ||
+            !resume_authority_path[0] || !recovery_worker_id ||
+            !recovery_worker_id[0]) {
+            diag_set(out_diagnostics,
+                     out_diagnostics_size,
+                     "manual recovery requires --resume plus descriptor, authority, and worker identity");
+            return false;
+        }
+    } else if (resume && fleet_job && strcmp(fleet_job, "1") == 0) {
+        diag_set(out_diagnostics,
+                 out_diagnostics_size,
+                 "fleet resume requires coordinator-issued recovery authority");
+        return false;
+    }
     if (!ray_tracing_job_runner_build_jobs_root(argv0,
                                                 jobs_root_override,
                                                 jobs_root,
@@ -558,6 +558,12 @@ bool ray_tracing_job_runner_submit(const char *argv0,
                                                        render_cli_path,
                                                        sizeof(render_cli_path))) {
         diag_set(out_diagnostics, out_diagnostics_size, "failed to resolve render cli path");
+        return false;
+    }
+    if (!ray_tracing_job_runner_derive_worker_runtime_path(argv0,
+                                                          worker_runtime_path,
+                                                          sizeof(worker_runtime_path))) {
+        diag_set(out_diagnostics, out_diagnostics_size, "failed to resolve worker runtime path");
         return false;
     }
     if (is_shared_bundle) {
@@ -586,8 +592,16 @@ bool ray_tracing_job_runner_submit(const char *argv0,
         diag_set(out_diagnostics, out_diagnostics_size, "invalid detached output root");
         return false;
     }
-    contiguous_existing = count_contiguous_existing_frames(&request);
-    if (!overwrite && !resume && contiguous_existing > 0) {
+    if (!ray_tracing_frame_recovery_scan(request.output_root,
+                                         request.start_frame,
+                                         request.frame_count,
+                                         request.width,
+                                         request.height,
+                                         &recovery_scan)) {
+        diag_set(out_diagnostics, out_diagnostics_size, "failed to scan existing output frames");
+        return false;
+    }
+    if (!overwrite && !resume && recovery_scan.any_existing_frame) {
         diag_set(out_diagnostics,
                  out_diagnostics_size,
                  "existing output frames found; use --overwrite or --resume");
@@ -597,20 +611,47 @@ bool ray_tracing_job_runner_submit(const char *argv0,
         request.overwrite = true;
     }
     if (resume) {
-        if (contiguous_existing <= 0) {
+        if (recovery_scan.first_invalid_frame >= 0) {
+            snprintf(out_diagnostics,
+                     out_diagnostics_size,
+                     "existing frame_%04d.bmp is invalid; use --overwrite or quarantine it before resume",
+                     recovery_scan.first_invalid_frame);
+            return false;
+        }
+        if (recovery_scan.first_noncontiguous_frame >= 0) {
+            snprintf(out_diagnostics,
+                     out_diagnostics_size,
+                     "existing frame_%04d.bmp is noncontiguous; use --overwrite or reconcile the output set before resume",
+                     recovery_scan.first_noncontiguous_frame);
+            return false;
+        }
+        if (recovery_scan.durable_prefix_count <= 0) {
             request.overwrite = false;
-        } else if (contiguous_existing >= request.frame_count) {
+        } else if (recovery_scan.durable_prefix_count >= request.frame_count) {
             diag_set(out_diagnostics,
                      out_diagnostics_size,
-                     "all requested frames already exist; nothing to resume");
+                     "all requested frames are durably valid; nothing to resume");
             return false;
         } else {
             request.has_sampling_window = true;
-            request.sampling_frame_offset = contiguous_existing;
+            request.sampling_frame_offset = recovery_scan.durable_prefix_count;
             request.sampling_frame_count = request.frame_count;
-            request.start_frame += contiguous_existing;
-            request.frame_count -= contiguous_existing;
+            request.start_frame += recovery_scan.durable_prefix_count;
+            request.frame_count -= recovery_scan.durable_prefix_count;
             request.overwrite = false;
+        }
+    }
+    if (request.temporal_frames > 1) {
+        request.checkpoint_enabled = true;
+        request.checkpoint_resume = resume;
+        if (snprintf(request.checkpoint_root,
+                     sizeof(request.checkpoint_root),
+                     "%s/checkpoints",
+                     request.output_root) >= (int)sizeof(request.checkpoint_root)) {
+            diag_set(out_diagnostics,
+                     out_diagnostics_size,
+                     "failed to derive temporal checkpoint root");
+            return false;
         }
     }
     if (ray_tracing_job_runner_file_exists(paths.job_root)) {
@@ -689,22 +730,67 @@ bool ray_tracing_job_runner_submit(const char *argv0,
         return false;
     }
 
-    if (!spawn_detached_render(render_cli_path, &paths, out_job_id, &pid)) {
+    memset(&worker_spawn_request, 0, sizeof(worker_spawn_request));
+    worker_spawn_request.job_id = out_job_id;
+    worker_spawn_request.worker_runtime_path = worker_runtime_path;
+    worker_spawn_request.render_cli_path = render_cli_path;
+    worker_spawn_request.canonical_request_path = paths.job_request_path;
+    worker_spawn_request.capabilities_path = paths.worker_capabilities_path;
+    worker_spawn_request.worker_request_path = paths.worker_request_path;
+    worker_spawn_request.event_directory = paths.worker_event_directory;
+    worker_spawn_request.cancellation_path = paths.worker_cancellation_path;
+    worker_spawn_request.recovery_descriptor_path = recovery_descriptor_path;
+    worker_spawn_request.resume_authority_path = resume_authority_path;
+    worker_spawn_request.resume_receipt_path = paths.resume_receipt_path;
+    worker_spawn_request.recovery_worker_id = recovery_worker_id;
+    worker_spawn_request.output_root = request.output_root;
+    worker_spawn_request.progress_path = record.progress_path;
+    worker_spawn_request.job_status_path = paths.job_status_path;
+    worker_spawn_request.result_summary_path = paths.result_summary_path;
+    worker_spawn_request.stdout_log_path = paths.stdout_log_path;
+    worker_spawn_request.stderr_log_path = paths.stderr_log_path;
+    worker_spawn_request.width = request.width;
+    worker_spawn_request.height = request.height;
+    worker_spawn_request.start_frame = request.start_frame;
+    worker_spawn_request.frame_count = request.frame_count;
+    worker_spawn_request.temporal_frames =
+        request.temporal_frames > 0 ? request.temporal_frames : 1;
+    worker_spawn_request.force_direct_fallback =
+        protocol_mode && strcmp(protocol_mode, "direct") == 0;
+    memset(&worker_spawn_result, 0, sizeof(worker_spawn_result));
+    if (!ray_tracing_worker_client_spawn(&worker_spawn_request,
+                                         &worker_spawn_result,
+                                         diagnostics,
+                                         sizeof(diagnostics))) {
         ray_tracing_detached_job_record_mark_spawn_failed(&record, &paths, render_cli_path);
         (void)ray_tracing_job_runner_persist_job_state(&paths, &record);
-        if (out_diagnostics && out_diagnostics_size > 0u) {
-            snprintf(out_diagnostics,
-                     out_diagnostics_size,
-                     "failed to spawn detached render cli=%s job_status=%s stdout=%s stderr=%s",
-                     render_cli_path,
-                     paths.job_status_path,
-                     paths.stdout_log_path,
-                     paths.stderr_log_path);
-        }
+        diag_set(out_diagnostics, out_diagnostics_size, diagnostics);
         return false;
     }
 
+    pid = worker_spawn_result.pid;
+    if (!write_worker_client_state(&paths, &worker_spawn_result)) {
+        (void)kill(pid, SIGTERM);
+        diag_set(out_diagnostics,
+                 out_diagnostics_size,
+                 "failed to persist worker client binding");
+        return false;
+    }
     ray_tracing_detached_job_record_mark_started(&record, pid);
+    record.worker_protocol_version = worker_spawn_result.protocol_version;
+    copy_string(record.execution_mode,
+                sizeof(record.execution_mode),
+                worker_spawn_result.execution_mode);
+    copy_string(record.immutable_request_sha256,
+                sizeof(record.immutable_request_sha256),
+                worker_spawn_result.request_sha256);
+    copy_string(record.renderer_build_sha256,
+                sizeof(record.renderer_build_sha256),
+                worker_spawn_result.renderer_build_sha256);
+    snprintf(record.diagnostics,
+             sizeof(record.diagnostics),
+             "detached render launched via %s",
+             record.execution_mode);
     if (!ray_tracing_job_runner_write_pid_file(paths.pid_path, pid) ||
         !ray_tracing_job_runner_persist_job_state(&paths, &record)) {
         diag_set(out_diagnostics, out_diagnostics_size, "failed to persist detached job state");
@@ -780,8 +866,11 @@ bool ray_tracing_job_runner_cancel(const char *argv0,
         diag_set(out_diagnostics, out_diagnostics_size, "failed to read job pid");
         return false;
     }
-    if (kill(pid, SIGTERM) != 0 && errno != ESRCH) {
-        diag_set(out_diagnostics, out_diagnostics_size, "failed to signal job pid");
+    if (!ray_tracing_worker_client_request_cancel(job_id,
+                                                  paths.worker_cancellation_path,
+                                                  pid,
+                                                  out_diagnostics,
+                                                  out_diagnostics_size)) {
         return false;
     }
     ray_tracing_detached_job_record_defaults(&record);

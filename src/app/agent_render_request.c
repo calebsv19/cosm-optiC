@@ -128,6 +128,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     json_object *scene = NULL;
     json_object *volume = NULL;
     json_object *render = NULL;
+    json_object *checkpoint = NULL;
     json_object *output = NULL;
     json_object *progress = NULL;
     json_object *inspection = NULL;
@@ -279,6 +280,38 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
         if (RayTracingJsonGetString(render, "integrator_3d", &value)) {
             request.integrator_3d = agent_render_request_parse_integrator_3d(value);
             request.has_integrator_3d_override = true;
+        }
+    }
+
+    if (RayTracingJsonGetObject(root, "checkpoint", &checkpoint)) {
+        RayTracingJsonGetBool(checkpoint, "enabled", &request.checkpoint_enabled);
+        RayTracingJsonGetBool(checkpoint, "resume", &request.checkpoint_resume);
+        if (RayTracingJsonGetInt(checkpoint, "tile_batch_size", &int_value)) {
+            request.checkpoint_tile_batch_size = int_value;
+        }
+        if (RayTracingJsonGetInt(checkpoint,
+                                "max_tile_batch_size",
+                                &int_value)) {
+            request.checkpoint_max_tile_batch_size = int_value;
+        }
+        if (RayTracingJsonGetInt(checkpoint, "max_interval_ms", &int_value)) {
+            request.checkpoint_max_interval_ms = int_value;
+        }
+        if (RayTracingJsonGetString(checkpoint, "root", &value) &&
+            !RayTracingResolveRequestOutputPath(request_dir,
+                                                value,
+                                                request.checkpoint_root,
+                                                sizeof(request.checkpoint_root))) {
+            json_object_put(root);
+            agent_render_request_set_diagf(
+                out_diagnostics,
+                out_diagnostics_size,
+                "request=%s field=checkpoint.root invalid or path too long",
+                request_path);
+            return false;
+        }
+        if (request.checkpoint_root[0] != '\0') {
+            request.checkpoint_enabled = true;
         }
     }
 

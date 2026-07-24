@@ -23,7 +23,7 @@ LINUX_WORKER_PLATFORM_CAPABILITY := platform-linux-aarch64-v1
 else
 $(error Unsupported Linux worker package platform: $(LINUX_WORKER_PLATFORM))
 endif
-LINUX_WORKER_BASENAME := $(RELEASE_PROGRAM_KEY)-$(RELEASE_VERSION)-$(LINUX_WORKER_PLATFORM)-worker
+LINUX_WORKER_BASENAME := $(LINUX_WORKER_SLUG)-$(WORKER_VERSION)-$(LINUX_WORKER_PLATFORM)
 LINUX_WORKER_DIR := $(RELEASE_DIR)/$(LINUX_WORKER_BASENAME)
 LINUX_WORKER_BIN_DIR := $(LINUX_WORKER_DIR)/bin
 LINUX_WORKER_CONFIG_DIR := $(LINUX_WORKER_DIR)/config
@@ -36,7 +36,8 @@ LINUX_WORKER_MAX_GLIBC ?= 2.39.0
 package-linux-worker-contract:
 	@echo "Linux worker package contract"
 	@echo "  worker slug: $(LINUX_WORKER_SLUG)"
-	@echo "  version:     $(RELEASE_VERSION)"
+	@echo "  worker version: $(WORKER_VERSION)"
+	@echo "  source app version: $(RELEASE_VERSION)"
 	@echo "  platform:    $(LINUX_WORKER_PLATFORM)"
 	@echo "  max glibc:   $(LINUX_WORKER_MAX_GLIBC)"
 	@echo "  stage dir:   $(LINUX_WORKER_DIR)"
@@ -44,6 +45,10 @@ package-linux-worker-contract:
 	@echo "  binaries:"
 	@echo "    - $(RAY_TRACING_RENDER_HEADLESS_BIN)"
 	@echo "    - $(RAY_TRACING_JOB_RUNNER_BIN)"
+	@echo "    - $(RAY_TRACING_WORKER_RUNTIME_BIN)"
+
+package-linux-worker-dry-run: worker-version-contract package-linux-worker-contract
+	@echo "Dry-run only: no worker package was built."
 
 package-linux-worker-clean:
 	@rm -rf "$(LINUX_WORKER_DIR)" "$(LINUX_WORKER_ARCHIVE)"
@@ -56,6 +61,7 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@mkdir -p "$(LINUX_WORKER_BIN_DIR)" "$(LINUX_WORKER_CONFIG_DIR)" "$(LINUX_WORKER_DOCS_DIR)"
 	@cp "$(RAY_TRACING_RENDER_HEADLESS_BIN)" "$(LINUX_WORKER_BIN_DIR)/ray_tracing_render_headless"
 	@cp "$(RAY_TRACING_JOB_RUNNER_BIN)" "$(LINUX_WORKER_BIN_DIR)/ray_tracing_job_runner"
+	@cp "$(RAY_TRACING_WORKER_RUNTIME_BIN)" "$(LINUX_WORKER_BIN_DIR)/ray_tracing_worker_runtime"
 	@printf '#!/usr/bin/env bash\n' > "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
 	@printf 'set -euo pipefail\n' >> "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
 	@printf 'SCRIPT_DIR="$$(cd "$$(dirname "$${BASH_SOURCE[0]}")" && pwd)"\n' >> "$(LINUX_WORKER_BIN_DIR)/run_worker.sh"
@@ -69,12 +75,14 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '{\n' > "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "schema_version": "codework-worker-package/v1",\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "worker_slug": "%s",\n' "$(LINUX_WORKER_SLUG)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
-	@printf '  "version": "%s",\n' "$(RELEASE_VERSION)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '  "version": "%s",\n' "$(WORKER_VERSION)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '  "source_program_version": "%s",\n' "$(RELEASE_VERSION)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "platform": "%s",\n' "$(LINUX_WORKER_PLATFORM)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "program": "%s",\n' "$(RELEASE_PROGRAM_KEY)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "max_glibc_version": "%s",\n' "$(LINUX_WORKER_MAX_GLIBC)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "job_types": ["trio_headless_stage"],\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
-	@printf '  "capabilities": ["trio-headless-v1", "scene-project-portable-v1", "ray-tracing-project-render-v1", "%s"],\n' "$(LINUX_WORKER_PLATFORM_CAPABILITY)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '  "capabilities": ["trio-headless-v1", "scene-project-portable-v1", "ray-tracing-project-render-v1", "ray-tracing-worker-protocol-v1", "ray-tracing-recovery-fence-v1", "%s"],\n' "$(LINUX_WORKER_PLATFORM_CAPABILITY)" >> "$(LINUX_WORKER_MANIFEST_JSON)"
+	@printf '  "compatibility": {"worker_protocol_min": 1, "worker_protocol_max": 1, "checkpoint_schema_min": 2, "checkpoint_schema_max": 2},\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "entrypoint": "bin/run_worker.sh",\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "default_args": [],\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
 	@printf '  "default_resource_budget": {\n' >> "$(LINUX_WORKER_MANIFEST_JSON)"
@@ -87,14 +95,17 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '  "package_role": "headless-worker",\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "worker_slug": "%s",\n' "$(LINUX_WORKER_SLUG)" >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "program": "%s",\n' "$(RELEASE_PROGRAM_KEY)" >> "$(LINUX_WORKER_MANIFEST)"
-	@printf '  "version": "%s",\n' "$(RELEASE_VERSION)" >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '  "version": "%s",\n' "$(WORKER_VERSION)" >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '  "source_program_version": "%s",\n' "$(RELEASE_VERSION)" >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "platform": "%s",\n' "$(LINUX_WORKER_PLATFORM)" >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "max_glibc_version": "%s",\n' "$(LINUX_WORKER_MAX_GLIBC)" >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "entrypoints": {\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '    "headless_cli": "bin/ray_tracing_render_headless",\n' >> "$(LINUX_WORKER_MANIFEST)"
-	@printf '    "job_runner": "bin/ray_tracing_job_runner"\n' >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '    "job_runner": "bin/ray_tracing_job_runner",\n' >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '    "worker_runtime": "bin/ray_tracing_worker_runtime"\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  },\n' >> "$(LINUX_WORKER_MANIFEST)"
-	@printf '  "capabilities": ["trio-headless-v1", "scene-project-portable-v1", "ray-tracing-project-render-v1", "%s"],\n' "$(LINUX_WORKER_PLATFORM_CAPABILITY)" >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '  "capabilities": ["trio-headless-v1", "scene-project-portable-v1", "ray-tracing-project-render-v1", "ray-tracing-worker-protocol-v1", "ray-tracing-recovery-fence-v1", "%s"],\n' "$(LINUX_WORKER_PLATFORM_CAPABILITY)" >> "$(LINUX_WORKER_MANIFEST)"
+	@printf '  "compatibility": {"worker_protocol_min": 1, "worker_protocol_max": 1, "checkpoint_schema_min": 2, "checkpoint_schema_max": 2},\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "runtime_dependencies": ["glibc", "libgcc_s", "libm", "ffmpeg"],\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '  "default_resource_budget": {\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@printf '    "cpu_percent": 50\n' >> "$(LINUX_WORKER_MANIFEST)"
@@ -111,11 +122,12 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 package-linux-worker-self-test: package-linux-worker
 	@test -x "$(LINUX_WORKER_BIN_DIR)/ray_tracing_render_headless" || (echo "Missing ray_tracing_render_headless"; exit 1)
 	@test -x "$(LINUX_WORKER_BIN_DIR)/ray_tracing_job_runner" || (echo "Missing ray_tracing_job_runner"; exit 1)
+	@test -x "$(LINUX_WORKER_BIN_DIR)/ray_tracing_worker_runtime" || (echo "Missing ray_tracing_worker_runtime"; exit 1)
 	@test -x "$(LINUX_WORKER_BIN_DIR)/run_worker.sh" || (echo "Missing run_worker.sh"; exit 1)
 	@test -f "$(LINUX_WORKER_MANIFEST_JSON)" || (echo "Missing manifest.json"; exit 1)
 	@test -f "$(LINUX_WORKER_MANIFEST)" || (echo "Missing package_manifest.json"; exit 1)
 	@test -f "$(LINUX_WORKER_DOCS_DIR)/headless_agent_render_cli.md" || (echo "Missing docs/headless_agent_render_cli.md"; exit 1)
 	@test -f "$(LINUX_WORKER_CONFIG_DIR)/scene_config.json" || (echo "Missing config/scene_config.json"; exit 1)
 	@test -f "$(LINUX_WORKER_ARCHIVE)" || (echo "Missing worker archive"; exit 1)
-	@python3 tools/validate_linux_worker_package.py --archive "$(LINUX_WORKER_ARCHIVE)" --package-root "$(LINUX_WORKER_BASENAME)" --platform "$(LINUX_WORKER_PLATFORM)" --max-glibc "$(LINUX_WORKER_MAX_GLIBC)"
+	@python3 tools/validate_linux_worker_package.py --archive "$(LINUX_WORKER_ARCHIVE)" --package-root "$(LINUX_WORKER_BASENAME)" --platform "$(LINUX_WORKER_PLATFORM)" --max-glibc "$(LINUX_WORKER_MAX_GLIBC)" --worker-version "$(WORKER_VERSION)" --source-program-version "$(RELEASE_VERSION)"
 	@echo "package-linux-worker-self-test passed."

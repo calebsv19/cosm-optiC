@@ -1,5 +1,6 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
+#include "app/ray_tracing_durable_io.h"
 #include "app/ray_tracing_request_utils.h"
 
 #include <errno.h>
@@ -78,13 +79,14 @@ static bool write_progress_file(const char *path,
                                 double estimated_remaining_seconds,
                                 const char *state,
                                 const char *diagnostics) {
+    RayTracingDurableOutput output;
     FILE *file = NULL;
     char updated_at_utc[32] = {0};
     if (!path || !path[0] || !request) return true;
     if (!ensure_parent_directory_exists(path)) return false;
     utc_now_string(updated_at_utc, sizeof(updated_at_utc));
-    file = fopen(path, "wb");
-    if (!file) return false;
+    if (!ray_tracing_durable_output_begin(&output, path)) return false;
+    file = output.stream;
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_version\": \"ray_tracing_render_progress_v1\",\n");
     fprintf(file, "  \"run_id\": ");
@@ -122,8 +124,7 @@ static bool write_progress_file(const char *path,
     fprintf(file, "  \"diagnostics\": ");
     RayTracingJsonWriteString(file, diagnostics ? diagnostics : "");
     fprintf(file, "\n}\n");
-    fclose(file);
-    return true;
+    return ray_tracing_durable_output_commit(&output);
 }
 
 bool ray_tracing_render_headless_write_progress_and_job_status(
@@ -289,6 +290,7 @@ bool ray_tracing_render_headless_write_job_status_file(
     double elapsed_seconds,
     double estimated_remaining_seconds,
     const char *diagnostics) {
+    RayTracingDurableOutput output;
     FILE *file = NULL;
     char updated_at_utc[32] = {0};
     char started_at_utc[32] = {0};
@@ -341,8 +343,8 @@ bool ray_tracing_render_headless_write_job_status_file(
     } else {
         snprintf(overwrite_policy, sizeof(overwrite_policy), "fail_if_exists");
     }
-    file = fopen(path, "wb");
-    if (!file) return false;
+    if (!ray_tracing_durable_output_begin(&output, path)) return false;
+    file = output.stream;
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_version\": \"ray_tracing_detached_job_status_v1\",\n");
     fprintf(file, "  \"program\": \"ray_tracing\",\n");
@@ -423,6 +425,5 @@ bool ray_tracing_render_headless_write_job_status_file(
     fprintf(file, "  \"diagnostics\": ");
     RayTracingJsonWriteString(file, diagnostics ? diagnostics : "");
     fprintf(file, "\n}\n");
-    fclose(file);
-    return true;
+    return ray_tracing_durable_output_commit(&output);
 }
