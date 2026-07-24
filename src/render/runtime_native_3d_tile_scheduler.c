@@ -12,6 +12,7 @@
 #include "core_workers.h"
 #include "render/integrators/integrator_common.h"
 #include "render/timer_hud_adapter.h"
+#include "render/runtime_native_3d_frame_denoise.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_render_unit.h"
 #include "render/runtime_ray_3d.h"
@@ -753,38 +754,73 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
         goto finalize;
     }
 
-    for (size_t i = 0; i < scheduler.jobCount; ++i) {
-        RuntimeNative3DRenderStats resolve_stats = {0};
+    {
+        RuntimeNative3DFrameDenoise frame_denoise = {0};
         const bool heatmap_enabled =
             RuntimeNative3DAdaptiveSampling_TemporalBudgetHeatmapEnabled();
-        if (heatmap_enabled) {
-            if (!RuntimeNative3DRenderUnit_ResolveTemporalBudgetHeatmapToPixels(
-                    &scheduler.jobs[i].renderUnit,
-                    pixel_buffer,
-                    frame->width)) {
+        const bool full_frame_denoise =
+            !heatmap_enabled && scheduler.jobCount > 0u &&
+            scheduler.jobs[0].renderUnit.useDenoise;
+        RuntimeNative3DFrameDenoise_Init(&frame_denoise);
+        if (full_frame_denoise &&
+            !RuntimeNative3DFrameDenoise_Prepare(&frame_denoise,
+                                                 frame->width,
+                                                 frame->height,
+                                                 integrator_id,
+                                                 scheduler.committedSubpasses)) {
+            ok = false;
+        }
+        for (size_t i = 0; ok && full_frame_denoise && i < scheduler.jobCount; ++i) {
+            ok = RuntimeNative3DFrameDenoise_GatherUnit(
+                &frame_denoise,
+                &scheduler.jobs[i].renderUnit);
+        }
+        if (ok && full_frame_denoise) {
+            RuntimeNative3DRenderStats resolve_stats = {0};
+            ok = RuntimeNative3DFrameDenoise_Apply(&frame_denoise, &resolve_stats);
+            RuntimeNative3DRenderStats_Accumulate(&scheduler.stats, &resolve_stats);
+        }
+        for (size_t i = 0; ok && i < scheduler.jobCount; ++i) {
+            RuntimeNative3DRenderStats resolve_stats = {0};
+            if (heatmap_enabled) {
+                if (!RuntimeNative3DRenderUnit_ResolveTemporalBudgetHeatmapToPixels(
+                        &scheduler.jobs[i].renderUnit,
+                        pixel_buffer,
+                        frame->width)) {
+                    ok = false;
+                    break;
+                }
+                resolve_stats.temporalAdaptiveBudgetHeatmapEnabled = 1;
+            } else if (full_frame_denoise) {
+                if (!RuntimeNative3DFrameDenoise_ResolveUnitToPixels(
+                        &frame_denoise,
+                        &scheduler.jobs[i].renderUnit,
+                        pixel_buffer,
+                        frame->width)) {
+                    ok = false;
+                    break;
+                }
+            } else if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
+                           &scheduler.jobs[i].renderUnit,
+                           pixel_buffer,
+                           frame->width,
+                           &resolve_stats)) {
                 ok = false;
                 break;
             }
-            resolve_stats.temporalAdaptiveBudgetHeatmapEnabled = 1;
-        } else if (!RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
-                       &scheduler.jobs[i].renderUnit,
-                       pixel_buffer,
-                       frame->width,
-                       &resolve_stats)) {
-            ok = false;
-            break;
+            if (!heatmap_enabled) {
+                runtime_native_3d_tile_scheduler_capture_black_hit_pixels(
+                    &scheduler.jobs[i],
+                    pixel_buffer,
+                    frame->width,
+                    scheduler.jobs[i].renderUnit.committedSubpasses,
+                    "final_resolve");
+            }
+            RuntimeNative3DRenderStats_Accumulate(&scheduler.stats, &resolve_stats);
+            RuntimeNative3DRenderUnit_RecordScratchStats(&scheduler.jobs[i].renderUnit,
+                                                         &scheduler.stats);
         }
-        if (!heatmap_enabled) {
-            runtime_native_3d_tile_scheduler_capture_black_hit_pixels(
-                &scheduler.jobs[i],
-                pixel_buffer,
-                frame->width,
-                scheduler.jobs[i].renderUnit.committedSubpasses,
-                "final_resolve");
-        }
-        RuntimeNative3DRenderStats_Accumulate(&scheduler.stats, &resolve_stats);
-        RuntimeNative3DRenderUnit_RecordScratchStats(&scheduler.jobs[i].renderUnit,
-                                                     &scheduler.stats);
+        RuntimeNative3DFrameDenoise_Free(&frame_denoise);
     }
     if (!ok) {
         goto finalize;

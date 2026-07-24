@@ -90,6 +90,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_frame_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_unit.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_diag.o \
@@ -439,6 +440,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
+	$(BUILD_DIR)/render/runtime_native_3d_frame_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_unit.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler.o \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_diag.o \

@@ -1,8 +1,10 @@
+#include <stdlib.h>
 #include <string.h>
 
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_native_3d_denoise.h"
 #include "render/runtime_native_3d_feature_buffer.h"
+#include "render/runtime_native_3d_frame_denoise.h"
 #include "test_runtime_native_3d_denoise.h"
 #include "test_support.h"
 
@@ -389,6 +391,145 @@ static int test_runtime_native_3d_denoise_disney_v2_preserves_temporally_unstabl
     return 0;
 }
 
+static bool test_runtime_native_3d_frame_denoise_setup_unit(
+    RuntimeNative3DRenderUnit* unit,
+    int start_x,
+    int end_x,
+    const float* source_radiance) {
+    const int width = end_x - start_x;
+    if (!unit || width <= 0 || !source_radiance) return false;
+
+    RuntimeNative3DRenderUnit_Init(unit);
+    unit->integratorId = RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
+    unit->startX = start_x;
+    unit->startY = 0;
+    unit->endX = end_x;
+    unit->endY = 1;
+    unit->width = width;
+    unit->height = 1;
+    unit->temporalFrames = 8;
+    unit->committedSubpasses = 2 + (start_x % 7);
+    unit->useDenoise = true;
+    unit->featuresPrepared = true;
+    unit->resolvedRadiance =
+        (float*)calloc((size_t)width * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+                       sizeof(*unit->resolvedRadiance));
+    if (!unit->resolvedRadiance ||
+        !RuntimeNative3DTemporalAccumulation_Ensure(&unit->accumulation, width, 1) ||
+        !RuntimeNative3DFeatureBuffer_Ensure(&unit->featureBuffer, width, 1)) {
+        return false;
+    }
+
+    memset(unit->featureBuffer.hitMaskBuffer,
+           1,
+           (size_t)width * sizeof(*unit->featureBuffer.hitMaskBuffer));
+    for (int x = 0; x < width; ++x) {
+        const size_t local = (size_t)x;
+        const size_t radiance_base =
+            local * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+        const size_t normal_base = local * 3u;
+        const float value = source_radiance[start_x + x];
+        unit->accumulation.accumulationBuffer[radiance_base] = value * 0.25f;
+        unit->accumulation.accumulationBuffer[radiance_base + 1u] = value * 0.25f;
+        unit->accumulation.accumulationBuffer[radiance_base + 2u] = value * 0.25f;
+        unit->accumulation.sampleCountBuffer[local] = 1u;
+        unit->accumulation.activityBuffer[local] = 0.01f;
+        unit->featureBuffer.normalBuffer[normal_base + 2u] = 1.0f;
+        unit->featureBuffer.depthBuffer[local] = 1.0f;
+        unit->featureBuffer.roughnessBuffer[local] = 1.0f;
+        unit->featureBuffer.triangleIndexBuffer[local] = x;
+        unit->featureBuffer.sceneObjectIndexBuffer[local] = 9;
+    }
+    return true;
+}
+
+static bool test_runtime_native_3d_frame_denoise_run_partition(
+    int tile_size,
+    float* output) {
+    enum { kWidth = 24 };
+    static const float source[kWidth] = {
+        0.20f, 0.21f, 0.19f, 0.20f, 0.22f, 0.18f,
+        0.20f, 0.21f, 0.19f, 0.20f, 0.22f, 0.18f,
+        0.20f, 0.21f, 0.19f, 0.20f, 0.22f, 0.18f,
+        0.20f, 0.21f, 0.19f, 0.20f, 0.22f, 0.18f
+    };
+    RuntimeNative3DFrameDenoise frame_denoise = {0};
+    RuntimeNative3DRenderUnit* units = NULL;
+    const int unit_count = (kWidth + tile_size - 1) / tile_size;
+    bool ok = tile_size > 0 && output;
+
+    RuntimeNative3DFrameDenoise_Init(&frame_denoise);
+    if (ok) {
+        units = (RuntimeNative3DRenderUnit*)calloc((size_t)unit_count, sizeof(*units));
+        ok = units != NULL;
+    }
+    for (int i = 0; ok && i < unit_count; ++i) {
+        const int start_x = i * tile_size;
+        const int end_x = start_x + tile_size < kWidth ? start_x + tile_size : kWidth;
+        ok = test_runtime_native_3d_frame_denoise_setup_unit(&units[i],
+                                                             start_x,
+                                                             end_x,
+                                                             source);
+    }
+    if (ok) {
+        ok = RuntimeNative3DFrameDenoise_Prepare(&frame_denoise,
+                                                 kWidth,
+                                                 1,
+                                                 RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
+                                                 8);
+    }
+    for (int i = 0; ok && i < unit_count; ++i) {
+        ok = RuntimeNative3DFrameDenoise_GatherUnit(&frame_denoise, &units[i]);
+    }
+    if (ok) {
+        ok = RuntimeNative3DFrameDenoise_Apply(&frame_denoise, NULL);
+    }
+    if (ok) {
+        for (int x = 0; x < kWidth; ++x) {
+            output[x] = frame_denoise.radianceBuffer[
+                (size_t)x * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS];
+        }
+    }
+
+    for (int i = 0; i < unit_count; ++i) {
+        RuntimeNative3DRenderUnit_Free(&units[i]);
+    }
+    free(units);
+    RuntimeNative3DFrameDenoise_Free(&frame_denoise);
+    return ok;
+}
+
+static int test_runtime_native_3d_frame_denoise_tile_size_invariance(void) {
+    enum { kWidth = 24 };
+    float tile_8[kWidth] = {0};
+    float tile_16[kWidth] = {0};
+    float tile_32[kWidth] = {0};
+    bool ok_8 = test_runtime_native_3d_frame_denoise_run_partition(8, tile_8);
+    bool ok_16 = test_runtime_native_3d_frame_denoise_run_partition(16, tile_16);
+    bool ok_32 = test_runtime_native_3d_frame_denoise_run_partition(32, tile_32);
+
+    assert_true("runtime_native_3d_frame_denoise_tile_8_ok", ok_8);
+    assert_true("runtime_native_3d_frame_denoise_tile_16_ok", ok_16);
+    assert_true("runtime_native_3d_frame_denoise_tile_32_ok", ok_32);
+    if (!ok_8 || !ok_16 || !ok_32) return 0;
+
+    for (int x = 0; x < kWidth; ++x) {
+        assert_close("runtime_native_3d_frame_denoise_8_16_invariant",
+                     tile_8[x],
+                     tile_16[x],
+                     1e-7);
+        assert_close("runtime_native_3d_frame_denoise_16_32_invariant",
+                     tile_16[x],
+                     tile_32[x],
+                     1e-7);
+    }
+    assert_true("runtime_native_3d_frame_denoise_filters_across_tile_8_boundary",
+                tile_8[7] != 0.21f && tile_8[8] != 0.19f);
+    assert_true("runtime_native_3d_frame_denoise_filters_across_tile_16_boundary",
+                tile_16[15] != 0.20f && tile_16[16] != 0.22f);
+    return 0;
+}
+
 int run_test_runtime_native_3d_denoise_tests(void) {
     int before = test_support_failures();
 
@@ -402,5 +543,6 @@ int run_test_runtime_native_3d_denoise_tests(void) {
     test_runtime_native_3d_denoise_disney_v2_requires_same_object_identity();
     test_runtime_native_3d_denoise_disney_v2_preserves_special_materials();
     test_runtime_native_3d_denoise_disney_v2_preserves_temporally_unstable_pixels();
+    test_runtime_native_3d_frame_denoise_tile_size_invariance();
     return test_support_failures() - before;
 }
