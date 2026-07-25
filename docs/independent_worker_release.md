@@ -1,7 +1,7 @@
 # Independent RayTracing Worker Releases
 
-Status: implementation complete; first independent release awaits exact
-operator authorization.
+Status: implementation complete; first independent release is in the
+decision-two rollout lane.
 
 ## Version Ownership
 
@@ -17,7 +17,9 @@ Registry worker-current pointer all use `WORKER_VERSION`.
 
 The current `0.10.0` worker package is preserved as legacy app-coupled history.
 It must not be relabeled as worker runtime `0.4.0`. The first independent
-worker release is a new immutable artifact.
+worker release is a new immutable artifact. Historical app-coupled package
+roots already used `0.5.0` on part of the fleet, so the collision-free first
+independent package is `0.5.1`; immutable historical roots are never replaced.
 
 ## Compatibility
 
