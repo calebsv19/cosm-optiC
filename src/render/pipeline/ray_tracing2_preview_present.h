@@ -106,6 +106,18 @@ bool RayTracing2PreviewPresent_ReconstructNative3DHostTruth(
     Runtime3DUpscaleMode upscale_mode,
     RuntimeNative3DRenderStats* stats);
 bool RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(const char* path);
+/* Copies a dimmed last-complete frame into an equal-sized progressive preview
+ * buffer. False means no compatible complete-frame history is available. */
+bool RayTracing2PreviewPresent_CopyNative3DPreviewHistory(Uint8* host_buffer,
+                                                          size_t host_pixel_count,
+                                                          int host_width,
+                                                          int host_height);
+bool RayTracing2PreviewPresent_PromoteNative3DPreviewHistory(
+    const Uint8* host_buffer,
+    size_t host_pixel_count,
+    int host_width,
+    int host_height);
+void RayTracing2PreviewPresent_ReleaseNative3DPreviewHistory(void);
 bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     SDL_Renderer* renderer,
     Uint8* host_buffer,

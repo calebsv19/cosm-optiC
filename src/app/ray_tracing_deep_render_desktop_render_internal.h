@@ -47,6 +47,7 @@ typedef struct RayTracingDeepRenderDesktopRenderUnit {
     int hostHeight;
     int temporalFrames;
     int tileSize;
+    bool progressivePreviewEnabled;
     RayTracing3DIntegratorId integratorId;
     Runtime3DUpscaleMode upscaleMode;
 } RayTracingDeepRenderDesktopRenderUnit;

@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-22
+Last updated: 2026-07-25
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -48,6 +48,30 @@ Last updated: 2026-07-22
 - Primary runtime entry:
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
   - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
+
+## Desktop HiDPI Default And Readback
+
+- Native `3D` render scale `0` means automatic HiDPI: use drawable pixels when
+  the display exposes more pixels than the logical window, otherwise use the
+  logical size.
+- Automatic HiDPI is the code and packaged fresh-state default. Missing or
+  invalid `renderScale3D` state resolves to that policy; `1x` remains an
+  explicit logical-resolution choice.
+- The Vulkan desktop host logs logical size, drawable size, and resolved DPI
+  scale whenever those dimensions change. Desktop async work consumes those
+  resolved drawable dimensions.
+- Initial render-context binding queries the window's drawable size immediately
+  instead of waiting for the first frame-begin call. Deep Render can snapshot
+  its host/render/tile dimensions before that later call.
+- Async Deep Render logs its resolved logical, drawable, host, render,
+  configured-tile, and resolved-tile dimensions when each frame starts.
+- Desktop tile size is expressed in logical display points. A configured
+  `16`-point tile therefore resolves to `32` render pixels on a `2x` drawable,
+  preserving the intended on-screen tile footprint instead of shrinking it by
+  half. Explicit headless tile sizes remain render-pixel values.
+- Headless workers remain display-neutral. Agent/remote render requests carry
+  explicit pixel `width` and `height`; they do not infer Retina state from the
+  worker host.
 
 ## Shared Complex-Mesh Preview Adoption
 
@@ -625,6 +649,14 @@ Last updated: 2026-07-22
     matching-generation tile progress is retained and presented by the desktop
     thread, output advances only after verified frame commit, and close/Escape
     drains cancellation before request teardown
+  - coalesced dirty-region presentation backed by a full-frame async buffer, so
+    the desktop thread cannot lose unseen tile updates when workers publish
+    faster than the display loop
+  - a main-thread progress HUD lifecycle for start, tile/subpass progress,
+    completed-frame promotion, cancellation, failure, and shutdown
+  - a compatible completed-frame preview-history underlay before fresh tiles
+    arrive; `Tile Preview` controls progressive pixel publication without
+    suppressing numeric progress or the terminal full-frame result
   - conservative synchronous fallback when native tiled routing is unavailable
     or dynamic volume/water frame dependencies are selected
   - authored Bezier light/camera path sampling in native `3D` deep render even

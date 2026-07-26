@@ -217,6 +217,7 @@ void CleanupRayTracing(void) {
                                     &native3DPreviewWidth,
                                     &native3DPreviewHeight);
     RayTracingPreview_ShutdownNative3DDirtyRect();
+    RayTracing2PreviewPresent_ReleaseNative3DPreviewHistory();
     TileGridFree(&tileGrid);
     UniformGridFree(&uniformGrid);
     IrradianceCacheClear(&irradianceCache);
@@ -341,8 +342,13 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             return;
         }
         renderPixelCount = (size_t)renderWidth * (size_t)renderHeight;
-        nativeTileSize = RuntimeNative3DTileSchedulerResolveTileSizeForScale(animSettings.tileSize,
-                                                                             renderScale);
+        nativeTileSize = RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(
+            animSettings.tileSize,
+            renderScale,
+            WIDTH,
+            HEIGHT,
+            renderWidth,
+            renderHeight);
         if (!RayTracing2BuffersEnsureNative3DRenderBuffer(&native3DRenderBuffer,
                                                           &native3DRenderBufferCapacity,
                                                           renderPixelCount) ||

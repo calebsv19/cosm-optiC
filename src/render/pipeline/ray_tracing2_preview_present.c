@@ -580,6 +580,9 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     };
     size_t total = (size_t)render_width * (size_t)render_height;
     bool env_capture_started = false;
+    RuntimeNative3DTileSchedulerControl scheduler_control = {
+        .tileSizeOverride = grid ? grid->tileSize : 0,
+    };
 
     if (out_stats) {
         memset(out_stats, 0, sizeof(*out_stats));
@@ -631,7 +634,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
         }
     }
     ts_session_start_timer(timer_hud_session(), "Tile Frame Calc");
-    if (!RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgress(
+    if (!RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl(
             render_buffer,
             integrator_id,
             &frame,
@@ -640,6 +643,8 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
             NULL,
             present_progress ? PresentNative3DPreviewTileProgress : NULL,
             present_progress ? &progress_ctx : NULL,
+            NULL,
+            &scheduler_control,
             &stats)) {
         ts_session_stop_timer(timer_hud_session(), "Tile Frame Calc");
         RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);

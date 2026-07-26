@@ -194,7 +194,11 @@ static bool desktop_async_publish_tile_progress(
         (RayTracingDesktopAsyncBridgeState*)user_data;
     SDL_Rect dirty = {0};
     RuntimeNative3DAsyncRenderProgressRect bridge_rect = {0};
-    if (!state || !progress || !state->progress) return false;
+    if (!state || !progress || !state->progress ||
+        !RuntimeNative3DAsyncRenderProgressBuffer_PublishTileProgress(
+            state->progress, state->generation, progress)) {
+        return false;
+    }
     if (!desktop_async_resolve_dirty_host_union(progress,
                                                 state->renderWidth,
                                                 state->renderHeight,
@@ -262,6 +266,7 @@ static bool desktop_async_worker_run(
     RuntimeNative3DRenderStats stats = {0};
     RuntimeNative3DTileSchedulerControl control = {
         .cancelToken = cancel_token,
+        .tileSizeOverride = state ? state->tileSize : 0,
     };
     bool ok = false;
     bool cancel_requested = false;
@@ -436,9 +441,13 @@ static bool desktop_async_start_job(RayTracingDesktopAsyncBridgeState* state,
     state->hostHeight = host_height;
     state->renderWidth = render_width;
     state->renderHeight = render_height;
-    state->tileSize =
-        RuntimeNative3DTileSchedulerResolveTileSizeForScale(animSettings.tileSize,
-                                                            animSettings.renderScale3D);
+    state->tileSize = RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(
+        animSettings.tileSize,
+        animSettings.renderScale3D,
+        output_width,
+        output_height,
+        render_width,
+        render_height);
     state->temporalFrames = desktop_async_temporal_frames(route->integratorMode3D);
     state->integratorId = route->integratorMode3D;
     state->upscaleMode = (Runtime3DUpscaleMode)animSettings.upscaleMode3D;

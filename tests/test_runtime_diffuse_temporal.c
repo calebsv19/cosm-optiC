@@ -1742,6 +1742,28 @@ static int test_runtime_native_3d_tile_scheduler_policy_contract(void) {
                 RuntimeNative3DTileSchedulerResolveTileSizeForScale(16,
                                                                     RUNTIME_3D_RENDER_SCALE_HIDPI) ==
                     16);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_hidpi_display_2x",
+                RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(
+                    16,
+                    RUNTIME_3D_RENDER_SCALE_HIDPI,
+                    1200,
+                    900,
+                    2400,
+                    1800) == 32);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_hidpi_display_1x",
+                RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(
+                    16,
+                    RUNTIME_3D_RENDER_SCALE_HIDPI,
+                    1200,
+                    900,
+                    1200,
+                    900) == 16);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_headless_explicit_unchanged",
+                RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(
+                    16, 1, 1200, 900, 2400, 1800) == 16);
+    assert_true("runtime_native_3d_tile_scheduler_tile_size_override",
+                RuntimeNative3DTileSchedulerResolveEffectiveTileSize(
+                    16, RUNTIME_3D_RENDER_SCALE_HIDPI, 32) == 32);
     assert_true("runtime_native_3d_tile_scheduler_tile_size_scale_downsizes_preview_tiles",
                 RuntimeNative3DTileSchedulerResolveTileSizeForScale(16, 4) == 8);
     assert_true("runtime_native_3d_tile_scheduler_tile_size_scale_clamps_floor",

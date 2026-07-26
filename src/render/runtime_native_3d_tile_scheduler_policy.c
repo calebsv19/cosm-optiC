@@ -35,6 +35,43 @@ int RuntimeNative3DTileSchedulerResolveTileSizeForScale(int requested, int rende
     return ClampTileSize(adjusted);
 }
 
+int RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(int requested,
+                                                         int render_scale,
+                                                         int logical_width,
+                                                         int logical_height,
+                                                         int render_width,
+                                                         int render_height) {
+    const int base_tile_size =
+        RuntimeNative3DTileSchedulerResolveTileSizeForScale(requested, render_scale);
+    double scale_x = 1.0;
+    double scale_y = 1.0;
+    double display_scale = 1.0;
+
+    if (!RuntimeNative3DRenderScaleUsesHiDPI(render_scale) ||
+        logical_width <= 0 || logical_height <= 0 ||
+        render_width <= logical_width || render_height <= logical_height) {
+        return base_tile_size;
+    }
+
+    scale_x = (double)render_width / (double)logical_width;
+    scale_y = (double)render_height / (double)logical_height;
+    display_scale = fmin(scale_x, scale_y);
+    if (!isfinite(display_scale) || display_scale <= 1.0) {
+        return base_tile_size;
+    }
+    return ClampTileSize((int)lround((double)base_tile_size * display_scale));
+}
+
+int RuntimeNative3DTileSchedulerResolveEffectiveTileSize(
+    int requested,
+    int render_scale,
+    int tile_size_override) {
+    if (tile_size_override > 0) {
+        return RuntimeNative3DTileSchedulerResolveTileSize(tile_size_override);
+    }
+    return RuntimeNative3DTileSchedulerResolveTileSizeForScale(requested, render_scale);
+}
+
 int RuntimeNative3DTileSchedulerAdaptiveMinChildTileSize(void) {
     return kRuntimeNative3DTileSchedulerAdaptiveMinChildTileSize;
 }

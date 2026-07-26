@@ -121,7 +121,10 @@ wait_for_state() {
   local job_id="$1"
   local state="$2"
   local status=""
-  for _ in $(seq 1 240); do
+  # The full stable lane can leave the host under sustained compile/render
+  # pressure before Phase E starts. Allow the detached worker up to 60 seconds
+  # to reach its expected state; standalone runs normally finish in seconds.
+  for _ in $(seq 1 600); do
     status="$("$RUNNER" status --job-id "$job_id" --jobs-root "$LIVE_JOBS_ROOT")"
     if printf '%s' "$status" | grep -q "\"state\": \"$state\""; then
       printf '%s' "$status"
@@ -130,6 +133,32 @@ wait_for_state() {
     sleep 0.1
   done
   printf '%s\n' "$status" >&2
+  return 1
+}
+
+wait_for_file() {
+  local path="$1"
+  for _ in $(seq 1 600); do
+    if [[ -s "$path" ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "timed out waiting for file: $path" >&2
+  return 1
+}
+
+wait_for_event_message() {
+  local event_dir="$1"
+  local message_type="$2"
+  for _ in $(seq 1 600); do
+    if grep -q "\"message_type\":\"$message_type\"" \
+         "$event_dir"/*.json 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.1
+  done
+  echo "timed out waiting for worker event: $message_type in $event_dir" >&2
   return 1
 }
 
@@ -188,11 +217,12 @@ RESUMED_OUTPUT="$(
 )"
 RESUMED_ID="$(printf '%s' "$RESUMED_OUTPUT" | job_id_from_output)"
 wait_for_state "$RESUMED_ID" completed >/dev/null
-test -s "$RECEIPT_PATH"
+wait_for_file "$RECEIPT_PATH"
 grep -q '"recovery_authorized":true' \
   "$LIVE_JOBS_ROOT/$RESUMED_ID/worker_request.json"
-grep -q '"message_type":"completion"' \
-  "$LIVE_JOBS_ROOT/$RESUMED_ID"/worker_events/*.json
+wait_for_event_message \
+  "$LIVE_JOBS_ROOT/$RESUMED_ID/worker_events" \
+  completion
 
 if RAY_TRACING_FLEET_JOB=1 \
    "$RUNNER" submit --request "$LIVE_REQUEST" --jobs-root "$LIVE_JOBS_ROOT" --resume \
