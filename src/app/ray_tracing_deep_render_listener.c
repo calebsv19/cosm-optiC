@@ -285,6 +285,28 @@ bool RayTracingDeepRenderListener_Poll(
                     RUNTIME_NATIVE_3D_ASYNC_RENDER_PUBLISH_STALE_GENERATION ||
                 result.publishStatus == RUNTIME_NATIVE_3D_ASYNC_RENDER_PUBLISH_CANCELED ||
                 result.publishStatus == RUNTIME_NATIVE_3D_ASYNC_RENDER_PUBLISH_FAILED;
+
+            /* The worker can publish its final full-frame snapshot after the
+             * regular progress read above but before its terminal status is
+             * observed. Drain once more so completion never validates the
+             * preceding partial-tile view. */
+            if (result.terminalObserved) {
+                progress_status =
+                    deep_render_listener_apply_progress(listener, progress, &result);
+                if (progress_status == DEEP_RENDER_PROGRESS_STALE) {
+                    result.staleProgressRejected = true;
+                } else if (progress_status ==
+                           DEEP_RENDER_PROGRESS_ALLOCATION_FAILED) {
+                    result.status =
+                        RAY_TRACING_DEEP_RENDER_LISTENER_ALLOCATION_FAILED;
+                    *out_result = result;
+                    return false;
+                } else if (progress_status == DEEP_RENDER_PROGRESS_INVALID) {
+                    result.status = RAY_TRACING_DEEP_RENDER_LISTENER_PROGRESS_INVALID;
+                    *out_result = result;
+                    return false;
+                }
+            }
         }
     }
     *out_result = result;

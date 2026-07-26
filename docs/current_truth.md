@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-25
+Last updated: 2026-07-26
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -649,6 +649,10 @@ Last updated: 2026-07-25
     matching-generation tile progress is retained and presented by the desktop
     thread, output advances only after verified frame commit, and close/Escape
     drains cancellation before request teardown
+  - terminal observation performs a final progress-buffer drain before frame
+    completion validation. This closes the worker/desktop interleaving where
+    the final full-frame publication could arrive after the regular tile drain
+    and otherwise leave completion inspecting the preceding partial tile
   - coalesced dirty-region presentation backed by a full-frame async buffer, so
     the desktop thread cannot lose unseen tile updates when workers publish
     faster than the display loop

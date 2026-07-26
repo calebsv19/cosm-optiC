@@ -13,6 +13,16 @@ typedef struct DeepRenderPresentProbe {
     uint8_t sampledPixel[4];
 } DeepRenderPresentProbe;
 
+typedef struct DeepRenderTerminalPublishProbe {
+    RuntimeNative3DAsyncRenderProgressBuffer* progress;
+    uint64_t generation;
+    const uint8_t* hostPixels;
+    int hostWidth;
+    int hostHeight;
+    int calls;
+    bool published;
+} DeepRenderTerminalPublishProbe;
+
 static RayTracingDeepRenderSession make_listener_session(uint64_t generation) {
     RayTracingDeepRenderSession session;
     RayTracingDeepRenderSession_Init(&session);
@@ -41,6 +51,32 @@ static bool listener_present_probe(
         memcpy(probe->sampledPixel, view->pixels + offset, 4u);
     }
     return true;
+}
+
+static bool listener_terminal_publish_probe(
+    const RayTracingDeepRenderPresentationView* view,
+    void* user_data) {
+    DeepRenderTerminalPublishProbe* probe =
+        (DeepRenderTerminalPublishProbe*)user_data;
+    RuntimeNative3DAsyncRenderProgressRect full_rect;
+    if (!view || !view->valid || !probe || !probe->progress ||
+        !probe->hostPixels) {
+        return false;
+    }
+    full_rect.x = 0;
+    full_rect.y = 0;
+    full_rect.width = probe->hostWidth;
+    full_rect.height = probe->hostHeight;
+    probe->calls += 1;
+    probe->published =
+        RuntimeNative3DAsyncRenderProgressBuffer_PublishDirtyRectABGR(
+            probe->progress,
+            probe->generation,
+            probe->hostPixels,
+            probe->hostWidth,
+            probe->hostHeight,
+            full_rect);
+    return probe->published;
 }
 
 static RuntimeNative3DRenderRequestSnapshot make_listener_job_snapshot(void) {
@@ -239,6 +275,80 @@ static int test_deep_render_listener_reports_terminal_without_session_mutation(v
     return 0;
 }
 
+static int test_deep_render_listener_drains_final_progress_at_terminal(void) {
+    RayTracingDeepRenderListener listener;
+    RayTracingDeepRenderSession session = make_listener_session(32u);
+    RuntimeNative3DAsyncRenderProgressBuffer* progress =
+        RuntimeNative3DAsyncRenderProgressBuffer_Create();
+    RuntimeNative3DAsyncRenderJob* job = RuntimeNative3DAsyncRenderJob_Create();
+    RuntimeNative3DAsyncRenderJobStartDesc start = {
+        .snapshot = make_listener_job_snapshot(),
+        .generation = 32u,
+        .run_fn = listener_job_success,
+    };
+    RuntimeNative3DAsyncRenderProgressRect partial_rect = {
+        .x = 0,
+        .y = 0,
+        .width = 2,
+        .height = 2,
+    };
+    uint8_t partial_pixels[4 * 3 * 4];
+    uint8_t final_pixels[4 * 3 * 4];
+    DeepRenderTerminalPublishProbe publish = {0};
+    RayTracingDeepRenderListenerPollResult result;
+    RayTracingDeepRenderPresentationView view;
+
+    memset(partial_pixels, 0x11, sizeof(partial_pixels));
+    memset(final_pixels, 0x7a, sizeof(final_pixels));
+    RayTracingDeepRenderListener_Init(&listener);
+    assert_true("deep_listener_terminal_drain_fixtures",
+                progress != NULL && job != NULL);
+    if (!progress || !job) {
+        RuntimeNative3DAsyncRenderProgressBuffer_Destroy(progress);
+        RuntimeNative3DAsyncRenderJob_Destroy(job);
+        return 0;
+    }
+    assert_true("deep_listener_terminal_drain_partial_publish",
+                RuntimeNative3DAsyncRenderProgressBuffer_PublishDirtyRectABGR(
+                    progress, 32u, partial_pixels, 4, 3, partial_rect));
+    assert_true("deep_listener_terminal_drain_job_start",
+                RuntimeNative3DAsyncRenderJob_Start(job, &start));
+    assert_true("deep_listener_terminal_drain_job_join",
+                RuntimeNative3DAsyncRenderJob_Join(job));
+
+    publish.progress = progress;
+    publish.generation = 32u;
+    publish.hostPixels = final_pixels;
+    publish.hostWidth = 4;
+    publish.hostHeight = 3;
+    assert_true("deep_listener_terminal_drain_poll",
+                RayTracingDeepRenderListener_Poll(
+                    &listener,
+                    &session,
+                    progress,
+                    job,
+                    listener_terminal_publish_probe,
+                    &publish,
+                    &result));
+    view = RayTracingDeepRenderListener_GetView(&listener);
+    assert_true("deep_listener_terminal_drain_applies_final_frame",
+                publish.calls == 1 && publish.published &&
+                    result.terminalObserved && result.progressApplied &&
+                    result.publishStatus ==
+                        RUNTIME_NATIVE_3D_ASYNC_RENDER_PUBLISH_PUBLISHED &&
+                    view.valid && view.sequence == 2u &&
+                    view.dirtyRect.x == 0 && view.dirtyRect.y == 0 &&
+                    view.dirtyRect.width == 4 && view.dirtyRect.height == 3 &&
+                    view.byteCount == sizeof(final_pixels) &&
+                    view.pixels[0] == 0x7a &&
+                    view.pixels[sizeof(final_pixels) - 1u] == 0x7a);
+
+    RuntimeNative3DAsyncRenderJob_Destroy(job);
+    RuntimeNative3DAsyncRenderProgressBuffer_Destroy(progress);
+    RayTracingDeepRenderListener_Destroy(&listener);
+    return 0;
+}
+
 static int test_deep_render_listener_rejects_stale_terminal_and_reports_failure(void) {
     RayTracingDeepRenderListener listener;
     RayTracingDeepRenderSession session = make_listener_session(42u);
@@ -309,6 +419,7 @@ static int test_deep_render_listener_rejects_stale_terminal_and_reports_failure(
 int run_test_ray_tracing_deep_render_listener_tests(void) {
     test_deep_render_listener_applies_matching_progress_and_retains_view();
     test_deep_render_listener_reports_terminal_without_session_mutation();
+    test_deep_render_listener_drains_final_progress_at_terminal();
     test_deep_render_listener_rejects_stale_terminal_and_reports_failure();
     return test_support_failures();
 }
