@@ -1,0 +1,19 @@
+{
+  "schema": "ray_tracing.procedural_surface_binding",
+  "schema_version": 1,
+  "binding_id": "central_mountain_peak_terrain_v1",
+  "graph_program_id": "central_mountain_peak_v1",
+  "selector": "upward_facing",
+  "surface_group_id": "",
+  "up_axis": [0.0, 0.0, 1.0],
+  "selector_min_dot": 0.7,
+  "selector_feather": 0.15,
+  "projection": "planar_xy",
+  "projection_scale": 1.0,
+  "displacement_direction": "world_up",
+  "displacement_scale": 1.0,
+  "fallback_color_r": 0.255,
+  "fallback_color_g": 0.205,
+  "fallback_color_b": 0.145,
+  "fallback_roughness": 0.84
+}

@@ -304,6 +304,65 @@ static int test_mesh_blas_cache_reuses_loaded_assets(void) {
     return 0;
 }
 
+static int test_mesh_blas_cache_tracks_procedural_identity(void) {
+    const char* saved_mode =
+        getenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    char saved_mode_copy[64] = {0};
+    RayTracingRuntimeMeshAssetSet set;
+    RuntimeSceneAcceleration3DDiagnostics stats;
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    if (saved_mode && saved_mode[0]) {
+        snprintf(saved_mode_copy, sizeof(saved_mode_copy), "%s", saved_mode);
+    }
+    setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE", "off", 1);
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    ok = ray_tracing_runtime_mesh_assets_load_scene_file(
+        kMrt0ScenePath, &set, diagnostics, sizeof(diagnostics));
+    assert_true("psg5_blas_identity_load_fixture", ok);
+    if (ok) {
+        set.assets[0].procedural_surface_valid = true;
+        snprintf(
+            set.assets[0].procedural_manifest.cache_identity_sha256,
+            sizeof(set.assets[0].procedural_manifest
+                       .cache_identity_sha256),
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        ok = RuntimeMeshBLASCache3D_PrepareAssetSet(&set);
+        assert_true("psg5_blas_identity_first_prepare", ok);
+        ok = RuntimeMeshBLASCache3D_PrepareAssetSet(&set);
+        assert_true("psg5_blas_identity_static_reuse", ok);
+        RuntimeMeshBLASCache3D_SnapshotDiagnostics(&stats);
+        assert_true("psg5_blas_identity_three_static_hits",
+                    stats.blasCacheHits == 3u);
+        snprintf(
+            set.assets[0].procedural_manifest.cache_identity_sha256,
+            sizeof(set.assets[0].procedural_manifest
+                       .cache_identity_sha256),
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        ok = RuntimeMeshBLASCache3D_PrepareAssetSet(&set);
+        assert_true("psg5_blas_identity_changed_prepare", ok);
+        RuntimeMeshBLASCache3D_SnapshotDiagnostics(&stats);
+        assert_true("psg5_blas_identity_change_invalidates_one",
+                    stats.blasCacheInvalidations == 1u);
+        assert_true("psg5_blas_identity_change_rebuilds_one",
+                    stats.blasCacheMisses == 4u &&
+                    stats.blasFullRebuilds == 4u);
+        assert_true("psg5_blas_identity_unchanged_assets_reused",
+                    stats.blasCacheHits == 5u);
+    }
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    if (saved_mode_copy[0]) {
+        setenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE",
+               saved_mode_copy, 1);
+    } else {
+        unsetenv("RAY_TRACING_RUNTIME_MESH_ASSET_PACK_CACHE_MODE");
+    }
+    return 0;
+}
+
 static int test_mesh_blas_persistent_cache_reuses_after_reset(void) {
     const char* cache_root = "/private/tmp/ray_tracing_mrt3_blas_persistent_cache";
     const char* cache_dir =
@@ -1155,6 +1214,7 @@ static int test_bridge_builder_consumes_retained_mesh_assets(void) {
 int main(void) {
     test_append_mesh_asset_set_preserves_scene_object_lookup();
     test_mesh_blas_cache_reuses_loaded_assets();
+    test_mesh_blas_cache_tracks_procedural_identity();
     test_mesh_blas_persistent_cache_reuses_after_reset();
     test_mesh_blas_cache_builds_once_for_repeated_instances();
     test_tlas_route_traces_mixed_supported_and_primitive_instances();

@@ -29,6 +29,8 @@
 #include "render/runtime_material_response_3d.h"
 #include "render/runtime_material_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
+#include "procedural/procedural_solid_authored_material.h"
+#include "procedural/procedural_solid_material_texture_runtime.h"
 #include "render/runtime_water_material_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -1425,6 +1427,22 @@ static int test_runtime_material_payload_3d_hit_resolution_contract(void) {
                  1e-9);
     assert_true("runtime_material_payload_3d_hit_thin_walled_match",
                 payload.thinWalled == MaterialManagerGet(MATERIAL_PRESET_GLOSSY)->thin_walled);
+    hit.hasRegionMaterial = true;
+    hit.regionMaterialId = MATERIAL_PRESET_EMISSIVE;
+    ok = RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload);
+    assert_true("runtime_material_payload_3d_region_preset_ok", ok);
+    assert_true("runtime_material_payload_3d_region_preset_material",
+                payload.materialId == MATERIAL_PRESET_EMISSIVE);
+    assert_close("runtime_material_payload_3d_region_preset_reflectivity",
+                 payload.bsdf.reflectivity,
+                 MaterialManagerGet(MATERIAL_PRESET_EMISSIVE)->reflectivity,
+                 1e-9);
+    assert_close("runtime_material_payload_3d_region_preset_roughness",
+                 payload.bsdf.roughness,
+                 MaterialManagerGet(MATERIAL_PRESET_EMISSIVE)->roughness,
+                 1e-9);
+    assert_true("runtime_material_payload_3d_region_preset_emissive",
+                payload.emissive > 0.0);
     assert_true("runtime_material_payload_3d_hit_invalid_index_rejected",
                 !RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(4, &payload));
     assert_true("runtime_material_payload_3d_hit_invalid_hit_rejected",
@@ -4702,6 +4720,210 @@ static int test_runtime_material_hydration_parity_scene_config_and_runtime_scene
     return 0;
 }
 
+static double runtime_material_weighted_texture_eval_delta(
+    RuntimeMaterialSurfaceEval a,
+    RuntimeMaterialSurfaceEval b) {
+    return fabs(a.colorR - b.colorR) +
+           fabs(a.colorG - b.colorG) +
+           fabs(a.colorB - b.colorB) +
+           fabs(a.roughness - b.roughness) +
+           fabs(a.reflectivity - b.reflectivity) +
+           fabs(a.specWeight - b.specWeight) +
+           fabs(a.diffuseWeight - b.diffuseWeight) +
+           fabs(a.transparency - b.transparency);
+}
+
+static int test_procedural_solid_weighted_textures_cross_half_continuously(void) {
+    ProceduralSolidAuthoredMaterialV1 rock;
+    ProceduralSolidAuthoredMaterialV1 snow;
+    ProceduralSolidMaterialWeightedTextureV1 textures[2] = {0};
+    RuntimeMaterialTextureStack stack;
+    RuntimeMaterialSurfaceEval base_eval =
+        RuntimeMaterialSurfaceEvalMakeBase(
+            0.52, 0.50, 0.46, 0.62, 0.12, 0.22, 0.78, 0.0);
+    RuntimeMaterialSurfaceEval at_zero;
+    RuntimeMaterialSurfaceEval at_49;
+    RuntimeMaterialSurfaceEval at_50;
+    RuntimeMaterialSurfaceEval at_50_repeat;
+    RuntimeMaterialSurfaceEval at_51;
+    RuntimeMaterialSurfaceEval at_one;
+    SceneObject object = {0};
+    double low_step;
+    double high_step;
+    double endpoint_delta;
+    assert_true(
+        "procedural_weighted_texture_rock_template",
+        ProceduralSolidAuthoredMaterialV1_FromTemplate(
+            "weathered_rock", "base_material", &rock, NULL));
+    assert_true(
+        "procedural_weighted_texture_snow_template",
+        ProceduralSolidAuthoredMaterialV1_FromTemplate(
+            "snow", "snow_material", &snow, NULL));
+    textures[0].texture = rock.surface.texture;
+    textures[0].weight = 1.0;
+    textures[0].graph_layer_index = 0u;
+    textures[1].texture = snow.surface.texture;
+    textures[1].graph_layer_index = 1u;
+    textures[1].weight = 0.50;
+    assert_true(
+        "procedural_weighted_texture_builds_two_layer_stack",
+        ProceduralSolidMaterialWeightedTextures_BuildStack(
+            textures, 2u, &stack));
+    assert_true(
+        "procedural_weighted_texture_stack_count",
+        stack.layerCount == 2);
+    assert_close(
+        "procedural_weighted_texture_half_opacity",
+        stack.layers[1].opacity,
+        snow.surface.texture.strength * 0.50,
+        1e-12);
+
+#define EVALUATE_AT(sample_weight, output, label) \
+    do { \
+        textures[1].weight = (sample_weight); \
+        assert_true( \
+            (label), \
+            ProceduralSolidMaterialWeightedTextures_EvaluatePlacedUV( \
+                textures, 2u, &object, 0.371, 0.619, 37, \
+                &base_eval, &(output))); \
+    } while (0)
+    EVALUATE_AT(0.00, at_zero, "procedural_weighted_texture_zero");
+    EVALUATE_AT(0.49, at_49, "procedural_weighted_texture_49");
+    EVALUATE_AT(0.50, at_50, "procedural_weighted_texture_50");
+    EVALUATE_AT(
+        0.50, at_50_repeat, "procedural_weighted_texture_50_repeat");
+    EVALUATE_AT(0.51, at_51, "procedural_weighted_texture_51");
+    EVALUATE_AT(1.00, at_one, "procedural_weighted_texture_one");
+#undef EVALUATE_AT
+
+    low_step = runtime_material_weighted_texture_eval_delta(at_49, at_50);
+    high_step = runtime_material_weighted_texture_eval_delta(at_50, at_51);
+    endpoint_delta =
+        runtime_material_weighted_texture_eval_delta(at_zero, at_one);
+    assert_true(
+        "procedural_weighted_texture_endpoint_signal",
+        endpoint_delta > 1e-4);
+    assert_true(
+        "procedural_weighted_texture_cross_half_has_no_switch",
+        low_step > 1e-8 && high_step > 1e-8 &&
+        low_step < endpoint_delta * 0.05 &&
+        high_step < endpoint_delta * 0.05);
+    assert_true(
+        "procedural_weighted_texture_neighbor_steps_are_balanced",
+        low_step < high_step * 1.25 && high_step < low_step * 1.25);
+    assert_close(
+        "procedural_weighted_texture_repeat_color_r",
+        at_50.colorR, at_50_repeat.colorR, 1e-12);
+    assert_close(
+        "procedural_weighted_texture_repeat_color_g",
+        at_50.colorG, at_50_repeat.colorG, 1e-12);
+    assert_close(
+        "procedural_weighted_texture_repeat_color_b",
+        at_50.colorB, at_50_repeat.colorB, 1e-12);
+    assert_close(
+        "procedural_weighted_texture_repeat_roughness",
+        at_50.roughness, at_50_repeat.roughness, 1e-12);
+    return 0;
+}
+
+static int test_procedural_solid_microdetail_normal_is_bounded_and_shading_only(void) {
+    ProceduralSolidAuthoredMaterialV1 rock;
+    ProceduralSolidMaterialWeightedTextureV1 texture = {0};
+    RuntimeMaterialSurfaceEval base_eval =
+        RuntimeMaterialSurfaceEvalMakeBase(
+            0.52, 0.50, 0.46, 0.62, 0.12, 0.22, 0.78, 0.0);
+    RuntimeMaterialSurfaceEval disabled;
+    RuntimeMaterialSurfaceEval enabled;
+    RuntimeMaterialSurfaceEval repeated;
+    RuntimeMaterialPayload3D payload = {0};
+    HitInfo3D hit = {0};
+    Vec3 geometric_before;
+    SceneObject object = {0};
+
+    assert_true(
+        "procedural_microdetail_rock_template",
+        ProceduralSolidAuthoredMaterialV1_FromTemplate(
+            "weathered_rock", "microdetail_rock", &rock, NULL));
+    texture.texture = rock.surface.texture;
+    texture.weight = 0.75;
+    texture.graph_layer_index = 0u;
+    texture.texture.microdetail_normal_strength = 0.0;
+    assert_true(
+        "procedural_microdetail_disabled_eval",
+        ProceduralSolidMaterialWeightedTextures_EvaluateMicrodetailPlacedUV(
+            &texture, 1u, &object, 0.371, 0.619, 37,
+            &base_eval, &disabled));
+    assert_true(
+        "procedural_microdetail_disabled_has_no_normal",
+        !disabled.microdetailNormalActive);
+
+    texture.texture.microdetail_normal_strength = 0.8;
+    assert_true(
+        "procedural_microdetail_enabled_eval",
+        ProceduralSolidMaterialWeightedTextures_EvaluateMicrodetailPlacedUV(
+            &texture, 1u, &object, 0.371, 0.619, 37,
+            &base_eval, &enabled));
+    assert_true(
+        "procedural_microdetail_repeat_eval",
+        ProceduralSolidMaterialWeightedTextures_EvaluateMicrodetailPlacedUV(
+            &texture, 1u, &object, 0.371, 0.619, 37,
+            &base_eval, &repeated));
+    assert_true(
+        "procedural_microdetail_enabled_has_normal",
+        enabled.microdetailNormalActive);
+    assert_true(
+        "procedural_microdetail_slope_signal",
+        fabs(enabled.microdetailSlopeU) > 1e-7 ||
+        fabs(enabled.microdetailSlopeV) > 1e-7);
+    assert_true(
+        "procedural_microdetail_slopes_are_bounded",
+        fabs(enabled.microdetailSlopeU) <= 0.45 &&
+        fabs(enabled.microdetailSlopeV) <= 0.45);
+    assert_close(
+        "procedural_microdetail_repeat_height",
+        enabled.microdetailHeight, repeated.microdetailHeight, 1e-12);
+    assert_close(
+        "procedural_microdetail_repeat_slope_u",
+        enabled.microdetailSlopeU, repeated.microdetailSlopeU, 1e-12);
+    assert_close(
+        "procedural_microdetail_repeat_slope_v",
+        enabled.microdetailSlopeV, repeated.microdetailSlopeV, 1e-12);
+
+    payload.valid = true;
+    assert_true(
+        "procedural_microdetail_payload_surface_eval",
+        RuntimeMaterialPayload3D_ApplySurfaceEval(&enabled, &payload));
+    hit.normal = vec3(0.0, 0.0, 1.0);
+    hit.shadingNormal = hit.normal;
+    hit.geometricNormal = hit.normal;
+    geometric_before = hit.geometricNormal;
+    assert_true(
+        "procedural_microdetail_payload_resolves_normal",
+        RuntimeMaterialPayload3D_ResolveShadingNormal(&hit, &payload));
+    assert_true(
+        "procedural_microdetail_payload_applies_normal",
+        RuntimeMaterialPayload3D_ApplyShadingNormal(&payload, &hit));
+    assert_close(
+        "procedural_microdetail_normal_unit_length",
+        vec3_length(hit.shadingNormal), 1.0, 1e-12);
+    assert_true(
+        "procedural_microdetail_normal_changes_shading",
+        vec3_length(vec3_sub(hit.shadingNormal, geometric_before)) > 1e-7);
+    assert_close(
+        "procedural_microdetail_geometric_x_unchanged",
+        hit.geometricNormal.x, geometric_before.x, 1e-12);
+    assert_close(
+        "procedural_microdetail_geometric_y_unchanged",
+        hit.geometricNormal.y, geometric_before.y, 1e-12);
+    assert_close(
+        "procedural_microdetail_geometric_z_unchanged",
+        hit.geometricNormal.z, geometric_before.z, 1e-12);
+    assert_true(
+        "procedural_microdetail_same_geometric_hemisphere",
+        vec3_dot(hit.shadingNormal, hit.geometricNormal) > 0.0);
+    return 0;
+}
+
 int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_payload_3d_scene_object_resolution_contract();
     test_runtime_material_payload_3d_authoring_object_values_override_preset();
@@ -4753,5 +4975,7 @@ int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_material_preview_payload_surface_eval_parity_grounded_primitive_face();
     test_runtime_material_config_loads_v2_stack_schema();
     test_runtime_material_hydration_parity_scene_config_and_runtime_scene();
+    test_procedural_solid_weighted_textures_cross_half_continuously();
+    test_procedural_solid_microdetail_normal_is_bounded_and_shading_only();
     return 0;
 }

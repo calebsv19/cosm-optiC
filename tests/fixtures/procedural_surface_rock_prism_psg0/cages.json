@@ -1,0 +1,19 @@
+{
+  "schema": "ray_tracing.procedural_surface_cages",
+  "schema_version": 1,
+  "unit": "object_unit",
+  "cages": [
+    {
+      "cage_id": "rock_plane_psg0",
+      "kind": "plane",
+      "dimensions": [4.0, 3.0, 0.0],
+      "target_edge_length_units": 0.25
+    },
+    {
+      "cage_id": "rock_prism_psg0",
+      "kind": "rectangular_prism",
+      "dimensions": [4.0, 3.0, 2.0],
+      "target_edge_length_units": 0.25
+    }
+  ]
+}

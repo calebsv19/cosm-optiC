@@ -1,0 +1,98 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg15_mountain_peak_cluster",
+  "semantic_source_id": "mountain_peak_cluster",
+  "max_node_evaluations": 32,
+  "nodes": [
+    {
+      "id": "base",
+      "op": "sphere",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.92,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "base_shape",
+      "op": "transform",
+      "inputs": ["base"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, -0.42],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [1.55, 1.35, 0.72],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "ridge",
+      "op": "sphere",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.72,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "ridge_shape",
+      "op": "transform",
+      "inputs": ["ridge"],
+      "source_id": "",
+      "vector_a": [-0.22, 0.04, 0.28],
+      "vector_b": [0.0, 0.0, 0.12],
+      "vector_c": [1.05, 0.88, 1.18],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "summit",
+      "op": "sphere",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.46,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "summit_shape",
+      "op": "transform",
+      "inputs": ["summit"],
+      "source_id": "",
+      "vector_a": [0.16, -0.04, 0.92],
+      "vector_b": [0.0, 0.0, -0.08],
+      "vector_c": [0.78, 0.68, 1.32],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "lower_blend",
+      "op": "smooth_union",
+      "inputs": ["base_shape", "ridge_shape"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.24,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "mountain",
+      "op": "smooth_union",
+      "inputs": ["lower_blend", "summit_shape"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.18,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "mountain"
+}

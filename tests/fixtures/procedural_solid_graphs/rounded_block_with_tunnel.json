@@ -1,0 +1,43 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg9_rounded_block_with_tunnel",
+  "semantic_source_id": "primitive_rect_prism",
+  "max_node_evaluations": 16,
+  "nodes": [
+    {
+      "id": "rounded_block",
+      "op": "box",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [1.25, 0.95, 0.58],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.12,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "tunnel",
+      "op": "cylinder_z",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.43,
+      "scalar_b": 1.0
+    },
+    {
+      "id": "carved",
+      "op": "difference",
+      "inputs": ["rounded_block", "tunnel"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "carved"
+}

@@ -173,6 +173,9 @@ typedef struct RayTracingHeadlessPreflight {
     RuntimeRenderTraceCostLedger3D render_trace_cost_ledger;
     RayTracingRuntimeMeshAssetTimingStats mesh_asset_timing_stats;
     RuntimeScene3DBuilderTimingStats scene_builder_timing_stats;
+    int procedural_solid_material_bound_triangles;
+    int procedural_solid_material_triangle_counts[6];
+    int procedural_solid_authored_material_bound_triangles;
     double runtime_scene_apply_ms;
     double runtime_scene_preflight_ms;
     double native_prepare_frame_ms;

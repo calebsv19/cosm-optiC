@@ -1,0 +1,15 @@
+{
+  "recipe_digest_sha256": "563d838258da20c7c9a106323470fedc642558d90154ce62f25f2a006fe99525",
+  "shell_digest_sha256": "f6fd32de40f0e0ceccfde8d70678cdd076acaba23d5b9510b69a23702e9f7a1f",
+  "material_digest_sha256": "694ca67f570cb52c7b5009b24922914c415ea50830c624884f79ba94b96583bd",
+  "sample_count": 834,
+  "snow_vertex_count": 219,
+  "minimum_snow": 0.0,
+  "maximum_snow": 0.94657804431781234,
+  "mean_snow": 0.21862828570473367,
+  "minimum_roughness": 0.68264977876430111,
+  "maximum_roughness": 0.93186780756462384,
+  "mean_roughness": 0.78068129812226594,
+  "top_mean_snow": 0.83755155898726052,
+  "side_maximum_snow": 0.43896988052465785
+}

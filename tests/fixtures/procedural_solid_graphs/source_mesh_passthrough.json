@@ -1,0 +1,21 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg15p_source_mesh_passthrough",
+  "semantic_source_id": "primitive_rect_prism",
+  "max_node_evaluations": 4,
+  "nodes": [
+    {
+      "id": "surface_field_shell",
+      "op": "source_mesh",
+      "inputs": [],
+      "source_id": "surface_field_shell",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "surface_field_shell"
+}

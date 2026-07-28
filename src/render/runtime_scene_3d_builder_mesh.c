@@ -1,5 +1,6 @@
 #include "render/runtime_scene_3d_builder_internal.h"
 
+#include "import/runtime_mesh_asset_loader_authored_material.h"
 #include "import/runtime_scene_motion_bridge.h"
 
 static bool runtime_scene_3d_builder_smooth_mesh_shading_enabled(void) {
@@ -160,6 +161,19 @@ static Vec3 runtime_scene_3d_builder_object_texture_coord(
                 runtime_scene_3d_builder_normalize_axis(p.z,
                                                         bounds->min.z,
                                                         bounds->extent.z));
+}
+
+static RuntimeSurfaceMaterialVertex3D
+runtime_scene_3d_builder_procedural_material_vertex(
+    const ProceduralSurfaceMaterialSample* sample) {
+    RuntimeSurfaceMaterialVertex3D value = {0};
+    if (!sample) return value;
+    value.colorR = sample->final_color_r;
+    value.colorG = sample->final_color_g;
+    value.colorB = sample->final_color_b;
+    value.roughness = sample->final_roughness;
+    value.snowLikelihood = sample->snow_likelihood;
+    return value;
 }
 
 static int runtime_scene_3d_builder_resolve_mesh_scene_object_index(
@@ -345,6 +359,68 @@ bool runtime_scene_3d_builder_append_mesh_asset_set_at_t(
                     vec3_length(appended->vertexNormal0) > 1e-9 &&
                     vec3_length(appended->vertexNormal1) > 1e-9 &&
                     vec3_length(appended->vertexNormal2) > 1e-9;
+            }
+            if (asset->procedural_surface_valid &&
+                asset->procedural_material.valid &&
+                asset->procedural_material.vertex_count ==
+                    document->vertex_count) {
+                RuntimeTriangle3D* appended =
+                    &scene->triangleMesh
+                         .triangles[scene->triangleMesh.triangleCount - 1];
+                appended->hasProceduralSurfaceMaterial = true;
+                appended->proceduralMaterial0 =
+                    runtime_scene_3d_builder_procedural_material_vertex(
+                        &asset->procedural_material.vertex_samples[src->a]);
+                appended->proceduralMaterial1 =
+                    runtime_scene_3d_builder_procedural_material_vertex(
+                        &asset->procedural_material.vertex_samples[src->b]);
+                appended->proceduralMaterial2 =
+                    runtime_scene_3d_builder_procedural_material_vertex(
+                        &asset->procedural_material.vertex_samples[src->c]);
+            }
+            if (asset->procedural_solid_material_valid) {
+                RuntimeTriangle3D* appended =
+                    &scene->triangleMesh
+                         .triangles[scene->triangleMesh.triangleCount - 1];
+                ProceduralSolidMaterialPreset material =
+                    PROCEDURAL_SOLID_MATERIAL_DEFAULT;
+                if (!ProceduralSolidMaterialBindingV1_Resolve(
+                        &asset->procedural_solid_material_binding,
+                        src->surface_group_id, &material, NULL)) {
+                    runtime_scene_3d_builder_set_diag(
+                        "append mesh assets failed: solid material region "
+                        "resolution failed");
+                    RuntimeScene3D_Reset(scene);
+                    return false;
+                }
+                appended->hasRegionMaterial = true;
+                appended->regionMaterialId = (int)material;
+            }
+            if (asset->procedural_solid_authored_material_valid) {
+                RuntimeTriangle3D* appended =
+                    &scene->triangleMesh
+                         .triangles[scene->triangleMesh.triangleCount - 1];
+                if (asset->procedural_solid_material_graph_valid &&
+                    j <
+                        asset->procedural_solid_composed_triangle_material_count) {
+                    appended->hasRegionAuthoredMaterial = true;
+                    appended->regionAuthoredMaterial =
+                        asset->procedural_solid_composed_triangle_materials[
+                            j];
+                    if (asset->procedural_solid_material_runtime_program.valid) {
+                        appended->proceduralSolidMaterialRuntimeProgram =
+                            &asset->
+                                procedural_solid_material_runtime_program;
+                    }
+                } else {
+                    const ProceduralSolidAuthoredMaterialV1* authored =
+                        runtime_mesh_asset_resolve_procedural_solid_authored_material(
+                            asset, src->surface_group_id);
+                    if (authored) {
+                        appended->hasRegionAuthoredMaterial = true;
+                        appended->regionAuthoredMaterial = authored->surface;
+                    }
+                }
             }
             appended_triangle_count += 1;
         }

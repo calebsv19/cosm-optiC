@@ -1,0 +1,31 @@
+{
+  "schema": "ray_tracing.procedural_surface_prism_mesh_summary",
+  "schema_version": 1,
+  "recipe_digest_sha256": "563d838258da20c7c9a106323470fedc642558d90154ce62f25f2a006fe99525",
+  "subdivisions": [16, 12, 8],
+  "vertex_count": 834,
+  "triangle_count": 1664,
+  "unique_edge_count": 2496,
+  "boundary_edge_count": 0,
+  "connected_component_count": 1,
+  "surface_group_count": 6,
+  "euler_characteristic": 2,
+  "field_evaluation_count": 834,
+  "surface_group_triangle_counts": {
+    "negative_x": 192,
+    "positive_x": 192,
+    "negative_y": 256,
+    "positive_y": 256,
+    "negative_z": 384,
+    "positive_z": 384
+  },
+  "bounds_min": [-2.0596405468687253, -1.5601479816399064, -1.0560249862574436],
+  "bounds_max": [2.0587229826093205, 1.5594040259691861, 1.0603720149535192],
+  "maximum_absolute_displacement_units": 0.060372014953519154,
+  "maximum_edge_absolute_displacement_units": 0.0,
+  "minimum_twice_triangle_area_units2": 0.0625,
+  "total_surface_area_units2": 52.368377350288668,
+  "signed_volume_units3": 25.194709321339356,
+  "minimum_outward_winding_dot": 0.0625,
+  "mesh_digest_sha256": "f6fd32de40f0e0ceccfde8d70678cdd076acaba23d5b9510b69a23702e9f7a1f"
+}

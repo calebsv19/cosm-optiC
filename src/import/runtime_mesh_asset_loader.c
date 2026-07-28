@@ -11,6 +11,10 @@
 #include "config/config_manager.h"
 #include "core_io.h"
 #include "core_scene.h"
+#include "procedural/procedural_surface_binding.h"
+#include "procedural/procedural_surface_field_graph.h"
+#include "procedural/procedural_solid_material_binding.h"
+#include "import/runtime_mesh_asset_loader_authored_material.h"
 
 static RayTracingRuntimeMeshAssetSet g_last_runtime_mesh_assets;
 static bool g_last_runtime_mesh_asset_scene_stamp_valid = false;
@@ -26,6 +30,325 @@ static bool ray_tracing_runtime_mesh_asset_resolve_path_with_hint(const char* ru
                                                                   size_t out_path_size,
                                                                   char* out_diagnostics,
                                                                   size_t out_diagnostics_size);
+
+static bool runtime_mesh_asset_resolve_relative_to_file(
+    const char* owner_path,
+    const char* referenced_path,
+    char* out_path,
+    size_t out_path_size) {
+    char base_dir[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    if (!owner_path || !referenced_path || !referenced_path[0] || !out_path ||
+        out_path_size == 0u) {
+        return false;
+    }
+    if (referenced_path[0] == '/') {
+        return snprintf(out_path, out_path_size, "%s", referenced_path) <
+               (int)out_path_size;
+    }
+    return core_scene_dirname(owner_path, base_dir, sizeof(base_dir)).code ==
+               CORE_OK &&
+           core_scene_resolve_path(base_dir, referenced_path, out_path,
+                                   out_path_size).code == CORE_OK;
+}
+
+static bool runtime_mesh_asset_paths_identify_same_file(const char* a,
+                                                        const char* b) {
+    struct stat a_stat;
+    struct stat b_stat;
+    if (!a || !b || stat(a, &a_stat) != 0 || stat(b, &b_stat) != 0) {
+        return false;
+    }
+    return a_stat.st_dev == b_stat.st_dev && a_stat.st_ino == b_stat.st_ino;
+}
+
+static bool runtime_mesh_asset_capture_dependency(
+    const char* path,
+    RayTracingRuntimeMeshAssetFileDependency* dependency) {
+    if (!path || !path[0] || !dependency) return false;
+    memset(dependency, 0, sizeof(*dependency));
+    if (snprintf(dependency->path, sizeof(dependency->path), "%s", path) >=
+        (int)sizeof(dependency->path)) {
+        return false;
+    }
+    dependency->stamp_valid =
+        runtime_mesh_asset_stat_path(path,
+                                     &dependency->mtime_sec,
+                                     &dependency->mtime_nsec,
+                                     &dependency->size_bytes);
+    return dependency->stamp_valid;
+}
+
+static bool runtime_mesh_asset_dependency_matches(
+    const RayTracingRuntimeMeshAssetFileDependency* dependency) {
+    return dependency && dependency->stamp_valid &&
+           runtime_mesh_asset_stamp_matches_path(dependency->path,
+                                                 dependency->mtime_sec,
+                                                 dependency->mtime_nsec,
+                                                 dependency->size_bytes);
+}
+
+static bool runtime_mesh_asset_load_procedural_surface_ref(
+    const char* runtime_scene_path,
+    json_object* object,
+    RayTracingRuntimeMeshAsset* asset,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
+    json_object* reference = NULL;
+    const char* manifest_reference = NULL;
+    char manifest_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char recipe_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char field_graph_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char binding_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char mesh_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char material_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    ProceduralSurfaceDerivedAssetManifest manifest;
+    ProceduralSurfaceDerivedAssetMaterial material;
+    ProceduralSurfaceDerivedAssetReport derived_report;
+    ProceduralSurfaceRecipeV1 recipe;
+    ProceduralSurfaceRecipeReport recipe_report;
+    char recipe_digest[PROCEDURAL_SURFACE_RECIPE_DIGEST_CAPACITY] = {0};
+    char field_graph_digest[PROCEDURAL_SURFACE_FIELD_GRAPH_DIGEST_CAPACITY] = {0};
+    char binding_digest[PROCEDURAL_SURFACE_BINDING_DIGEST_CAPACITY] = {0};
+
+    if (!object || !asset) return false;
+    if (!json_object_object_get_ex(object, "procedural_surface_ref", &reference)) {
+        return true;
+    }
+    if (!json_object_is_type(reference, json_type_object)) {
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "procedural_surface_ref must be an object");
+        return false;
+    }
+    manifest_reference =
+        runtime_mesh_asset_string_field(reference, "manifest_path");
+    if (!manifest_reference ||
+        !runtime_mesh_asset_resolve_relative_to_file(
+            runtime_scene_path, manifest_reference, manifest_path,
+            sizeof(manifest_path))) {
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "procedural surface manifest path is invalid");
+        return false;
+    }
+    memset(&manifest, 0, sizeof(manifest));
+    ProceduralSurfaceDerivedAssetMaterial_Init(&material);
+    if (!ProceduralSurfaceDerivedAssetManifest_LoadJsonFile(
+            manifest_path, &manifest, &derived_report)) {
+        char message[256] = {0};
+        snprintf(message, sizeof(message), "procedural surface manifest invalid: %s",
+                 derived_report.message);
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, message);
+        return false;
+    }
+    if (strcmp(manifest.asset_id, asset->asset_id) != 0 ||
+        strcmp(manifest.source_asset_id,
+               asset->document.contract.source_asset_id) != 0) {
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "procedural surface asset identity mismatch");
+        return false;
+    }
+    if (!runtime_mesh_asset_resolve_relative_to_file(
+            manifest_path, manifest.recipe_path, recipe_path,
+            sizeof(recipe_path)) ||
+        !runtime_mesh_asset_resolve_relative_to_file(
+            manifest_path, manifest.mesh_path, mesh_path, sizeof(mesh_path)) ||
+        !runtime_mesh_asset_resolve_relative_to_file(
+            manifest_path, manifest.material_path, material_path,
+            sizeof(material_path))) {
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "procedural surface referenced path is invalid");
+        return false;
+    }
+    if (!runtime_mesh_asset_paths_identify_same_file(mesh_path, asset->path)) {
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "procedural surface mesh path mismatch");
+        return false;
+    }
+    if (!ProceduralSurfaceRecipeV1_LoadJsonFile(
+            recipe_path, &recipe, &recipe_report) ||
+        !ProceduralSurfaceRecipeV1_Digest(
+            &recipe, recipe_digest, &recipe_report) ||
+        strcmp(recipe_digest, manifest.recipe_digest_sha256) != 0) {
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "procedural surface recipe reference is stale");
+        return false;
+    }
+    if (manifest.schema_version >= 2u) {
+        ProceduralSurfaceFieldGraphV1 field_graph;
+        ProceduralSurfaceFieldGraphReport field_graph_report;
+        ProceduralSurfaceBindingV1 binding;
+        ProceduralSurfaceBindingReport binding_report;
+        if (!runtime_mesh_asset_resolve_relative_to_file(
+                manifest_path, manifest.field_graph_path, field_graph_path,
+                sizeof(field_graph_path)) ||
+            !runtime_mesh_asset_resolve_relative_to_file(
+                manifest_path, manifest.binding_path, binding_path,
+                sizeof(binding_path)) ||
+            !ProceduralSurfaceFieldGraphV1_LoadJsonFile(
+                field_graph_path, &field_graph, &field_graph_report) ||
+            !ProceduralSurfaceFieldGraphV1_Digest(
+                &field_graph, field_graph_digest, &field_graph_report) ||
+            strcmp(field_graph_digest,
+                   manifest.field_graph_digest_sha256) != 0 ||
+            !ProceduralSurfaceBindingV1_LoadJsonFile(
+                binding_path, &binding, &binding_report) ||
+            !ProceduralSurfaceBindingV1_Validate(
+                &binding, &field_graph, &binding_report) ||
+            !ProceduralSurfaceBindingV1_Digest(
+                &binding, binding_digest, &binding_report) ||
+            strcmp(binding_digest, manifest.binding_digest_sha256) != 0) {
+            runtime_mesh_asset_diag(
+                out_diagnostics, out_diagnostics_size,
+                "procedural surface graph or binding reference is stale");
+            return false;
+        }
+    }
+    if (!ProceduralSurfaceDerivedAssetMaterial_LoadJsonFile(
+            material_path, &manifest, asset->document.vertex_count,
+            asset->document.triangle_count, &material, &derived_report)) {
+        char message[256] = {0};
+        snprintf(message, sizeof(message), "procedural surface material invalid: %s",
+                 derived_report.message);
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, message);
+        return false;
+    }
+    for (size_t i = 0u; i < asset->document.triangle_count; ++i) {
+        const CoreMeshAssetRuntimeTriangle* triangle =
+            &asset->document.triangles[i];
+        if (material.triangle_indices[(i * 3u) + 0u] != triangle->a ||
+            material.triangle_indices[(i * 3u) + 1u] != triangle->b ||
+            material.triangle_indices[(i * 3u) + 2u] != triangle->c) {
+            ProceduralSurfaceDerivedAssetMaterial_Free(&material);
+            runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                    "procedural surface material topology mismatch");
+            return false;
+        }
+    }
+    if (asset->procedural_surface_valid) {
+        bool same = strcmp(asset->procedural_manifest.cache_identity_sha256,
+                           manifest.cache_identity_sha256) == 0;
+        ProceduralSurfaceDerivedAssetMaterial_Free(&material);
+        if (!same) {
+            runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                    "procedural surface instance identity mismatch");
+        }
+        return same;
+    }
+    if (!runtime_mesh_asset_capture_dependency(
+            manifest_path, &asset->procedural_manifest_dependency) ||
+        !runtime_mesh_asset_capture_dependency(
+            recipe_path, &asset->procedural_recipe_dependency) ||
+        (manifest.schema_version >= 2u &&
+         (!runtime_mesh_asset_capture_dependency(
+              field_graph_path,
+              &asset->procedural_field_graph_dependency) ||
+          !runtime_mesh_asset_capture_dependency(
+              binding_path, &asset->procedural_binding_dependency))) ||
+        !runtime_mesh_asset_capture_dependency(
+            material_path, &asset->procedural_material_dependency)) {
+        ProceduralSurfaceDerivedAssetMaterial_Free(&material);
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "procedural surface dependency stat failed");
+        return false;
+    }
+    asset->procedural_surface_valid = true;
+    snprintf(asset->procedural_manifest_path,
+             sizeof(asset->procedural_manifest_path), "%s", manifest_path);
+    asset->procedural_manifest = manifest;
+    asset->procedural_material = material;
+    runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "ok");
+    return true;
+}
+
+static bool runtime_mesh_asset_load_procedural_solid_material_ref(
+    const char* runtime_scene_path,
+    json_object* object,
+    RayTracingRuntimeMeshAsset* asset,
+    char* out_diagnostics,
+    size_t out_diagnostics_size) {
+    json_object* reference = NULL;
+    const char* binding_reference = NULL;
+    char binding_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    ProceduralSolidMaterialBindingV1 binding;
+    ProceduralSolidMaterialBindingReport report = {0};
+    char digest[PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY] = {0};
+    if (!object || !asset) return false;
+    if (!json_object_object_get_ex(
+            object, "procedural_solid_material_ref", &reference)) {
+        if (asset->procedural_solid_material_reference_observed) {
+            runtime_mesh_asset_diag(
+                out_diagnostics, out_diagnostics_size,
+                "procedural solid material references must be consistent "
+                "across instances of one mesh asset");
+            return false;
+        }
+        asset->procedural_solid_material_reference_absent = true;
+        return true;
+    }
+    if (asset->procedural_solid_material_reference_absent) {
+        runtime_mesh_asset_diag(
+            out_diagnostics, out_diagnostics_size,
+            "procedural solid material references must be consistent "
+            "across instances of one mesh asset");
+        return false;
+    }
+    asset->procedural_solid_material_reference_observed = true;
+    if (!json_object_is_type(reference, json_type_object)) {
+        runtime_mesh_asset_diag(
+            out_diagnostics, out_diagnostics_size,
+            "procedural_solid_material_ref must be an object");
+        return false;
+    }
+    binding_reference =
+        runtime_mesh_asset_string_field(reference, "binding_path");
+    if (!binding_reference ||
+        !runtime_mesh_asset_resolve_relative_to_file(
+            runtime_scene_path, binding_reference, binding_path,
+            sizeof(binding_path)) ||
+        !ProceduralSolidMaterialBindingV1_LoadJsonFile(
+            binding_path, &binding, &report) ||
+        !ProceduralSolidMaterialBindingV1_Validate(
+            &binding, &asset->document, &report) ||
+        !ProceduralSolidMaterialBindingV1_Digest(
+            &binding, digest, &report)) {
+        char message[320] = {0};
+        snprintf(
+            message, sizeof(message),
+            "procedural solid material binding invalid: %s",
+            report.message[0] ? report.message : "path resolution failed");
+        runtime_mesh_asset_diag(
+            out_diagnostics, out_diagnostics_size, message);
+        return false;
+    }
+    if (asset->procedural_solid_material_valid) {
+        char existing_digest[
+            PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY] = {0};
+        if (!ProceduralSolidMaterialBindingV1_Digest(
+                &asset->procedural_solid_material_binding,
+                existing_digest, &report) ||
+            strcmp(existing_digest, digest) != 0) {
+            runtime_mesh_asset_diag(
+                out_diagnostics, out_diagnostics_size,
+                "procedural solid material instance identity mismatch");
+            return false;
+        }
+        return true;
+    }
+    if (!runtime_mesh_asset_capture_dependency(
+            binding_path,
+            &asset->procedural_solid_material_binding_dependency)) {
+        runtime_mesh_asset_diag(
+            out_diagnostics, out_diagnostics_size,
+            "procedural solid material dependency stat failed");
+        return false;
+    }
+    asset->procedural_solid_material_valid = true;
+    snprintf(
+        asset->procedural_solid_material_binding_path,
+        sizeof(asset->procedural_solid_material_binding_path), "%s",
+        binding_path);
+    asset->procedural_solid_material_binding = binding;
+    return true;
+}
 
 static void runtime_mesh_asset_clear_last_scene_stamp(void) {
     g_last_runtime_mesh_asset_scene_stamp_valid = false;
@@ -225,6 +548,11 @@ void ray_tracing_runtime_mesh_asset_set_free(RayTracingRuntimeMeshAssetSet* set)
     if (!set) return;
     for (i = 0; i < set->asset_count; ++i) {
         core_mesh_asset_runtime_document_free(&set->assets[i].document);
+        ProceduralSurfaceDerivedAssetMaterial_Free(
+            &set->assets[i].procedural_material);
+        free(set->assets[i].procedural_solid_composed_triangle_materials);
+        ProceduralSolidMaterialRuntimeProgramV1_Free(
+            &set->assets[i].procedural_solid_material_runtime_program);
     }
     memset(set, 0, sizeof(*set));
 }
@@ -473,6 +801,30 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
             return false;
         }
         if (!asset_skipped &&
+            !runtime_mesh_asset_load_procedural_surface_ref(
+                runtime_scene_path, object, &out_set->assets[asset_index],
+                out_diagnostics, out_diagnostics_size)) {
+            json_object_put(root);
+            ray_tracing_runtime_mesh_asset_set_free(out_set);
+            return false;
+        }
+        if (!asset_skipped &&
+            !runtime_mesh_asset_load_procedural_solid_material_ref(
+                runtime_scene_path, object, &out_set->assets[asset_index],
+                out_diagnostics, out_diagnostics_size)) {
+            json_object_put(root);
+            ray_tracing_runtime_mesh_asset_set_free(out_set);
+            return false;
+        }
+        if (!asset_skipped &&
+            !runtime_mesh_asset_load_procedural_solid_authored_material_ref(
+                runtime_scene_path, object, &out_set->assets[asset_index],
+                out_diagnostics, out_diagnostics_size)) {
+            json_object_put(root);
+            ray_tracing_runtime_mesh_asset_set_free(out_set);
+            return false;
+        }
+        if (!asset_skipped &&
             !runtime_mesh_asset_append_instance(out_set,
                                                 object_id,
                                                 asset_id,
@@ -546,6 +898,106 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
             (unsigned long long)asset->document.vertex_count;
         g_runtime_mesh_asset_timing.loaded_triangles +=
             (unsigned long long)asset->document.triangle_count;
+        if (asset->procedural_surface_valid) {
+            g_runtime_mesh_asset_timing.procedural_surface_assets += 1;
+            g_runtime_mesh_asset_timing.procedural_surface_vertices +=
+                (unsigned long long)asset->procedural_material.vertex_count;
+            if (!g_runtime_mesh_asset_timing
+                     .procedural_surface_cache_identity_sha256[0]) {
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_surface_cache_identity_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_surface_cache_identity_sha256),
+                    "%s",
+                    asset->procedural_manifest.cache_identity_sha256);
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_surface_cage_digest_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_surface_cage_digest_sha256),
+                    "%s", asset->procedural_manifest.cage_digest_sha256);
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_surface_shell_digest_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_surface_shell_digest_sha256),
+                    "%s", asset->procedural_manifest.shell_digest_sha256);
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_surface_material_digest_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_surface_material_digest_sha256),
+                    "%s", asset->procedural_manifest.material_digest_sha256);
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_surface_collision_owner,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_surface_collision_owner),
+                    "%s", asset->procedural_manifest.collision_owner);
+            }
+        }
+        if (asset->procedural_solid_material_valid) {
+            char digest[
+                PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY] = {0};
+            ProceduralSolidMaterialBindingReport report;
+            g_runtime_mesh_asset_timing.procedural_solid_material_assets += 1;
+            g_runtime_mesh_asset_timing.procedural_solid_material_regions +=
+                (unsigned long long)
+                    asset->procedural_solid_material_binding.region_count;
+            if (ProceduralSolidMaterialBindingV1_Digest(
+                    &asset->procedural_solid_material_binding,
+                    digest, &report) &&
+                !g_runtime_mesh_asset_timing
+                     .procedural_solid_material_binding_digest_sha256[0]) {
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_solid_material_binding_digest_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_solid_material_binding_digest_sha256),
+                    "%s", digest);
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_solid_material_mesh_digest_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_solid_material_mesh_digest_sha256),
+                    "%s",
+                    asset->procedural_solid_material_binding
+                        .mesh_digest_sha256);
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_solid_material_region_digest_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_solid_material_region_digest_sha256),
+                    "%s",
+                    asset->procedural_solid_material_binding
+                        .region_digest_sha256);
+            }
+        }
+        if (asset->procedural_solid_authored_material_valid) {
+            char digest[
+                PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY] = {0};
+            ProceduralSolidAuthoredBindingReport report;
+            g_runtime_mesh_asset_timing
+                .procedural_solid_authored_material_assets += 1;
+            g_runtime_mesh_asset_timing
+                .procedural_solid_authored_material_regions +=
+                    (unsigned long long)
+                        asset->procedural_solid_authored_binding
+                            .assignment_count;
+            if (ProceduralSolidAuthoredMaterialBindingV1_Digest(
+                    &asset->procedural_solid_authored_binding,
+                    digest, &report) &&
+                !g_runtime_mesh_asset_timing
+                     .procedural_solid_authored_binding_digest_sha256[0]) {
+                snprintf(
+                    g_runtime_mesh_asset_timing
+                        .procedural_solid_authored_binding_digest_sha256,
+                    sizeof(g_runtime_mesh_asset_timing
+                               .procedural_solid_authored_binding_digest_sha256),
+                    "%s", digest);
+            }
+        }
     }
     g_runtime_mesh_asset_timing.total_ms += runtime_mesh_asset_elapsed_ms_since(&total_start);
     runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "ok");
@@ -611,6 +1063,29 @@ bool ray_tracing_runtime_mesh_assets_last_matches_scene_file(const char* runtime
                                                   asset->file_mtime_sec,
                                                   asset->file_mtime_nsec,
                                                   asset->file_size_bytes)) {
+            return false;
+        }
+        if (asset->procedural_surface_valid &&
+            (!runtime_mesh_asset_dependency_matches(
+                 &asset->procedural_manifest_dependency) ||
+             !runtime_mesh_asset_dependency_matches(
+                 &asset->procedural_recipe_dependency) ||
+             (asset->procedural_manifest.schema_version >= 2u &&
+              (!runtime_mesh_asset_dependency_matches(
+                   &asset->procedural_field_graph_dependency) ||
+               !runtime_mesh_asset_dependency_matches(
+                   &asset->procedural_binding_dependency))) ||
+             !runtime_mesh_asset_dependency_matches(
+                 &asset->procedural_material_dependency))) {
+            return false;
+        }
+        if (asset->procedural_solid_material_valid &&
+            !runtime_mesh_asset_dependency_matches(
+                &asset->procedural_solid_material_binding_dependency)) {
+            return false;
+        }
+        if (!runtime_mesh_asset_procedural_solid_authored_dependencies_match(
+                asset)) {
             return false;
         }
     }

@@ -1,0 +1,132 @@
+{
+  "schema_version": "procedural_surface_visual_proof_contract_v1",
+  "proof_id": "rock_prism_psg3v",
+  "title": "PSG-3V procedural rock-prism visual proof",
+  "visual_intent": "Show the frozen rectangular-prism shell from every principal axis and one three-quarter view so displacement continuity, silhouette variation, face coverage, and accidental holes or flipped faces are visible before material coupling begins.",
+  "expected_signal": "The procedural shell remains a complete prism while its face interiors show deterministic low-amplitude rocky variation. The zero-displacement control preserves the same cage, tessellation, camera, light, and material.",
+  "rejection_condition": "Reject if any view is blank, misses the procedural object, reports a triangle count other than 1664, overflows BVH traversal, loses the closed-shell digest, or if the displaced hero is pixel-identical to the zero-displacement control.",
+  "control_policy": "Only displacement amplitude changes between control_hero and procedural_hero. Camera, resolution, lighting, material, topology density, seed, and all other recipe fields remain fixed.",
+  "cage": {
+    "width_units": 4.0,
+    "height_units": 3.0,
+    "depth_units": 2.0
+  },
+  "render": {
+    "width": 320,
+    "height": 240,
+    "integrator_3d": "direct_light",
+    "temporal_frames": 1,
+    "camera_zoom": 1.05
+  },
+  "lighting": {
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.22,
+    "top_fill_strength": 0.8,
+    "light_intensity": 2.4,
+    "light_radius": 0.0
+  },
+  "light_rig": [
+    {
+      "id": "key_negative_xy",
+      "position": { "x": -4.5, "y": -5.0, "z": 6.5 },
+      "intensity": 2.4
+    },
+    {
+      "id": "fill_positive_x",
+      "position": { "x": 5.5, "y": -3.5, "z": 3.0 },
+      "intensity": 1.8
+    },
+    {
+      "id": "fill_positive_y",
+      "position": { "x": -3.0, "y": 5.5, "z": 2.5 },
+      "intensity": 1.7
+    },
+    {
+      "id": "fill_negative_z",
+      "position": { "x": 2.5, "y": 2.0, "z": -5.5 },
+      "intensity": 1.6
+    }
+  ],
+  "assertions": {
+    "expected_vertex_count": 834,
+    "expected_triangle_count": 1664,
+    "minimum_primary_hit_pixels": 5000,
+    "primary_hit_pixel_tolerance": 32,
+    "minimum_image_luma_standard_deviation": 10.0,
+    "minimum_control_changed_pixels": 1000
+  },
+  "views": [
+    {
+      "id": "control_hero",
+      "label": "CONTROL HERO",
+      "asset_role": "control",
+      "direction": "three_quarter",
+      "expected_primary_hit_pixels": 7256,
+      "camera_position": { "x": 6.4, "y": -7.2, "z": 5.0 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "procedural_hero",
+      "label": "PROCEDURAL HERO",
+      "asset_role": "procedural",
+      "direction": "three_quarter",
+      "expected_primary_hit_pixels": 7256,
+      "camera_position": { "x": 6.4, "y": -7.2, "z": 5.0 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "positive_x",
+      "label": "VIEW FROM +X",
+      "asset_role": "procedural",
+      "direction": "positive_x",
+      "expected_primary_hit_pixels": 13160,
+      "camera_position": { "x": 7.2, "y": -0.01, "z": 0.0 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "negative_x",
+      "label": "VIEW FROM -X",
+      "asset_role": "procedural",
+      "direction": "negative_x",
+      "expected_primary_hit_pixels": 13160,
+      "camera_position": { "x": -7.2, "y": -0.01, "z": 0.0 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "positive_y",
+      "label": "VIEW FROM +Y",
+      "asset_role": "procedural",
+      "direction": "positive_y",
+      "expected_primary_hit_pixels": 14288,
+      "camera_position": { "x": 0.01, "y": 7.2, "z": 0.0 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "negative_y",
+      "label": "VIEW FROM -Y",
+      "asset_role": "procedural",
+      "direction": "negative_y",
+      "expected_primary_hit_pixels": 14304,
+      "camera_position": { "x": 0.01, "y": -7.2, "z": 0.0 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "positive_z",
+      "label": "VIEW FROM +Z",
+      "asset_role": "procedural",
+      "direction": "positive_z",
+      "expected_primary_hit_pixels": 17968,
+      "camera_position": { "x": 0.0, "y": -0.85, "z": 7.2 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "negative_z",
+      "label": "VIEW FROM -Z",
+      "asset_role": "procedural",
+      "direction": "negative_z",
+      "expected_primary_hit_pixels": 17660,
+      "camera_position": { "x": 0.0, "y": -0.85, "z": -7.2 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    }
+  ]
+}

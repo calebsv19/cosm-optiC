@@ -678,6 +678,120 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    }\n");
     fprintf(file, "  },\n");
     ray_tracing_headless_write_render_stats_summary(file, preflight);
+    fprintf(file, "  \"procedural_surface_runtime\": {\n");
+    fprintf(file, "    \"loaded\": %s,\n",
+            preflight->mesh_asset_timing_stats.procedural_surface_assets > 0
+                ? "true"
+                : "false");
+    fprintf(file, "    \"asset_count\": %d,\n",
+            preflight->mesh_asset_timing_stats.procedural_surface_assets);
+    fprintf(file, "    \"vertex_count\": %llu,\n",
+            preflight->mesh_asset_timing_stats.procedural_surface_vertices);
+    fprintf(file, "    \"semantic_cage_retained\": %s,\n",
+            preflight->mesh_asset_timing_stats.procedural_surface_assets > 0
+                ? "true"
+                : "false");
+    fprintf(file, "    \"derived_shell_replaceable\": %s,\n",
+            preflight->mesh_asset_timing_stats.procedural_surface_assets > 0
+                ? "true"
+                : "false");
+    fprintf(file, "    \"collision_owner\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats.procedural_surface_collision_owner);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"cache_identity_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_surface_cache_identity_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"cage_digest_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_surface_cage_digest_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"shell_digest_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_surface_shell_digest_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"material_digest_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_surface_material_digest_sha256);
+    fprintf(file, "\n  },\n");
+    fprintf(file, "  \"procedural_solid_material_runtime\": {\n");
+    fprintf(file, "    \"loaded\": %s,\n",
+            preflight->mesh_asset_timing_stats
+                        .procedural_solid_material_assets > 0
+                ? "true"
+                : "false");
+    fprintf(file, "    \"asset_count\": %d,\n",
+            preflight->mesh_asset_timing_stats
+                .procedural_solid_material_assets);
+    fprintf(file, "    \"region_count\": %llu,\n",
+            preflight->mesh_asset_timing_stats
+                .procedural_solid_material_regions);
+    fprintf(file, "    \"bound_triangle_count\": %d,\n",
+            preflight->procedural_solid_material_bound_triangles);
+    fprintf(file, "    \"material_triangle_counts\": {\n");
+    fprintf(file, "      \"default\": %d,\n",
+            preflight->procedural_solid_material_triangle_counts[0]);
+    fprintf(file, "      \"mirror\": %d,\n",
+            preflight->procedural_solid_material_triangle_counts[1]);
+    fprintf(file, "      \"rough_metal\": %d,\n",
+            preflight->procedural_solid_material_triangle_counts[2]);
+    fprintf(file, "      \"glossy\": %d,\n",
+            preflight->procedural_solid_material_triangle_counts[3]);
+    fprintf(file, "      \"emissive\": %d,\n",
+            preflight->procedural_solid_material_triangle_counts[4]);
+    fprintf(file, "      \"transparent\": %d\n",
+            preflight->procedural_solid_material_triangle_counts[5]);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"binding_digest_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_solid_material_binding_digest_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"mesh_digest_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_solid_material_mesh_digest_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"region_digest_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_solid_material_region_digest_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"authored_materials\": {\n");
+    fprintf(file, "      \"loaded\": %s,\n",
+            preflight->mesh_asset_timing_stats
+                        .procedural_solid_authored_material_assets > 0
+                ? "true"
+                : "false");
+    fprintf(file, "      \"asset_count\": %d,\n",
+            preflight->mesh_asset_timing_stats
+                .procedural_solid_authored_material_assets);
+    fprintf(file, "      \"region_count\": %llu,\n",
+            preflight->mesh_asset_timing_stats
+                .procedural_solid_authored_material_regions);
+    fprintf(file, "      \"bound_triangle_count\": %d,\n",
+            preflight->procedural_solid_authored_material_bound_triangles);
+    fprintf(file, "      \"binding_digest_sha256\": ");
+    RayTracingJsonWriteString(
+        file,
+        preflight->mesh_asset_timing_stats
+            .procedural_solid_authored_binding_digest_sha256);
+    fprintf(file, "\n");
+    fprintf(file, "    }\n");
+    fprintf(file, "  },\n");
     fprintf(file, "  \"timing_breakdown\": {\n");
     fprintf(file, "    \"runtime_scene_apply_ms\": %.6f,\n",
             preflight->runtime_scene_apply_ms);

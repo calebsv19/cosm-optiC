@@ -23,6 +23,10 @@ RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
     if (trace.primary.hit) {
         trace.payloadResolved =
             RuntimeMaterialPayload3D_ResolveFromHit(&trace.primary.hitInfo, &trace.payload);
+        if (trace.payloadResolved) {
+            (void)RuntimeMaterialPayload3D_ApplyShadingNormal(
+                &trace.payload, &trace.primary.hitInfo);
+        }
     }
     if (RuntimeLightEmitter3D_IntersectRay(scene,
                                            &trace.primary.primaryRay,

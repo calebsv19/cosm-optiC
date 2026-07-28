@@ -1,0 +1,97 @@
+{
+  "schema_version": "procedural_surface_field_preset_visual_contract_v1",
+  "proof_id": "procedural_surface_field_presets_psg7",
+  "title": "Procedural surface field preset comparison",
+  "visual_intent": "Compare four deterministic field-authored surfaces through the same native mesh/material runtime, camera classes, resolution, and light rig.",
+  "cage": {
+    "width_units": 8.0,
+    "height_units": 8.0,
+    "depth_units": 0.8
+  },
+  "render": {
+    "width": 720,
+    "height": 540,
+    "integrator_3d": "direct_light",
+    "temporal_frames": 1,
+    "camera_zoom": 1.0
+  },
+  "lighting": {
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.18,
+    "top_fill_strength": 0.72,
+    "light_intensity": 2.8,
+    "light_radius": 0.0
+  },
+  "light_rig": [
+    {
+      "id": "grazing_key",
+      "position": { "x": -6.5, "y": -7.0, "z": 8.5 },
+      "intensity": 3.0
+    },
+    {
+      "id": "warm_fill",
+      "position": { "x": 7.5, "y": -4.0, "z": 5.0 },
+      "intensity": 1.7
+    },
+    {
+      "id": "rim_fill",
+      "position": { "x": -4.0, "y": 7.5, "z": 4.5 },
+      "intensity": 1.4
+    }
+  ],
+  "assertions": {
+    "minimum_primary_hit_pixels": 18000,
+    "minimum_image_luma_standard_deviation": 8.0,
+    "minimum_pairwise_changed_pixels": 9000
+  },
+  "views": [
+    {
+      "id": "hero",
+      "label_suffix": "HERO",
+      "direction": "three_quarter",
+      "camera_position": { "x": 9.5, "y": -10.5, "z": 7.8 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.45 }
+    },
+    {
+      "id": "top",
+      "label_suffix": "TOP",
+      "direction": "positive_z_detail",
+      "camera_position": { "x": 0.0, "y": -0.8, "z": 13.5 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.25 }
+    }
+  ],
+  "presets": [
+    {
+      "id": "pitted_concrete",
+      "label": "PITTED CONCRETE",
+      "graph": "pitted_concrete.json",
+      "target_edge_length_units": 0.04,
+      "displacement_amplitude_units": 0.10,
+      "edge_lock_width_units": 0.28
+    },
+    {
+      "id": "wind_shaped_sand",
+      "label": "WIND SAND",
+      "graph": "wind_shaped_sand.json",
+      "target_edge_length_units": 0.05,
+      "displacement_amplitude_units": 0.26,
+      "edge_lock_width_units": 0.30
+    },
+    {
+      "id": "rocky_terrain",
+      "label": "ROCKY TERRAIN",
+      "graph": "rocky_terrain.json",
+      "target_edge_length_units": 0.05,
+      "displacement_amplitude_units": 0.48,
+      "edge_lock_width_units": 0.30
+    },
+    {
+      "id": "central_mountain_peak",
+      "label": "MOUNTAIN PEAK",
+      "graph": "central_mountain_peak.json",
+      "target_edge_length_units": 0.06,
+      "displacement_amplitude_units": 2.20,
+      "edge_lock_width_units": 0.36
+    }
+  ]
+}

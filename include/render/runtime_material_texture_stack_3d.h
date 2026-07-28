@@ -76,6 +76,10 @@ typedef struct {
     double textureU;
     double textureV;
     double layerMasks[RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS];
+    bool microdetailNormalActive;
+    double microdetailHeight;
+    double microdetailSlopeU;
+    double microdetailSlopeV;
 } RuntimeMaterialSurfaceEval;
 
 typedef struct {

@@ -1,0 +1,22 @@
+{
+  "schema": "ray_tracing.procedural_surface_graph_expectation",
+  "schema_version": 1,
+  "implementation_phase": "PSG-6",
+  "graph_digest_sha256": "05ab6a7f6fcb5d2bbc039b6dbf280e8a26f5ec0813cebdad18d207bf9f317ae5",
+  "node_count": 21,
+  "link_count": 20,
+  "evaluated_node_count": 21,
+  "max_node_evaluations": 24,
+  "output_domains": ["field_ir", "geometry", "material"],
+  "compiled_recipe_digest_sha256": "563d838258da20c7c9a106323470fedc642558d90154ce62f25f2a006fe99525",
+  "field_summary_digest_sha256": "ed2d2bf6d1e8939ab4a99ca9d3872316c1d3081f173572da68fcdd352653065d",
+  "shell_digest_sha256": "f6fd32de40f0e0ceccfde8d70678cdd076acaba23d5b9510b69a23702e9f7a1f",
+  "material_digest_sha256": "694ca67f570cb52c7b5009b24922914c415ea50830c624884f79ba94b96583bd",
+  "derived_cache_identity_sha256": "60e315e7db7616692572d6f664500893c97c9c8e1ec963844125c28cb238f470",
+  "transactional_rejections": [
+    "budget",
+    "type_mismatch",
+    "cycle",
+    "missing_file"
+  ]
+}

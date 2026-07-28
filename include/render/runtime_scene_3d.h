@@ -5,12 +5,15 @@
 
 #include "config/config_manager.h"
 #include "math/vec3.h"
+#include "procedural/procedural_solid_authored_material.h"
 #include "render/runtime_emissive_light_set_3d.h"
 #include "render/runtime_volume_3d.h"
 
 #define RUNTIME_SCENE_3D_MAX_OBJECT_ID 64
 
 typedef struct RuntimeTriangleBVH3D RuntimeTriangleBVH3D;
+typedef struct ProceduralSolidMaterialRuntimeProgramV1
+    ProceduralSolidMaterialRuntimeProgramV1;
 
 typedef enum {
     RUNTIME_PRIMITIVE_3D_KIND_INVALID = 0,
@@ -70,6 +73,14 @@ typedef struct {
 } RuntimePrimitive3D;
 
 typedef struct {
+    double colorR;
+    double colorG;
+    double colorB;
+    double roughness;
+    double snowLikelihood;
+} RuntimeSurfaceMaterialVertex3D;
+
+typedef struct {
     Vec3 p0;
     Vec3 p1;
     Vec3 p2;
@@ -83,6 +94,16 @@ typedef struct {
     Vec3 objectTexture0;
     Vec3 objectTexture1;
     Vec3 objectTexture2;
+    bool hasProceduralSurfaceMaterial;
+    RuntimeSurfaceMaterialVertex3D proceduralMaterial0;
+    RuntimeSurfaceMaterialVertex3D proceduralMaterial1;
+    RuntimeSurfaceMaterialVertex3D proceduralMaterial2;
+    bool hasRegionMaterial;
+    int regionMaterialId;
+    bool hasRegionAuthoredMaterial;
+    ProceduralSolidAuthoredMaterialSurfaceV1 regionAuthoredMaterial;
+    const ProceduralSolidMaterialRuntimeProgramV1
+        *proceduralSolidMaterialRuntimeProgram;
     int primitiveIndex;
     int sceneObjectIndex;
     int localTriangleIndex;

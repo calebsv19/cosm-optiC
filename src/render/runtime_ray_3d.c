@@ -390,6 +390,31 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                               vec3_scale(triangle->objectTexture1, bary_v)),
                      vec3_scale(triangle->objectTexture2, bary_w));
     }
+    if (triangle->hasProceduralSurfaceMaterial) {
+        const RuntimeSurfaceMaterialVertex3D *m0 =
+            &triangle->proceduralMaterial0;
+        const RuntimeSurfaceMaterialVertex3D *m1 =
+            &triangle->proceduralMaterial1;
+        const RuntimeSurfaceMaterialVertex3D *m2 =
+            &triangle->proceduralMaterial2;
+        hit.hasProceduralSurfaceMaterial = true;
+#define INTERPOLATE_MATERIAL_FIELD(FIELD)                                      \
+        hit.proceduralSurfaceMaterial.FIELD =                                  \
+            (m0->FIELD * bary_u) + (m1->FIELD * bary_v) +                     \
+            (m2->FIELD * bary_w)
+        INTERPOLATE_MATERIAL_FIELD(colorR);
+        INTERPOLATE_MATERIAL_FIELD(colorG);
+        INTERPOLATE_MATERIAL_FIELD(colorB);
+        INTERPOLATE_MATERIAL_FIELD(roughness);
+        INTERPOLATE_MATERIAL_FIELD(snowLikelihood);
+#undef INTERPOLATE_MATERIAL_FIELD
+    }
+    hit.hasRegionMaterial = triangle->hasRegionMaterial;
+    hit.regionMaterialId = triangle->regionMaterialId;
+    hit.hasRegionAuthoredMaterial = triangle->hasRegionAuthoredMaterial;
+    hit.regionAuthoredMaterial = triangle->regionAuthoredMaterial;
+    hit.proceduralSolidMaterialRuntimeProgram =
+        triangle->proceduralSolidMaterialRuntimeProgram;
 
     *out_hit = hit;
     return true;

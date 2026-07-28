@@ -59,6 +59,26 @@ Fast C and contract lanes:
 
 ```bash
 make -C ray_tracing test
+make -C ray_tracing test-procedural-surface-recipe-contract
+make -C ray_tracing test-procedural-surface-field-contract
+make -C ray_tracing test-procedural-surface-plane-contract
+make -C ray_tracing test-procedural-surface-prism-contract
+make -C ray_tracing test-procedural-surface-material-contract
+make -C ray_tracing test-procedural-surface-derived-asset-contract
+make -C ray_tracing test-procedural-surface-graph-contract
+make -C ray_tracing test-procedural-surface-field-graph-contract
+make -C ray_tracing test-procedural-surface-authoring-contract
+make -C ray_tracing test-procedural-surface-binding-contract
+make -C ray_tracing test-procedural-surface-terrain-contract
+make -C ray_tracing test-procedural-surface-shell-contract
+make -C ray_tracing test-procedural-solid-contract
+make -C ray_tracing test-procedural-surface-visual-proof
+make -C ray_tracing test-procedural-surface-field-preset-visual-proof
+make -C ray_tracing test-procedural-surface-binding-visual-proof
+make -C ray_tracing test-procedural-surface-terrain-visual-proof
+make -C ray_tracing test-procedural-surface-shell-visual-proof
+make -C ray_tracing test-procedural-solid-visual-proof
+make -C ray_tracing test-procedural-surface-agent-iteration
 make -C ray_tracing test-runtime-scene-bridge-contract
 make -C ray_tracing test-starter-scene-profile-contract
 make -C ray_tracing test-ray-tracing-runtime-host-lifecycle-contract
@@ -69,6 +89,184 @@ make -C ray_tracing test-scene-editor-viewport-nav-contract
 make -C ray_tracing test-scene-editor-primitive-preview-geometry
 make -C ray_tracing test-ray-tracing-worker-version-contract
 ```
+
+The procedural-surface recipe target is the PSG-0 UI-free foundation. It
+strictly validates recipe schema v1, canonical JSON/SHA-256 identity,
+object-unit feature and target-edge scales, invalid-input nonmutation, and the
+count/topology expectations for the first open plane and closed rectangular
+prism. It does not evaluate noise or generate displaced vertices.
+
+The procedural-surface prism target is the PSG-3 closed-shell proof. It
+generates one welded six-face rectangular prism, locks edges/corners exactly,
+validates manifold incidence, connectedness, Euler-2 topology, outward
+winding, positive volume, and geometry normals, then saves and reloads the
+result through `core_mesh_asset` runtime-v1. It does not attach the shell to a
+scene or renderer.
+
+The procedural-surface material target is the PSG-4 coupled-channel proof. It
+consumes retained PSG-1 fields with displaced positions and geometry normals,
+freezes stone/snow/roughness results over all 834 shell vertices, binds
+material identity to both recipe and shell digests, and checks preview
+`RuntimeMaterialSurfaceEval` against final `RuntimeMaterialPayload3D`
+readback. It does not reevaluate noise.
+
+The procedural-surface derived-asset target is the PSG-5 persistence and cache
+contract. It freezes canonical cage and cache identities, validates manifest
+round trips and retained material topology, rejects stale cage state, and
+proves transactional failure. The runtime mesh builder target separately
+proves that a material-only procedural identity change invalidates exactly
+the affected in-memory BLAS while unchanged assets remain cache hits.
+
+The procedural-surface graph target is the PSG-6 UI-free authoring contract.
+It loads the golden typed graph, canonicalizes nodes and links independently
+of file order, compiles through the existing recipe validator, and requires
+the exact PSG-0 through PSG-5 recipe, field, shell, material, and cache
+identities. It also proves a connected editable math node, type/cycle/budget
+rejection, disconnected-node rejection, and transactional failure. Build
+`procedural-surface-graph-tool` for canonical machine-readable compile-plan
+and recipe readback.
+
+The procedural-surface field-graph target is the PSG-7 spatial authoring
+contract. It evaluates all four preset graphs over the same object-space grid,
+freezes distinct graph identities and output statistics, and proves cycle,
+disconnected-node, and exhausted-budget failures are rejected without
+mutating caller output.
+
+The procedural-surface field-preset visual-proof target compiles pitted
+concrete, wind-shaped sand, rocky terrain, and central mountain graphs into
+final-quality watertight runtime meshes and retained per-vertex material. It
+renders matching hero and top views at `720 x 540`, requires shell and runtime
+triangle parity, nonblank tonal variation, native procedural material binding,
+zero BVH overflow, and a pairwise changed-pixel floor. Review artifacts are
+written under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_surface_field_presets/psg7/`.
+
+The PSG-8 authoring target validates curated typed parameter manifests over the
+same field graph, digest-guarded duplication/edit/save, transactional failures,
+and exact undo restore. Build `procedural-surface-agent-tool` for canonical
+inspect/apply/restore receipts; it does not introduce a parallel evaluator.
+
+The PSG-8 binding target validates all-surface, named-group, and upward-facing
+selectors; object and planar projection; displacement direction/scale;
+feathering; and fallback material. The binding visual proof renders the old
+wrapped-sand control beside top-bound sand and requires a side-view visual
+difference while retaining top relief and native material loading.
+
+The PSG-8 arbitrary-shell target uniformly refines shared triangle edges from
+an existing `core_mesh_asset` source, applies the bound field once per final
+shared vertex, preserves surface groups, normalizes winding, recomputes
+normals, and rejects open/nonmanifold, over-budget, over-displaced, or invalid
+derived shells transactionally. Its native proof refines the imported
+tetrahedron from `4` to `1,024` triangles with zero boundary/nonmanifold edges,
+one component, Euler characteristic `2`, and positive volume.
+
+The PSG-8 recursive agent iteration performs inspect, typed edit, derived
+compile, three-view native render, changed-pixel evaluation, and exact undo.
+Artifacts are under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_surface_agent_iteration/psg8/`.
+These PSG-8 gates are part of `test-stable`.
+
+The PSG-8.5 terrain contract specializes the existing binding and prism
+generator without creating another evaluator. The central-mountain fixture
+uses upward-facing selection, planar XY projection, and world-up
+displacement. It requires substantial top relief, exactly zero side and
+bottom displacement, a fixed XY footprint, a flat bottom cap, deterministic
+identity, and the full closed-shell validity readback. A second prism contract
+proves that a custom displacement direction is applied geometrically rather
+than merely parsed from the binding.
+
+The PSG-8.5 terrain visual proof is an explicit A/B comparison between the old
+unbound six-face mountain and the corrected top-authored terrain body. Hero,
+top, side, and underside views must differ; the corrected side skirt and
+underside remain stable closure geometry. Artifacts are written under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_surface_field_presets/psg8_5_terrain/`.
+This gate is part of `test-stable`.
+
+The PSG-9 solid contract is the UI-free topology-changing construction lane.
+It validates canonical graph identity, every primitive/source/transform/
+deformation/CSG operator family, evaluation and output budgets, missing-source
+rejection, clipped-domain rejection, explicit multi-component policy,
+byte-deterministic remeshing, and strict zero-boundary/zero-nonmanifold shell
+readback. The golden family includes an Euler-`0` through-tunnel rather than
+privileging one cube-to-U example. It also applies the existing pitted-concrete
+field, material, and displacement evaluator to that fresh genus-one shell.
+Build `procedural-solid-asset-tool` for runtime-mesh and machine-readable
+receipt output.
+
+The PSG-9 native visual proof renders object transforms, twist/taper, boolean
+difference, smooth composition, and an imported source-mesh deformation from
+hero, Y-axis, and Z-axis views. It asserts receipt topology, renderer triangle
+parity, visible coverage/form contrast, and pairwise changed-pixel floors.
+Artifacts are under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_solid/psg9/`.
+
+The PSG-10 solid-authoring contract derives typed parameter and connection
+readback directly from the validated solid graph, then proves digest-guarded
+edits, semantic ranges, atomic canonical save, exact undo identity, and
+deterministic adaptive convergence. The agent-flow integration test performs
+inspect, a two-parameter edit, adaptive mesh compile, exact restore, and a
+hostile stale edit that must publish no output. Both gates are registered in
+`test-stable`.
+
+The PSG-10 native proof reruns all five operator families with bounded
+whole-domain resolution selection. Every selected `18 -> 36 -> 72` result
+retains component/Euler topology, zero boundary and nonmanifold edges,
+converged volume/bounds, and a `0.133333`-unit feature floor. The source-mesh
+twist consumes a real canonical 12-triangle cube fixture instead of the PSG-9
+proof's mislabeled imported tetrahedron. Artifacts are under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_solid/psg10/`.
+
+The PSG-11 focused contract proves local active-cell extraction on a shared
+fine lattice, topology-preserving zero-set projection, deterministic
+retained/cut/blend surface groups, and accelerated imported-source queries. A
+dense 6,912-triangle cube fixture must match the exact fallback signed-distance
+and contributor result while reducing triangle work by more than 75%. The
+agent-flow integration compiles a source-mesh twist twice with identical mesh,
+region, and pass receipts, and rejects an invalid surface-band request without
+publishing output.
+
+The PSG-11 native proof renders the same five solid families at `24 -> 48`
+cells. Selected passes use about 14.5% to 24.0% of the fine domain, report zero
+surface crossings at inactive interfaces, reduce RMS surface residual by about
+71.7% to 82.1%, preserve zero boundary/nonmanifold edges, and expose tunnel
+cut plus smooth-union blend regions. Artifacts are under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_solid/psg11/`.
+
+The PSG-12 focused contract adds error-driven surface analysis, deterministic
+regularized QEF-like crease positioning, and split-vertex hard-edge normal
+islands. Feature movement uses transactional full-vertex snapshots and a
+bounded line search; no step is accepted unless triangle validity, topology,
+volume, and measurable improvement gates pass. The hostile split-vertex budget
+must fail without publishing an asset.
+
+The PSG-12 integration flow compiles the transformed box twice with identical
+mesh/quality/shading receipts, compiles the imported-source twist with exact
+accelerated-query parity, validates final runtime/receipt geometry counts, and
+proves hostile CLI failure creates neither runtime asset nor receipt.
+
+The PSG-12 native proof renders the same five families at `24 -> 48 -> 96`
+from hero, Y-axis, and Z-axis views. It requires lower signed-distance and
+composite error, measurable QEF and hard-corner shading improvements, closed
+geometric topology, region/source authority, renderer triangle parity,
+coverage, contrast, and pairwise shape distinction. Artifacts are under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_solid/psg12/`.
+
+The procedural-surface visual-proof target is the bounded PSG-3V through PSG-5
+consumer. It exports the frozen shell through `mesh_asset_runtime_v1`, renders
+a zero-displacement control, a displaced hero, and six canonical axis views
+through the existing headless renderer, then checks object-hit coverage,
+triangle identity, nonblank tonal range, TLAS/BLAS health, and control/subject
+pixel difference. The native views consume the persisted per-vertex material
+through ray-hit interpolation and the existing payload/BSDF owner. The proof
+also renders material-only, coupled-result, snow-mask, and roughness diagnostic
+cells, reopens the saved request and requires an identical frame and cache
+identity, and requires a recipe-changed stale manifest to fail preflight.
+Review artifacts are written under
+`ray_tracing/build/agent_runs/ray_tracing/procedural_surface_visual_proof/psg3v/`;
+the entry points are `index.md`, the labeled contact sheet under `review/`,
+and `procedural_surface_visual_proof_summary.json`. The target remains in
+`STABLE_TEST_TARGETS` as the visual regression checkpoint for the complete
+PSG-3V through PSG-5 artifact lane.
 
 The worker-version contract target is non-packaging proof. It verifies the
 canonical `WORKER_VERSION`, generated compile-time identity, separate
@@ -568,6 +766,61 @@ make -C ray_tracing test-ray-tracing-release-contract-redaction
 make -C ray_tracing package-linux-worker-self-test
 ```
 
+Procedural solid material-graph gates:
+
+```bash
+make -C ray_tracing test-procedural-solid-material-graph
+make -C ray_tracing test-procedural-solid-psg15-flow
+make -C ray_tracing test-procedural-solid-psg16b-visual-proof
+make -C ray_tracing test-procedural-solid-psg17-visual-proof
+make -C ray_tracing test-procedural-surface-selected-face-shell-contract
+make -C ray_tracing test-procedural-surface-selected-face-visual-proof
+```
+
+These gates cover the bounded authored-material DAG, deterministic graph
+identity, agent edits with stale-base protection and restore, and the
+five-family proof for snow accumulation, material-only concrete pore
+coloration, sediment, dune bands, and layered rock. Each proof family authors
+a new digest-bound object graph before compilation rather than treating one
+universal preset block as evidence. The proof renders full-size `800 x 600`
+eight-frame family rows, a compact overview, and `1024 x 1024` raw mountain
+height, signed-up-slope, and snow-weight views.
+
+The PSG-16A C gates additionally prove per-hit barycentric continuity across a
+shared edge, monotonic height-mask response, unchanged source geometry,
+runtime-program survival through flattened and TLAS/BLAS hit paths, and exact
+path parity. Curvature, cavity, boundary distance, and region remain
+triangle-derived compatibility inputs.
+
+The PSG-16B C and native proof gates retain every enabled authored procedural
+texture in graph order, scale each layer's effective opacity by its continuous
+graph weight, and evaluate all layers at the same placed UV. Samples at
+`0.49`, `0.50`, and `0.51` must produce nonzero balanced neighboring steps
+that remain below eight percent of the full `0.00 -> 1.00` endpoint delta.
+The repeated `0.50` native render must have zero changed pixels. The proof
+still makes no bump/normal or material-driven displacement claim.
+
+The PSG-17 proof authors a fresh mountain source per run, renders control,
+microdetail-normal, deterministic-repeat, and amplified-effect views at
+`1200 x 900` with twelve temporal frames, and holds mesh digest, triangle
+count, primary-hit silhouette, and TLAS/BLAS route constant. The new
+`texture.microdetail_normal_strength` channel is explicitly opt-in: zero
+strength preserves the interpolated shading normal, while enabled authored
+texture layers contribute deterministic weighted height derivatives to a
+bounded tangent-space perturbation. The payload changes shading response only;
+geometric normals, ray offsets, topology, acceleration identity, and
+silhouette are unchanged.
+
+The PSG-18 selected-face contract requires an exact semantic `surface_group`
+binding, preserves distinct source and derived asset identities, refines the
+selected prism face while naming neighboring refinement as closure-support
+topology, and rejects any nonzero movement outside the selected surface or
+shared cage edge. It proves deterministic repeat identity, zero boundary
+edges, one component, Euler characteristic 2, positive volume, outward
+winding, and a changed mesh digest for nonzero displacement. Snow is evaluated
+after shell generation from displaced elevation, rebuilt geometry-normal
+slope, and retained cavity/breakup data.
+
 Stable and smoke checkpoints:
 
 ```bash
@@ -590,6 +843,27 @@ smokes unless they are listed in `STABLE_TEST_TARGETS`. Examples include the
 water long/object-coupling review targets and local worker-backed preview
 matrix execution. Keep expensive visual proof runs manual unless a specific
 slice promotes one into the stable lane.
+
+The PSG-16B `800 x 600`, eight-temporal-frame material matrix is an
+operator review gate and is not rerendered by `test-stable`.
+`test-procedural-solid-psg16b-visual-contract` keeps its exact contract,
+fixture provenance, per-run authoring edits, and acceptance schema in the
+stable lane; `test-procedural-solid-psg16b-visual-proof` performs the full
+high-quality render explicitly.
+
+The PSG-17 `1200 x 900`, twelve-temporal-frame comparison is likewise an
+operator review gate. `test-procedural-solid-psg17-visual-contract` stays in
+`test-stable`; `test-procedural-solid-psg17-visual-proof` performs the full
+fresh-object high-quality render.
+
+The PSG-18 `1200 x 900`, eight-temporal-frame hero/profile proof is an explicit
+operator review gate. It creates fresh flat-control, displaced, and repeat
+derived objects, requires identical control/displaced topology counts, exact
+repeat mesh/material digests, runtime topology parity, loaded procedural
+material, geometry-derived snow response, and material primary-hit coverage
+changes in both views. `test-procedural-surface-selected-face-shell-contract`
+stays in `test-stable`; the full render runs through
+`test-procedural-surface-selected-face-visual-proof`.
 
 The authoritative stable target list is `STABLE_TEST_TARGETS` in
 `ray_tracing/make/rules-test.mk`.

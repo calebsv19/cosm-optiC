@@ -1,0 +1,44 @@
+{
+  "schema": "ray_tracing.procedural_surface_topology_expectation",
+  "schema_version": 1,
+  "triangulation": "fixed_diagonal_per_quad",
+  "cages": [
+    {
+      "cage_id": "rock_plane_psg0",
+      "subdivisions": [16, 12, 0],
+      "vertex_count": 221,
+      "triangle_count": 384,
+      "unique_edge_count": 604,
+      "boundary_edge_count": 56,
+      "connected_component_count": 1,
+      "surface_group_count": 1,
+      "euler_characteristic": 1,
+      "requires_outward_winding": false,
+      "requires_positive_signed_volume": false,
+      "requires_two_incident_triangles_per_edge": false
+    },
+    {
+      "cage_id": "rock_prism_psg0",
+      "subdivisions": [16, 12, 8],
+      "vertex_count": 834,
+      "triangle_count": 1664,
+      "unique_edge_count": 2496,
+      "boundary_edge_count": 0,
+      "connected_component_count": 1,
+      "surface_group_count": 6,
+      "euler_characteristic": 2,
+      "requires_outward_winding": true,
+      "requires_positive_signed_volume": true,
+      "requires_two_incident_triangles_per_edge": true
+    }
+  ],
+  "closed_shell_requirements": {
+    "shared_boundaries_welded": true,
+    "stable_source_face_groups": true,
+    "non_finite_vertices_rejected": true,
+    "zero_area_triangles_rejected": true,
+    "inverted_triangles_rejected": true,
+    "bounds_recomputed": true,
+    "normals_recomputed": true
+  }
+}

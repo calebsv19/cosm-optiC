@@ -1,0 +1,19 @@
+{
+  "schema": "ray_tracing.procedural_surface_binding",
+  "schema_version": 1,
+  "binding_id": "pitted_concrete_all_v1",
+  "graph_program_id": "pitted_concrete_v1",
+  "selector": "all",
+  "surface_group_id": "",
+  "up_axis": [0.0, 0.0, 1.0],
+  "selector_min_dot": 0.0,
+  "selector_feather": 0.0,
+  "projection": "object_3d",
+  "projection_scale": 1.0,
+  "displacement_direction": "smooth_normal",
+  "displacement_scale": 1.0,
+  "fallback_color_r": 0.49,
+  "fallback_color_g": 0.475,
+  "fallback_color_b": 0.445,
+  "fallback_roughness": 0.73
+}

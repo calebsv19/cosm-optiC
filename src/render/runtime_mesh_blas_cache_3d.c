@@ -2,6 +2,7 @@
 
 #include "core_io.h"
 #include "import/runtime_mesh_asset_pack.h"
+#include "import/runtime_mesh_asset_loader_authored_material.h"
 #include "math/vec3.h"
 #include "render/runtime_mesh_accel_pack_3d.h"
 #include "render/runtime_scene_3d.h"
@@ -18,7 +19,7 @@
 
 #define RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_SCHEMA_VERSION 1u
 #define RUNTIME_MESH_BLAS_CACHE_3D_BLAS_BUILDER_VERSION 1u
-#define RUNTIME_MESH_BLAS_CACHE_3D_TRIANGLE_LAYOUT_VERSION 1u
+#define RUNTIME_MESH_BLAS_CACHE_3D_TRIANGLE_LAYOUT_VERSION 2u
 #define RUNTIME_MESH_BLAS_CACHE_3D_BVH_LAYOUT_VERSION 1u
 #define RUNTIME_MESH_BLAS_CACHE_3D_BVH_BUILDER_POLICY_VERSION 1u
 #define RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_POLICY_STATIC_TLAS_BLAS 1u
@@ -32,6 +33,12 @@ typedef struct RuntimeMeshBLASCache3DEntry {
     long long file_size;
     size_t vertex_count;
     size_t source_triangle_count;
+    char procedural_cache_identity_sha256[
+        PROCEDURAL_SURFACE_DERIVED_ASSET_DIGEST_CAPACITY];
+    char procedural_solid_material_binding_digest_sha256[
+        PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY];
+    char procedural_solid_authored_binding_digest_sha256[
+        PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY];
     RuntimeTriangleMesh3D local_mesh;
 } RuntimeMeshBLASCache3DEntry;
 
@@ -226,12 +233,44 @@ static void runtime_mesh_blas_cache_3d_accel_key(
         asset ? (uint32_t)asset->document.triangle_count : 0u;
 }
 
+static bool runtime_mesh_blas_cache_3d_material_binding_digest(
+    const RayTracingRuntimeMeshAsset* asset,
+    char out_digest[PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY]) {
+    ProceduralSolidMaterialBindingReport report = {0};
+    if (!out_digest) return false;
+    out_digest[0] = '\0';
+    if (!asset || !asset->procedural_solid_material_valid) return true;
+    return ProceduralSolidMaterialBindingV1_Digest(
+        &asset->procedural_solid_material_binding, out_digest, &report);
+}
+
+static bool runtime_mesh_blas_cache_3d_authored_binding_digest(
+    const RayTracingRuntimeMeshAsset* asset,
+    char out_digest[PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY]) {
+    ProceduralSolidAuthoredBindingReport report = {0};
+    if (!out_digest) return false;
+    out_digest[0] = '\0';
+    if (!asset || !asset->procedural_solid_authored_material_valid) return true;
+    return ProceduralSolidAuthoredMaterialBindingV1_Digest(
+        &asset->procedural_solid_authored_binding, out_digest, &report);
+}
+
 static bool runtime_mesh_blas_cache_3d_entry_matches(
     const RuntimeMeshBLASCache3DEntry* entry,
     const RayTracingRuntimeMeshAsset* asset,
     long long mtime_sec,
     long long mtime_nsec,
     long long file_size) {
+    char material_binding_digest[
+        PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY] = {0};
+    char authored_binding_digest[
+        PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY] = {0};
+    if (!runtime_mesh_blas_cache_3d_material_binding_digest(
+            asset, material_binding_digest) ||
+        !runtime_mesh_blas_cache_3d_authored_binding_digest(
+            asset, authored_binding_digest)) {
+        return false;
+    }
     return entry && entry->valid && asset &&
            strcmp(entry->asset_id, asset->asset_id) == 0 &&
            strcmp(entry->path, asset->path) == 0 &&
@@ -239,7 +278,17 @@ static bool runtime_mesh_blas_cache_3d_entry_matches(
            entry->mtime_nsec == mtime_nsec &&
            entry->file_size == file_size &&
            entry->vertex_count == asset->document.vertex_count &&
-           entry->source_triangle_count == asset->document.triangle_count;
+           entry->source_triangle_count == asset->document.triangle_count &&
+           strcmp(entry->procedural_cache_identity_sha256,
+                  asset->procedural_surface_valid
+                      ? asset->procedural_manifest.cache_identity_sha256
+                      : "") == 0 &&
+           strcmp(
+               entry->procedural_solid_material_binding_digest_sha256,
+               material_binding_digest) == 0 &&
+           strcmp(
+               entry->procedural_solid_authored_binding_digest_sha256,
+               authored_binding_digest) == 0;
 }
 
 static int runtime_mesh_blas_cache_3d_find(
@@ -288,6 +337,19 @@ static Vec3 runtime_mesh_blas_cache_3d_vertex_position(
     const CoreMeshAssetRuntimeVertex* vertex) {
     if (!vertex) return vec3(0.0, 0.0, 0.0);
     return vec3(vertex->position.x, vertex->position.y, vertex->position.z);
+}
+
+static RuntimeSurfaceMaterialVertex3D
+runtime_mesh_blas_cache_3d_material_vertex(
+    const ProceduralSurfaceMaterialSample* sample) {
+    RuntimeSurfaceMaterialVertex3D value = {0};
+    if (!sample) return value;
+    value.colorR = sample->final_color_r;
+    value.colorG = sample->final_color_g;
+    value.colorB = sample->final_color_b;
+    value.roughness = sample->final_roughness;
+    value.snowLikelihood = sample->snow_likelihood;
+    return value;
 }
 
 static bool runtime_mesh_blas_cache_3d_build_local_mesh(
@@ -358,6 +420,21 @@ static bool runtime_mesh_blas_cache_3d_build_local_mesh(
             dst->hasVertexNormals = true;
         }
         dst->twoSided = false;
+        if (asset->procedural_surface_valid &&
+            asset->procedural_material.valid &&
+            asset->procedural_material.vertex_count ==
+                document->vertex_count) {
+            dst->hasProceduralSurfaceMaterial = true;
+            dst->proceduralMaterial0 =
+                runtime_mesh_blas_cache_3d_material_vertex(
+                    &asset->procedural_material.vertex_samples[src->a]);
+            dst->proceduralMaterial1 =
+                runtime_mesh_blas_cache_3d_material_vertex(
+                    &asset->procedural_material.vertex_samples[src->b]);
+            dst->proceduralMaterial2 =
+                runtime_mesh_blas_cache_3d_material_vertex(
+                    &asset->procedural_material.vertex_samples[src->c]);
+        }
         dst->primitiveIndex = -1;
         dst->sceneObjectIndex = -1;
         dst->localTriangleIndex = (int)i;
@@ -375,6 +452,58 @@ static bool runtime_mesh_blas_cache_3d_build_local_mesh(
         runtime_mesh_blas_cache_3d_set_diag(RuntimeTriangleMesh3D_BVHLastDiagnostics());
         RuntimeTriangleMesh3D_Free(out_mesh);
         return false;
+    }
+    return true;
+}
+
+static bool runtime_mesh_blas_cache_3d_apply_material_binding(
+    const RayTracingRuntimeMeshAsset* asset,
+    RuntimeTriangleMesh3D* mesh) {
+    const CoreMeshAssetRuntimeDocument* document = NULL;
+    if (!asset || !mesh) return false;
+    if (!asset->procedural_solid_material_valid) return true;
+    document = &asset->document;
+    for (int i = 0; i < mesh->triangleCount; ++i) {
+        RuntimeTriangle3D* triangle = &mesh->triangles[i];
+        ProceduralSolidMaterialPreset material =
+            PROCEDURAL_SOLID_MATERIAL_DEFAULT;
+        int source_index = triangle->localTriangleIndex;
+        if (source_index < 0 ||
+            (size_t)source_index >= document->triangle_count ||
+            !ProceduralSolidMaterialBindingV1_Resolve(
+                &asset->procedural_solid_material_binding,
+                document->triangles[source_index].surface_group_id,
+                &material,
+                NULL)) {
+            runtime_mesh_blas_cache_3d_set_diag(
+                "BLAS material binding failed: triangle region unresolved");
+            return false;
+        }
+        triangle->hasRegionMaterial = true;
+        triangle->regionMaterialId = (int)material;
+        if (asset->procedural_solid_authored_material_valid) {
+            if (asset->procedural_solid_material_graph_valid &&
+                (size_t)source_index <
+                    asset->procedural_solid_composed_triangle_material_count) {
+                triangle->hasRegionAuthoredMaterial = true;
+                triangle->regionAuthoredMaterial =
+                    asset->procedural_solid_composed_triangle_materials[
+                        source_index];
+                if (asset->procedural_solid_material_runtime_program.valid) {
+                    triangle->proceduralSolidMaterialRuntimeProgram =
+                        &asset->procedural_solid_material_runtime_program;
+                }
+            } else {
+                const ProceduralSolidAuthoredMaterialV1* authored =
+                    runtime_mesh_asset_resolve_procedural_solid_authored_material(
+                        asset,
+                        document->triangles[source_index].surface_group_id);
+                if (authored) {
+                    triangle->hasRegionAuthoredMaterial = true;
+                    triangle->regionAuthoredMaterial = authored->surface;
+                }
+            }
+        }
     }
     return true;
 }
@@ -452,7 +581,7 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
         if (persistent_mode == RAY_TRACING_RUNTIME_MESH_ASSET_PERSISTENT_CACHE_REFRESH) {
             gRuntimeMeshBLASCache3DDiagnostics.blasPersistentCacheRefreshes += 1u;
         }
-        if (asset->path[0] &&
+        if (!asset->procedural_surface_valid && asset->path[0] &&
             asset->document.triangle_count > 0u &&
             asset->document.triangle_count <= (size_t)UINT32_MAX &&
             (persistent_can_read || persistent_can_write)) {
@@ -518,6 +647,11 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
             }
             gRuntimeMeshBLASCache3DDiagnostics.blasFullRebuilds += 1u;
         }
+        if (!runtime_mesh_blas_cache_3d_apply_material_binding(
+                asset, &local_mesh)) {
+            RuntimeTriangleMesh3D_Free(&local_mesh);
+            return false;
+        }
 
         entry = &gRuntimeMeshBLASCache3D[slot];
         RuntimeTriangleMesh3D_Free(&entry->local_mesh);
@@ -530,6 +664,29 @@ bool RuntimeMeshBLASCache3D_PrepareAssetSet(
         entry->file_size = file_size;
         entry->vertex_count = asset->document.vertex_count;
         entry->source_triangle_count = asset->document.triangle_count;
+        snprintf(entry->procedural_cache_identity_sha256,
+                 sizeof(entry->procedural_cache_identity_sha256), "%s",
+                 asset->procedural_surface_valid
+                     ? asset->procedural_manifest.cache_identity_sha256
+                     : "");
+        if (!runtime_mesh_blas_cache_3d_material_binding_digest(
+                asset,
+                entry->procedural_solid_material_binding_digest_sha256)) {
+            RuntimeTriangleMesh3D_Free(&local_mesh);
+            memset(entry, 0, sizeof(*entry));
+            runtime_mesh_blas_cache_3d_set_diag(
+                "BLAS material binding failed: digest unavailable");
+            return false;
+        }
+        if (!runtime_mesh_blas_cache_3d_authored_binding_digest(
+                asset,
+                entry->procedural_solid_authored_binding_digest_sha256)) {
+            RuntimeTriangleMesh3D_Free(&local_mesh);
+            memset(entry, 0, sizeof(*entry));
+            runtime_mesh_blas_cache_3d_set_diag(
+                "BLAS authored material binding failed: digest unavailable");
+            return false;
+        }
         entry->local_mesh = local_mesh;
     }
 

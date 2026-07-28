@@ -42,16 +42,23 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
     ok = runtime_scene_bridge_preflight_json(json_text, out_preflight);
     free(json_text);
     if (ok) {
-        RayTracingRuntimeMeshAssetSet mesh_assets;
+        RayTracingRuntimeMeshAssetSet *mesh_assets =
+            calloc(1u, sizeof(*mesh_assets));
+        if (!mesh_assets) {
+            runtime_scene_bridge_preflight_diag(
+                out_preflight, "out of memory");
+            return false;
+        }
         if (!ray_tracing_runtime_mesh_assets_last_matches_scene_file(runtime_scene_path)) {
-            ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
+            ray_tracing_runtime_mesh_asset_set_init(mesh_assets);
             ok = ray_tracing_runtime_mesh_assets_load_scene_file(
                 runtime_scene_path,
-                &mesh_assets,
+                mesh_assets,
                 out_preflight->diagnostics,
                 sizeof(out_preflight->diagnostics));
-            ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
+            ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
         }
+        free(mesh_assets);
     }
     return ok;
 }
@@ -64,12 +71,17 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     char runtime_scene_path_copy[sizeof(animSettings.runtimeScenePath)];
     char previous_runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
     char *json_text = NULL;
-    RayTracingRuntimeMeshAssetSet mesh_assets;
+    RayTracingRuntimeMeshAssetSet *mesh_assets = NULL;
     bool ok;
 
     if (!runtime_scene_path || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
-    ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
+    mesh_assets = calloc(1u, sizeof(*mesh_assets));
+    if (!mesh_assets) {
+        runtime_scene_bridge_preflight_diag(out_summary, "out of memory");
+        return false;
+    }
+    ray_tracing_runtime_mesh_asset_set_init(mesh_assets);
     snprintf(previous_runtime_scene_path,
              sizeof(previous_runtime_scene_path),
              "%s",
@@ -83,6 +95,7 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     if (io_result.code != CORE_OK || !file_data.data || file_data.size == 0) {
         runtime_scene_bridge_preflight_diag(out_summary, "failed to read runtime scene file");
         core_io_buffer_free(&file_data);
+        free(mesh_assets);
         return false;
     }
 
@@ -90,6 +103,7 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     if (!json_text) {
         runtime_scene_bridge_preflight_diag(out_summary, "out of memory");
         core_io_buffer_free(&file_data);
+        free(mesh_assets);
         return false;
     }
     memcpy(json_text, file_data.data, file_data.size);
@@ -99,21 +113,23 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     if (load_mesh_assets) {
         if (!ray_tracing_runtime_mesh_assets_load_scene_file(
                 runtime_scene_path_copy,
-                &mesh_assets,
+                mesh_assets,
                 out_summary->diagnostics,
                 sizeof(out_summary->diagnostics))) {
             free(json_text);
+            ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
+            free(mesh_assets);
             return false;
         }
     } else {
         if (!ray_tracing_runtime_mesh_assets_load_scene_file_preview_limited(
                 runtime_scene_path_copy,
                 RUNTIME_SCENE_BRIDGE_EDITOR_MESH_PREVIEW_MAX_ASSET_BYTES,
-                &mesh_assets,
+                mesh_assets,
                 out_summary->diagnostics,
                 sizeof(out_summary->diagnostics))) {
-            ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
-            ray_tracing_runtime_mesh_asset_set_init(&mesh_assets);
+            ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
+            ray_tracing_runtime_mesh_asset_set_init(mesh_assets);
         }
     }
 
@@ -123,7 +139,8 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
              runtime_scene_path_copy);
     ok = runtime_scene_bridge_apply_json(json_text, out_summary);
     if (ok) {
-        ray_tracing_runtime_mesh_assets_take_last_for_scene(runtime_scene_path_copy, &mesh_assets);
+        ray_tracing_runtime_mesh_assets_take_last_for_scene(
+            runtime_scene_path_copy, mesh_assets);
     }
     if (ok) {
         runtime_scene_volume_defaults_apply_transition(&animSettings,
@@ -138,9 +155,10 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
                  sizeof(animSettings.runtimeScenePath),
                  "%s",
                  previous_runtime_scene_path);
-        ray_tracing_runtime_mesh_asset_set_free(&mesh_assets);
+        ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
     }
     free(json_text);
+    free(mesh_assets);
     return ok;
 }
 
