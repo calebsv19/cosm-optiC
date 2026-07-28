@@ -214,7 +214,8 @@ void scene_editor_light_timeline_panel_render(
     char label[192];
 
     if (!renderer || !panel || !document || !document->valid || !state ||
-        !state->view || !state->sample ||
+        !state->view || !state->evaluated_scene ||
+        !state->evaluated_scene->valid ||
         document->progress_track_index >= document->timeline.track_count ||
         document->timeline.range.frame_count < 2u) {
         return;
@@ -230,7 +231,7 @@ void scene_editor_light_timeline_panel_render(
     path_point_strip = geometry.path_point_strip;
     speed_strip = geometry.speed_strip;
     fps = panel_fps(document);
-    path_length = state->sample->path_length_world;
+    path_length = state->evaluated_scene->light.path_length_world;
     visible_start = state->view->start_normalized;
     visible_span = state->view->span_normalized;
     if (!isfinite(visible_start) || !isfinite(visible_span) ||
@@ -278,9 +279,9 @@ void scene_editor_light_timeline_panel_render(
                      (int64_t)document->timeline.range.frame_count - 1),
                  (double)(state->current_frame -
                           document->timeline.range.start_frame) / fps,
-                 state->sample->progress * 100.0,
-                 state->sample->speed_valid
-                     ? state->sample->world_speed_per_second
+                 state->evaluated_scene->light.progress * 100.0,
+                 state->evaluated_scene->light.speed_valid
+                     ? state->evaluated_scene->light.world_speed_per_second
                      : 0.0,
                  (unsigned long long)document->timeline.range.frame_count,
                  fps);
@@ -292,9 +293,9 @@ void scene_editor_light_timeline_panel_render(
                      (int64_t)document->timeline.range.frame_count - 1),
                  (double)(state->current_frame -
                           document->timeline.range.start_frame) / fps,
-                 state->sample->progress * 100.0,
-                 state->sample->speed_valid
-                     ? state->sample->world_speed_per_second
+                 state->evaluated_scene->light.progress * 100.0,
+                 state->evaluated_scene->light.speed_valid
+                     ? state->evaluated_scene->light.world_speed_per_second
                      : 0.0);
     }
     panel_text(renderer, font, label, geometry.metrics_line.x,

@@ -6,7 +6,7 @@
 
 #include <SDL2/SDL.h>
 
-#include "animation/timeline_light_motion.h"
+#include "animation/evaluated_scene_snapshot.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "scene_editor_light_timeline_edit.h"
 #include "scene_editor_light_timeline_view.h"
@@ -21,7 +21,7 @@ typedef struct SceneEditorLightTimelinePanelState {
     bool pointer_over_panel;
     SceneEditorLightTimelineTraversalMode traversal_mode;
     const SceneEditorLightTimelineView* view;
-    const TimelineLightMotionSample* sample;
+    const RayEvaluatedSceneSnapshot* evaluated_scene;
 } SceneEditorLightTimelinePanelState;
 
 void scene_editor_light_timeline_panel_render(

@@ -1,6 +1,7 @@
 #include "test_runtime_timeline_light_persistence.h"
 
 #include "config/config_manager.h"
+#include "app/evaluated_scene_service.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_bridge.h"
 #include "editor/scene_editor_light_timeline.h"
@@ -348,6 +349,13 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
     TimelineLightMotionSample after_reopen;
     RuntimeSceneBridge3DLightSeedState lights_before_play;
     RuntimeSceneBridge3DLightSeedState lights_after_play;
+    RuntimeSceneLightTimelineDocument timeline_before_play;
+    RuntimeSceneLightTimelineDocument timeline_after_play;
+    RayEvaluatedSceneSnapshot evaluated_before_play;
+    RayEvaluatedSceneSnapshot evaluated_after_play;
+    RayEvaluatedSceneServiceResult direct_after_play;
+    SceneConfig scene_before_play;
+    AnimationConfig animation_before_play;
     SceneEditorPaneHost pane_host;
     const SceneEditorPaneLayout* layout;
     SDL_Rect timing_graph;
@@ -401,6 +409,13 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
 
     runtime_scene_bridge_get_last_3d_light_seed_state(
         &lights_before_play);
+    assert_true("light_acceptance_initial_evaluated_scene",
+                SceneEditorLightTimelineCopyEvaluatedScene(
+                    &evaluated_before_play));
+    assert_true("light_acceptance_timeline_before_play",
+                RuntimeSceneLightTimelineGetLast(&timeline_before_play));
+    scene_before_play = sceneSettings;
+    animation_before_play = animSettings;
     memset(&event, 0, sizeof(event));
     event.type = SDL_MOUSEBUTTONDOWN;
     event.button.button = SDL_BUTTON_LEFT;
@@ -417,12 +432,40 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
     SDL_Delay(60u);
     assert_true("light_acceptance_playback_advanced",
                 SceneEditorLightTimelineAdvancePlayback());
+    assert_true("light_acceptance_advanced_evaluated_scene",
+                SceneEditorLightTimelineCopyEvaluatedScene(
+                    &evaluated_after_play));
     runtime_scene_bridge_get_last_3d_light_seed_state(
         &lights_after_play);
-    assert_true("light_acceptance_playback_moves_proxy",
+    assert_true("light_acceptance_playback_moves_evaluated_proxy",
+                fabs(evaluated_before_play.light.position.x -
+                     evaluated_after_play.light.position.x) > 1e-6);
+    assert_true("light_acceptance_playback_exact_subframe",
+                evaluated_after_play.frame.sample.subframe_denominator ==
+                    1000000u);
+    assert_true("light_acceptance_direct_service_after_play",
+                RayEvaluatedSceneCaptureAuthoredSample(
+                    evaluated_after_play.frame.sample,
+                    &direct_after_play));
+    assert_true("light_acceptance_play_direct_snapshot_parity",
+                memcmp(&evaluated_after_play,
+                       &direct_after_play.snapshot,
+                       sizeof(evaluated_after_play)) == 0);
+    assert_true("light_acceptance_playback_preserves_retained_lights",
                 lights_before_play.valid && lights_after_play.valid &&
-                fabs(lights_before_play.lights[0].position.x -
-                     lights_after_play.lights[0].position.x) > 1e-6);
+                memcmp(&lights_before_play, &lights_after_play,
+                       sizeof(lights_before_play)) == 0);
+    assert_true("light_acceptance_playback_preserves_scene",
+                memcmp(&scene_before_play, &sceneSettings,
+                       sizeof(scene_before_play)) == 0);
+    assert_true("light_acceptance_playback_preserves_animation",
+                memcmp(&animation_before_play, &animSettings,
+                       sizeof(animation_before_play)) == 0);
+    assert_true("light_acceptance_timeline_after_play",
+                RuntimeSceneLightTimelineGetLast(&timeline_after_play));
+    assert_true("light_acceptance_playback_preserves_timeline",
+                memcmp(&timeline_before_play, &timeline_after_play,
+                       sizeof(timeline_before_play)) == 0);
     assert_true("light_acceptance_pause_button",
                 SceneEditorLightTimelineHandleEvent(
                     &event, &pane_host, layout, NULL));

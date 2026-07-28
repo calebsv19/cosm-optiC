@@ -5,6 +5,7 @@
 
 #include <SDL2/SDL.h>
 
+#include "animation/evaluated_scene_snapshot.h"
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_pane_host.h"
 
@@ -21,6 +22,8 @@ bool SceneEditorLightTimelineInteractionActive(void);
 bool SceneEditorLightTimelinePlaying(void);
 bool SceneEditorLightTimelineTogglePlayback(void);
 bool SceneEditorLightTimelineAdvancePlayback(void);
+bool SceneEditorLightTimelineCopyEvaluatedScene(
+    RayEvaluatedSceneSnapshot* out_snapshot);
 bool SceneEditorLightTimelineToggle(SceneEditorPaneHost* pane_host);
 bool SceneEditorLightTimelineHandleEvent(
     SDL_Event* event,

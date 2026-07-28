@@ -7,6 +7,7 @@
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_light_timeline_bridge.h"
 #include "scene_editor_light_timeline_edit.h"
+#include "scene_editor_light_timeline_evaluation.h"
 #include "scene_editor_light_timeline_view.h"
 
 #include <math.h>
@@ -35,7 +36,7 @@ typedef struct SceneEditorLightTimelineState {
     int mouse_y;
     bool pointer_over_panel;
     SceneEditorLightTimelineView view;
-    TimelineLightMotionSample sample;
+    SceneEditorLightTimelineEvaluation evaluation;
     TimelineTrack undo_tracks[24];
     size_t undo_count;
     TimelineTrack redo_tracks[24];
@@ -46,6 +47,38 @@ static SceneEditorLightTimelineState g_light_timeline = {.selected_light_index =
                                                          .hovered_light_index = -1,
                                                          .selected_key_index = -1,
                                                          .selected_path_point_index = -1};
+
+#define SCENE_EDITOR_LIGHT_TIMELINE_SUBFRAME_DENOMINATOR 1000000u
+
+static TimelineSample current_sample(void) {
+    TimelineSample sample = {g_light_timeline.current_frame, 0u,
+                             SCENE_EDITOR_LIGHT_TIMELINE_SUBFRAME_DENOMINATOR};
+    double fraction = g_light_timeline.playback_frame_fraction;
+    if (!isfinite(fraction) || fraction <= 0.0) return sample;
+    if (fraction >= 1.0) fraction = nextafter(1.0, 0.0);
+    sample.subframe_numerator =
+        (uint32_t)llround(
+            fraction *
+            (double)SCENE_EDITOR_LIGHT_TIMELINE_SUBFRAME_DENOMINATOR);
+    if (sample.subframe_numerator >= sample.subframe_denominator) {
+        sample.subframe_numerator = sample.subframe_denominator - 1u;
+    }
+    return sample;
+}
+
+static bool capture_sample(TimelineSample sample) {
+    if (!scene_editor_light_timeline_evaluation_capture(
+            &g_light_timeline.evaluation, sample)) {
+        return false;
+    }
+    g_light_timeline.current_frame =
+        g_light_timeline.evaluation.result.snapshot.frame.sample.absolute_frame;
+    return true;
+}
+
+static bool capture_current_sample(void) {
+    return capture_sample(current_sample());
+}
 
 static bool point_in_rect(int x, int y, const SDL_Rect* rect) {
     return rect && x >= rect->x && x < rect->x + rect->w &&
@@ -61,11 +94,17 @@ static int pick_light(const SceneEditorDigestOverlayProjector* projector,
     if (!lights.valid || !projector) return -1;
     for (int i = 0; i < lights.light_count; ++i) {
         int x = 0, y = 0;
+        double position_x = 0.0;
+        double position_y = 0.0;
+        double position_z = 0.0;
+        scene_editor_light_timeline_evaluation_light_position(
+            &g_light_timeline.evaluation, &lights, i, &position_x, &position_y,
+            &position_z);
         if (!lights.lights[i].id[0] ||
             !SceneEditorDigestOverlayProjectPoint(projector,
-                                                  lights.lights[i].position.x,
-                                                  lights.lights[i].position.y,
-                                                  lights.lights[i].position.z,
+                                                  position_x,
+                                                  position_y,
+                                                  position_z,
                                                   &x, &y)) continue;
         double dx = (double)x - mouse_x;
         double dy = (double)y - mouse_y;
@@ -116,9 +155,7 @@ static TimelineStatus commit_track(RuntimeSceneLightTimelineDocument* document,
     if (status != TIMELINE_STATUS_OK) return status;
     status = RuntimeSceneLightTimelineSetLast(&candidate);
     if (status == TIMELINE_STATUS_OK) {
-        (void)runtime_scene_bridge_apply_light_timeline_sample(
-            (TimelineSample){g_light_timeline.current_frame, 0u, 1u},
-            &g_light_timeline.sample);
+        (void)capture_current_sample();
     }
     return status;
 }
@@ -201,6 +238,12 @@ bool SceneEditorLightTimelinePlaying(void) {
     return g_light_timeline.playing;
 }
 
+bool SceneEditorLightTimelineCopyEvaluatedScene(
+    RayEvaluatedSceneSnapshot* out_snapshot) {
+    return scene_editor_light_timeline_evaluation_copy(
+        &g_light_timeline.evaluation, out_snapshot);
+}
+
 static void stop_playback(void) {
     g_light_timeline.playing = false;
     g_light_timeline.playback_last_ms = 0u;
@@ -252,9 +295,8 @@ bool SceneEditorLightTimelineTogglePlayback(void) {
         (int64_t)document.timeline.range.frame_count - 1;
     if (g_light_timeline.current_frame >= last_frame) {
         g_light_timeline.current_frame = document.timeline.range.start_frame;
-        if (runtime_scene_bridge_apply_light_timeline_sample(
-                (TimelineSample){g_light_timeline.current_frame, 0u, 1u},
-                &g_light_timeline.sample) != TIMELINE_STATUS_OK) {
+        g_light_timeline.playback_frame_fraction = 0.0;
+        if (!capture_current_sample()) {
             return false;
         }
     }
@@ -296,7 +338,6 @@ bool SceneEditorLightTimelineAdvancePlayback(void) {
              (double)elapsed_ms * fps / 1000.0;
     advance = (int64_t)floor(frames);
     g_light_timeline.playback_frame_fraction = frames - (double)advance;
-    if (advance <= 0) return false;
     first_frame = document.timeline.range.start_frame;
     last_frame = first_frame +
         (int64_t)document.timeline.range.frame_count - 1;
@@ -307,9 +348,7 @@ bool SceneEditorLightTimelineAdvancePlayback(void) {
             first_frame +
             (g_light_timeline.current_frame - first_frame) % span;
     }
-    if (runtime_scene_bridge_apply_light_timeline_sample(
-            (TimelineSample){g_light_timeline.current_frame, 0u, 1u},
-            &g_light_timeline.sample) != TIMELINE_STATUS_OK) {
+    if (!capture_current_sample()) {
         stop_playback();
         return false;
     }
@@ -327,9 +366,7 @@ static void sync_spatial_path_from_editor(void) {
     document.spatial_path = sceneSettings.bezierPath;
     document.spatial_path_3d = sceneSettings.bezierPath3D;
     if (RuntimeSceneLightTimelineSetLast(&document) == TIMELINE_STATUS_OK) {
-        (void)runtime_scene_bridge_apply_light_timeline_sample(
-            (TimelineSample){g_light_timeline.current_frame, 0u, 1u},
-            &g_light_timeline.sample);
+        (void)capture_current_sample();
     }
 }
 
@@ -347,9 +384,8 @@ void SceneEditorLightTimelineSyncRuntime(void) {
         if (strcmp(lights.lights[i].id, id) == 0) {
             g_light_timeline.selected_light_index = i;
             g_light_timeline.current_frame = document.timeline.range.start_frame;
-            (void)runtime_scene_bridge_apply_light_timeline_sample(
-                (TimelineSample){g_light_timeline.current_frame, 0u, 1u},
-                &g_light_timeline.sample);
+            g_light_timeline.playback_frame_fraction = 0.0;
+            (void)capture_current_sample();
             return;
         }
     }
@@ -441,10 +477,9 @@ bool SceneEditorLightTimelineToggle(SceneEditorPaneHost* pane_host) {
         return false;
     }
     g_light_timeline.current_frame = document.timeline.range.start_frame;
+    g_light_timeline.playback_frame_fraction = 0.0;
     scene_editor_light_timeline_view_reset(&g_light_timeline.view);
-    (void)runtime_scene_bridge_apply_light_timeline_sample(
-        (TimelineSample){g_light_timeline.current_frame, 0u, 1u},
-        &g_light_timeline.sample);
+    (void)capture_current_sample();
     return scene_editor_pane_host_set_timeline_visible(pane_host, true);
 }
 
@@ -458,11 +493,9 @@ static bool scrub_to_x(int x, const SDL_Rect* rect) {
         &g_light_timeline.view, rect, x);
     frame = document.timeline.range.start_frame +
             (int64_t)llround(normalized * (double)(document.timeline.range.frame_count - 1u));
-    if (runtime_scene_bridge_apply_light_timeline_sample(
-            (TimelineSample){frame, 0u, 1u}, &g_light_timeline.sample) !=
-        TIMELINE_STATUS_OK) return false;
     g_light_timeline.current_frame = frame;
-    return true;
+    g_light_timeline.playback_frame_fraction = 0.0;
+    return capture_current_sample();
 }
 
 static void graph_to_key_values(const RuntimeSceneLightTimelineDocument* document,
@@ -893,11 +926,17 @@ void SceneEditorLightTimelineRenderViewportProxies(
     if (!renderer || !projector || !lights.valid) return;
     for (int i = 0; i < lights.light_count; ++i) {
         int x = 0, y = 0;
+        double position_x = 0.0;
+        double position_y = 0.0;
+        double position_z = 0.0;
+        scene_editor_light_timeline_evaluation_light_position(
+            &g_light_timeline.evaluation, &lights, i, &position_x, &position_y,
+            &position_z);
         if (!lights.lights[i].id[0] ||
             !SceneEditorDigestOverlayProjectPoint(projector,
-                                                  lights.lights[i].position.x,
-                                                  lights.lights[i].position.y,
-                                                  lights.lights[i].position.z,
+                                                  position_x,
+                                                  position_y,
+                                                  position_z,
                                                   &x, &y)) continue;
         int radius = (i == g_light_timeline.selected_light_index) ? 8 : 6;
         SDL_Rect marker = {x - radius, y - radius, radius * 2, radius * 2};
@@ -937,7 +976,9 @@ void SceneEditorLightTimelineRenderPanel(SDL_Renderer* renderer,
             &document.timeline.tracks[
                 document.progress_track_index]);
     state.view = &g_light_timeline.view;
-    state.sample = &g_light_timeline.sample;
+    state.evaluated_scene =
+        scene_editor_light_timeline_evaluation_snapshot(
+            &g_light_timeline.evaluation);
     scene_editor_light_timeline_panel_render(
         renderer, &layout->timeline_rect, &document, &state);
 }

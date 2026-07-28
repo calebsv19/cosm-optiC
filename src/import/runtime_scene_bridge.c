@@ -4,7 +4,6 @@
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
-#include "import/runtime_scene_light_timeline_bridge.h"
 
 #include "camera/camera_path_3d.h"
 #include "core_scene_overlay_merge_shared.h"
@@ -32,25 +31,6 @@ RuntimeSceneBridge3DPrimitiveSeedState g_last_3d_primitive_seeds = {0};
 RuntimeSceneBridge3DLightSeedState g_last_3d_light_seeds = {0};
 char g_last_runtime_object_ids[MAX_OBJECTS][64] = {{0}};
 int g_last_runtime_object_id_count = 0;
-
-TimelineStatus runtime_scene_bridge_apply_light_timeline_sample(
-    TimelineSample sample, TimelineLightMotionSample* out_sample) {
-    TimelineLightMotionSample motion;
-    RuntimeSceneLightTimelineTarget target;
-    TimelineStatus status;
-    if (!out_sample) return TIMELINE_STATUS_INVALID_ARGUMENT;
-    memset(&motion, 0, sizeof(motion));
-    status = RuntimeSceneLightTimelineInspectLast(sample, &motion);
-    if (status != TIMELINE_STATUS_OK) return status;
-    status = RuntimeSceneLightTimelineApplyMotion(
-        g_last_3d_light_seeds.lights,
-        (size_t)g_last_3d_light_seeds.light_count,
-        &motion,
-        &target);
-    if (status != TIMELINE_STATUS_OK) return status;
-    *out_sample = motion;
-    return TIMELINE_STATUS_OK;
-}
 
 static void scene_defaults_reset(void) {
     const double zero_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
