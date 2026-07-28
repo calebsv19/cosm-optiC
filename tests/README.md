@@ -70,6 +70,7 @@ make -C ray_tracing test-scene-editor-primitive-preview-geometry
 make -C ray_tracing test-ray-tracing-worker-version-contract
 TEST_RUNNER_GROUP=runtime_timeline_foundation make -C ray_tracing test
 TEST_RUNNER_GROUP=runtime_evaluated_scene_preview make -C ray_tracing test
+TEST_RUNNER_GROUP=preview_transport make -C ray_tracing test
 make -C ray_tracing test-ray-tracing-evaluated-scene-preview-parity
 TEST_RUNNER_GROUP=runtime_timeline_property_registry make -C ray_tracing test
 TEST_RUNNER_GROUP=runtime_timeline_frame_snapshot make -C ray_tracing test
@@ -630,3 +631,9 @@ while the shaded approximation responds only to the evaluated light.
 ESP-5 coverage adds compatibility rigid-transform capture, exact-frame
 provenance, transactional detachment, complete simulation-cache frame binding,
 and wrong-frame rejection.
+`preview_transport` proves the UI-free PVI-1 transport contract: paused
+initialization, Loop as the default, forward/reverse wrapping, Bounce endpoint
+reflection, exact rational seek preservation, pause invariance, resumed
+direction, and rejection without mutation. The transport selects only the
+canonical `TimelineSample`, playback mode, and direction; evaluated-scene
+capture remains the sole property/scene evaluator.
