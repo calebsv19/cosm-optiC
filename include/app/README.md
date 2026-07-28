@@ -8,6 +8,8 @@ Exposes the public interface for the application runtime.
 - `animation_output.h` – Output helper contract for optional render-metrics dataset export.
 - `preview_transport.h` – Headless Preview transport state/API for
   play/pause, Loop/Bounce, exact sample seek, direction, and endpoint policy.
+- `preview_workspace.h` – UI-independent PVI-2 Preview workspace state,
+  layout, control hit testing, exact-frame scrubbing, and frame-step API.
 - `data_paths.h` – Canonical path/root resolution helpers for config/import/export manifest lanes.
 - `runtime_time.h` – Runtime timing helper contract.
 - `scene_loop_policy.h` – Mode-aware wait-timeout policy contract for menu/editor idle behavior.

@@ -637,3 +637,12 @@ reflection, exact rational seek preservation, pause invariance, resumed
 direction, and rejection without mutation. The transport selects only the
 canonical `TimelineSample`, playback mode, and direction; evaluated-scene
 capture remains the sole property/scene evaluator.
+`preview_workspace` proves the PVI-2 workspace contract: Preview auto-plays
+with Loop selected, Play/Pause and Loop/Bounce controls route through
+`PreviewTransport`, scrubbing emits denominator-1 exact frames, playing
+scrubs resume while paused scrubs remain paused, endpoints and frame steps
+clamp deterministically, and layout updates remain presentation-only.
+`runtime_evaluated_scene_preview` additionally proves that playback-aware
+capture changes only Loop/Bounce/direction metadata for one selected sample;
+the evaluated frame, light/camera values, transforms, provenance, and
+simulation identity remain byte-identical.

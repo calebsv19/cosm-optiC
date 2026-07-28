@@ -439,6 +439,10 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
     TimelineLightMotionSample final_sample = {0};
     RayEvaluatedSceneServiceResult preview_sample = {0};
     RayEvaluatedSceneServiceResult retained_preview_sample = {0};
+    RayEvaluatedSceneServiceResult loop_preview_sample = {0};
+    RayEvaluatedSceneServiceResult bounce_preview_sample = {0};
+    RayEvaluatedSceneSnapshot normalized_loop_snapshot = {0};
+    RayEvaluatedSceneSnapshot normalized_bounce_snapshot = {0};
     RuntimeNative3DPreparedFrame native_frame = {0};
     RuntimeNative3DRenderRequestSnapshot render_snapshot = {0};
     RuntimeNative3DRenderRequestSnapshotDesc render_snapshot_desc = {0};
@@ -466,6 +470,16 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
     assert_true("evaluated_retained_preview_capture",
                 RayEvaluatedSceneCaptureAuthoredSample(
                     (TimelineSample){35, 0u, 1u}, &retained_preview_sample));
+    assert_true("evaluated_loop_preview_capture",
+                RayEvaluatedSceneCaptureSampleWithPlayback(
+                    (TimelineSample){35, 0u, 1u},
+                    RAY_EVALUATED_PLAYBACK_LOOP, false, false,
+                    &loop_preview_sample));
+    assert_true("evaluated_bounce_preview_capture",
+                RayEvaluatedSceneCaptureSampleWithPlayback(
+                    (TimelineSample){35, 0u, 1u},
+                    RAY_EVALUATED_PLAYBACK_BOUNCE, true, false,
+                    &bounce_preview_sample));
     assert_true("evaluated_preview_snapshot_valid", preview_sample.snapshot.valid);
     assert_close("evaluated_preview_final_progress_parity",
                  preview_sample.snapshot.light.progress,
@@ -491,6 +505,28 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
                 memcmp(&preview_sample.snapshot,
                        &retained_preview_sample.snapshot,
                        sizeof(preview_sample.snapshot)) == 0);
+    assert_true("evaluated_transport_playback_provenance",
+                loop_preview_sample.snapshot.playback_mode ==
+                    RAY_EVALUATED_PLAYBACK_LOOP &&
+                !loop_preview_sample.snapshot.reverse_direction &&
+                bounce_preview_sample.snapshot.playback_mode ==
+                    RAY_EVALUATED_PLAYBACK_BOUNCE &&
+                bounce_preview_sample.snapshot.reverse_direction);
+    normalized_loop_snapshot = loop_preview_sample.snapshot;
+    normalized_bounce_snapshot = bounce_preview_sample.snapshot;
+    normalized_loop_snapshot.playback_mode = RAY_EVALUATED_PLAYBACK_STOP;
+    normalized_loop_snapshot.reverse_direction = false;
+    normalized_loop_snapshot.clamped = false;
+    normalized_bounce_snapshot.playback_mode = RAY_EVALUATED_PLAYBACK_STOP;
+    normalized_bounce_snapshot.reverse_direction = false;
+    normalized_bounce_snapshot.clamped = false;
+    assert_true("evaluated_transport_same_sample_semantic_parity",
+                memcmp(&normalized_loop_snapshot,
+                       &normalized_bounce_snapshot,
+                       sizeof(normalized_loop_snapshot)) == 0 &&
+                memcmp(&normalized_loop_snapshot,
+                       &preview_sample.snapshot,
+                       sizeof(normalized_loop_snapshot)) == 0);
 
     assert_true("evaluated_native_prepare",
                 RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(

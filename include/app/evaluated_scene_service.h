@@ -19,6 +19,9 @@ TimelineStatus RayEvaluatedSceneCaptureCompatibilityTransforms(
     RayEvaluatedObjectTransform* out_transforms,
     size_t capacity,
     size_t* out_count);
+TimelineStatus RayEvaluatedSceneResolveTimelineClock(
+    TimelineRate* out_rate,
+    TimelineRange* out_range);
 bool RayEvaluatedSceneCaptureForElapsed(
     double elapsed_seconds,
     RayEvaluatedSceneServiceResult* out_result);
@@ -27,6 +30,12 @@ bool RayEvaluatedSceneCaptureAuthoredSample(
     RayEvaluatedSceneServiceResult* out_result);
 bool RayEvaluatedSceneCaptureSample(
     TimelineSample sample,
+    RayEvaluatedSceneServiceResult* out_result);
+bool RayEvaluatedSceneCaptureSampleWithPlayback(
+    TimelineSample sample,
+    RayEvaluatedPlaybackMode playback_mode,
+    bool reverse_direction,
+    bool clamped,
     RayEvaluatedSceneServiceResult* out_result);
 
 #endif

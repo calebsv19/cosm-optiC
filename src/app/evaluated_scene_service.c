@@ -401,11 +401,52 @@ bool RayEvaluatedSceneCaptureAuthoredSample(
 bool RayEvaluatedSceneCaptureSample(
     TimelineSample sample,
     RayEvaluatedSceneServiceResult* out_result) {
+    return RayEvaluatedSceneCaptureSampleWithPlayback(
+        sample, RAY_EVALUATED_PLAYBACK_STOP, false, false, out_result);
+}
+
+TimelineStatus RayEvaluatedSceneResolveTimelineClock(
+    TimelineRate* out_rate,
+    TimelineRange* out_range) {
+    RuntimeSceneLightTimelineDocument document = {0};
+    TimelineRate rate = {0};
+    TimelineRange range = {0};
+
+    if (!out_rate || !out_range) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    if (RuntimeSceneLightTimelineGetLast(&document)) {
+        rate = document.timeline.rate;
+        range = document.timeline.range;
+    } else {
+        rate.frames_per_second_numerator =
+            (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30);
+        rate.frames_per_second_denominator = 1u;
+        range.start_frame = animSettings.startFrameIndex;
+        range.frame_count =
+            (uint64_t)(animSettings.framesForTravel > 0
+                           ? animSettings.framesForTravel
+                           : 1);
+    }
+    if (!TimelineRateIsValid(rate)) return TIMELINE_STATUS_INVALID_RATE;
+    if (!TimelineRangeIsValid(range)) return TIMELINE_STATUS_INVALID_RANGE;
+    *out_rate = rate;
+    *out_range = range;
+    return TIMELINE_STATUS_OK;
+}
+
+bool RayEvaluatedSceneCaptureSampleWithPlayback(
+    TimelineSample sample,
+    RayEvaluatedPlaybackMode playback_mode,
+    bool reverse_direction,
+    bool clamped,
+    RayEvaluatedSceneServiceResult* out_result) {
     RuntimeSceneLightTimelineDocument document = {0};
     TimelineRate rate = {0};
     TimelineRange range = {0};
     TimelineEvaluationContext context = {0};
     TimelineStatus status;
+
     if (!out_result) return false;
     memset(out_result, 0, sizeof(*out_result));
     if (RuntimeSceneLightTimelineGetLast(&document)) {
@@ -416,17 +457,15 @@ bool RayEvaluatedSceneCaptureSample(
             return false;
         }
         return ray_evaluated_build_authored(
-            &document, &context, RAY_EVALUATED_PLAYBACK_STOP,
-            false, false, out_result);
+            &document, &context, playback_mode,
+            reverse_direction, clamped, out_result);
     }
-    rate.frames_per_second_numerator =
-        (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30);
-    rate.frames_per_second_denominator = 1u;
-    range.start_frame = animSettings.startFrameIndex;
-    range.frame_count =
-        (uint64_t)(animSettings.framesForTravel > 0
-                       ? animSettings.framesForTravel
-                       : 1);
+    status = RayEvaluatedSceneResolveTimelineClock(&rate, &range);
+    if (status != TIMELINE_STATUS_OK) {
+        ray_evaluated_fail(out_result, status,
+                           "fallback timeline clock is invalid");
+        return false;
+    }
     status = TimelineEvaluationContextBuild(rate, range, sample, &context);
     if (status != TIMELINE_STATUS_OK) {
         ray_evaluated_fail(out_result, status,
@@ -434,8 +473,7 @@ bool RayEvaluatedSceneCaptureSample(
         return false;
     }
     return ray_evaluated_build_legacy(
-        &context, RAY_EVALUATED_PLAYBACK_STOP,
-        false, false, out_result);
+        &context, playback_mode, reverse_direction, clamped, out_result);
 }
 
 bool RayEvaluatedSceneCaptureForElapsed(
@@ -457,14 +495,12 @@ bool RayEvaluatedSceneCaptureForElapsed(
         rate = document.timeline.rate;
         range = document.timeline.range;
     } else {
-        rate.frames_per_second_numerator =
-            (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30);
-        rate.frames_per_second_denominator = 1u;
-        range.start_frame = animSettings.startFrameIndex;
-        range.frame_count =
-            (uint64_t)(animSettings.framesForTravel > 0
-                           ? animSettings.framesForTravel
-                           : 1);
+        status = RayEvaluatedSceneResolveTimelineClock(&rate, &range);
+        if (status != TIMELINE_STATUS_OK) {
+            ray_evaluated_fail(out_result, status,
+                               "fallback timeline clock is invalid");
+            return false;
+        }
     }
     status = RayEvaluatedTimelineSampleFromElapsed(
         rate, range, elapsed_seconds, mode, &sample,
