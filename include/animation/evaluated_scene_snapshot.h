@@ -8,8 +8,9 @@
 #include "animation/timeline_document.h"
 #include "animation/timeline_light_motion.h"
 
-#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 1u
+#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 2u
 #define RAY_EVALUATED_SCENE_DIAGNOSTICS_CAPACITY 256u
+#define RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY 64u
 
 typedef enum RayEvaluatedSceneSource {
     RAY_EVALUATED_SCENE_SOURCE_NONE = 0,
@@ -27,6 +28,17 @@ typedef enum RayEvaluatedSimulationSource {
     RAY_EVALUATED_SIMULATION_NONE = 0,
     RAY_EVALUATED_SIMULATION_CACHE
 } RayEvaluatedSimulationSource;
+
+typedef enum RayEvaluatedObjectTransformSource {
+    RAY_EVALUATED_OBJECT_TRANSFORM_NONE = 0,
+    RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION
+} RayEvaluatedObjectTransformSource;
+
+typedef enum RayEvaluatedSimulationInterpolation {
+    RAY_EVALUATED_SIMULATION_INTERPOLATION_NONE = 0,
+    RAY_EVALUATED_SIMULATION_INTERPOLATION_STEP,
+    RAY_EVALUATED_SIMULATION_INTERPOLATION_LINEAR
+} RayEvaluatedSimulationInterpolation;
 
 typedef struct RayEvaluatedSceneIdentity {
     uint64_t scene_revision;
@@ -74,12 +86,31 @@ typedef struct RayEvaluatedCamera {
     double zoom;
 } RayEvaluatedCamera;
 
+typedef struct RayEvaluatedObjectTransform {
+    bool valid;
+    char target_id[TIMELINE_ID_CAPACITY];
+    RayEvaluatedObjectTransformSource source;
+    bool has_position;
+    bool has_rotation;
+    TimelineVec3 position;
+    TimelineVec3 rotation_radians;
+    TimelineEvaluationContext frame;
+} RayEvaluatedObjectTransform;
+
 typedef struct RayEvaluatedSimulationIdentity {
     RayEvaluatedSimulationSource source;
     bool valid;
     char cache_id[TIMELINE_ID_CAPACITY];
     uint64_t cache_revision;
     int64_t frame_index;
+    int64_t source_frame_index;
+    TimelineRate source_rate;
+    int64_t frame_offset;
+    uint32_t frame_stride;
+    uint32_t subframe_numerator;
+    uint32_t subframe_denominator;
+    RayEvaluatedSimulationInterpolation interpolation;
+    char content_digest[TIMELINE_ID_CAPACITY];
 } RayEvaluatedSimulationIdentity;
 
 typedef struct RayEvaluatedSceneSnapshot {
@@ -93,6 +124,9 @@ typedef struct RayEvaluatedSceneSnapshot {
     RayEvaluatedSceneIdentity identity;
     RayEvaluatedLight light;
     RayEvaluatedCamera camera;
+    size_t object_transform_count;
+    RayEvaluatedObjectTransform
+        object_transforms[RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY];
     RayEvaluatedSimulationIdentity simulation;
     uint32_t invalidation_domains;
     char diagnostics[RAY_EVALUATED_SCENE_DIAGNOSTICS_CAPACITY];
@@ -107,6 +141,8 @@ typedef struct RayEvaluatedSceneSnapshotInputs {
     RayEvaluatedSceneIdentity identity;
     RayEvaluatedLight light;
     RayEvaluatedCamera camera;
+    const RayEvaluatedObjectTransform* object_transforms;
+    size_t object_transform_count;
     RayEvaluatedSimulationIdentity simulation;
     uint32_t invalidation_domains;
     const char* diagnostics;

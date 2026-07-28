@@ -116,9 +116,28 @@ over legacy normalized-time sampling and preserves geometry/TLAS cache reuse for
 light-only motion. Headless summaries publish the sampled frame, target,
 progress, position, speed, and derivative validity for agent inspection.
 
+## ESP5 evaluated object and simulation channels
+
+`evaluated_scene_snapshot.*` schema v2 adds a fixed-capacity immutable rigid
+transform channel array and an explicit simulation-cache frame binding. Current
+object records are sampled only from the existing compatibility motion summary;
+each carries its stable target, position/rotation presence, compatibility
+provenance, and exact evaluation context.
+
+A claimed simulation cache must identify its cache revision, selected and
+source frames, rational source rate, frame offset and stride, rational
+subframe, interpolation policy, and content digest. `none` remains the explicit
+default. Validation rejects duplicate targets, non-finite values, wrong-frame
+records, incomplete cache identity, and capacity overflow.
+
+This is a consumer-contract framework, not new puppetry semantics. Primitive
+and mesh construction still applies the existing normalized-time compatibility
+motion path; solving, cache loading, and interpolation remain outside the
+snapshot.
+
 ## Next boundary
 
-Finish installed desktop interaction proof and visual frame comparison for an
-ordinary authored scene. After that acceptance boundary, generalize the same
-property-track/editor contract to camera and rigid-object transform lanes; do
-not make every scene object timeline-owned as part of the light-first slice.
+Add an app-local Preview transport controller and inspection shell: explicit
+play/pause, Loop by default, optional Bounce, exact-frame scrubbing, and
+read-only authored-key markers. Transport selects a canonical timeline sample
+before requesting an evaluated snapshot; it must not become a second evaluator.

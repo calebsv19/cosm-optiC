@@ -6,6 +6,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_light_timeline_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
+#include "import/runtime_scene_motion_bridge.h"
 #include "render/runtime_native_3d_prepare_cache.h"
 
 #include <math.h>
@@ -18,6 +19,55 @@ static RayEvaluatedPlaybackMode ray_evaluated_playback_mode(void) {
         return RAY_EVALUATED_PLAYBACK_LOOP;
     }
     return RAY_EVALUATED_PLAYBACK_STOP;
+}
+
+TimelineStatus RayEvaluatedSceneCaptureCompatibilityTransforms(
+    const RuntimeMotionTrack3DSummary* motion,
+    const TimelineEvaluationContext* frame,
+    RayEvaluatedObjectTransform* out_transforms,
+    size_t capacity,
+    size_t* out_count) {
+    RayEvaluatedObjectTransform
+        captured[RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY] = {{0}};
+    size_t count = 0u;
+    if (!motion || !frame || !out_count ||
+        (capacity > 0u && !out_transforms) ||
+        capacity > RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    *out_count = 0u;
+    if (!motion->valid) return TIMELINE_STATUS_OK;
+    if (motion->stored_tracks < 0 ||
+        motion->stored_tracks > RUNTIME_MOTION_TRACK_3D_MAX_TRACKS) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    for (int i = 0; i < motion->stored_tracks; ++i) {
+        const RuntimeMotionTrack3D* track = &motion->tracks[i];
+        RuntimeMotionTrack3DSample sample = {0};
+        RayEvaluatedObjectTransform transform = {0};
+        if (!RuntimeMotionTrack3DSampleTrack(track, frame->normalized_t, &sample)) {
+            continue;
+        }
+        if (count >= capacity) return TIMELINE_STATUS_CAPACITY_EXCEEDED;
+        transform.valid = true;
+        snprintf(transform.target_id, sizeof(transform.target_id), "%s",
+                 track->object_id);
+        transform.source =
+            RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION;
+        transform.has_position = sample.has_position;
+        transform.has_rotation = sample.has_rotation;
+        transform.position = (TimelineVec3){
+            sample.position_x, sample.position_y, sample.position_z};
+        transform.rotation_radians = (TimelineVec3){
+            sample.pitch_radians, sample.yaw_radians, sample.roll_radians};
+        transform.frame = *frame;
+        captured[count++] = transform;
+    }
+    if (count > 0u) {
+        memcpy(out_transforms, captured, count * sizeof(captured[0]));
+    }
+    *out_count = count;
+    return TIMELINE_STATUS_OK;
 }
 
 static TimelineVec3 ray_evaluated_vec3(Vec3 value) {
@@ -131,6 +181,10 @@ static bool ray_evaluated_build_authored(
     TimelineLightMotionSample motion = {0};
     TimelineEvaluationResult provenance = {0};
     RayEvaluatedSceneSnapshotInputs inputs = {0};
+    RayEvaluatedObjectTransform object_transforms[
+        RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY] = {{0}};
+    RuntimeMotionTrack3DSummary motion_summary = {0};
+    size_t object_transform_count = 0u;
     const TimelineTrack* progress_track = NULL;
     TimelineStatus status;
 
@@ -190,6 +244,17 @@ static bool ray_evaluated_build_authored(
                            "camera evaluation failed");
         return false;
     }
+    runtime_scene_motion_bridge_get_last_summary(&motion_summary);
+    status = RayEvaluatedSceneCaptureCompatibilityTransforms(
+        &motion_summary, context, object_transforms,
+        RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY, &object_transform_count);
+    if (status != TIMELINE_STATUS_OK) {
+        ray_evaluated_fail(out_result, status,
+                           "object compatibility motion capture failed");
+        return false;
+    }
+    inputs.object_transforms = object_transforms;
+    inputs.object_transform_count = object_transform_count;
     inputs.simulation.source = RAY_EVALUATED_SIMULATION_NONE;
     inputs.simulation.valid = false;
     inputs.invalidation_domains = motion.invalidation_domains;
@@ -222,6 +287,10 @@ static bool ray_evaluated_build_legacy(
     RuntimeSceneBridge3DLightSeedState light_state = {0};
     RuntimeNative3DPreparedSceneCacheStats cache_stats = {0};
     RayEvaluatedSceneSnapshotInputs inputs = {0};
+    RayEvaluatedObjectTransform object_transforms[
+        RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY] = {{0}};
+    RuntimeMotionTrack3DSummary motion_summary = {0};
+    size_t object_transform_count = 0u;
     Point light_point = {0};
     double light_z = 0.0;
     TimelineStatus status;
@@ -272,6 +341,17 @@ static bool ray_evaluated_build_legacy(
                            "legacy camera evaluation failed");
         return false;
     }
+    runtime_scene_motion_bridge_get_last_summary(&motion_summary);
+    status = RayEvaluatedSceneCaptureCompatibilityTransforms(
+        &motion_summary, context, object_transforms,
+        RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY, &object_transform_count);
+    if (status != TIMELINE_STATUS_OK) {
+        ray_evaluated_fail(out_result, status,
+                           "legacy object compatibility motion capture failed");
+        return false;
+    }
+    inputs.object_transforms = object_transforms;
+    inputs.object_transform_count = object_transform_count;
     inputs.simulation.source = RAY_EVALUATED_SIMULATION_NONE;
     inputs.simulation.valid = false;
     inputs.invalidation_domains = TIMELINE_INVALIDATION_LIGHTING |

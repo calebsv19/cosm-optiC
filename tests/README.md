@@ -627,3 +627,6 @@ constant-speed distinction used by the ESP-1/ESP-2 Preview slice. It also
 proves that ESP-4 Wireframe, Solid, and Interactive shaded selection preserves
 the snapshot byte-for-byte, including provenance and simulation-frame identity,
 while the shaded approximation responds only to the evaluated light.
+ESP-5 coverage adds compatibility rigid-transform capture, exact-frame
+provenance, transactional detachment, complete simulation-cache frame binding,
+and wrong-frame rejection.

@@ -35,6 +35,14 @@ static uint64_t ray_hash_timeline_value(uint64_t hash, TimelineValue value) {
     return hash;
 }
 
+static bool ray_evaluated_vec3_finite(TimelineVec3 value) {
+    return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
+}
+
+static bool ray_evaluated_id_valid(const char* value, size_t capacity) {
+    return value && value[0] && strnlen(value, capacity) < capacity;
+}
+
 const char* RayEvaluatedSceneSourceLabel(RayEvaluatedSceneSource source) {
     switch (source) {
         case RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE: return "authored";
@@ -122,16 +130,15 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
     const RayEvaluatedSceneSnapshot* snapshot) {
     TimelineEvaluationContext rebuilt;
     TimelineStatus status;
+    size_t i = 0u;
     if (!snapshot || !snapshot->valid ||
         snapshot->schema_version != RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION ||
         snapshot->source == RAY_EVALUATED_SCENE_SOURCE_NONE ||
         !snapshot->light.valid || !snapshot->camera.valid ||
-        !isfinite(snapshot->light.position.x) ||
-        !isfinite(snapshot->light.position.y) ||
-        !isfinite(snapshot->light.position.z) ||
-        !isfinite(snapshot->camera.position.x) ||
-        !isfinite(snapshot->camera.position.y) ||
-        !isfinite(snapshot->camera.position.z)) {
+        !ray_evaluated_vec3_finite(snapshot->light.position) ||
+        !ray_evaluated_vec3_finite(snapshot->camera.position) ||
+        snapshot->object_transform_count >
+            RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY) {
         return TIMELINE_STATUS_INVALID_SNAPSHOT;
     }
     status = TimelineEvaluationContextBuild(snapshot->frame.rate,
@@ -148,6 +155,41 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
     }
     if (snapshot->simulation.source == RAY_EVALUATED_SIMULATION_NONE &&
         snapshot->simulation.valid) {
+        return TIMELINE_STATUS_INVALID_SNAPSHOT;
+    }
+    for (i = 0u; i < snapshot->object_transform_count; ++i) {
+        const RayEvaluatedObjectTransform* transform =
+            &snapshot->object_transforms[i];
+        size_t prior = 0u;
+        if (!transform->valid ||
+            transform->source == RAY_EVALUATED_OBJECT_TRANSFORM_NONE ||
+            !ray_evaluated_id_valid(transform->target_id,
+                                    sizeof(transform->target_id)) ||
+            (!transform->has_position && !transform->has_rotation) ||
+            !ray_evaluated_vec3_finite(transform->position) ||
+            !ray_evaluated_vec3_finite(transform->rotation_radians) ||
+            !TimelineEvaluationContextsReferToSameSample(
+                &snapshot->frame, &transform->frame)) {
+            return TIMELINE_STATUS_INVALID_SNAPSHOT;
+        }
+        for (prior = 0u; prior < i; ++prior) {
+            if (strcmp(snapshot->object_transforms[prior].target_id,
+                       transform->target_id) == 0) {
+                return TIMELINE_STATUS_INVALID_SNAPSHOT;
+            }
+        }
+    }
+    if (snapshot->simulation.source == RAY_EVALUATED_SIMULATION_CACHE &&
+        (!snapshot->simulation.valid ||
+         !ray_evaluated_id_valid(snapshot->simulation.cache_id,
+                                 sizeof(snapshot->simulation.cache_id)) ||
+         snapshot->simulation.frame_stride == 0u ||
+         !TimelineRateIsValid(snapshot->simulation.source_rate) ||
+         snapshot->simulation.subframe_denominator == 0u ||
+         snapshot->simulation.subframe_numerator >=
+             snapshot->simulation.subframe_denominator ||
+         !ray_evaluated_id_valid(snapshot->simulation.content_digest,
+                                 sizeof(snapshot->simulation.content_digest)))) {
         return TIMELINE_STATUS_INVALID_SNAPSHOT;
     }
     return TIMELINE_STATUS_OK;
@@ -170,6 +212,17 @@ TimelineStatus RayEvaluatedSceneSnapshotBuild(
     snapshot.identity = inputs->identity;
     snapshot.light = inputs->light;
     snapshot.camera = inputs->camera;
+    if (inputs->object_transform_count >
+            RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY ||
+        (inputs->object_transform_count > 0u && !inputs->object_transforms)) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    snapshot.object_transform_count = inputs->object_transform_count;
+    if (snapshot.object_transform_count > 0u) {
+        memcpy(snapshot.object_transforms, inputs->object_transforms,
+               snapshot.object_transform_count *
+                   sizeof(snapshot.object_transforms[0]));
+    }
     snapshot.simulation = inputs->simulation;
     snapshot.invalidation_domains = inputs->invalidation_domains;
     snprintf(snapshot.diagnostics, sizeof(snapshot.diagnostics), "%s",

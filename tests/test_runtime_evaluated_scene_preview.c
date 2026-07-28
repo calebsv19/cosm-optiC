@@ -140,6 +140,97 @@ static int test_evaluated_snapshot_detachment(void) {
     return 0;
 }
 
+static int test_evaluated_object_and_simulation_channel_framework(void) {
+    RuntimeMotionTrack3DSummary motion = {0};
+    RayEvaluatedObjectTransform transforms[2] = {{0}};
+    RayEvaluatedSceneSnapshotInputs inputs = {0};
+    RayEvaluatedSceneSnapshot snapshot = {0};
+    TimelineEvaluationContext context = evaluated_context(10);
+    size_t transform_count = 0u;
+    RuntimeMotionTrack3D* track = NULL;
+
+    RuntimeMotionTrack3DSummaryInit(&motion, "evaluated channel fixture");
+    motion.stored_tracks = 1;
+    track = &motion.tracks[0];
+    track->used = true;
+    track->enabled = true;
+    track->matched_object = true;
+    track->supported_mode = true;
+    track->mode = RUNTIME_MOTION_TRACK_3D_MODE_AUTHORED_PATH;
+    track->has_position_path = true;
+    snprintf(track->object_id, sizeof(track->object_id), "object/rigid-proof");
+    track->position_path.numPoints = 2;
+    track->position_path.points[0] = (Point){1.0, 2.0};
+    track->position_path.points[1] = (Point){5.0, 6.0};
+    track->position_path_3d.point_z[0] = 3.0;
+    track->position_path_3d.point_z[1] = 7.0;
+
+    assert_true("evaluated_object_channel_capture",
+                RayEvaluatedSceneCaptureCompatibilityTransforms(
+                    &motion, &context, transforms, 2u, &transform_count) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("evaluated_object_channel_count", transform_count == 1u);
+    assert_true("evaluated_object_channel_identity",
+                strcmp(transforms[0].target_id, "object/rigid-proof") == 0 &&
+                transforms[0].source ==
+                    RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION);
+    assert_true("evaluated_object_channel_frame",
+                TimelineEvaluationContextsReferToSameSample(
+                    &context, &transforms[0].frame));
+    assert_true("evaluated_object_channel_position",
+                transforms[0].has_position);
+
+    inputs.source = RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE;
+    inputs.frame = context;
+    inputs.light.valid = true;
+    inputs.light.enabled = true;
+    inputs.light.position = (TimelineVec3){1.0, 2.0, 3.0};
+    inputs.light.property_provenance.valid = true;
+    inputs.camera.valid = true;
+    inputs.camera.position = (TimelineVec3){4.0, 5.0, 6.0};
+    inputs.camera.zoom = 1.0;
+    inputs.object_transforms = transforms;
+    inputs.object_transform_count = transform_count;
+    inputs.simulation.source = RAY_EVALUATED_SIMULATION_CACHE;
+    inputs.simulation.valid = true;
+    snprintf(inputs.simulation.cache_id, sizeof(inputs.simulation.cache_id),
+             "simulation/cache-proof");
+    inputs.simulation.cache_revision = 17u;
+    inputs.simulation.frame_index = 10;
+    inputs.simulation.source_frame_index = 24;
+    inputs.simulation.source_rate = (TimelineRate){60u, 1u};
+    inputs.simulation.frame_offset = 4;
+    inputs.simulation.frame_stride = 2u;
+    inputs.simulation.subframe_denominator = 1u;
+    inputs.simulation.interpolation =
+        RAY_EVALUATED_SIMULATION_INTERPOLATION_STEP;
+    snprintf(inputs.simulation.content_digest,
+             sizeof(inputs.simulation.content_digest), "sha256:proof");
+    inputs.invalidation_domains =
+        TIMELINE_INVALIDATION_RIGID_TRANSFORM |
+        TIMELINE_INVALIDATION_SIMULATION_CACHE;
+    inputs.diagnostics = "object and simulation channel framework";
+    assert_true("evaluated_object_sim_snapshot_build",
+                RayEvaluatedSceneSnapshotBuild(&inputs, &snapshot) ==
+                    TIMELINE_STATUS_OK);
+    transforms[0].position.x = 999.0;
+    inputs.simulation.source_frame_index = 999;
+    assert_true("evaluated_object_channel_detached",
+                snapshot.object_transform_count == 1u &&
+                snapshot.object_transforms[0].position.x != 999.0);
+    assert_true("evaluated_simulation_binding_detached",
+                snapshot.simulation.source_frame_index == 24 &&
+                snapshot.simulation.frame_stride == 2u &&
+                strcmp(snapshot.simulation.content_digest,
+                       "sha256:proof") == 0);
+
+    snapshot.object_transforms[0].frame.sample.absolute_frame += 1;
+    assert_true("evaluated_object_channel_wrong_frame_rejected",
+                RayEvaluatedSceneSnapshotValidate(&snapshot) ==
+                    TIMELINE_STATUS_INVALID_SNAPSHOT);
+    return 0;
+}
+
 static int test_preview_quality_preserves_evaluated_snapshot(void) {
     RayEvaluatedSceneSnapshotInputs inputs;
     RayEvaluatedSceneSnapshot snapshot;
@@ -170,6 +261,15 @@ static int test_preview_quality_preserves_evaluated_snapshot(void) {
              "preview-cache-proof");
     inputs.simulation.cache_revision = 9u;
     inputs.simulation.frame_index = 7;
+    inputs.simulation.source_frame_index = 7;
+    inputs.simulation.source_rate = (TimelineRate){20u, 1u};
+    inputs.simulation.frame_stride = 1u;
+    inputs.simulation.subframe_denominator = 1u;
+    inputs.simulation.interpolation =
+        RAY_EVALUATED_SIMULATION_INTERPOLATION_STEP;
+    snprintf(inputs.simulation.content_digest,
+             sizeof(inputs.simulation.content_digest),
+             "sha256:preview-cache-proof");
     inputs.invalidation_domains =
         TIMELINE_INVALIDATION_LIGHTING | TIMELINE_INVALIDATION_CAMERA;
     inputs.diagnostics = "preview quality snapshot parity";
@@ -511,6 +611,7 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
 int run_test_runtime_evaluated_scene_preview_tests(void) {
     test_evaluated_elapsed_frame_mapping();
     test_evaluated_snapshot_detachment();
+    test_evaluated_object_and_simulation_channel_framework();
     test_preview_quality_preserves_evaluated_snapshot();
     test_preview_quality_light_first_shading();
     test_evaluated_equal_time_vs_constant_speed();
