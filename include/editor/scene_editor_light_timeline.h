@@ -18,6 +18,9 @@ TimelineStatus SceneEditorLightTimelineDeleteSelectedKey(void);
 bool SceneEditorLightTimelineUndo(void);
 bool SceneEditorLightTimelineRedo(void);
 bool SceneEditorLightTimelineInteractionActive(void);
+bool SceneEditorLightTimelinePlaying(void);
+bool SceneEditorLightTimelineTogglePlayback(void);
+bool SceneEditorLightTimelineAdvancePlayback(void);
 bool SceneEditorLightTimelineToggle(SceneEditorPaneHost* pane_host);
 bool SceneEditorLightTimelineHandleEvent(
     SDL_Event* event,

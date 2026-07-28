@@ -75,6 +75,7 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     if (!editor->running || sceneEditorExitFlag) {
         return;
     }
+    (void)SceneEditorLightTimelineAdvancePlayback();
 
     SceneEditorSyncWindowSize(editor);
     scene_editor_session_runtime_update_dirty_objects();
@@ -173,6 +174,9 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                     scene_loop_diag_tick(frame_elapsed_sec, wait_blocked_ms, wait_call_count);
                 }
                 break;
+            }
+            if (SceneEditorLightTimelineAdvancePlayback()) {
+                frame_dirty = true;
             }
 
             heartbeat_due = (last_render_ms == 0u) ||

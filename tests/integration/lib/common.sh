@@ -12,6 +12,19 @@ ray_tracing_root_dir() {
   cd "$integration_dir/../.." && pwd
 }
 
+ray_tracing_workspace_root() {
+  local root_dir="${1:-$(ray_tracing_root_dir)}"
+  if [[ -d "$root_dir/../skills" ]]; then
+    cd "$root_dir/.." && pwd
+    return 0
+  fi
+  if [[ -d "$root_dir/../../skills" ]]; then
+    cd "$root_dir/../.." && pwd
+    return 0
+  fi
+  cd "$root_dir/.." && pwd
+}
+
 ray_tracing_tool_path() {
   local tool_name="$1"
   local root_dir="${2:-$(ray_tracing_root_dir)}"
@@ -54,5 +67,7 @@ ray_tracing_test_diagnostics_dir() {
 ray_tracing_visualizer_drop_root() {
   local drop_id="$1"
   local root_dir="${2:-$(ray_tracing_root_dir)}"
-  printf '%s\n' "$root_dir/../_private_workspace_artifacts/codework_visualizer_runs/$drop_id"
+  local workspace_root
+  workspace_root="$(ray_tracing_workspace_root "$root_dir")"
+  printf '%s\n' "$workspace_root/_private_workspace_artifacts/codework_visualizer_runs/$drop_id"
 }

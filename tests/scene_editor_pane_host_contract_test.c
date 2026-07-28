@@ -82,7 +82,7 @@ static void test_pane_host_timeline_is_collapsed_then_resizable(void) {
     assert(scene_editor_pane_host_set_timeline_visible(&host, true));
     opened = *scene_editor_pane_host_layout(&host);
     assert(opened.timeline_visible);
-    assert(opened.timeline_rect.h >= 100);
+    assert(opened.timeline_rect.h >= 200);
     assert(opened.viewport_rect.h < before.viewport_rect.h);
     pointer_x = (float)(opened.timeline_rect.x + opened.timeline_rect.w / 2);
     pointer_y = (float)(opened.timeline_rect.y - 10);
