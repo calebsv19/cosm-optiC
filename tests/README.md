@@ -623,4 +623,7 @@ The authoritative stable target list is `STABLE_TEST_TARGETS` in
 `runtime_evaluated_scene_preview` proves immutable evaluated-scene capture,
 authored-frame Preview/final light parity, authoring-global non-mutation,
 explicit simulation identity, and the unequal-path equal-time versus
-constant-speed distinction used by the ESP-1/ESP-2 Preview slice.
+constant-speed distinction used by the ESP-1/ESP-2 Preview slice. It also
+proves that ESP-4 Wireframe, Solid, and Interactive shaded selection preserves
+the snapshot byte-for-byte, including provenance and simulation-frame identity,
+while the shaded approximation responds only to the evaluated light.

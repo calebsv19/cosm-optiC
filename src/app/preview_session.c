@@ -4,7 +4,9 @@
 #include "app/preview_mode_route.h"
 #include "app/preview_camera_sample.h"
 #include "app/preview_camera_projector.h"
+#include "app/preview_retained_scene_quality.h"
 #include "app/preview_retained_scene_renderer.h"
+#include "app/preview_retained_scene_surface.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
 #include "editor/material_editor_face_preview.h"
@@ -51,18 +53,26 @@ static void DrawPreviewMarker(SDL_Renderer* renderer,
 
 static void DrawPreviewRouteStatus(SDL_Renderer* renderer,
                                    const PreviewModeRouteDecision* decision,
-                                   const RayEvaluatedSceneServiceResult* evaluation) {
+                                   const RayEvaluatedSceneServiceResult* evaluation,
+                                   PreviewRetainedSceneQuality quality) {
     SDL_Rect line1 = {12, 10, 360, 22};
     SDL_Rect line2 = {12, 32, 520, 38};
     SDL_Rect line3 = {12, 68, 520, 22};
+    SDL_Rect line4 = {12, 92, 520, 22};
     SDL_Color primary = {220, 224, 232, 255};
     SDL_Color secondary = {170, 176, 188, 255};
+    char quality_line[128];
     if (!renderer || !decision) return;
     RenderLabelTextLeft(renderer, line1, decision->branchLabel, primary);
     RenderLabelTextWrappedLeft(renderer, line2, decision->statusLine, secondary);
     if (evaluation && evaluation->status_line[0] != '\0') {
         RenderLabelTextWrappedLeft(renderer, line3, evaluation->status_line, secondary);
     }
+    snprintf(quality_line,
+             sizeof(quality_line),
+             "Preview quality: %s (Q cycles; wireframe is always retained)",
+             PreviewRetainedSceneQualityLabel(quality));
+    RenderLabelTextLeft(renderer, line4, quality_line, secondary);
 }
 
 static SDL_Rect PreviewCloseButtonRect(int window_width) {
@@ -124,6 +134,8 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     double elapsed = 0.0;
     bool running_preview = true;
     bool close_button_pressed = false;
+    PreviewRetainedSceneQuality preview_quality =
+        PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME;
 
     if (standalone) {
         if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -230,6 +242,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         }
     }
 
+    PreviewRetainedSceneSurfacePrepare();
     prev_ns = runtime_time_now_ns();
     while (running_preview) {
         SDL_Event event;
@@ -238,6 +251,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         int mouse_y = 0;
         bool close_button_hovered = false;
         RayEvaluatedSceneServiceResult evaluation = {0};
+        PreviewRetainedSceneFrame retained_frame = {0};
         Point light_point = {sceneSettings.bezierPath.points[0].x,
                              sceneSettings.bezierPath.points[0].y};
         double light_z = sceneSettings.bezierPath3D.point_z[0];
@@ -285,6 +299,12 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                 close_button_pressed = false;
             }
             if (event.type == SDL_KEYDOWN) {
+                if (event.key.windowID == preview_window_id &&
+                    event.key.keysym.sym == SDLK_q) {
+                    preview_quality =
+                        PreviewRetainedSceneQualityCycle(preview_quality);
+                    continue;
+                }
                 if (animation_handle_text_zoom_shortcut(&event.key)) {
                     continue;
                 }
@@ -340,6 +360,8 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             runtime_scene_bridge_get_last_3d_digest_state(&preview_digest);
             preview_digest_status = RayTracingModeBackend_BuildSceneDigestStatus(&preview_route);
         }
+        (void)PreviewRetainedSceneFrameBuild(
+            preview_quality, &evaluation.snapshot, &retained_frame);
         if (!PreviewModeRouteSelect(&preview_route,
                                     &preview_digest_status,
                                     projector_ready,
@@ -373,6 +395,12 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         }
 
         if (route_decision.branch == PREVIEW_RENDER_BRANCH_RETAINED_3D) {
+            if (PreviewRetainedSceneQualityUsesSurface(preview_quality)) {
+                (void)PreviewRetainedSceneSurfaceRender(preview_renderer,
+                                                        &preview_projector,
+                                                        &retained_frame,
+                                                        NULL);
+            }
             PreviewRetainedSceneRender(preview_renderer, &preview_digest, &preview_projector);
             PreviewRetainedSceneRenderLightMarker(preview_renderer,
                                                   &preview_projector,
@@ -418,11 +446,15 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                               (SDL_Color){120, 200, 255, 255},
                               6);
         }
-        DrawPreviewRouteStatus(preview_renderer, &route_decision, &evaluation);
+        DrawPreviewRouteStatus(preview_renderer,
+                               &route_decision,
+                               &evaluation,
+                               preview_quality);
         DrawPreviewCloseButton(preview_renderer, close_button_rect, close_button_hovered);
         render_end_frame();
     }
 
+    PreviewRetainedSceneSurfaceReset(preview_renderer);
     if (standalone) {
         ray_tracing_font_runtime_detach_renderer(preview_renderer);
 #if USE_VULKAN

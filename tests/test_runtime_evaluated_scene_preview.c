@@ -7,6 +7,7 @@
 #include "animation/evaluated_scene_snapshot.h"
 #include "animation/timeline_property_registry.h"
 #include "app/evaluated_scene_service.h"
+#include "app/preview_retained_scene_quality.h"
 #include "config/config_manager.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
@@ -136,6 +137,130 @@ static int test_evaluated_snapshot_detachment(void) {
     assert_true("evaluated_snapshot_sim_none",
                 snapshot.simulation.source == RAY_EVALUATED_SIMULATION_NONE &&
                 !snapshot.simulation.valid);
+    return 0;
+}
+
+static int test_preview_quality_preserves_evaluated_snapshot(void) {
+    RayEvaluatedSceneSnapshotInputs inputs;
+    RayEvaluatedSceneSnapshot snapshot;
+    PreviewRetainedSceneFrame solid;
+    PreviewRetainedSceneFrame shaded;
+    memset(&inputs, 0, sizeof(inputs));
+    inputs.source = RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE;
+    inputs.playback_mode = RAY_EVALUATED_PLAYBACK_BOUNCE;
+    inputs.reverse_direction = true;
+    inputs.frame = evaluated_context(7);
+    inputs.identity.scene_revision = 41u;
+    inputs.identity.timeline_revision = 73u;
+    inputs.light.valid = true;
+    inputs.light.enabled = true;
+    inputs.light.position = (TimelineVec3){1.0, 2.0, 8.0};
+    inputs.light.color = (TimelineVec3){1.0, 0.5, 0.25};
+    inputs.light.intensity = 4.0;
+    inputs.light.property_provenance.valid = true;
+    inputs.light.property_provenance.left_frame = 5;
+    inputs.light.property_provenance.right_frame = 10;
+    inputs.camera.valid = true;
+    inputs.camera.position = (TimelineVec3){4.0, 5.0, 6.0};
+    inputs.camera.zoom = 1.0;
+    inputs.simulation.source = RAY_EVALUATED_SIMULATION_CACHE;
+    inputs.simulation.valid = true;
+    snprintf(inputs.simulation.cache_id,
+             sizeof(inputs.simulation.cache_id),
+             "preview-cache-proof");
+    inputs.simulation.cache_revision = 9u;
+    inputs.simulation.frame_index = 7;
+    inputs.invalidation_domains =
+        TIMELINE_INVALIDATION_LIGHTING | TIMELINE_INVALIDATION_CAMERA;
+    inputs.diagnostics = "preview quality snapshot parity";
+    assert_true("preview_quality_snapshot_fixture",
+                RayEvaluatedSceneSnapshotBuild(&inputs, &snapshot) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("preview_quality_solid_frame",
+                PreviewRetainedSceneFrameBuild(
+                    PREVIEW_RETAINED_SCENE_QUALITY_SOLID,
+                    &snapshot,
+                    &solid));
+    assert_true("preview_quality_shaded_frame",
+                PreviewRetainedSceneFrameBuild(
+                    PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED,
+                    &snapshot,
+                    &shaded));
+    assert_true("preview_quality_snapshot_byte_parity_solid",
+                memcmp(&solid.evaluated_scene,
+                       &snapshot,
+                       sizeof(snapshot)) == 0);
+    assert_true("preview_quality_snapshot_byte_parity_shaded",
+                memcmp(&shaded.evaluated_scene,
+                       &snapshot,
+                       sizeof(snapshot)) == 0);
+    assert_true("preview_quality_only_changes_presentation",
+                solid.quality != shaded.quality &&
+                memcmp(&solid.evaluated_scene,
+                       &shaded.evaluated_scene,
+                       sizeof(snapshot)) == 0);
+    assert_true("preview_quality_simulation_identity_preserved",
+                shaded.evaluated_scene.simulation.valid &&
+                shaded.evaluated_scene.simulation.cache_revision == 9u &&
+                shaded.evaluated_scene.simulation.frame_index == 7);
+    return 0;
+}
+
+static int test_preview_quality_light_first_shading(void) {
+    RayEvaluatedSceneSnapshotInputs inputs;
+    RayEvaluatedSceneSnapshot snapshot;
+    PreviewRetainedSceneFrame solid;
+    PreviewRetainedSceneFrame shaded;
+    SDL_Color base = {200, 180, 160, 255};
+    SDL_Color solid_color;
+    SDL_Color shaded_color;
+    SDL_Color moved_light_color;
+    memset(&inputs, 0, sizeof(inputs));
+    inputs.source = RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE;
+    inputs.frame = evaluated_context(8);
+    inputs.light.valid = true;
+    inputs.light.enabled = true;
+    inputs.light.position = (TimelineVec3){0.0, 0.0, 5.0};
+    inputs.light.color = (TimelineVec3){1.0, 1.0, 1.0};
+    inputs.light.intensity = 8.0;
+    inputs.light.property_provenance.valid = true;
+    inputs.light.property_provenance.left_frame = 8;
+    inputs.light.property_provenance.right_frame = 8;
+    inputs.camera.valid = true;
+    inputs.camera.zoom = 1.0;
+    inputs.diagnostics = "preview light-first shading";
+    assert_true("preview_shading_snapshot_fixture",
+                RayEvaluatedSceneSnapshotBuild(&inputs, &snapshot) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("preview_shading_solid_frame",
+                PreviewRetainedSceneFrameBuild(
+                    PREVIEW_RETAINED_SCENE_QUALITY_SOLID,
+                    &snapshot,
+                    &solid));
+    assert_true("preview_shading_interactive_frame",
+                PreviewRetainedSceneFrameBuild(
+                    PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED,
+                    &snapshot,
+                    &shaded));
+    solid_color = PreviewRetainedSceneShadeColor(
+        base, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, &solid);
+    shaded_color = PreviewRetainedSceneShadeColor(
+        base, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, &shaded);
+    snapshot.light.position.z = -5.0;
+    assert_true("preview_shading_moved_light_frame",
+                PreviewRetainedSceneFrameBuild(
+                    PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED,
+                    &snapshot,
+                    &shaded));
+    moved_light_color = PreviewRetainedSceneShadeColor(
+        base, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, &shaded);
+    assert_true("preview_shading_solid_is_light_independent",
+                solid_color.r == 164 && solid_color.g == 148 &&
+                solid_color.b == 131);
+    assert_true("preview_shading_uses_evaluated_light",
+                shaded_color.r > moved_light_color.r &&
+                shaded_color.g > moved_light_color.g &&
+                shaded_color.b > moved_light_color.b);
     return 0;
 }
 
@@ -386,6 +511,8 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
 int run_test_runtime_evaluated_scene_preview_tests(void) {
     test_evaluated_elapsed_frame_mapping();
     test_evaluated_snapshot_detachment();
+    test_preview_quality_preserves_evaluated_snapshot();
+    test_preview_quality_light_first_shading();
     test_evaluated_equal_time_vs_constant_speed();
     test_evaluated_explicit_legacy_fallback();
     test_evaluated_service_parity_and_nonmutation();
