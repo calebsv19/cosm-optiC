@@ -69,6 +69,8 @@ make -C ray_tracing test-scene-editor-viewport-nav-contract
 make -C ray_tracing test-scene-editor-primitive-preview-geometry
 make -C ray_tracing test-ray-tracing-worker-version-contract
 TEST_RUNNER_GROUP=runtime_timeline_foundation make -C ray_tracing test
+TEST_RUNNER_GROUP=runtime_evaluated_scene_preview make -C ray_tracing test
+make -C ray_tracing test-ray-tracing-evaluated-scene-preview-parity
 TEST_RUNNER_GROUP=runtime_timeline_property_registry make -C ray_tracing test
 TEST_RUNNER_GROUP=runtime_timeline_frame_snapshot make -C ray_tracing test
 ```
@@ -617,3 +619,8 @@ slice promotes one into the stable lane.
 
 The authoritative stable target list is `STABLE_TEST_TARGETS` in
 `ray_tracing/make/rules-test.mk`.
+
+`runtime_evaluated_scene_preview` proves immutable evaluated-scene capture,
+authored-frame Preview/final light parity, authoring-global non-mutation,
+explicit simulation identity, and the unequal-path equal-time versus
+constant-speed distinction used by the ESP-1/ESP-2 Preview slice.

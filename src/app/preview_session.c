@@ -1,9 +1,9 @@
 #include "app/animation.h"
 #include "app/animation_input_helpers.h"
+#include "app/evaluated_scene_service.h"
 #include "app/preview_mode_route.h"
 #include "app/preview_camera_sample.h"
 #include "app/preview_camera_projector.h"
-#include "app/preview_playback.h"
 #include "app/preview_retained_scene_renderer.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
@@ -25,14 +25,18 @@
 
 static const double kPreviewBg = 60.0;
 
-static void DrawPreviewMarker(SDL_Renderer* renderer, Point world, SDL_Color color, int radius) {
+static void DrawPreviewMarker(SDL_Renderer* renderer,
+                              const Camera* camera,
+                              Point world,
+                              SDL_Color color,
+                              int radius) {
     SpaceModeViewContext view_ctx;
     CameraPoint screen;
     int dx = 0;
     int dy = 0;
-    if (!renderer) return;
+    if (!renderer || !camera) return;
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-    view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
+    view_ctx = SpaceModeAdapter_BuildViewContext(camera,
                                                  sceneSettings.windowWidth,
                                                  sceneSettings.windowHeight);
     screen = SpaceModeAdapter_WorldToScreen(&view_ctx, world.x, world.y);
@@ -47,7 +51,7 @@ static void DrawPreviewMarker(SDL_Renderer* renderer, Point world, SDL_Color col
 
 static void DrawPreviewRouteStatus(SDL_Renderer* renderer,
                                    const PreviewModeRouteDecision* decision,
-                                   const PreviewPlaybackSample* playback) {
+                                   const RayEvaluatedSceneServiceResult* evaluation) {
     SDL_Rect line1 = {12, 10, 360, 22};
     SDL_Rect line2 = {12, 32, 520, 38};
     SDL_Rect line3 = {12, 68, 520, 22};
@@ -56,8 +60,8 @@ static void DrawPreviewRouteStatus(SDL_Renderer* renderer,
     if (!renderer || !decision) return;
     RenderLabelTextLeft(renderer, line1, decision->branchLabel, primary);
     RenderLabelTextWrappedLeft(renderer, line2, decision->statusLine, secondary);
-    if (playback && playback->valid) {
-        RenderLabelTextWrappedLeft(renderer, line3, playback->status_line, secondary);
+    if (evaluation && evaluation->status_line[0] != '\0') {
+        RenderLabelTextWrappedLeft(renderer, line3, evaluation->status_line, secondary);
     }
 }
 
@@ -120,8 +124,6 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     double elapsed = 0.0;
     bool running_preview = true;
     bool close_button_pressed = false;
-    Camera saved_camera = sceneSettings.camera;
-    double saved_camera_z = sceneSettings.cameraZ;
 
     if (standalone) {
         if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -235,12 +237,13 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         int mouse_x = 0;
         int mouse_y = 0;
         bool close_button_hovered = false;
-        PreviewPlaybackSample playback_sample = {0};
-        double t = 0.0;
-        Point light_point;
-        double light_z = 0.0;
+        RayEvaluatedSceneServiceResult evaluation = {0};
+        Point light_point = {sceneSettings.bezierPath.points[0].x,
+                             sceneSettings.bezierPath.points[0].y};
+        double light_z = sceneSettings.bezierPath3D.point_z[0];
         Point camera_point = {sceneSettings.camera.x, sceneSettings.camera.y};
         PreviewCameraSample camera_sample = {0};
+        Camera evaluated_view_camera = sceneSettings.camera;
         PreviewCameraProjector preview_projector = {0};
         RuntimeSceneBridge3DDigestState preview_digest = {0};
         PreviewModeRouteDecision route_decision = {0};
@@ -299,38 +302,37 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         prev_ns = now_ns;
         elapsed += dt;
 
-        PreviewPlaybackEvaluate(elapsed,
-                                animSettings.previewDuration,
-                                animSettings.bounceMode,
-                                animSettings.loopMode,
-                                &playback_sample);
-        t = playback_sample.normalized_t;
-
-        light_point = (sceneSettings.bezierPath.numPoints >= 2)
-                          ? GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t)
-                          : sceneSettings.bezierPath.points[0];
-        light_z = (sceneSettings.bezierPath.numPoints >= 2)
-                      ? CameraPath3D_GetPositionZNormalized(&sceneSettings.bezierPath,
-                                                            &sceneSettings.bezierPath3D,
-                                                            t)
-                      : sceneSettings.bezierPath3D.point_z[0];
-        animSettings.lightHeight = light_z;
-
-        if (PreviewCameraSampleEvaluate(&sceneSettings.camera,
-                                        sceneSettings.cameraZ,
-                                        &sceneSettings.cameraPath,
-                                        &sceneSettings.cameraPath3D,
-                                        t,
-                                        sceneSettings.windowWidth,
-                                        sceneSettings.windowHeight,
-                                        &camera_sample) &&
-            camera_sample.uses_authored_path) {
-            camera_point.x = camera_sample.position_x;
-            camera_point.y = camera_sample.position_y;
-            sceneSettings.camera.x = camera_sample.position_x;
-            sceneSettings.camera.y = camera_sample.position_y;
-            sceneSettings.cameraZ = camera_sample.position_z;
-            sceneSettings.camera.rotation = camera_sample.yaw_radians;
+        if (RayEvaluatedSceneCaptureForElapsed(elapsed, &evaluation)) {
+            const RayEvaluatedSceneSnapshot* snapshot = &evaluation.snapshot;
+            light_point.x = snapshot->light.position.x;
+            light_point.y = snapshot->light.position.y;
+            light_z = snapshot->light.position.z;
+            camera_point.x = snapshot->camera.position.x;
+            camera_point.y = snapshot->camera.position.y;
+            evaluated_view_camera.x = snapshot->camera.position.x;
+            evaluated_view_camera.y = snapshot->camera.position.y;
+            evaluated_view_camera.rotation = snapshot->camera.yaw_radians;
+            evaluated_view_camera.zoom = snapshot->camera.zoom;
+            camera_sample.valid = snapshot->camera.valid;
+            camera_sample.uses_authored_path =
+                snapshot->camera.uses_authored_path;
+            camera_sample.position_x = snapshot->camera.position.x;
+            camera_sample.position_y = snapshot->camera.position.y;
+            camera_sample.position_z = snapshot->camera.position.z;
+            camera_sample.yaw_radians = snapshot->camera.yaw_radians;
+            camera_sample.pitch_radians = snapshot->camera.pitch_radians;
+            camera_sample.fov_y_degrees = snapshot->camera.fov_y_degrees;
+            camera_sample.aspect_ratio = snapshot->camera.aspect_ratio;
+        } else {
+            (void)PreviewCameraSampleEvaluate(
+                &sceneSettings.camera,
+                sceneSettings.cameraZ,
+                &sceneSettings.cameraPath,
+                &sceneSettings.cameraPath3D,
+                0.0,
+                sceneSettings.windowWidth,
+                sceneSettings.windowHeight,
+                &camera_sample);
         }
         if (preview_route.requestedMode == SPACE_MODE_3D) {
             SDL_Rect preview_viewport = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
@@ -386,7 +388,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             RenderBezierPathCameraStyled(preview_renderer,
                                          &sceneSettings.bezierPath,
                                          false,
-                                         &sceneSettings.camera,
+                                         &evaluated_view_camera,
                                          path_color,
                                          (SDL_Color){0, 0, 0, 0},
                                          -1,
@@ -395,24 +397,32 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             RenderBezierPathCameraStyled(preview_renderer,
                                          &sceneSettings.cameraPath,
                                          false,
-                                         &sceneSettings.camera,
+                                         &evaluated_view_camera,
                                          camera_path_color,
                                          (SDL_Color){0, 0, 0, 0},
                                          -1,
                                          select_color,
                                          4);
             SDL_SetRenderDrawColor(preview_renderer, 220, 220, 220, 255);
-            RenderSceneObjects(preview_renderer, !AnimationUseFluidScene());
-            DrawPreviewMarker(preview_renderer, light_point, (SDL_Color){255, 230, 120, 255}, 6);
-            DrawPreviewMarker(preview_renderer, camera_point, (SDL_Color){120, 200, 255, 255}, 6);
+            RenderSceneObjectsWithCamera(preview_renderer,
+                                         !AnimationUseFluidScene(),
+                                         &evaluated_view_camera);
+            DrawPreviewMarker(preview_renderer,
+                              &evaluated_view_camera,
+                              light_point,
+                              (SDL_Color){255, 230, 120, 255},
+                              6);
+            DrawPreviewMarker(preview_renderer,
+                              &evaluated_view_camera,
+                              camera_point,
+                              (SDL_Color){120, 200, 255, 255},
+                              6);
         }
-        DrawPreviewRouteStatus(preview_renderer, &route_decision, &playback_sample);
+        DrawPreviewRouteStatus(preview_renderer, &route_decision, &evaluation);
         DrawPreviewCloseButton(preview_renderer, close_button_rect, close_button_hovered);
         render_end_frame();
     }
 
-    sceneSettings.camera = saved_camera;
-    sceneSettings.cameraZ = saved_camera_z;
     if (standalone) {
         ray_tracing_font_runtime_detach_renderer(preview_renderer);
 #if USE_VULKAN

@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_EVALUATED_SCENE_PREVIEW_H
+#define TEST_RUNTIME_EVALUATED_SCENE_PREVIEW_H
+
+int run_test_runtime_evaluated_scene_preview_tests(void);
+
+#endif

@@ -321,6 +321,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_timeline_frame_snapshot.o \
 	$(BUILD_DIR)/tests/test_runtime_timeline_light_motion.o \
 	$(BUILD_DIR)/tests/test_runtime_timeline_light_persistence.o \
+	$(BUILD_DIR)/tests/test_runtime_evaluated_scene_preview.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \

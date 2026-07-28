@@ -55,8 +55,8 @@ int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY) {
 }
 
 
-static CameraPoint ToScreen(double worldX, double worldY) {
-    Vec2 screen = CameraWorldToScreenVec2(&sceneSettings.camera,
+static CameraPoint ToScreen(const Camera* camera, double worldX, double worldY) {
+    Vec2 screen = CameraWorldToScreenVec2(camera,
                                           vec2(worldX, worldY),
                                           sceneSettings.windowWidth,
                                           sceneSettings.windowHeight);
@@ -64,18 +64,24 @@ static CameraPoint ToScreen(double worldX, double worldY) {
     return out;
 }
 
-static CameraPoint ToScreenDepthProjected(double worldX, double worldY, double object_z) {
-    CameraPoint base = ToScreen(worldX, worldY);
+static CameraPoint ToScreenDepthProjected(const Camera* camera,
+                                          double worldX,
+                                          double worldY,
+                                          double object_z) {
+    CameraPoint base = ToScreen(camera, worldX, worldY);
     if (animSettings.spaceMode != SPACE_MODE_3D) {
         return base;
     }
-    base.y -= RenderHelper_DepthYOffsetPixelsForObjectZ(object_z, sceneSettings.camera.zoom);
+    base.y -= RenderHelper_DepthYOffsetPixelsForObjectZ(object_z, camera->zoom);
     return base;
 }
 
-static void BuildScreenShapePoints(SceneObject* obj, int screenPoints[MAX_POINTS][2]) {
-    CameraPoint base_center = ToScreen(obj->x, obj->y);
-    CameraPoint projected_center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
+static void BuildScreenShapePoints(const Camera* camera,
+                                   SceneObject* obj,
+                                   int screenPoints[MAX_POINTS][2]) {
+    CameraPoint base_center = ToScreen(camera, obj->x, obj->y);
+    CameraPoint projected_center =
+        ToScreenDepthProjected(camera, obj->x, obj->y, obj->z);
     double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
                              ? RenderHelper_DepthScaleForObjectZ(obj->z)
                              : 1.0;
@@ -83,7 +89,7 @@ static void BuildScreenShapePoints(SceneObject* obj, int screenPoints[MAX_POINTS
     for (int i = 0; i < obj->numPoints; i++) {
         double worldX = obj->x + obj->shapePoints[i][0];
         double worldY = obj->y + obj->shapePoints[i][1];
-        CameraPoint screen = ToScreen(worldX, worldY);
+        CameraPoint screen = ToScreen(camera, worldX, worldY);
         if (animSettings.spaceMode == SPACE_MODE_3D) {
             double offset_x = screen.x - base_center.x;
             double offset_y = screen.y - base_center.y;
@@ -158,7 +164,9 @@ static void RenderGuideCircle(SDL_Renderer* renderer, int x, int y, int radius) 
     }
 }
 
-static void RenderGuideShape(SDL_Renderer* renderer, SceneObject* obj) {
+static void RenderGuideShape(SDL_Renderer* renderer,
+                             SceneObject* obj,
+                             const Camera* camera) {
     int screenPoints[MAX_POINTS][2];
     int i = 0;
     if (!renderer || !obj) return;
@@ -171,13 +179,15 @@ static void RenderGuideShape(SDL_Renderer* renderer, SceneObject* obj) {
         double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
                                  ? RenderHelper_DepthScaleForObjectZ(obj->z)
                                  : 1.0;
-        CameraPoint center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
-        int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom * depth_scale);
+        CameraPoint center =
+            ToScreenDepthProjected(camera, obj->x, obj->y, obj->z);
+        int radius =
+            (int)lround(obj->radius * obj->scale * camera->zoom * depth_scale);
         RenderGuideCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius);
         return;
     }
     if (obj->numPoints <= 1) return;
-    BuildScreenShapePoints(obj, screenPoints);
+    BuildScreenShapePoints(camera, obj, screenPoints);
     for (i = 0; i < obj->numPoints; ++i) {
         int nextIndex = (i + 1) % obj->numPoints;
         RenderDashedLine(renderer,
@@ -190,13 +200,15 @@ static void RenderGuideShape(SDL_Renderer* renderer, SceneObject* obj) {
     }
 }
 
-void RenderFillShape(SDL_Renderer* renderer, SceneObject* obj) {
+static void RenderFillShapeWithCamera(SDL_Renderer* renderer,
+                                      SceneObject* obj,
+                                      const Camera* camera) {
     if (obj->numPoints < 3) {
         return;
     }
 
     int screenPoints[MAX_POINTS][2];
-    BuildScreenShapePoints(obj, screenPoints);
+    BuildScreenShapePoints(camera, obj, screenPoints);
 
     int minY = screenPoints[0][1];
     int maxY = screenPoints[0][1];
@@ -240,17 +252,53 @@ void RenderFillShape(SDL_Renderer* renderer, SceneObject* obj) {
     }
 }
 
+void RenderFillShape(SDL_Renderer* renderer, SceneObject* obj) {
+    RenderFillShapeWithCamera(renderer, obj, &sceneSettings.camera);
+}
 
 int compareInts(const void* a, const void* b) {
     return (*(int*)a - *(int*)b);
 }
 
 
+static void RenderShapeWithCamera(SDL_Renderer* renderer,
+                                  SceneObject* obj,
+                                  bool fillObjects,
+                                  const Camera* camera);
+
 void RenderShape(SDL_Renderer* renderer, SceneObject* obj, bool fillObjects) {
+    RenderShapeWithCamera(renderer, obj, fillObjects, &sceneSettings.camera);
+}
+
+static void RenderShapeWithCamera(SDL_Renderer* renderer,
+                                  SceneObject* obj,
+                                  bool fillObjects,
+                                  const Camera* camera) {
     if (fillObjects) {
-        RenderFillShape(renderer, obj);
+        RenderFillShapeWithCamera(renderer, obj, camera);
     } else {
-        RenderDrawShape(renderer, obj);
+        if (strcmp(obj->type, "circle") == 0) {
+            double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
+                                     ? RenderHelper_DepthScaleForObjectZ(obj->z)
+                                     : 1.0;
+            CameraPoint center =
+                ToScreenDepthProjected(camera, obj->x, obj->y, obj->z);
+            int radius = (int)lround(obj->radius * obj->scale * camera->zoom *
+                                     depth_scale);
+            RenderDrawCircle(renderer, (int)lround(center.x),
+                             (int)lround(center.y), radius);
+        } else if (obj->numPoints > 1) {
+            int screenPoints[MAX_POINTS][2];
+            BuildScreenShapePoints(camera, obj, screenPoints);
+            for (int i = 0; i < obj->numPoints; i++) {
+                int nextIndex = (i + 1) % obj->numPoints;
+                SDL_RenderDrawLine(renderer,
+                                   screenPoints[i][0],
+                                   screenPoints[i][1],
+                                   screenPoints[nextIndex][0],
+                                   screenPoints[nextIndex][1]);
+            }
+        }
     }
 }
 
@@ -312,26 +360,7 @@ void RenderFillCircle(SDL_Renderer* renderer, int x, int y, int radius) {
 }
 
 void RenderDrawShape(SDL_Renderer* renderer, SceneObject* obj) {
-    if (strcmp(obj->type, "circle") == 0) {
-        double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
-                                 ? RenderHelper_DepthScaleForObjectZ(obj->z)
-                                 : 1.0;
-        CameraPoint center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
-        int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom * depth_scale);
-        RenderDrawCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius);
-    } else if (obj->numPoints > 1) {
-        int screenPoints[MAX_POINTS][2];
-        BuildScreenShapePoints(obj, screenPoints);
-        for (int i = 0; i < obj->numPoints; i++) {
-            int nextIndex = (i + 1) % obj->numPoints;
-            int x1 = screenPoints[i][0];
-            int y1 = screenPoints[i][1];
-            int x2 = screenPoints[nextIndex][0];
-            int y2 = screenPoints[nextIndex][1];
-
-            SDL_RenderDrawLine(renderer, x1, y1, x2, y2);
-        }
-    }
+    RenderShapeWithCamera(renderer, obj, false, &sceneSettings.camera);
 }
 
 void RenderStaticScene(SDL_Renderer* renderer) {
@@ -512,9 +541,12 @@ int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char
 }
                 
 
-void RenderSceneObject(SDL_Renderer* renderer, SceneObject* obj, bool fillObjects) {
+static void RenderSceneObjectWithCamera(SDL_Renderer* renderer,
+                                        SceneObject* obj,
+                                        bool fillObjects,
+                                        const Camera* camera) {
     if (SceneObjectIsGuideOnly(obj)) {
-        RenderGuideShape(renderer, obj);
+        RenderGuideShape(renderer, obj, camera);
         return;
     }
 
@@ -522,14 +554,19 @@ void RenderSceneObject(SDL_Renderer* renderer, SceneObject* obj, bool fillObject
         double depth_scale = (animSettings.spaceMode == SPACE_MODE_3D)
                                  ? RenderHelper_DepthScaleForObjectZ(obj->z)
                                  : 1.0;
-        CameraPoint center = ToScreenDepthProjected(obj->x, obj->y, obj->z);
-        int radius = (int)lround(obj->radius * obj->scale * sceneSettings.camera.zoom * depth_scale);
+        CameraPoint center =
+            ToScreenDepthProjected(camera, obj->x, obj->y, obj->z);
+        int radius =
+            (int)lround(obj->radius * obj->scale * camera->zoom * depth_scale);
         RenderCircle(renderer, (int)lround(center.x), (int)lround(center.y), radius, fillObjects);
     } else {
-        RenderShape(renderer, obj, fillObjects);
+        RenderShapeWithCamera(renderer, obj, fillObjects, camera);
     }
 }
 
+void RenderSceneObject(SDL_Renderer* renderer, SceneObject* obj, bool fillObjects) {
+    RenderSceneObjectWithCamera(renderer, obj, fillObjects, &sceneSettings.camera);
+}
 static int compare_object_index_by_depth(const void* lhs, const void* rhs) {
     int li = *(const int*)lhs;
     int ri = *(const int*)rhs;
@@ -541,8 +578,15 @@ static int compare_object_index_by_depth(const void* lhs, const void* rhs) {
 }
 
 void RenderSceneObjects(SDL_Renderer* renderer, bool fillObjects) {
+    RenderSceneObjectsWithCamera(renderer, fillObjects, &sceneSettings.camera);
+}
+
+void RenderSceneObjectsWithCamera(SDL_Renderer* renderer,
+                                  bool fillObjects,
+                                  const Camera* camera) {
     int draw_order[MAX_OBJECTS];
     int count = sceneSettings.objectCount;
+    if (!renderer || !camera) return;
     if (count > MAX_OBJECTS) count = MAX_OBJECTS;
     for (int i = 0; i < count; ++i) {
         draw_order[i] = i;
@@ -553,6 +597,6 @@ void RenderSceneObjects(SDL_Renderer* renderer, bool fillObjects) {
 
     for (int i = 0; i < count; i++) {
         SceneObject* obj = &sceneSettings.sceneObjects[draw_order[i]];
-        RenderSceneObject(renderer, obj, fillObjects);
+        RenderSceneObjectWithCamera(renderer, obj, fillObjects, camera);
     }
 }

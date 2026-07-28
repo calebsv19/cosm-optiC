@@ -770,6 +770,9 @@ test-ray-tracing-wtr66-preview-matrix-planner-dry-run:
 test-ray-tracing-wtr66-preview-matrix-local-job-runner: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	bash tests/integration/run_ray_tracing_wtr66_preview_matrix_local_job_runner.sh
 
+test-ray-tracing-evaluated-scene-preview-parity:
+	TEST_RUNNER_GROUP=runtime_evaluated_scene_preview $(MAKE) test
+
 test-ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_material_preview_headless.sh
 
