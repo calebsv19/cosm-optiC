@@ -45,6 +45,18 @@ static void ray_evaluated_copy_light_base(
     out_light->axis_v = ray_evaluated_vec3(source->axisV);
     out_light->normal = ray_evaluated_vec3(source->normal);
     out_light->radius = source->radius;
+    if (out_light->radius <= 0.0 &&
+        (out_light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_POINT ||
+         out_light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE) &&
+        animSettings.lightRadius > 0.0) {
+        out_light->radius = animSettings.lightRadius;
+    }
+    if (out_light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_POINT ||
+        out_light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE) {
+        out_light->kind = out_light->radius > 0.0
+                              ? RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE
+                              : RUNTIME_LIGHT_SOURCE_3D_KIND_POINT;
+    }
     out_light->width = source->width;
     out_light->height = source->height;
     out_light->color = ray_evaluated_vec3(source->color);
@@ -52,7 +64,7 @@ static void ray_evaluated_copy_light_base(
     out_light->radiometry_mode = (int)source->radiometryMode;
     out_light->radiance = source->radiance;
     out_light->falloff_distance = source->falloffDistance;
-    out_light->falloff_mode = (int)source->falloffMode;
+    out_light->falloff_mode = (int)animSettings.forwardFalloffMode;
 }
 
 static bool ray_evaluated_capture_camera(double normalized_t,
@@ -304,6 +316,46 @@ bool RayEvaluatedSceneCaptureAuthoredSample(
     return ray_evaluated_build_authored(&document, &context,
                                         RAY_EVALUATED_PLAYBACK_STOP,
                                         false, false, out_result);
+}
+
+bool RayEvaluatedSceneCaptureSample(
+    TimelineSample sample,
+    RayEvaluatedSceneServiceResult* out_result) {
+    RuntimeSceneLightTimelineDocument document = {0};
+    TimelineRate rate = {0};
+    TimelineRange range = {0};
+    TimelineEvaluationContext context = {0};
+    TimelineStatus status;
+    if (!out_result) return false;
+    memset(out_result, 0, sizeof(*out_result));
+    if (RuntimeSceneLightTimelineGetLast(&document)) {
+        status = ray_evaluated_authored_context(&document, sample, &context);
+        if (status != TIMELINE_STATUS_OK) {
+            ray_evaluated_fail(out_result, status,
+                               "authored frame context is invalid");
+            return false;
+        }
+        return ray_evaluated_build_authored(
+            &document, &context, RAY_EVALUATED_PLAYBACK_STOP,
+            false, false, out_result);
+    }
+    rate.frames_per_second_numerator =
+        (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30);
+    rate.frames_per_second_denominator = 1u;
+    range.start_frame = animSettings.startFrameIndex;
+    range.frame_count =
+        (uint64_t)(animSettings.framesForTravel > 0
+                       ? animSettings.framesForTravel
+                       : 1);
+    status = TimelineEvaluationContextBuild(rate, range, sample, &context);
+    if (status != TIMELINE_STATUS_OK) {
+        ray_evaluated_fail(out_result, status,
+                           "fallback frame context is invalid");
+        return false;
+    }
+    return ray_evaluated_build_legacy(
+        &context, RAY_EVALUATED_PLAYBACK_STOP,
+        false, false, out_result);
 }
 
 bool RayEvaluatedSceneCaptureForElapsed(

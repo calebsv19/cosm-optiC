@@ -28,6 +28,7 @@ grep -q '"schema_version": "ray_tracing_headless_summary_v1"' "$SUMMARY"
 grep -q '"scene_applied": true' "$SUMMARY"
 grep -q '"route_native_3d": true' "$SUMMARY"
 grep -q '"prepared_frame": true' "$SUMMARY"
+grep -q '"evaluated_scene_bound": true' "$SUMMARY"
 grep -q '"integrator_3d": "emission_transparency"' "$SUMMARY"
 grep -q '"preset": "glass_preview"' "$SUMMARY"
 grep -q '"has_secondary_diffuse_samples_3d_override": true' "$SUMMARY"
@@ -115,6 +116,8 @@ request["render"]["start_frame"] = 5
 json.dump(request, open(request_dst, "w", encoding="utf-8"), indent=2)
 PY
 "$CLI" --request "$TIMELINE_REQUEST" --preflight --summary "$TIMELINE_SUMMARY" >/dev/null
+grep -q '"evaluated_scene_bound": true' "$TIMELINE_SUMMARY"
+grep -q '"evaluated_scene_source": 1' "$TIMELINE_SUMMARY"
 grep -q '"sampled": true' "$TIMELINE_SUMMARY"
 grep -q '"frame": 5' "$TIMELINE_SUMMARY"
 grep -q '"target_id": "light/key"' "$TIMELINE_SUMMARY"

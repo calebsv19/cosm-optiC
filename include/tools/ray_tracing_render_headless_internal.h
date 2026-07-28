@@ -68,6 +68,13 @@ typedef struct RayTracingHeadlessPreflight {
     bool volume_summary_built;
     bool route_native_3d;
     bool prepared_frame;
+    bool evaluated_scene_bound;
+    int evaluated_scene_source;
+    int64_t evaluated_scene_first_frame;
+    int64_t evaluated_scene_last_frame;
+    uint64_t evaluated_scene_scene_revision;
+    uint64_t evaluated_scene_timeline_revision;
+    char evaluated_scene_light_id[TIMELINE_ID_CAPACITY];
     bool rendered_frames;
     bool denoise_enabled;
     int frames_rendered;

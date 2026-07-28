@@ -32,6 +32,8 @@ typedef struct RuntimeNative3DRenderRequestSnapshot {
     RuntimeNative3DResourceBudget resourceBudget;
     bool preparedFrameBound;
     bool preparedFrameValid;
+    bool evaluatedSceneBound;
+    RayEvaluatedSceneSnapshot evaluatedScene;
     int preparedFrameWidth;
     int preparedFrameHeight;
     uint64_t preparedPrimitiveCount;

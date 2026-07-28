@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app/evaluated_scene_service.h"
 #include "config/config_manager.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/integrators/integrator_common.h"
@@ -252,6 +253,12 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     RuntimeNative3DRenderRequestSnapshot snapshot = {0};
     RuntimeNative3DRenderRequestSnapshot dispatch = {0};
     RuntimeNative3DRenderRequestSnapshotDesc snapshot_desc = {0};
+    RayEvaluatedSceneServiceResult evaluated_scene = {0};
+    TimelineSample evaluated_sample = {
+        .absolute_frame = desc ? desc->absoluteFrameIndex : 0,
+        .subframe_numerator = 0,
+        .subframe_denominator = 1
+    };
     RuntimeNative3DSamplingContext sampling;
     RuntimeSceneAcceleration3DDiagnostics accel =
         RuntimeSceneAcceleration3DDiagnostics_Disabled();
@@ -269,6 +276,11 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     deep_render_desktop_set_reason(out_reason, "invalid async desktop request");
     if (!unit || !session || !job || !desc || desc->generation == 0u ||
         !desc->outputRoot || !desc->frameDirectory || !desc->finalFramePath) {
+        return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
+    }
+    if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+        deep_render_desktop_set_reason(
+            out_reason, "evaluated-scene capture failed");
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
     }
     route = RayTracingModeBackend_ResolveRoute();
@@ -376,14 +388,11 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     }
 
     sampling = deep_render_desktop_next_sampling();
-    if (!RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
+    if (!RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
             &prepared,
             unit->renderWidth,
             unit->renderHeight,
-            desc->normalizedT,
-            desc->absoluteFrameIndex,
-            desc->lightX,
-            desc->lightY,
+            &evaluated_scene.snapshot,
             &sampling)) {
         deep_render_desktop_set_reason(out_reason, "native 3D frame preparation failed");
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
@@ -400,8 +409,10 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     snapshot_desc.renderHeight = unit->renderHeight;
     snapshot_desc.hostWidth = unit->hostWidth;
     snapshot_desc.hostHeight = unit->hostHeight;
-    snapshot_desc.frameIndex = desc->absoluteFrameIndex;
-    snapshot_desc.frameCount = desc->frameCount;
+    snapshot_desc.frameIndex =
+        (int)evaluated_scene.snapshot.frame.sample.absolute_frame;
+    snapshot_desc.frameCount =
+        (int)evaluated_scene.snapshot.frame.range.frame_count;
     snapshot_desc.temporalFrames = unit->temporalFrames;
     snapshot_desc.tileSize = unit->tileSize;
     snapshot_desc.integratorId = unit->integratorId;
@@ -427,11 +438,17 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     RayTracingDeepRenderFrameRequest_Init(&request);
     request_desc.generation = desc->generation;
     request_desc.localFrameIndex = desc->localFrameIndex;
-    request_desc.absoluteFrameIndex = desc->absoluteFrameIndex;
-    request_desc.frameCount = desc->frameCount;
-    request_desc.frameDurationSeconds = desc->frameDurationSeconds;
-    request_desc.animationTimeSeconds = desc->animationTimeSeconds;
-    request_desc.normalizedT = desc->normalizedT;
+    request_desc.absoluteFrameIndex =
+        (int)evaluated_scene.snapshot.frame.sample.absolute_frame;
+    request_desc.frameCount =
+        (int)evaluated_scene.snapshot.frame.range.frame_count;
+    request_desc.frameDurationSeconds =
+        (double)evaluated_scene.snapshot.frame.rate.frames_per_second_denominator /
+        (double)evaluated_scene.snapshot.frame.rate.frames_per_second_numerator;
+    request_desc.animationTimeSeconds =
+        evaluated_scene.snapshot.frame.absolute_time_seconds;
+    request_desc.normalizedT =
+        evaluated_scene.snapshot.frame.normalized_t;
     request_desc.camera = &prepared.scene.camera;
     request_desc.light = &prepared.scene.light;
     request_desc.renderSnapshot = &snapshot;

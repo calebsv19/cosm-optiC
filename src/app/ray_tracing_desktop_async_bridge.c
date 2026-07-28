@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "app/animation.h"
+#include "app/evaluated_scene_service.h"
 #include "config/config_manager.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/integrators/integrator_common.h"
@@ -417,6 +418,12 @@ static bool desktop_async_start_job(RayTracingDesktopAsyncBridgeState* state,
                                     double light_y) {
     RuntimeNative3DRenderRequestSnapshot snapshot = {0};
     RuntimeNative3DRenderRequestSnapshotDesc snapshot_desc = {0};
+    RayEvaluatedSceneServiceResult evaluated_scene = {0};
+    TimelineSample evaluated_sample = {
+        .absolute_frame = AnimationCurrentAbsoluteFrameIndex(),
+        .subframe_numerator = 0,
+        .subframe_denominator = 1
+    };
     RuntimeNative3DAsyncRenderAssessment assessment;
     RuntimeNative3DAsyncRenderJobStartDesc start_desc = {0};
     RuntimeSceneAcceleration3DDiagnostics accel_diag =
@@ -428,6 +435,11 @@ static bool desktop_async_start_job(RayTracingDesktopAsyncBridgeState* state,
     size_t host_bytes = 0u;
     atomic_init(&cancel_probe, false);
     if (!state || !route) return false;
+    (void)light_x;
+    (void)light_y;
+    if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+        return false;
+    }
 
     state->generation += 1u;
     if (state->generation == 0u) {
@@ -477,13 +489,12 @@ static bool desktop_async_start_job(RayTracingDesktopAsyncBridgeState* state,
     TileGridClear(&state->tileGrid);
 
     desktop_async_free_prepared_frame(state);
-    if (!RuntimeNative3DPrepareFrameWithSampling(&state->preparedFrame,
-                                                 render_width,
-                                                 render_height,
-                                                 AnimationCurrentNormalizedT(),
-                                                 light_x,
-                                                 light_y,
-                                                 &state->sampling)) {
+    if (!RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+            &state->preparedFrame,
+            render_width,
+            render_height,
+            &evaluated_scene.snapshot,
+            &state->sampling)) {
         return false;
     }
     state->preparedFrameOwned = true;
@@ -501,8 +512,10 @@ static bool desktop_async_start_job(RayTracingDesktopAsyncBridgeState* state,
     snapshot_desc.renderHeight = render_height;
     snapshot_desc.hostWidth = host_width;
     snapshot_desc.hostHeight = host_height;
-    snapshot_desc.frameIndex = AnimationCurrentAbsoluteFrameIndex();
-    snapshot_desc.frameCount = AnimationConfiguredPathFrameCount();
+    snapshot_desc.frameIndex =
+        (int)evaluated_scene.snapshot.frame.sample.absolute_frame;
+    snapshot_desc.frameCount =
+        (int)evaluated_scene.snapshot.frame.range.frame_count;
     snapshot_desc.temporalFrames = state->temporalFrames;
     snapshot_desc.tileSize = state->tileSize;
     snapshot_desc.integratorId = state->integratorId;

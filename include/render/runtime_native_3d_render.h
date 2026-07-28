@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "animation/evaluated_scene_snapshot.h"
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_caustic_bootstrap_3d.h"
 #include "render/runtime_caustic_photon_integration_3d.h"
@@ -348,6 +349,8 @@ typedef struct {
     bool directLightVisibilityAttributionEnabled;
     bool causticSidecarProbeValid;
     bool causticPhotonRenderPrepReadbackBuilt;
+    bool evaluatedSceneBound;
+    RayEvaluatedSceneSnapshot evaluatedScene;
     bool valid;
 } RuntimeNative3DPreparedFrame;
 
@@ -409,6 +412,12 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     int frame_index,
     double live_light_x,
     double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling);
+bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+    RuntimeNative3DPreparedFrame* out_frame,
+    int width,
+    int height,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
     const RuntimeNative3DSamplingContext* sampling);
 void RuntimeNative3DPreparedFrame_Free(RuntimeNative3DPreparedFrame* frame);
 bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
@@ -492,6 +501,17 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgress(
     RuntimeNative3DTemporalProgressCallback progress_callback,
     void* progress_user_data,
     RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressForEvaluatedScene(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DRenderStats* out_stats);
 bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressAtFrameIndex(
     uint8_t* pixel_buffer,
     RayTracing3DIntegratorId integrator_id,
@@ -548,6 +568,21 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
     int frame_index,
     double live_light_x,
     double live_light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    const struct RuntimeNative3DTileSchedulerControl* scheduler_control,
+    RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedScene(
+    uint8_t* pixel_buffer,
+    RayTracing3DIntegratorId integrator_id,
+    int width,
+    int height,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
     const RuntimeNative3DSamplingContext* sampling,
     int temporal_frames,
     RuntimeNative3DTemporalProgressCallback progress_callback,

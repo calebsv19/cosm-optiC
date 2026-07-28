@@ -136,6 +136,20 @@ bool RayTracingDeepRenderFrameRequest_Build(
             out_status, RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_FRAME_RANGE_INVALID);
         return false;
     }
+    if (!prepared_frame->evaluatedSceneBound ||
+        !snapshot->evaluatedSceneBound ||
+        RayEvaluatedSceneSnapshotValidate(&prepared_frame->evaluatedScene) !=
+            TIMELINE_STATUS_OK ||
+        memcmp(&prepared_frame->evaluatedScene,
+               &snapshot->evaluatedScene,
+               sizeof(prepared_frame->evaluatedScene)) != 0 ||
+        snapshot->evaluatedScene.frame.sample.absolute_frame !=
+            desc->absoluteFrameIndex) {
+        deep_render_frame_request_set_status(
+            out_status,
+            RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_EVALUATED_SCENE_INVALID);
+        return false;
+    }
     if (!prepared_frame->valid || !snapshot->preparedFrameBound ||
         !snapshot->preparedFrameValid || snapshot->preparedFrameWidth != prepared_frame->width ||
         snapshot->preparedFrameHeight != prepared_frame->height) {
@@ -267,6 +281,7 @@ const char* RayTracingDeepRenderFrameRequestStatus_Name(
         case RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_OUTPUT_IDENTITY_INVALID: return "output_identity_invalid";
         case RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_RENDER_SNAPSHOT_INVALID: return "render_snapshot_invalid";
         case RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_GENERATION_MISMATCH: return "generation_mismatch";
+        case RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_EVALUATED_SCENE_INVALID: return "evaluated_scene_invalid";
         case RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_PREPARED_FRAME_INVALID: return "prepared_frame_invalid";
         case RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_PREPARED_FRAME_EXTERNAL_BACKING: return "prepared_frame_external_backing";
         case RAY_TRACING_DEEP_RENDER_FRAME_REQUEST_ACCELERATION_UNBOUND: return "acceleration_unbound";

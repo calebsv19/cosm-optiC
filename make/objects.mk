@@ -1,4 +1,7 @@
 NATIVE3D_AUDIT_DEPS = \
+	$(BUILD_DIR)/animation/evaluated_scene_snapshot.o \
+	$(BUILD_DIR)/app/evaluated_scene_service.o \
+	$(BUILD_DIR)/app/preview_camera_sample.o \
 	$(BUILD_DIR)/render/materials/material_bsdf.o \
 	$(BUILD_DIR)/material/material_manager.o \
 	$(BUILD_DIR)/material/material.o \
@@ -145,6 +148,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
+	$(BUILD_DIR)/render/runtime_evaluated_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_3d.o \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_cache_3d.o \

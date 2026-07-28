@@ -56,6 +56,12 @@ bool RuntimeNative3DRenderRequestSnapshot_Build(
     snapshot.preparedFrameBound = desc->preparedFrameBound || desc->preparedFrame != NULL;
     if (desc->preparedFrame) {
         snapshot.preparedFrameValid = desc->preparedFrame->valid;
+        snapshot.evaluatedSceneBound =
+            desc->preparedFrame->evaluatedSceneBound;
+        if (snapshot.evaluatedSceneBound) {
+            snapshot.evaluatedScene =
+                desc->preparedFrame->evaluatedScene;
+        }
         snapshot.preparedFrameWidth = desc->preparedFrame->width;
         snapshot.preparedFrameHeight = desc->preparedFrame->height;
         snapshot.preparedPrimitiveCount =

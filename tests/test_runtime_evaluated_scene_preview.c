@@ -1,6 +1,7 @@
 #include "test_runtime_evaluated_scene_preview.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "animation/evaluated_scene_snapshot.h"
@@ -10,6 +11,7 @@
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_render_request_snapshot.h"
 #include "test_support.h"
 
 static TimelineTrack evaluated_progress_track(bool equal_segment_time) {
@@ -213,6 +215,9 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
     RayEvaluatedSceneServiceResult preview_sample = {0};
     RayEvaluatedSceneServiceResult retained_preview_sample = {0};
     RuntimeNative3DPreparedFrame native_frame = {0};
+    RuntimeNative3DRenderRequestSnapshot render_snapshot = {0};
+    RuntimeNative3DRenderRequestSnapshotDesc render_snapshot_desc = {0};
+    RayEvaluatedSceneSnapshot unresolved_snapshot = {0};
     const RuntimeLightSource3D* native_light = NULL;
     SceneConfig before_scene;
     AnimationConfig before_animation;
@@ -263,14 +268,18 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
                        sizeof(preview_sample.snapshot)) == 0);
 
     assert_true("evaluated_native_prepare",
-                RuntimeNative3DPrepareFrameAtFrameIndex(
+                RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
                     &native_frame,
                     64,
                     64,
-                    preview_sample.snapshot.frame.normalized_t,
-                    (int)preview_sample.snapshot.frame.sample.absolute_frame,
-                    preview_sample.snapshot.light.position.x,
-                    preview_sample.snapshot.light.position.y));
+                    &preview_sample.snapshot,
+                    NULL));
+    assert_true("evaluated_native_snapshot_bound",
+                native_frame.evaluatedSceneBound);
+    assert_true("evaluated_native_snapshot_exact",
+                memcmp(&native_frame.evaluatedScene,
+                       &preview_sample.snapshot,
+                       sizeof(preview_sample.snapshot)) == 0);
     for (int i = 0; i < native_frame.scene.lightSet.lightCount; ++i) {
         if (strcmp(native_frame.scene.lightSet.lights[i].id,
                    preview_sample.snapshot.light.runtime_light_id) == 0) {
@@ -299,6 +308,53 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
     assert_close("evaluated_native_camera_z_parity",
                  native_frame.scene.camera.position.z,
                  preview_sample.snapshot.camera.position.z, 1e-12);
+    assert_close("evaluated_native_camera_yaw_parity",
+                 native_frame.scene.camera.rotation,
+                 preview_sample.snapshot.camera.yaw_radians, 1e-12);
+    assert_close("evaluated_native_camera_pitch_parity",
+                 native_frame.scene.camera.lookPitch,
+                 preview_sample.snapshot.camera.pitch_radians, 1e-12);
+    assert_close("evaluated_native_camera_zoom_parity",
+                 native_frame.scene.camera.zoom,
+                 preview_sample.snapshot.camera.zoom, 1e-12);
+    render_snapshot_desc.outputWidth = 64;
+    render_snapshot_desc.outputHeight = 64;
+    render_snapshot_desc.renderWidth = 64;
+    render_snapshot_desc.renderHeight = 64;
+    render_snapshot_desc.hostWidth = 64;
+    render_snapshot_desc.hostHeight = 64;
+    render_snapshot_desc.frameIndex =
+        (int)preview_sample.snapshot.frame.sample.absolute_frame;
+    render_snapshot_desc.frameCount =
+        (int)preview_sample.snapshot.frame.range.frame_count;
+    render_snapshot_desc.temporalFrames = 1;
+    render_snapshot_desc.preparedFrame = &native_frame;
+    assert_true("evaluated_render_snapshot_build",
+                RuntimeNative3DRenderRequestSnapshot_Build(
+                    &render_snapshot, &render_snapshot_desc));
+    assert_true("evaluated_render_snapshot_bound",
+                render_snapshot.evaluatedSceneBound);
+    assert_true("evaluated_render_snapshot_exact",
+                memcmp(&render_snapshot.evaluatedScene,
+                       &preview_sample.snapshot,
+                       sizeof(preview_sample.snapshot)) == 0);
+
+    unresolved_snapshot = preview_sample.snapshot;
+    snprintf(unresolved_snapshot.light.runtime_light_id,
+             sizeof(unresolved_snapshot.light.runtime_light_id),
+             "%s",
+             "missing-authored-light");
+    {
+        RuntimeNative3DPreparedFrame unresolved_frame = {0};
+        assert_true("evaluated_authored_light_id_fail_closed",
+                    !RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+                        &unresolved_frame,
+                        64,
+                        64,
+                        &unresolved_snapshot,
+                        NULL));
+        RuntimeNative3DPreparedFrame_Free(&unresolved_frame);
+    }
     assert_close("evaluated_headless_preflight_progress_parity",
                  final_sample.progress,
                  preview_sample.snapshot.light.progress, 1e-12);

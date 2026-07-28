@@ -136,6 +136,22 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     bool disney_denoise_enabled,
     bool present_progress,
     RuntimeNative3DRenderStats* out_stats);
+bool RayTracing2PreviewPresent_RenderNative3DTilesPreviewForEvaluatedScene(
+    SDL_Renderer* renderer,
+    Uint8* host_buffer,
+    int host_width,
+    int host_height,
+    Uint8* render_buffer,
+    int render_width,
+    int render_height,
+    TileGrid* grid,
+    RayTracing3DIntegratorId integrator_id,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    bool disney_denoise_enabled,
+    bool present_progress,
+    RuntimeNative3DRenderStats* out_stats);
 void RayTracing2PreviewPresent_RenderHybridTilesPreview(
     SDL_Renderer* renderer,
     IntegratorContext* ctx,

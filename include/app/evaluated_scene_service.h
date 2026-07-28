@@ -18,5 +18,8 @@ bool RayEvaluatedSceneCaptureForElapsed(
 bool RayEvaluatedSceneCaptureAuthoredSample(
     TimelineSample sample,
     RayEvaluatedSceneServiceResult* out_result);
+bool RayEvaluatedSceneCaptureSample(
+    TimelineSample sample,
+    RayEvaluatedSceneServiceResult* out_result);
 
 #endif

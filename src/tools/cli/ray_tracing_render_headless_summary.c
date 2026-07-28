@@ -70,6 +70,27 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, ",\n");
     fprintf(file, "  \"route_native_3d\": %s,\n", preflight->route_native_3d ? "true" : "false");
     fprintf(file, "  \"prepared_frame\": %s,\n", preflight->prepared_frame ? "true" : "false");
+    fprintf(file,
+            "  \"evaluated_scene_bound\": %s,\n",
+            preflight->evaluated_scene_bound ? "true" : "false");
+    fprintf(file,
+            "  \"evaluated_scene_source\": %d,\n",
+            preflight->evaluated_scene_source);
+    fprintf(file,
+            "  \"evaluated_scene_first_frame\": %lld,\n",
+            (long long)preflight->evaluated_scene_first_frame);
+    fprintf(file,
+            "  \"evaluated_scene_last_frame\": %lld,\n",
+            (long long)preflight->evaluated_scene_last_frame);
+    fprintf(file,
+            "  \"evaluated_scene_scene_revision\": %llu,\n",
+            (unsigned long long)preflight->evaluated_scene_scene_revision);
+    fprintf(file,
+            "  \"evaluated_scene_timeline_revision\": %llu,\n",
+            (unsigned long long)preflight->evaluated_scene_timeline_revision);
+    fprintf(file, "  \"evaluated_scene_light_id\": ");
+    RayTracingJsonWriteString(file, preflight->evaluated_scene_light_id);
+    fprintf(file, ",\n");
     fprintf(file, "  \"rendered_frames\": %s,\n", preflight->rendered_frames ? "true" : "false");
     fprintf(file, "  \"frames_rendered\": %d,\n", preflight->frames_rendered);
     fprintf(file, "  \"checkpoint\": {\n");
