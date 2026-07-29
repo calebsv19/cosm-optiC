@@ -151,6 +151,25 @@ therefore remain authoritative overrides. Photon-map rendering itself remains
 opt-in/default-off; “default” here means the selected photon-map working preset,
 not that every ordinary render silently builds a 131K map.
 
+### Animated Water Contract
+
+Dynamic water geometry is part of the photon-map lifecycle identity. A new
+heightfield frame therefore rebuilds the map even when the static scene,
+emitter, and photon settings are unchanged. The water importer also recognizes
+the explicit `water_body_boundary_v1` heightfield-volume contract: dry perimeter
+samples become a fixed-height rim and the animated top is attached to the
+declared side/bottom shell object as one outward-facing medium boundary.
+Interior dry samples remain cutouts.
+
+For local motion review, first render two adjacent low-photon frames and reject
+the run if the water-to-shell rim separates, the dynamic geometry key does not
+change, or the caustic pattern is static. Then use a 12- or 16-frame,
+24-fps review at 131,072 photons with 12 transmission samples and denoising
+disabled. Keep camera, light, estimator, and seed fixed so only the animated
+water changes. After motion coherence is accepted, render four selected frames
+at 262,144 photons for hero-quality comparison; do not pay the hero cost across
+the full clip until that comparison shows a visible benefit.
+
 ## Current Boundary
 
 This integration makes photon mapping usable and testable as an opt-in system;
