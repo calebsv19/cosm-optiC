@@ -87,6 +87,8 @@ package-desktop-smoke: package-desktop
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/samples/optic_build_week_showcase/scene_runtime.json" || (echo "Missing Build Week showcase scene"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/starter_scene_profile.json" || (echo "Missing starter scene profile"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/samples/optic_build_week_showcase/render_request.json" || (echo "Missing Build Week showcase request"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/config/samples/light_timeline_editor_demo_runtime.json" || (echo "Missing light timeline editor demo scene"; exit 1)
+	@test -f "$(PACKAGE_RESOURCES_DIR)/config/samples/light_timeline_editor_demo_request.json" || (echo "Missing light timeline editor demo request"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_reflection_blob.runtime.json" || (echo "Missing Build Week reflection mesh"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_grooved_orb.runtime.json" || (echo "Missing Build Week grooved orb mesh"; exit 1)
 	@test -f "$(PACKAGE_RESOURCES_DIR)/config/samples/optic_build_week_showcase/assets/mesh_assets/asset_build_week_lattice_shell.runtime.json" || (echo "Missing Build Week lattice shell mesh"; exit 1)

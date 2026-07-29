@@ -3,8 +3,9 @@ set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT_DIR/tools/publish_validation.sh"
-STAGE_SCRIPT="$ROOT_DIR/../skills/codework-visualizer-drop/scripts/stage_visualizer_run.py"
-UPLOAD_SCRIPT="$ROOT_DIR/../skills/codework-visualizer-drop/scripts/upload_visualizer_drop.sh"
+WORKSPACE_ROOT="$(rt_publish_workspace_root "$ROOT_DIR")"
+STAGE_SCRIPT="$WORKSPACE_ROOT/skills/codework-visualizer-drop/scripts/stage_visualizer_run.py"
+UPLOAD_SCRIPT="$WORKSPACE_ROOT/skills/codework-visualizer-drop/scripts/upload_visualizer_drop.sh"
 LOCAL_REVIEW_SCRIPT="$ROOT_DIR/tools/publish_render_review_set.sh"
 
 RUN_ROOT=""
@@ -155,7 +156,7 @@ EOF
     --program ray-tracing \
     --job-type "$JOB_TYPE" \
     --summary "$SUMMARY_TEXT" \
-    --staging-root "$ROOT_DIR/../_private_workspace_artifacts/codework_visualizer_runs" \
+    --staging-root "$WORKSPACE_ROOT/_private_workspace_artifacts/codework_visualizer_runs" \
     --preview-source "$FRAME_PATH" \
     --log-source "$PUBLISH_LOG_PATH" \
     --primary-output-source "$FRAME_PATH" \
@@ -184,13 +185,13 @@ EOF
 
   if [ "$STAGE_ONLY" -eq 0 ]; then
     "$UPLOAD_SCRIPT" \
-      "$ROOT_DIR/../_private_workspace_artifacts/codework_visualizer_runs/$DROP_ID" \
+      "$WORKSPACE_ROOT/_private_workspace_artifacts/codework_visualizer_runs/$DROP_ID" \
       "$DROP_ID"
   fi
 
   echo "render outputs published to visualizer lane"
   echo "drop_id=$DROP_ID"
-  echo "local_drop_dir=$ROOT_DIR/../_private_workspace_artifacts/codework_visualizer_runs/$DROP_ID"
+  echo "local_drop_dir=$WORKSPACE_ROOT/_private_workspace_artifacts/codework_visualizer_runs/$DROP_ID"
   if [ "$STAGE_ONLY" -eq 1 ]; then
     echo "remote_upload=skipped"
   fi

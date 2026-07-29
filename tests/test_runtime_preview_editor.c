@@ -10,6 +10,7 @@
 #include "app/preview_camera_sample.h"
 #include "app/preview_mode_route.h"
 #include "app/preview_playback.h"
+#include "app/preview_retained_scene_quality.h"
 #include "app/preview_retained_scene_mesh.h"
 #include "app/preview_retained_scene_renderer.h"
 #include "editor/scene_editor_digest_overlay.h"
@@ -716,6 +717,35 @@ static void test_preview_retained_scene_large_mesh_silhouette_policy(void) {
                 !PreviewRetainedSceneMeshShouldBuildSilhouetteForTriangleCount(171246u));
 }
 
+static void test_preview_retained_scene_quality_policy(void) {
+    PreviewRetainedSceneQuality quality =
+        PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME;
+    assert_true("preview_quality_wire_has_no_surface",
+                !PreviewRetainedSceneQualityUsesSurface(quality));
+    quality = PreviewRetainedSceneQualityCycle(quality);
+    assert_true("preview_quality_cycle_solid",
+                quality == PREVIEW_RETAINED_SCENE_QUALITY_SOLID &&
+                PreviewRetainedSceneQualityUsesSurface(quality));
+    quality = PreviewRetainedSceneQualityCycle(quality);
+    assert_true("preview_quality_cycle_shaded",
+                quality == PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED &&
+                PreviewRetainedSceneQualityUsesSurface(quality));
+    quality = PreviewRetainedSceneQualityCycle(quality);
+    assert_true("preview_quality_cycle_wire",
+                quality == PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME);
+    assert_true("preview_quality_invalid_falls_back_to_wire",
+                PreviewRetainedSceneQualityNormalize(
+                    (PreviewRetainedSceneQuality)99) ==
+                    PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME);
+    assert_true("preview_quality_labels_are_explicit",
+                strcmp(PreviewRetainedSceneQualityLabel(
+                           PREVIEW_RETAINED_SCENE_QUALITY_SOLID),
+                       "Solid") == 0 &&
+                strstr(PreviewRetainedSceneQualityLabel(
+                           PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED),
+                       "shaded") != NULL);
+}
+
 static void test_preview_mode_route_select_contract(void) {
     RayTracingRuntimeRoute route = {0};
     RayTracingSceneDigestStatus digest_status = {0};
@@ -801,6 +831,7 @@ int run_test_runtime_preview_editor_tests(void) {
     test_preview_retained_scene_includes_runtime_mesh_asset_edges();
     test_preview_retained_scene_deferred_path_keeps_small_mesh_edges();
     test_preview_retained_scene_large_mesh_silhouette_policy();
+    test_preview_retained_scene_quality_policy();
     test_preview_mode_route_select_contract();
     test_preview_playback_evaluate_contract();
     return test_support_failures() - before;

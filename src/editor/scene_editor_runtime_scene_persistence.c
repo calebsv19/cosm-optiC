@@ -11,6 +11,7 @@
 #include "editor/object_editor_motion.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_motion_bridge.h"
+#include "import/runtime_scene_light_timeline_io.h"
 #include "render/runtime_material_texture_stack_3d.h"
 #include "render/runtime_material_graph_3d.h"
 #include "render/runtime_material_authored_texture_3d.h"
@@ -593,6 +594,7 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object* camera_path_depth = NULL;
     json_object* object_materials = NULL;
     json_object* object_motion_tracks = NULL;
+    json_object* light_timeline = NULL;
     const char* serialized = NULL;
     char* out = NULL;
     Path saved_light_path = {0};
@@ -630,6 +632,16 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     camera_path_depth = CameraPath3D_ToJsonObject(&saved_camera_path3d, &saved_camera_path);
     object_materials = scene_editor_runtime_scene_build_object_materials_json();
     object_motion_tracks = ObjectEditorMotionBuildAuthoringTracksJson(authored_to_runtime);
+    {
+        RuntimeSceneLightTimelineDocument timeline_document;
+        if (RuntimeSceneLightTimelineGetLast(&timeline_document)) {
+            timeline_document.spatial_path = sceneSettings.bezierPath;
+            timeline_document.spatial_path_3d = sceneSettings.bezierPath3D;
+            (void)RuntimeSceneLightTimelineSetLast(&timeline_document);
+            light_timeline = RuntimeSceneLightTimelineToJsonObject(&timeline_document,
+                                                                   world_scale);
+        }
+    }
 
     if (!overlay_root || !overlay_meta || !extensions || !ray_tracing || !authoring ||
         !environment ||
@@ -714,6 +726,9 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     json_object_object_add(authoring, "object_materials", object_materials);
     if (object_motion_tracks) {
         json_object_object_add(authoring, "object_motion_tracks", object_motion_tracks);
+    }
+    if (light_timeline) {
+        json_object_object_add(authoring, "light_timeline", light_timeline);
     }
     json_object_object_add(ray_tracing, "authoring", authoring);
     json_object_object_add(extensions, "ray_tracing", ray_tracing);

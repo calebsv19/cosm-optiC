@@ -5,10 +5,32 @@
 #include "render/runtime_native_3d_async_render_bridge.h"
 #include "test_support.h"
 
-static RuntimeNative3DPreparedFrame make_deep_render_prepared_frame(void) {
+static RuntimeNative3DPreparedFrame make_deep_render_prepared_frame(
+    int frame_index,
+    int frame_count) {
     RuntimeNative3DPreparedFrame frame;
+    RayEvaluatedSceneSnapshotInputs inputs;
     memset(&frame, 0, sizeof(frame));
+    memset(&inputs, 0, sizeof(inputs));
     RuntimeScene3D_Init(&frame.scene);
+    assert_true("deep_evaluated_context",
+                TimelineEvaluationContextBuild(
+                    (TimelineRate){30u, 1u},
+                    (TimelineRange){frame_index, (uint64_t)frame_count},
+                    (TimelineSample){frame_index, 0u, 1u},
+                    &inputs.frame) == TIMELINE_STATUS_OK);
+    inputs.source = RAY_EVALUATED_SCENE_SOURCE_LEGACY_PREVIEW_FALLBACK;
+    inputs.light.valid = true;
+    inputs.light.enabled = true;
+    inputs.light.position = (TimelineVec3){4.0, 5.0, 6.0};
+    inputs.camera.valid = true;
+    inputs.camera.position = (TimelineVec3){1.0, 2.0, 3.0};
+    inputs.camera.zoom = 1.0;
+    inputs.diagnostics = "deep request fixture";
+    assert_true("deep_evaluated_snapshot",
+                RayEvaluatedSceneSnapshotBuild(
+                    &inputs, &frame.evaluatedScene) == TIMELINE_STATUS_OK);
+    frame.evaluatedSceneBound = true;
     frame.width = 160;
     frame.height = 96;
     frame.valid = true;
@@ -16,7 +38,7 @@ static RuntimeNative3DPreparedFrame make_deep_render_prepared_frame(void) {
 }
 
 static RuntimeNative3DRenderRequestSnapshot make_deep_render_snapshot(
-    int frame_index,
+    const RuntimeNative3DPreparedFrame* prepared_frame,
     int frame_count,
     bool dynamic_volume,
     bool dynamic_water) {
@@ -28,15 +50,12 @@ static RuntimeNative3DRenderRequestSnapshot make_deep_render_snapshot(
         .renderHeight = 96,
         .hostWidth = 160,
         .hostHeight = 96,
-        .frameIndex = frame_index,
+        .frameIndex = (int)prepared_frame->evaluatedScene.frame.sample.absolute_frame,
         .frameCount = frame_count,
         .temporalFrames = 4,
         .tileSize = 16,
         .integratorId = RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,
-        .preparedFrameBound = true,
-        .preparedFrameValid = true,
-        .preparedFrameWidth = 160,
-        .preparedFrameHeight = 96,
+        .preparedFrame = prepared_frame,
         .preparedPrimitiveCount = 3u,
         .preparedTriangleCount = 26u,
         .sceneAccelerationBound = true,
@@ -94,9 +113,10 @@ static bool build_deep_render_request(RayTracingDeepRenderFrameRequest* request,
                                       int local_frame_index,
                                       int absolute_frame_index,
                                       int frame_count) {
-    RuntimeNative3DPreparedFrame frame = make_deep_render_prepared_frame();
+    RuntimeNative3DPreparedFrame frame =
+        make_deep_render_prepared_frame(absolute_frame_index, frame_count);
     RuntimeNative3DRenderRequestSnapshot snapshot =
-        make_deep_render_snapshot(absolute_frame_index, frame_count, false, false);
+        make_deep_render_snapshot(&frame, frame_count, false, false);
     RayTracingDeepRenderFrameRequestDesc desc = make_deep_render_request_desc(
         &snapshot,
         generation,
@@ -119,9 +139,9 @@ static int test_deep_render_frame_request_owns_immutable_inputs(void) {
     char output_root[128] = "/tmp/deep-render";
     char frame_directory[128] = "/tmp/deep-render/frames";
     char final_frame_path[128] = "/tmp/deep-render/frames/frame_0042.bmp";
-    RuntimeNative3DPreparedFrame frame = make_deep_render_prepared_frame();
+    RuntimeNative3DPreparedFrame frame = make_deep_render_prepared_frame(42, 2);
     RuntimeNative3DRenderRequestSnapshot snapshot =
-        make_deep_render_snapshot(42, 2, false, false);
+        make_deep_render_snapshot(&frame, 2, false, false);
     RayTracingDeepRenderFrameRequestDesc desc = make_deep_render_request_desc(
         &snapshot, 100u, 0, 42, 2, output_root, frame_directory, final_frame_path);
     RayTracingDeepRenderFrameRequest request;
@@ -170,9 +190,10 @@ static int test_deep_render_frame_request_owns_immutable_inputs(void) {
 }
 
 static int test_deep_render_frame_request_rejects_unowned_dynamic_inputs(void) {
-    RuntimeNative3DPreparedFrame volume_frame = make_deep_render_prepared_frame();
+    RuntimeNative3DPreparedFrame volume_frame =
+        make_deep_render_prepared_frame(8, 1);
     RuntimeNative3DRenderRequestSnapshot volume_snapshot =
-        make_deep_render_snapshot(8, 1, true, false);
+        make_deep_render_snapshot(&volume_frame, 1, true, false);
     RayTracingDeepRenderFrameRequestDesc volume_desc = make_deep_render_request_desc(
         &volume_snapshot, 9u, 0, 8, 1, "/tmp/a", "/tmp/a/frames", "/tmp/a/f.bmp");
     RayTracingDeepRenderFrameRequest request;
@@ -186,9 +207,10 @@ static int test_deep_render_frame_request_rejects_unowned_dynamic_inputs(void) {
                     volume_frame.valid);
     RuntimeNative3DPreparedFrame_Free(&volume_frame);
 
-    RuntimeNative3DPreparedFrame water_frame = make_deep_render_prepared_frame();
+    RuntimeNative3DPreparedFrame water_frame =
+        make_deep_render_prepared_frame(8, 1);
     RuntimeNative3DRenderRequestSnapshot water_snapshot =
-        make_deep_render_snapshot(8, 1, false, true);
+        make_deep_render_snapshot(&water_frame, 1, false, true);
     RayTracingDeepRenderFrameRequestDesc water_desc = make_deep_render_request_desc(
         &water_snapshot, 10u, 0, 8, 1, "/tmp/a", "/tmp/a/frames", "/tmp/a/f.bmp");
     assert_true("deep_request_blocks_dynamic_water",

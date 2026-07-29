@@ -5,9 +5,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
 ROOT_DIR="$(ray_tracing_root_dir)"
-LINE_TOOL="$ROOT_DIR/../line_drawing/build/toolchains/clang/bin/agent_scene_tool"
+WORKSPACE_ROOT="$(ray_tracing_workspace_root "$ROOT_DIR")"
+LINE_DRAWING_ROOT="${RAY_TRACING_LINE_DRAWING_ROOT:-$WORKSPACE_ROOT/line_drawing}"
+LINE_TOOL="$LINE_DRAWING_ROOT/build/toolchains/clang/bin/agent_scene_tool"
 PREVIEW_BIN="$(ray_tracing_tool_path ray_tracing_material_preview_headless "$ROOT_DIR")"
-LINE_REQUEST="$ROOT_DIR/../line_drawing/tests/fixtures/agent_detached_lab_emitter_paths_request.json"
+LINE_REQUEST="$LINE_DRAWING_ROOT/tests/fixtures/agent_detached_lab_emitter_paths_request.json"
 WORK_ROOT="$(ray_tracing_test_reset_work_root material_preview_headless "$ROOT_DIR")"
 AUTHOR_OUT="$WORK_ROOT/author"
 REQUEST_PATH="$WORK_ROOT/material_preview_request.json"
@@ -18,7 +20,7 @@ DIAG_ROOT="$WORK_ROOT/diagnostics"
 
 mkdir -p "$NEGATIVE_ROOT" "$DIAG_ROOT"
 
-make -C "$ROOT_DIR/../line_drawing" BUILD_TOOLCHAIN=clang agent_scene_tool
+make -C "$LINE_DRAWING_ROOT" BUILD_TOOLCHAIN=clang agent_scene_tool
 
 "$LINE_TOOL" --request "$LINE_REQUEST" --out "$AUTHOR_OUT" --determinism-check
 

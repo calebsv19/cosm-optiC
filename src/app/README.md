@@ -7,6 +7,16 @@ Application lifecycle orchestration.
 - `animation_fluid_scene.c` – Fluid/scene bundle apply helpers and default camera/path seeding for imported manifests.
 - `animation_input_helpers.c` – Input-side helper actions (fluid overlay toggles and text-zoom shortcut handling).
 - `animation_output.c` – Output/export helpers (frame capture and optional render-metrics dataset export).
+- `preview_transport.c` – UI-free Preview transport controller. It owns
+  play/pause, Loop-by-default or Bounce policy, explicit direction, exact
+  rational seeks, and deterministic authored-range endpoint behavior while
+  returning the canonical `TimelineSample` consumed by evaluated-scene capture.
+- `preview_workspace.c` – PVI-2 interaction controller for Preview playback
+  controls and the exact-frame scrubber. It pauses during a drag, preserves
+  prior play state for resume, and delegates all sampling policy to
+  `PreviewTransport` without mutating authored animation globals.
+- `preview_workspace_render.c` – SDL-only presentation for the Preview
+  transport bar; it renders retained workspace state without owning sampling.
 - `ray_tracing_deep_render_frame_request.c` – Move-only immutable Deep Render frame handoff. It adopts one prepared frame, copies timing/camera/light/output identity, sanitizes caller cancellation pointers, rejects unowned dynamic volume/water dependencies, and emits a generation-bound S9 dispatch snapshot.
 - `ray_tracing_deep_render_session.c` – App-owned Deep Render session state machine. It owns one frame request at a time across prepare/render/save/cancel transitions and advances frame index/generation only after confirmed frame save.
 - `ray_tracing_deep_render_listener.c` – Main-thread Deep Render listener. It copies only matching-generation dirty progress into a retained display buffer, invokes presentation through a desktop callback, and reports terminal job publication without joining or advancing the session.

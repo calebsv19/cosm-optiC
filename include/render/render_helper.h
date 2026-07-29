@@ -11,6 +11,9 @@
 // ✅ Declare rendering functions
 void RenderSceneObject(SDL_Renderer* renderer, SceneObject* obj, bool fillObjects);
 void RenderSceneObjects(SDL_Renderer* renderer, bool fillObjects);
+void RenderSceneObjectsWithCamera(SDL_Renderer* renderer,
+                                  bool fillObjects,
+                                  const Camera* camera);
 void RenderShape(SDL_Renderer* renderer, SceneObject* obj, bool fillObjects);
 void RenderCircle(SDL_Renderer* renderer, int x, int y, int radius, bool fillObjects);
 void RenderDrawCircle(SDL_Renderer* renderer, int x, int y, int radius);

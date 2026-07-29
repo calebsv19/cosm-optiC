@@ -539,7 +539,7 @@ void RayTracing2PreviewPresent_DrawABGRBufferToRect(SDL_Renderer* renderer,
                                                            linear_filter);
 }
 
-bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
+static bool ray_tracing2_preview_present_render_native_3d_tiles_internal(
     SDL_Renderer* renderer,
     Uint8* host_buffer,
     int host_width,
@@ -552,6 +552,7 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     double normalized_t,
     double light_x,
     double light_y,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
     const RuntimeNative3DSamplingContext* sampling,
     int temporal_frames,
     bool disney_denoise_enabled,
@@ -595,13 +596,25 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     }
     env_capture_started = BeginNative3DEnvPresentationCapture();
 
-    if (!RuntimeNative3DPrepareFrameWithSampling(&frame,
-                                                 render_width,
-                                                 render_height,
-                                                 normalized_t,
-                                                 light_x,
-                                                 light_y,
-                                                 sampling)) {
+    if (evaluated_scene) {
+        if (!RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+                &frame,
+                render_width,
+                render_height,
+                evaluated_scene,
+                sampling)) {
+            RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
+            WriteNative3DEnvPresentationCapture(env_capture_started, false, &stats);
+            return false;
+        }
+    } else if (!RuntimeNative3DPrepareFrameWithSampling(
+                   &frame,
+                   render_width,
+                   render_height,
+                   normalized_t,
+                   light_x,
+                   light_y,
+                   sampling)) {
         RuntimeNative3DFillPixelBufferEnvironment(render_buffer, total);
         WriteNative3DEnvPresentationCapture(env_capture_started, false, &stats);
         return false;
@@ -705,6 +718,58 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     }
     WriteNative3DEnvPresentationCapture(env_capture_started, true, &stats);
     return true;
+}
+
+bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
+    SDL_Renderer* renderer,
+    Uint8* host_buffer,
+    int host_width,
+    int host_height,
+    Uint8* render_buffer,
+    int render_width,
+    int render_height,
+    TileGrid* grid,
+    RayTracing3DIntegratorId integrator_id,
+    double normalized_t,
+    double light_x,
+    double light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    bool disney_denoise_enabled,
+    bool present_progress,
+    RuntimeNative3DRenderStats* out_stats) {
+    return ray_tracing2_preview_present_render_native_3d_tiles_internal(
+        renderer, host_buffer, host_width, host_height, render_buffer,
+        render_width, render_height, grid, integrator_id, normalized_t,
+        light_x, light_y, NULL, sampling, temporal_frames,
+        disney_denoise_enabled, present_progress, out_stats);
+}
+
+bool RayTracing2PreviewPresent_RenderNative3DTilesPreviewForEvaluatedScene(
+    SDL_Renderer* renderer,
+    Uint8* host_buffer,
+    int host_width,
+    int host_height,
+    Uint8* render_buffer,
+    int render_width,
+    int render_height,
+    TileGrid* grid,
+    RayTracing3DIntegratorId integrator_id,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    bool disney_denoise_enabled,
+    bool present_progress,
+    RuntimeNative3DRenderStats* out_stats) {
+    if (!evaluated_scene) return false;
+    return ray_tracing2_preview_present_render_native_3d_tiles_internal(
+        renderer, host_buffer, host_width, host_height, render_buffer,
+        render_width, render_height, grid, integrator_id,
+        evaluated_scene->frame.normalized_t,
+        evaluated_scene->light.position.x,
+        evaluated_scene->light.position.y,
+        evaluated_scene, sampling, temporal_frames, disney_denoise_enabled,
+        present_progress, out_stats);
 }
 
 void RayTracing2PreviewPresent_RenderHybridTilesPreview(

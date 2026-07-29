@@ -13,6 +13,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_mesh_preview_render.h"
+#include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "editor/scene_editor_tool_state.h"
 
@@ -104,6 +105,11 @@ bool SceneEditorChromeActionsResolve(const SDL_Event* event, SceneEditorChromeAc
         out_action->kind = SCENE_EDITOR_CHROME_ACTION_BACK_TO_MENU;
         return true;
     }
+    if (scene_editor_chrome_actions_point_in_rect(mx, my, &animateLightButton)) {
+        if (!SceneEditorLightTimelineHasSelectedLight()) return false;
+        out_action->kind = SCENE_EDITOR_CHROME_ACTION_TOGGLE_LIGHT_TIMELINE;
+        return true;
+    }
     return false;
 }
 
@@ -177,6 +183,12 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         }
         SceneEditorChromeShellSetActionFeedback("Scene saved", 1800);
         printf("Saved scene editor authoring in mode %d\n", editor->currentMode);
+        return;
+    }
+    if (action->kind == SCENE_EDITOR_CHROME_ACTION_TOGGLE_LIGHT_TIMELINE) {
+        if (!SceneEditorToggleSelectedLightTimeline()) {
+            SceneEditorChromeShellSetActionFeedback("Light timeline unavailable", 2200);
+        }
         return;
     }
     if (action->kind == SCENE_EDITOR_CHROME_ACTION_BACK_TO_MENU) {
