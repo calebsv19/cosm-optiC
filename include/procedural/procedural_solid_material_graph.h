@@ -23,6 +23,7 @@ typedef enum ProceduralSolidMaterialNodeKind {
     PROCEDURAL_SOLID_MATERIAL_NODE_SLOPE,
     PROCEDURAL_SOLID_MATERIAL_NODE_CURVATURE,
     PROCEDURAL_SOLID_MATERIAL_NODE_CAVITY,
+    PROCEDURAL_SOLID_MATERIAL_NODE_AUTHORED_REGION,
     PROCEDURAL_SOLID_MATERIAL_NODE_REGION,
     PROCEDURAL_SOLID_MATERIAL_NODE_BOUNDARY_DISTANCE,
     PROCEDURAL_SOLID_MATERIAL_NODE_NOISE,
@@ -74,6 +75,7 @@ typedef struct ProceduralSolidMaterialGeometryInputs {
     double slope;
     double curvature;
     double cavity;
+    double authored_region;
     double boundary_distance;
     double region_retained;
     double region_cut;

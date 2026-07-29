@@ -3,6 +3,7 @@
 
 #include "procedural/procedural_solid_material_graph.h"
 #include "procedural/procedural_solid_material_weighted_texture.h"
+#include "procedural/procedural_imported_surface_region.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -38,6 +39,15 @@ bool ProceduralSolidMaterialRuntimeProgramV1_Build(
     size_t material_count,
     const CoreMeshAssetRuntimeDocument *mesh,
     const char *const *region_kinds,
+    ProceduralSolidMaterialRuntimeProgramV1 *out_program,
+    ProceduralSolidMaterialGraphReport *report);
+bool ProceduralSolidMaterialRuntimeProgramV1_BuildWithImportedRegion(
+    const ProceduralSolidMaterialGraphV1 *graph,
+    const ProceduralSolidAuthoredMaterialV1 *materials,
+    size_t material_count,
+    const CoreMeshAssetRuntimeDocument *mesh,
+    const char *const *region_kinds,
+    const ProceduralImportedSurfaceRegionV1 *imported_region,
     ProceduralSolidMaterialRuntimeProgramV1 *out_program,
     ProceduralSolidMaterialGraphReport *report);
 bool ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(

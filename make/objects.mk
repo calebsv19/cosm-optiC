@@ -15,6 +15,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/procedural/procedural_solid_authored_material.o \
 	$(BUILD_DIR)/procedural/procedural_solid_authored_material_binding.o \
 	$(BUILD_DIR)/procedural/procedural_solid_authored_material_runtime.o \
+	$(BUILD_DIR)/procedural/procedural_imported_surface_region.o \
 	$(BUILD_DIR)/procedural/procedural_solid_material_graph.o \
 	$(BUILD_DIR)/procedural/procedural_solid_material_graph_json.o \
 	$(BUILD_DIR)/procedural/procedural_solid_material_graph_geometry.o \

@@ -48,6 +48,20 @@ bool ProceduralSolidMaterialRuntimeProgramV1_Build(
     const char *const *region_kinds,
     ProceduralSolidMaterialRuntimeProgramV1 *out_program,
     ProceduralSolidMaterialGraphReport *report) {
+    return ProceduralSolidMaterialRuntimeProgramV1_BuildWithImportedRegion(
+        graph, materials, material_count, mesh, region_kinds, NULL,
+        out_program, report);
+}
+
+bool ProceduralSolidMaterialRuntimeProgramV1_BuildWithImportedRegion(
+    const ProceduralSolidMaterialGraphV1 *graph,
+    const ProceduralSolidAuthoredMaterialV1 *materials,
+    size_t material_count,
+    const CoreMeshAssetRuntimeDocument *mesh,
+    const char *const *region_kinds,
+    const ProceduralImportedSurfaceRegionV1 *imported_region,
+    ProceduralSolidMaterialRuntimeProgramV1 *out_program,
+    ProceduralSolidMaterialGraphReport *report) {
     ProceduralSolidMaterialRuntimeProgramV1 program;
     size_t input_count;
     if (!graph || !materials || material_count != graph->layer_count ||
@@ -71,6 +85,26 @@ bool ProceduralSolidMaterialRuntimeProgramV1_Build(
             mesh, region_kinds, program.corner_inputs, input_count, report)) {
         ProceduralSolidMaterialRuntimeProgramV1_Free(&program);
         return false;
+    }
+    if (imported_region) {
+        if (!imported_region->vertex_weights ||
+            imported_region->vertex_count != mesh->vertex_count ||
+            imported_region->triangle_count != mesh->triangle_count) {
+            ProceduralSolidMaterialRuntimeProgramV1_Free(&program);
+            return false;
+        }
+        for (size_t triangle_index = 0u;
+             triangle_index < mesh->triangle_count; ++triangle_index) {
+            const CoreMeshAssetRuntimeTriangle *triangle =
+                &mesh->triangles[triangle_index];
+            const size_t indices[3] = {
+                triangle->a, triangle->b, triangle->c};
+            for (size_t corner = 0u; corner < 3u; ++corner) {
+                program.corner_inputs[
+                    (triangle_index * 3u) + corner].authored_region =
+                        imported_region->vertex_weights[indices[corner]];
+            }
+        }
     }
     program.graph = *graph;
     memcpy(program.materials, materials,
@@ -111,6 +145,7 @@ bool ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
     INTERPOLATE_FIELD(slope);
     INTERPOLATE_FIELD(curvature);
     INTERPOLATE_FIELD(cavity);
+    INTERPOLATE_FIELD(authored_region);
     INTERPOLATE_FIELD(boundary_distance);
     INTERPOLATE_FIELD(region_retained);
     INTERPOLATE_FIELD(region_cut);

@@ -136,6 +136,8 @@ static bool load_material_graph(
     char *out_diagnostics,
     size_t out_diagnostics_size) {
     const char *graph_reference = string_field(reference, "graph_path");
+    const char *surface_region_reference =
+        string_field(reference, "surface_region_path");
     ProceduralSolidMaterialGraphV1 graph;
     ProceduralSolidMaterialGraphReport graph_report = {0};
     ProceduralSolidAuthoredMaterialV1
@@ -147,6 +149,9 @@ static bool load_material_graph(
     const char **region_kinds = NULL;
     char graph_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     char graph_digest[PROCEDURAL_SOLID_MATERIAL_GRAPH_DIGEST_CAPACITY] = {0};
+    char surface_region_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    const ProceduralImportedSurfaceRegionV1 *surface_region = NULL;
     memset(materials, 0, sizeof(materials));
     memset(dependencies, 0, sizeof(dependencies));
     if (!graph_reference) {
@@ -190,7 +195,57 @@ static bool load_material_graph(
                      "procedural solid material graph instance mismatch");
             return false;
         }
+        if ((surface_region_reference != NULL) !=
+            asset->procedural_imported_surface_region_valid) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "imported surface region references must be consistent "
+                     "across instances of one mesh asset");
+            return false;
+        }
+        if (surface_region_reference &&
+            (!resolve_relative(runtime_scene_path, surface_region_reference,
+                               surface_region_path,
+                               sizeof(surface_region_path)) ||
+             strcmp(surface_region_path,
+                    asset->procedural_imported_surface_region_path) != 0)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "imported surface region instance mismatch");
+            return false;
+        }
         return true;
+    }
+    if (surface_region_reference) {
+        ProceduralImportedSurfaceRegionReport region_report = {0};
+        if (asset->procedural_imported_surface_region_absent ||
+            !resolve_relative(runtime_scene_path, surface_region_reference,
+                              surface_region_path,
+                              sizeof(surface_region_path)) ||
+            !ProceduralImportedSurfaceRegionV1_LoadJsonFile(
+                surface_region_path, &asset->document, asset->path,
+                &asset->procedural_imported_surface_region, &region_report) ||
+            !capture_dependency(
+                surface_region_path,
+                &asset->procedural_imported_surface_region_dependency)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     region_report.message[0]
+                         ? region_report.message
+                         : "imported surface region identity is stale");
+            return false;
+        }
+        asset->procedural_imported_surface_region_observed = true;
+        asset->procedural_imported_surface_region_valid = true;
+        snprintf(asset->procedural_imported_surface_region_path,
+                 sizeof(asset->procedural_imported_surface_region_path),
+                 "%s", surface_region_path);
+        surface_region = &asset->procedural_imported_surface_region;
+    } else {
+        if (asset->procedural_imported_surface_region_observed) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "imported surface region references must be consistent "
+                     "across instances of one mesh asset");
+            return false;
+        }
+        asset->procedural_imported_surface_region_absent = true;
     }
     for (size_t i = 0u; i < graph.layer_count; ++i) {
         char material_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
@@ -229,9 +284,9 @@ static bool load_material_graph(
                 &graph, &inputs[i], materials, graph.layer_count,
                 &surfaces[i], &graph_report)) goto fail;
     }
-    if (!ProceduralSolidMaterialRuntimeProgramV1_Build(
+    if (!ProceduralSolidMaterialRuntimeProgramV1_BuildWithImportedRegion(
             &graph, materials, graph.layer_count, &asset->document,
-            region_kinds,
+            region_kinds, surface_region,
             &asset->procedural_solid_material_runtime_program,
             &graph_report)) {
         goto fail;
@@ -396,6 +451,10 @@ bool runtime_mesh_asset_procedural_solid_authored_dependencies_match(
                         i])) return false;
         }
     }
+    if (asset->procedural_imported_surface_region_valid &&
+        !dependency_matches(
+            &asset->procedural_imported_surface_region_dependency))
+        return false;
     return true;
 }
 

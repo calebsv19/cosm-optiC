@@ -38,9 +38,9 @@ static double clamp01(double value) {
 const char *ProceduralSolidMaterialNodeKind_Name(
     ProceduralSolidMaterialNodeKind kind) {
     static const char *names[] = {
-        "constant", "height", "slope", "curvature", "cavity", "region",
-        "boundary_distance", "noise", "add", "multiply", "invert",
-        "smoothstep", "bands"};
+        "constant", "height", "slope", "curvature", "cavity",
+        "authored_region", "region", "boundary_distance", "noise", "add",
+        "multiply", "invert", "smoothstep", "bands"};
     if ((unsigned)kind >= sizeof(names) / sizeof(names[0])) return "invalid";
     return names[(unsigned)kind];
 }
@@ -402,6 +402,8 @@ static bool eval_node(
         case PROCEDURAL_SOLID_MATERIAL_NODE_SLOPE: t = in->slope; break;
         case PROCEDURAL_SOLID_MATERIAL_NODE_CURVATURE: t = in->curvature; break;
         case PROCEDURAL_SOLID_MATERIAL_NODE_CAVITY: t = in->cavity; break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_AUTHORED_REGION:
+            t = in->authored_region; break;
         case PROCEDURAL_SOLID_MATERIAL_NODE_BOUNDARY_DISTANCE:
             t = in->boundary_distance; break;
         case PROCEDURAL_SOLID_MATERIAL_NODE_REGION:

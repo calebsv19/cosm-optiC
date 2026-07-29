@@ -95,6 +95,14 @@ typedef struct RayTracingRuntimeMeshAsset {
     RayTracingRuntimeMeshAssetFileDependency
         procedural_solid_material_graph_dependency;
     ProceduralSolidMaterialGraphV1 procedural_solid_material_graph;
+    bool procedural_imported_surface_region_observed;
+    bool procedural_imported_surface_region_absent;
+    bool procedural_imported_surface_region_valid;
+    char procedural_imported_surface_region_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_imported_surface_region_dependency;
+    ProceduralImportedSurfaceRegionV1 procedural_imported_surface_region;
     size_t procedural_solid_material_graph_material_count;
     ProceduralSolidAuthoredMaterialV1 procedural_solid_material_graph_materials[
         PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_LAYERS];

@@ -553,6 +553,8 @@ void ray_tracing_runtime_mesh_asset_set_free(RayTracingRuntimeMeshAssetSet* set)
         free(set->assets[i].procedural_solid_composed_triangle_materials);
         ProceduralSolidMaterialRuntimeProgramV1_Free(
             &set->assets[i].procedural_solid_material_runtime_program);
+        ProceduralImportedSurfaceRegionV1_Free(
+            &set->assets[i].procedural_imported_surface_region);
     }
     memset(set, 0, sizeof(*set));
 }

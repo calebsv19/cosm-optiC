@@ -1390,11 +1390,134 @@ PROCEDURAL_SOLID_MATERIAL_BINDING_LOAD_SRCS := \
 	$(SRC_DIR)/procedural/procedural_solid_source_accel.c
 
 PROCEDURAL_SOLID_MATERIAL_GRAPH_LOAD_SRCS := \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
 	$(SRC_DIR)/procedural/procedural_solid_material_graph.c \
 	$(SRC_DIR)/procedural/procedural_solid_material_graph_json.c \
 	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry.c \
 	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry_corner.c \
 	$(SRC_DIR)/procedural/procedural_solid_material_runtime_program.c
+
+PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_imported_surface_region_tool
+PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_SRCS := \
+	tools/cli/procedural_imported_surface_region_tool.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN): \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-imported-surface-region-tool: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@echo "procedural imported surface region tool ready: $<"
+
+test-procedural-imported-surface-region-psg19: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_imported_surface_region_psg19.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-19 imported surface region lane passed"
+
+test-procedural-imported-surface-region-psg19-visual-proof: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tools/procedural_imported_surface_region_visual_proof.py
+	@echo "PSG-19 imported surface region visual proof passed"
+
+PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_imported_surface_inset_tool
+PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_SRCS := \
+	tools/cli/procedural_imported_surface_inset_tool.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_inset.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_inset_refinement.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_inset_topology.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN): \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-imported-surface-inset-tool: \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN)
+	@echo "procedural imported surface inset tool ready: $<"
+
+test-procedural-imported-surface-inset-psg20: \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_imported_surface_inset_psg20.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-21 adaptive imported surface inset lane passed"
+
+test-procedural-imported-surface-inset-psg21: \
+	test-procedural-imported-surface-inset-psg20
+
+test-procedural-imported-surface-inset-psg20-visual-proof: \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tools/procedural_imported_surface_inset_visual_proof.py
+	@echo "PSG-21 adaptive imported surface inset visual proof passed"
+
+test-procedural-imported-surface-inset-psg21-visual-proof: \
+	test-procedural-imported-surface-inset-psg20-visual-proof
 
 RUNTIME_MESH_ASSET_LOADER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_loader_test
 RUNTIME_MESH_ASSET_LOADER_TEST_SRCS := \

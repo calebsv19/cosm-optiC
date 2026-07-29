@@ -321,6 +321,112 @@ the repeated `0.50` render has zero changed pixels.
 PSG-16B does not add bump/normal output, dual contouring, or material-driven
 displacement/remeshing. Those remain separate PSG-17 and PSG-18 boundaries.
 
+PSG-17 and PSG-18 keep the material, shading, and geometry lanes distinct:
+
+- PSG-17 adds deterministic procedural microdetail normal output at native
+  hits. It perturbs the shading frame only; source vertices, triangle
+  topology, silhouette, and acceleration identity stay unchanged;
+- PSG-18 refines one selected source face, displaces the derived patch in
+  object space, rebuilds its closure walls, and validates the result as a
+  replaceable closed shell. This is true silhouette-changing geometry, not a
+  material or bump claim.
+
+PSG-19 adds a continuous authored-region carrier for imported source meshes:
+
+- `procedural_imported_surface_region` compiles a bounded set of normalized
+  object-space ellipsoid patches into one deterministic weight per immutable
+  source vertex;
+- the persisted carrier binds the region recipe digest, weight digest,
+  canonical mesh digest, exact runtime-sidecar SHA-256, vertex count, and
+  triangle count. Loading rejects stale or mismatched mesh identity;
+- the material runtime copies those weights to their original triangle
+  corners and barycentrically evaluates `authored_region` at native hits.
+  Weighted scalar and procedural-texture layers therefore cross the coating
+  boundary continuously;
+- `surface_region_path` is optional inside
+  `procedural_solid_material_ref`. Assets without it preserve the prior graph
+  runtime exactly; assets with it require one consistent carrier across all
+  instances;
+- the PSG-19 proof generates a new purpose-built statue-fragment STL from a
+  deterministic recipe on every run, imports it through the production
+  `mesh_asset_runtime_v1` harness, and renders aged plaster revealing pitted
+  concrete. Raw region and source-triangle views make the blend and immutable
+  provenance reviewable.
+
+PSG-19 is material-region authoring on the original imported topology. It does
+not cut recesses, create coating sidewalls, displace the source mesh, or grow
+secondary geometry. Those physical topology operations remain PSG-20 and later
+boundaries.
+
+PSG-20 adds the first topology-changing imported-surface inset compiler:
+
+- `procedural_imported_surface_inset` consumes the exact PSG-19 carrier and
+  rejects stale source asset, runtime-file, canonical-mesh, topology, or value
+  identity before changing geometry;
+- its public inset orchestration and shell-emission host delegates deterministic
+  edge collection, transition refinement, connected-component selection, and
+  disk-boundary classification to
+  `procedural_imported_surface_inset_topology`, a private seam intended for
+  later adaptive and multi-region work without widening the PSG-20 API;
+- one bounded conforming refinement pass splits carrier-selected source
+  triangles and their edge-sharing neighbors, then retains the largest
+  connected disk-like candidate patch with a single degree-two boundary loop;
+- the selected patch is duplicated and displaced inward along reconstructed
+  smooth object-space normals. The original boundary ring is bridged to the
+  inset floor with explicit transition-wall triangles, while all other source
+  triangles remain the retained surface;
+- the compiler emits a distinct replaceable derived runtime mesh, an exact
+  per-derived-triangle provenance artifact, and material groups named
+  `retained_surface`, `transition_wall`, and `inset_floor`;
+- the derived shell must reanalyze as one watertight, manifold, positive-volume
+  component with Euler characteristic two. The imported source mesh is never
+  overwritten.
+
+The focused PSG-20 fixture generates a fresh sculptural urn STL on every run,
+imports it through the runtime-mesh harness, compiles its carrier and inset
+twice, and proves exact repeat identity. The accepted result changes 5,440
+source triangles into a 5,926-triangle shell with an 81-edge boundary ring,
+162 transition-wall triangles, and 181 inset-floor triangles. The 1440 x 1080
+proof includes source control, hero and grazing physical views, topology-role,
+depth-delta, provenance, and exact-repeat views.
+
+The cleanup parity fixture binds the accepted source, refined, selected,
+retained, wall, floor, boundary-ring, and derived counts plus source-mesh,
+derived-mesh, provenance, and configuration digests. Internal topology changes
+must update that baseline deliberately; an extraction alone must preserve it.
+
+PSG-20's original proof is deliberately bounded to one largest connected,
+disk-like region and one refinement pass.
+
+PSG-21 evolves that compiler behind the private topology seam:
+
+- a bounded deterministic refinement controller repeatedly splits
+  threshold-straddling triangles and their edge-sharing neighbors until the
+  maximum selected-boundary edge reaches the typed target or the pass budget
+  is exhausted;
+- the default automatic target is `0.30` times the initial maximum boundary
+  edge. The CLI also exposes `--target-boundary-edge-length`,
+  `--adaptive-passes`, and `--minimum-component-triangles`;
+- all selected connected components meeting the explicit minimum triangle
+  count are retained. Independent degree-two boundary loops are counted and
+  reported rather than silently collapsing the result to the largest island;
+- the receipt exposes initial, target, and final boundary-edge scale,
+  refinement pass count, selected component count, loop count, and explicit
+  adaptive-active/converged state;
+- the accepted single-region urn result converges in two passes from
+  `0.3050905611` to `0.0766662452` object units against a
+  `0.0915271683` target. It changes the `5,440`-triangle source into a
+  `6,672`-triangle closed shell with `176` boundary-ring edges, `352` wall
+  triangles, and `390` floor triangles;
+- a second purpose-built carrier proves two retained selected components and
+  two independent boundary loops in one deterministic closed manifold shell.
+
+The PSG-21 proof remains bounded carrier-conforming subdivision, not a general
+quality remesher. It does not yet prove a hole inside one selected component,
+arbitrary Boolean clipping, fracture-quality edge optimization,
+self-intersection repair for unbounded depths, or conformal moss/grime growth
+shells.
+
 Boundary decisions:
 
 - `core_mesh_asset` remains the intended derived-shell output contract.
@@ -353,6 +459,8 @@ make test-procedural-solid-authoring
 make test-procedural-solid-psg11
 make test-procedural-solid-psg12
 make test-procedural-solid-agent-flow
+make test-procedural-imported-surface-region-psg19
+make test-procedural-imported-surface-region-psg19-visual-proof
 make test-procedural-solid-psg11-flow
 make test-procedural-solid-psg12-flow
 make test-procedural-solid-psg12-visual-proof
