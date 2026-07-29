@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app/preview_mesh_instance_bounds.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_primitive_preview_geometry.h"
@@ -14,11 +15,7 @@
 
 #define PREVIEW_RETAINED_SCENE_SURFACE_SCALE 0.75
 
-typedef struct PreviewRetainedSceneSurfacePoint3 {
-    double x;
-    double y;
-    double z;
-} PreviewRetainedSceneSurfacePoint3;
+typedef PreviewMeshInstancePoint3 PreviewRetainedSceneSurfacePoint3;
 
 typedef struct PreviewRetainedSceneSurfaceVertex {
     double x;
@@ -94,8 +91,8 @@ static uint64_t preview_retained_scene_surface_signature(
     for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance =
             SceneEditorMeshPreviewStoreGetInstance(i);
-        const CoreMeshAssetRuntimeContract* contract =
-            instance ? SceneEditorMeshPreviewStoreGetContract(instance->asset_index)
+        const CoreMeshAssetBounds3* bounds =
+            instance ? SceneEditorMeshPreviewStoreGetBounds(instance->asset_index)
                      : NULL;
         const CoreMeshPreviewLodMesh* lod =
             instance ? SceneEditorMeshPreviewStoreGetForQuality(
@@ -103,74 +100,28 @@ static uint64_t preview_retained_scene_surface_signature(
                      : NULL;
         SDL_Color color = preview_retained_scene_surface_base_color(
             instance ? instance->scene_object_index : i);
-        if (!instance || !contract || !lod) continue;
+        if (!instance || !bounds) continue;
         hash = preview_retained_scene_surface_hash(
             hash, instance, sizeof(*instance));
         hash = preview_retained_scene_surface_hash(
-            hash, contract, sizeof(*contract));
-        hash = preview_retained_scene_surface_hash(
-            hash, &lod->vertex_count, sizeof(lod->vertex_count));
-        hash = preview_retained_scene_surface_hash(
-            hash, &lod->triangle_count, sizeof(lod->triangle_count));
+            hash, bounds, sizeof(*bounds));
+        if (lod) {
+            hash = preview_retained_scene_surface_hash(
+                hash, &lod->vertex_count, sizeof(lod->vertex_count));
+            hash = preview_retained_scene_surface_hash(
+                hash, &lod->triangle_count, sizeof(lod->triangle_count));
+        }
         hash = preview_retained_scene_surface_hash(hash, &color, sizeof(color));
     }
     return hash;
 }
 
-static PreviewRetainedSceneSurfacePoint3 preview_retained_scene_surface_rotate(
-    PreviewRetainedSceneSurfacePoint3 point,
-    const RayTracingRuntimeMeshAssetInstance* instance) {
-    const double cx = cos(instance->rotation_x);
-    const double sx = sin(instance->rotation_x);
-    const double cy = cos(instance->rotation_y);
-    const double sy = sin(instance->rotation_y);
-    const double cz = cos(instance->rotation_z);
-    const double sz = sin(instance->rotation_z);
-    double value = point.y * cx - point.z * sx;
-    point.z = point.y * sx + point.z * cx;
-    point.y = value;
-    value = point.x * cy + point.z * sy;
-    point.z = -point.x * sy + point.z * cy;
-    point.x = value;
-    {
-        const double rotated_x = point.x * cz - point.y * sz;
-        const double rotated_y = point.x * sz + point.y * cz;
-        point.x = rotated_x;
-        point.y = rotated_y;
-    }
-    return point;
-}
-
 static PreviewRetainedSceneSurfacePoint3 preview_retained_scene_surface_world(
     CoreObjectVec3 local,
-    const CoreMeshAssetRuntimeContract* contract,
+    const CoreMeshAssetBounds3* bounds,
     const RayTracingRuntimeMeshAssetInstance* instance) {
-    PreviewRetainedSceneSurfacePoint3 pivot = {0.0, 0.0, 0.0};
-    PreviewRetainedSceneSurfacePoint3 point;
-    if (instance->rotation_pivot_policy ==
-        RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM) {
-        pivot = (PreviewRetainedSceneSurfacePoint3){
-            instance->rotation_pivot_x * instance->scale_x,
-            instance->rotation_pivot_y * instance->scale_y,
-            instance->rotation_pivot_z * instance->scale_z};
-    } else if (instance->rotation_pivot_policy ==
-               RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER) {
-        pivot = (PreviewRetainedSceneSurfacePoint3){
-            (contract->local_bounds.min.x + contract->local_bounds.max.x) *
-                0.5 * instance->scale_x,
-            (contract->local_bounds.min.y + contract->local_bounds.max.y) *
-                0.5 * instance->scale_y,
-            (contract->local_bounds.min.z + contract->local_bounds.max.z) *
-                0.5 * instance->scale_z};
-    }
-    point = (PreviewRetainedSceneSurfacePoint3){
-        local.x * instance->scale_x - pivot.x,
-        local.y * instance->scale_y - pivot.y,
-        local.z * instance->scale_z - pivot.z};
-    point = preview_retained_scene_surface_rotate(point, instance);
-    point.x += pivot.x + instance->position_x;
-    point.y += pivot.y + instance->position_y;
-    point.z += pivot.z + instance->position_z;
+    PreviewRetainedSceneSurfacePoint3 point = {0.0, 0.0, 0.0};
+    (void)PreviewMeshInstanceTransformPoint(local, bounds, instance, &point);
     return point;
 }
 
@@ -308,6 +259,78 @@ static void preview_retained_scene_surface_rasterize_triangle(
     stats->rendered_triangles += 1u;
 }
 
+static void preview_retained_scene_surface_rasterize_line(
+    const PreviewCameraProjector* projector,
+    PreviewRetainedSceneSurfacePoint3 wa,
+    PreviewRetainedSceneSurfacePoint3 wb,
+    SDL_Color color) {
+    PreviewRetainedSceneSurfaceVertex a;
+    PreviewRetainedSceneSurfaceVertex b;
+    double dx = 0.0;
+    double dy = 0.0;
+    int steps = 0;
+    if (!preview_retained_scene_surface_project(projector, wa, &a) ||
+        !preview_retained_scene_surface_project(projector, wb, &b)) {
+        return;
+    }
+    dx = b.x - a.x;
+    dy = b.y - a.y;
+    steps = (int)ceil(fmax(fabs(dx), fabs(dy)));
+    if (steps < 1) steps = 1;
+    for (int step = 0; step <= steps; ++step) {
+        const double t = (double)step / (double)steps;
+        const int center_x = (int)lround(a.x + dx * t);
+        const int center_y = (int)lround(a.y + dy * t);
+        const double depth = a.depth + (b.depth - a.depth) * t;
+        if (!(depth > 0.0)) continue;
+        for (int oy = -1; oy <= 1; ++oy) {
+            for (int ox = -1; ox <= 1; ++ox) {
+                const int x = center_x + ox;
+                const int y = center_y + oy;
+                size_t pixel = 0u;
+                if (x < 0 || y < 0 ||
+                    x >= g_preview_surface.width ||
+                    y >= g_preview_surface.height) {
+                    continue;
+                }
+                pixel = (size_t)y * (size_t)g_preview_surface.width +
+                        (size_t)x;
+                if (depth >= g_preview_surface.depth[pixel]) continue;
+                g_preview_surface.depth[pixel] = depth;
+                g_preview_surface.rgba[pixel * 4u + 0u] = color.r;
+                g_preview_surface.rgba[pixel * 4u + 1u] = color.g;
+                g_preview_surface.rgba[pixel * 4u + 2u] = color.b;
+                g_preview_surface.rgba[pixel * 4u + 3u] = color.a;
+            }
+        }
+    }
+}
+
+static void preview_retained_scene_surface_rasterize_bounds(
+    const PreviewCameraProjector* projector,
+    const CoreMeshAssetBounds3* bounds,
+    const RayTracingRuntimeMeshAssetInstance* instance,
+    SDL_Color base) {
+    static const int k_edges[12][2] = {
+        {0, 1}, {1, 2}, {2, 3}, {3, 0},
+        {4, 5}, {5, 6}, {6, 7}, {7, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+    PreviewMeshInstancePoint3 corners[8];
+    SDL_Color color = {
+        (Uint8)((int)base.r + (255 - (int)base.r) * 3 / 4),
+        (Uint8)((int)base.g + (255 - (int)base.g) * 3 / 4),
+        (Uint8)((int)base.b + (255 - (int)base.b) * 3 / 4),
+        255};
+    if (!PreviewMeshInstanceBuildBoundsCorners(bounds, instance, corners)) return;
+    for (int edge = 0; edge < 12; ++edge) {
+        preview_retained_scene_surface_rasterize_line(
+            projector,
+            corners[k_edges[edge][0]],
+            corners[k_edges[edge][1]],
+            color);
+    }
+}
+
 static bool preview_retained_scene_surface_prepare_pixels(int width, int height) {
     const size_t pixels = (size_t)width * (size_t)height;
     if (width <= 0 || height <= 0 || pixels > SIZE_MAX / 4u) return false;
@@ -405,14 +428,25 @@ static void preview_retained_scene_surface_rasterize(
     for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance =
             SceneEditorMeshPreviewStoreGetInstance(i);
-        const CoreMeshAssetRuntimeContract* contract =
-            instance ? SceneEditorMeshPreviewStoreGetContract(instance->asset_index)
+        const CoreMeshAssetBounds3* bounds =
+            instance ? SceneEditorMeshPreviewStoreGetBounds(instance->asset_index)
                      : NULL;
         const CoreMeshPreviewLodMesh* lod =
             instance ? SceneEditorMeshPreviewStoreGetForQuality(
                            instance->asset_index, true)
                      : NULL;
-        if (!instance || !contract || !lod) continue;
+        if (!instance || !bounds) continue;
+        if (!lod) {
+            preview_retained_scene_surface_rasterize_bounds(
+                projector,
+                bounds,
+                instance,
+                preview_retained_scene_surface_base_color(
+                    instance->scene_object_index));
+            stats->bounds_fallback_instances += 1;
+            stats->rendered_instances += 1;
+            continue;
+        }
         for (size_t triangle = 0u; triangle < lod->triangle_count; ++triangle) {
             const uint32_t ia = lod->indices[triangle * 3u + 0u];
             const uint32_t ib = lod->indices[triangle * 3u + 1u];
@@ -424,16 +458,17 @@ static void preview_retained_scene_surface_rasterize(
             preview_retained_scene_surface_rasterize_triangle(
                 projector,
                 preview_retained_scene_surface_world(
-                    lod->vertices[ia], contract, instance),
+                    lod->vertices[ia], bounds, instance),
                 preview_retained_scene_surface_world(
-                    lod->vertices[ib], contract, instance),
+                    lod->vertices[ib], bounds, instance),
                 preview_retained_scene_surface_world(
-                    lod->vertices[ic], contract, instance),
+                    lod->vertices[ic], bounds, instance),
                 preview_retained_scene_surface_base_color(
                     instance->scene_object_index),
                 frame,
                 stats);
         }
+        stats->mesh_lod_instances += 1;
         stats->rendered_instances += 1;
     }
 }

@@ -14,11 +14,15 @@ const CoreMeshPreviewLodMesh* SceneEditorMeshPreviewStoreGet(int asset_index);
 const CoreMeshPreviewLodMesh* SceneEditorMeshPreviewStoreGetForQuality(int asset_index,
                                                                        bool interactive);
 const CoreMeshAssetRuntimeContract* SceneEditorMeshPreviewStoreGetContract(int asset_index);
+const CoreMeshAssetBounds3* SceneEditorMeshPreviewStoreGetBounds(int asset_index);
 int SceneEditorMeshPreviewStoreInstanceCount(void);
 const RayTracingRuntimeMeshAssetInstance* SceneEditorMeshPreviewStoreGetInstance(
     int instance_index);
 bool SceneEditorMeshPreviewStoreHasSceneObject(int scene_object_index);
 int SceneEditorMeshPreviewStoreRecoveredInstanceCount(void);
+int SceneEditorMeshPreviewStoreBoundsFallbackInstanceCount(void);
+bool SceneEditorMeshPreviewStoreInstanceUsesBoundsFallback(int instance_index);
+bool SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(int scene_object_index);
 bool SceneEditorMeshPreviewStoreIsValid(int asset_index);
 bool SceneEditorMeshPreviewStoreGetVertexNormal(int asset_index,
                                                 size_t vertex_index,

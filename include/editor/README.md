@@ -15,3 +15,6 @@ Editor-facing interfaces shared across the scene editing modules.
 - `scene_editor_control_surface.h` – Shared scene-editor shell contract builder for lane-aware status/control descriptors (`2D` vs controlled `3D` vs native-3D-reserved).
 - `scene_editor_surface_render.h` – Shared scene-editor shell pane render API for left-pane mode summaries and right-pane wrapped status flow.
 - `scene_editor_primitive_preview_geometry.h` – Bounded editor-only plane/rect-prism triangle vocabulary used to place primitive previews in the same Solid/Material surface pass as STL mesh previews.
+- `scene_editor_mesh_preview_store.h` – Per-object retained mesh presentation
+  API for coherent LOD access, authoritative local bounds, instance lookup,
+  and observable bounds-fallback status.

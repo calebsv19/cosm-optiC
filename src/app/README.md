@@ -17,6 +17,14 @@ Application lifecycle orchestration.
   `PreviewTransport` without mutating authored animation globals.
 - `preview_workspace_render.c` – SDL-only presentation for the Preview
   transport bar; it renders retained workspace state without owning sampling.
+- `preview_mesh_instance_bounds.c` – App-local, renderer-neutral mesh-instance
+  point and AABB transformation helper. It applies the authored pivot, scale,
+  XYZ rotation, and translation used by retained mesh presentation so both
+  wire and surface fallback renderers consume one exact transform path.
+- `preview_retained_scene_mesh.c` / `preview_retained_scene_surface.c` –
+  Retained Wire and Solid/Shaded consumers of the per-object mesh-preview
+  store. They render coherent LOD geometry when available and a visible
+  12-edge AABB when only validated authoritative bounds remain.
 - `ray_tracing_deep_render_frame_request.c` – Move-only immutable Deep Render frame handoff. It adopts one prepared frame, copies timing/camera/light/output identity, sanitizes caller cancellation pointers, rejects unowned dynamic volume/water dependencies, and emits a generation-bound S9 dispatch snapshot.
 - `ray_tracing_deep_render_session.c` – App-owned Deep Render session state machine. It owns one frame request at a time across prepare/render/save/cancel transitions and advances frame index/generation only after confirmed frame save.
 - `ray_tracing_deep_render_listener.c` – Main-thread Deep Render listener. It copies only matching-generation dirty progress into a retained display buffer, invokes presentation through a desktop callback, and reports terminal job publication without joining or advancing the session.

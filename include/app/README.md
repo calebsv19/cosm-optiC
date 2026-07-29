@@ -10,6 +10,9 @@ Exposes the public interface for the application runtime.
   play/pause, Loop/Bounce, exact sample seek, direction, and endpoint policy.
 - `preview_workspace.h` – UI-independent PVI-2 Preview workspace state,
   layout, control hit testing, exact-frame scrubbing, and frame-step API.
+- `preview_retained_scene_surface.h` – Retained Solid/Shaded Preview surface
+  lifecycle and statistics, including separate coherent-LOD and AABB-fallback
+  object counts.
 - `data_paths.h` – Canonical path/root resolution helpers for config/import/export manifest lanes.
 - `runtime_time.h` – Runtime timing helper contract.
 - `scene_loop_policy.h` – Mode-aware wait-timeout policy contract for menu/editor idle behavior.

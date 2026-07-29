@@ -3,6 +3,7 @@
 #include "editor/scene_editor_mesh_preview_contract.h"
 #include "editor/scene_editor_mesh_preview_shading.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,7 +11,12 @@ typedef struct SceneEditorMeshPreviewStore {
     int asset_count;
     int instance_count;
     int recovered_instance_count;
+    int bounds_fallback_instance_count;
     bool valid[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
+    bool contract_valid[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
+    bool bounds_valid[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
+    char asset_ids[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS][64];
+    CoreMeshAssetBounds3 bounds[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
     CoreObjectVec3* vertex_normals[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
     size_t vertex_normal_counts[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
     CoreObjectVec3* interactive_vertex_normals[RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS];
@@ -24,6 +30,33 @@ typedef struct SceneEditorMeshPreviewStore {
 } SceneEditorMeshPreviewStore;
 
 static SceneEditorMeshPreviewStore g_mesh_preview_store;
+
+static void scene_editor_mesh_preview_store_copy_asset_id(int asset_index,
+                                                          const char* asset_id) {
+    if (asset_index < 0 ||
+        asset_index >= RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS ||
+        !asset_id) {
+        return;
+    }
+    snprintf(g_mesh_preview_store.asset_ids[asset_index],
+             sizeof(g_mesh_preview_store.asset_ids[asset_index]),
+             "%s",
+             asset_id);
+}
+
+static void scene_editor_mesh_preview_store_add_instance(
+    const RayTracingRuntimeMeshAssetInstance* source) {
+    if (!source ||
+        g_mesh_preview_store.instance_count >=
+            RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES ||
+        !SceneEditorMeshPreviewStoreGetBounds(source->asset_index)) {
+        return;
+    }
+    g_mesh_preview_store.instances[g_mesh_preview_store.instance_count++] = *source;
+    if (!SceneEditorMeshPreviewStoreIsValid(source->asset_index)) {
+        g_mesh_preview_store.bounds_fallback_instance_count += 1;
+    }
+}
 
 void SceneEditorMeshPreviewStoreReset(void) {
     for (int i = 0; i < RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS; ++i) {
@@ -70,7 +103,15 @@ static bool scene_editor_mesh_preview_store_build_vertex_normals(
 void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* assets) {
     SceneEditorMeshPreviewStoreReset();
     if (!assets) return;
-    for (int i = 0; i < assets->asset_count; ++i) {
+    for (int i = 0; i < assets->asset_count &&
+                    i < RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS; ++i) {
+        g_mesh_preview_store.contracts[i] = assets->assets[i].document.contract;
+        g_mesh_preview_store.contract_valid[i] = true;
+        g_mesh_preview_store.bounds[i] =
+            assets->assets[i].document.contract.local_bounds;
+        g_mesh_preview_store.bounds_valid[i] = true;
+        scene_editor_mesh_preview_store_copy_asset_id(
+            i, assets->assets[i].document.contract.asset_id);
         core_mesh_preview_lod_mesh_init(&g_mesh_preview_store.interactive_lods[i]);
         core_mesh_preview_lod_mesh_init(&g_mesh_preview_store.lods[i]);
         g_mesh_preview_store.interactive_valid[i] = SceneEditorMeshPreviewBuildLod(
@@ -82,7 +123,6 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
             SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
             &g_mesh_preview_store.lods[i]);
         if (g_mesh_preview_store.valid[i]) {
-            g_mesh_preview_store.contracts[i] = assets->assets[i].document.contract;
             (void)scene_editor_mesh_preview_store_build_vertex_normals(
                 i, &assets->assets[i].document, &g_mesh_preview_store.lods[i], false);
             if (g_mesh_preview_store.interactive_valid[i]) {
@@ -92,17 +132,12 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
                     &g_mesh_preview_store.interactive_lods[i],
                     true);
             }
-            g_mesh_preview_store.asset_count = i + 1;
         }
+        g_mesh_preview_store.asset_count = i + 1;
     }
     for (int i = 0; i < assets->instance_count; ++i) {
         const RayTracingRuntimeMeshAssetInstance* source = &assets->instances[i];
-        if (g_mesh_preview_store.instance_count >=
-                RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES ||
-            !SceneEditorMeshPreviewStoreIsValid(source->asset_index)) {
-            continue;
-        }
-        g_mesh_preview_store.instances[g_mesh_preview_store.instance_count++] = *source;
+        scene_editor_mesh_preview_store_add_instance(source);
     }
     for (int i = 0; i < assets->skipped_instance_count; ++i) {
         const RayTracingRuntimeMeshAssetSkippedInstance* skipped =
@@ -116,7 +151,8 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
             break;
         }
         for (int existing = 0; existing < g_mesh_preview_store.asset_count; ++existing) {
-            if (strcmp(g_mesh_preview_store.contracts[existing].asset_id,
+            if (g_mesh_preview_store.bounds_valid[existing] &&
+                strcmp(g_mesh_preview_store.asset_ids[existing],
                        skipped->asset_id) == 0) {
                 asset_index = existing;
                 break;
@@ -130,24 +166,46 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
             if (load_result.code != CORE_OK ||
                 strcmp(document.contract.asset_id, skipped->asset_id) != 0) {
                 core_mesh_asset_runtime_document_free(&document);
-                continue;
-            }
-            core_mesh_preview_lod_mesh_init(&g_mesh_preview_store.lods[asset_index]);
-            core_mesh_preview_lod_mesh_init(
-                &g_mesh_preview_store.interactive_lods[asset_index]);
-            g_mesh_preview_store.interactive_valid[asset_index] =
-                SceneEditorMeshPreviewBuildLod(
-                    &document,
-                    SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
-                    &g_mesh_preview_store.interactive_lods[asset_index]);
-            g_mesh_preview_store.valid[asset_index] = SceneEditorMeshPreviewBuildLod(
-                &document,
-                SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
-                &g_mesh_preview_store.lods[asset_index]);
-            if (g_mesh_preview_store.valid[asset_index]) {
+                if (!skipped->preview.preview_metadata_valid ||
+                    strcmp(skipped->preview.metadata.asset_id,
+                           skipped->asset_id) != 0) {
+                    continue;
+                }
+                g_mesh_preview_store.bounds[asset_index] =
+                    skipped->preview.metadata.local_bounds;
+                g_mesh_preview_store.bounds_valid[asset_index] = true;
+                scene_editor_mesh_preview_store_copy_asset_id(
+                    asset_index, skipped->asset_id);
+                g_mesh_preview_store.asset_count += 1;
+            } else {
                 g_mesh_preview_store.contracts[asset_index] = document.contract;
-                (void)scene_editor_mesh_preview_store_build_vertex_normals(
-                    asset_index, &document, &g_mesh_preview_store.lods[asset_index], false);
+                g_mesh_preview_store.contract_valid[asset_index] = true;
+                g_mesh_preview_store.bounds[asset_index] =
+                    document.contract.local_bounds;
+                g_mesh_preview_store.bounds_valid[asset_index] = true;
+                scene_editor_mesh_preview_store_copy_asset_id(
+                    asset_index, document.contract.asset_id);
+                core_mesh_preview_lod_mesh_init(
+                    &g_mesh_preview_store.lods[asset_index]);
+                core_mesh_preview_lod_mesh_init(
+                    &g_mesh_preview_store.interactive_lods[asset_index]);
+                g_mesh_preview_store.interactive_valid[asset_index] =
+                    SceneEditorMeshPreviewBuildLod(
+                        &document,
+                        SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
+                        &g_mesh_preview_store.interactive_lods[asset_index]);
+                g_mesh_preview_store.valid[asset_index] =
+                    SceneEditorMeshPreviewBuildLod(
+                        &document,
+                        SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
+                        &g_mesh_preview_store.lods[asset_index]);
+                if (g_mesh_preview_store.valid[asset_index]) {
+                    (void)scene_editor_mesh_preview_store_build_vertex_normals(
+                        asset_index,
+                        &document,
+                        &g_mesh_preview_store.lods[asset_index],
+                        false);
+                }
                 if (g_mesh_preview_store.interactive_valid[asset_index]) {
                     (void)scene_editor_mesh_preview_store_build_vertex_normals(
                         asset_index,
@@ -156,13 +214,14 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
                         true);
                 }
                 g_mesh_preview_store.asset_count += 1;
+                core_mesh_asset_runtime_document_free(&document);
             }
-            core_mesh_asset_runtime_document_free(&document);
-            if (!g_mesh_preview_store.valid[asset_index]) continue;
         }
         recovered.asset_index = asset_index;
-        g_mesh_preview_store.instances[g_mesh_preview_store.instance_count++] = recovered;
-        g_mesh_preview_store.recovered_instance_count += 1;
+        scene_editor_mesh_preview_store_add_instance(&recovered);
+        if (SceneEditorMeshPreviewStoreIsValid(asset_index)) {
+            g_mesh_preview_store.recovered_instance_count += 1;
+        }
     }
 }
 
@@ -181,8 +240,21 @@ const CoreMeshPreviewLodMesh* SceneEditorMeshPreviewStoreGetForQuality(int asset
 }
 
 const CoreMeshAssetRuntimeContract* SceneEditorMeshPreviewStoreGetContract(int asset_index) {
-    if (!SceneEditorMeshPreviewStoreIsValid(asset_index)) return NULL;
+    if (asset_index < 0 ||
+        asset_index >= RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS ||
+        !g_mesh_preview_store.contract_valid[asset_index]) {
+        return NULL;
+    }
     return &g_mesh_preview_store.contracts[asset_index];
+}
+
+const CoreMeshAssetBounds3* SceneEditorMeshPreviewStoreGetBounds(int asset_index) {
+    if (asset_index < 0 ||
+        asset_index >= RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS ||
+        !g_mesh_preview_store.bounds_valid[asset_index]) {
+        return NULL;
+    }
+    return &g_mesh_preview_store.bounds[asset_index];
 }
 
 int SceneEditorMeshPreviewStoreInstanceCount(void) {
@@ -204,6 +276,28 @@ bool SceneEditorMeshPreviewStoreHasSceneObject(int scene_object_index) {
 
 int SceneEditorMeshPreviewStoreRecoveredInstanceCount(void) {
     return g_mesh_preview_store.recovered_instance_count;
+}
+
+int SceneEditorMeshPreviewStoreBoundsFallbackInstanceCount(void) {
+    return g_mesh_preview_store.bounds_fallback_instance_count;
+}
+
+bool SceneEditorMeshPreviewStoreInstanceUsesBoundsFallback(int instance_index) {
+    const RayTracingRuntimeMeshAssetInstance* instance =
+        SceneEditorMeshPreviewStoreGetInstance(instance_index);
+    return instance && SceneEditorMeshPreviewStoreGetBounds(instance->asset_index) &&
+           !SceneEditorMeshPreviewStoreIsValid(instance->asset_index);
+}
+
+bool SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(int scene_object_index) {
+    for (int i = 0; i < g_mesh_preview_store.instance_count; ++i) {
+        if (g_mesh_preview_store.instances[i].scene_object_index ==
+                scene_object_index &&
+            SceneEditorMeshPreviewStoreInstanceUsesBoundsFallback(i)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool SceneEditorMeshPreviewStoreIsValid(int asset_index) {

@@ -14,6 +14,7 @@
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
 #include "editor/material_editor_face_preview.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "render/ray_tracing2.h"
 #include "render/render_helper.h"
 #include "render/space_mode_adapter.h"
@@ -63,9 +64,11 @@ static void DrawPreviewRouteStatus(SDL_Renderer* renderer,
     SDL_Rect line2 = {12, 32, 520, 38};
     SDL_Rect line3 = {12, 68, 520, 22};
     SDL_Rect line4 = {12, 92, 520, 22};
+    SDL_Rect line5 = {12, 116, 520, 22};
     SDL_Color primary = {220, 224, 232, 255};
     SDL_Color secondary = {170, 176, 188, 255};
     char quality_line[128];
+    char mesh_line[128];
     if (!renderer || !decision) return;
     RenderLabelTextLeft(renderer, line1, decision->branchLabel, primary);
     RenderLabelTextWrappedLeft(renderer, line2, decision->statusLine, secondary);
@@ -77,6 +80,12 @@ static void DrawPreviewRouteStatus(SDL_Renderer* renderer,
              "Preview quality: %s (Q cycles; wireframe is always retained)",
              PreviewRetainedSceneQualityLabel(quality));
     RenderLabelTextLeft(renderer, line4, quality_line, secondary);
+    snprintf(mesh_line,
+             sizeof(mesh_line),
+             "Mesh presentation: %d objects, %d AABB fallback",
+             SceneEditorMeshPreviewStoreInstanceCount(),
+             SceneEditorMeshPreviewStoreBoundsFallbackInstanceCount());
+    RenderLabelTextLeft(renderer, line5, mesh_line, secondary);
 }
 
 static SDL_Rect PreviewCloseButtonRect(int window_width) {

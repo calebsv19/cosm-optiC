@@ -4,7 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app/preview_mesh_instance_bounds.h"
 #include "config/config_manager.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "import/runtime_mesh_asset_loader.h"
 
 #define PREVIEW_RETAINED_SCENE_MAX_SILHOUETTE_EDGE_REFS 65536u
@@ -175,6 +177,38 @@ static void preview_retained_scene_mesh_append_bounds(
                                                    corners[b][0],
                                                    corners[b][1],
                                                    corners[b][2],
+                                                   color);
+    }
+}
+
+static void preview_retained_scene_mesh_append_transformed_bounds(
+    PreviewRetainedSceneLineSegment* segments,
+    int max_segments,
+    int* io_count,
+    const CoreMeshAssetBounds3* bounds,
+    const RayTracingRuntimeMeshAssetInstance* instance,
+    SDL_Color color) {
+    static const int k_edges[12][2] = {
+        {0, 1}, {1, 2}, {2, 3}, {3, 0},
+        {4, 5}, {5, 6}, {6, 7}, {7, 4},
+        {0, 4}, {1, 5}, {2, 6}, {3, 7}};
+    PreviewMeshInstancePoint3 corners[8];
+    if (!segments || !io_count ||
+        !PreviewMeshInstanceBuildBoundsCorners(bounds, instance, corners)) {
+        return;
+    }
+    for (int edge = 0; edge < 12; ++edge) {
+        const PreviewMeshInstancePoint3* a = &corners[k_edges[edge][0]];
+        const PreviewMeshInstancePoint3* b = &corners[k_edges[edge][1]];
+        preview_retained_scene_mesh_append_segment(segments,
+                                                   max_segments,
+                                                   io_count,
+                                                   a->x,
+                                                   a->y,
+                                                   a->z,
+                                                   b->x,
+                                                   b->y,
+                                                   b->z,
                                                    color);
     }
 }
@@ -367,6 +401,32 @@ bool PreviewRetainedSceneMeshResolveExtents(bool* seeded,
             any = true;
         }
     }
+    for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
+        const RayTracingRuntimeMeshAssetInstance* instance =
+            SceneEditorMeshPreviewStoreGetInstance(i);
+        const CoreMeshAssetBounds3* bounds =
+            instance ? SceneEditorMeshPreviewStoreGetBounds(instance->asset_index)
+                     : NULL;
+        PreviewMeshInstancePoint3 corners[8];
+        if (!instance || !bounds ||
+            !PreviewMeshInstanceBuildBoundsCorners(bounds, instance, corners)) {
+            continue;
+        }
+        for (int corner = 0; corner < 8; ++corner) {
+            preview_retained_scene_mesh_accumulate_extents(
+                corners[corner].x,
+                corners[corner].y,
+                corners[corner].z,
+                seeded,
+                min_x,
+                min_y,
+                min_z,
+                max_x,
+                max_y,
+                max_z);
+            any = true;
+        }
+    }
     return any;
 }
 
@@ -390,6 +450,10 @@ void PreviewRetainedSceneMeshAppendEdges(PreviewRetainedSceneLineSegment* segmen
         size_t triangle_stride = 1u;
         size_t max_triangles_to_draw = 0u;
 
+        if (SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(
+                instance->scene_object_index)) {
+            continue;
+        }
         if (instance->asset_index < 0 || instance->asset_index >= mesh_assets->asset_count) {
             continue;
         }
@@ -487,6 +551,70 @@ void PreviewRetainedSceneMeshAppendEdges(PreviewRetainedSceneLineSegment* segmen
                                                       max_y,
                                                       max_z,
                                                       color);
+        }
+    }
+    for (int i = 0;
+         i < SceneEditorMeshPreviewStoreInstanceCount() &&
+         *io_count < max_segments;
+         ++i) {
+        const RayTracingRuntimeMeshAssetInstance* instance =
+            SceneEditorMeshPreviewStoreGetInstance(i);
+        const CoreMeshAssetBounds3* bounds = NULL;
+        const CoreMeshPreviewLodMesh* lod = NULL;
+        bool exists_in_runtime_set = false;
+        SDL_Color color = preview_retained_scene_mesh_preview_color(i);
+        if (!instance) continue;
+        bounds = SceneEditorMeshPreviewStoreGetBounds(instance->asset_index);
+        for (int runtime_index = 0;
+             runtime_index < mesh_assets->instance_count;
+             ++runtime_index) {
+            if (mesh_assets->instances[runtime_index].scene_object_index ==
+                instance->scene_object_index) {
+                exists_in_runtime_set = true;
+                break;
+            }
+        }
+        if (SceneEditorMeshPreviewStoreInstanceUsesBoundsFallback(i)) {
+            preview_retained_scene_mesh_append_transformed_bounds(
+                segments, max_segments, io_count, bounds, instance, color);
+            continue;
+        }
+        if (exists_in_runtime_set) continue;
+        lod = SceneEditorMeshPreviewStoreGetForQuality(
+            instance->asset_index, true);
+        if (!lod || !bounds) {
+            preview_retained_scene_mesh_append_transformed_bounds(
+                segments, max_segments, io_count, bounds, instance, color);
+            continue;
+        }
+        for (size_t triangle = 0u;
+             triangle < lod->triangle_count && *io_count + 3 <= max_segments;
+             ++triangle) {
+            const uint32_t ia = lod->indices[triangle * 3u + 0u];
+            const uint32_t ib = lod->indices[triangle * 3u + 1u];
+            const uint32_t ic = lod->indices[triangle * 3u + 2u];
+            PreviewMeshInstancePoint3 a;
+            PreviewMeshInstancePoint3 b;
+            PreviewMeshInstancePoint3 c;
+            if (ia >= lod->vertex_count || ib >= lod->vertex_count ||
+                ic >= lod->vertex_count ||
+                !PreviewMeshInstanceTransformPoint(
+                    lod->vertices[ia], bounds, instance, &a) ||
+                !PreviewMeshInstanceTransformPoint(
+                    lod->vertices[ib], bounds, instance, &b) ||
+                !PreviewMeshInstanceTransformPoint(
+                    lod->vertices[ic], bounds, instance, &c)) {
+                continue;
+            }
+            preview_retained_scene_mesh_append_segment(
+                segments, max_segments, io_count,
+                a.x, a.y, a.z, b.x, b.y, b.z, color);
+            preview_retained_scene_mesh_append_segment(
+                segments, max_segments, io_count,
+                b.x, b.y, b.z, c.x, c.y, c.z, color);
+            preview_retained_scene_mesh_append_segment(
+                segments, max_segments, io_count,
+                c.x, c.y, c.z, a.x, a.y, a.z, color);
         }
     }
 }

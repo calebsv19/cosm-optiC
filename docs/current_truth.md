@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-07-26
+Last updated: 2026-07-29
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -85,6 +85,17 @@ Last updated: 2026-07-26
   only the runtime contract and instance transform, and frees the full document.
   Large preview geometry therefore does not enter final-render geometry or BVH
   ownership and is not retained as a full source document by the editor.
+- Preview presentation is now decided per mesh object. When a coherent LOD is
+  unavailable, the store retains validated local bounds from the runtime
+  contract or preview sidecar and both retained Wire and Solid/Shaded Preview
+  draw the same 12-edge AABB after the authored pivot, scale, XYZ rotation, and
+  translation. The Preview HUD reports aggregate AABB fallback count and the
+  object list labels affected objects individually.
+- The bounds proxy is deliberately truthful: if neither a validated runtime
+  document nor a validated preview sidecar supplies authoritative bounds, the
+  object remains `mesh skipped` instead of receiving an invented unit box.
+  This presentation fallback does not change evaluated frame identity,
+  transforms, final/headless geometry, materials, acceleration, or BVHs.
 - RayTracing owns Bounds/Wire/Solid/Material mode meaning and quality
   invalidation. Zoom, pan, projection, appearance, hover, and selection do not
   demote the established geometry tier; geometry and view-direction changes may.
@@ -1029,8 +1040,9 @@ Last updated: 2026-07-26
       skull as over budget, but the editor-only LOD store recovers it without
       retaining the 17.9 MiB source document; the object pane reports both mesh
       instances in `Mesh Preview`, labels the skull `mesh preview ... LOD from
-      17.9 MB`, and leaves an invalid/unrecoverable over-budget file labeled
-      `mesh skipped`
+      17.9 MB`, labels a bounds-only object `mesh bounds ... AABB fallback`,
+      and leaves a file with neither valid geometry nor authoritative bounds
+      labeled `mesh skipped`
     - loaded mesh preview edges now use a dedicated high-contrast editor
       diagnostic color and append a mesh-local bounds outline, so small
       default-material meshes such as the platform do not visually blend into

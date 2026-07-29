@@ -13,6 +13,8 @@ typedef struct PreviewRetainedSceneSurfaceStats {
     PreviewRetainedSceneQuality quality;
     size_t rendered_triangles;
     int rendered_instances;
+    int mesh_lod_instances;
+    int bounds_fallback_instances;
 } PreviewRetainedSceneSurfaceStats;
 
 void PreviewRetainedSceneSurfacePrepare(void);
