@@ -21,6 +21,8 @@
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 
+typedef struct RayEvaluatedSceneServiceResult RayEvaluatedSceneServiceResult;
+
 #define RAY_TRACING_HEADLESS_OBJECT_AUDIT_MAX 64
 
 typedef struct RayTracingHeadlessObjectAuditEntry {
@@ -286,6 +288,9 @@ void ray_tracing_headless_note_water_surface_mesh(
     const RuntimeNative3DPreparedFrame *frame);
 void ray_tracing_headless_apply_inspection_overrides(
     const RayTracingAgentRenderRequest *request);
+bool ray_tracing_headless_apply_inspection_evaluated_camera(
+    const RayTracingAgentRenderRequest *request,
+    RayEvaluatedSceneServiceResult *evaluated_scene);
 size_t ray_tracing_headless_count_nonzero_pixels(const uint8_t *pixels,
                                                  int width,
                                                  int height,

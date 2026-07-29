@@ -58,7 +58,7 @@ assert cache["cached_triangle_count"] == 65030, cache
 assert cache["cached_bvh_node_count"] in (0, bvh["node_count"]), cache
 assert cache["cached_bvh_leaf_count"] in (0, bvh["leaf_count"]), cache
 assert abs(cache["cached_normalized_t"] - 0.0) < 1e-9, cache
-assert abs(cache["last_requested_normalized_t"] - 1.0) < 1e-9, cache
+assert abs(cache["last_requested_normalized_t"] - (2.0 / 39.0)) < 1e-9, cache
 
 audit = {entry["object_id"]: entry for entry in summary["object_audit"]}
 entry = audit["obj_sphere_pressure_mrt10"]

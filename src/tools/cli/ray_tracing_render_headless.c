@@ -481,6 +481,8 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
     preflight.prepared_frame =
         RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene) &&
+        ray_tracing_headless_apply_inspection_evaluated_camera(
+            request, &evaluated_scene) &&
         RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
             &frame,
             request->width,
@@ -775,6 +777,16 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                      "evaluated-scene capture failed at frame %d: %.800s",
                      frame_index,
                      evaluated_scene.status_line);
+            free(pixels);
+            *out_preflight = preflight;
+            return 13;
+        }
+        if (!ray_tracing_headless_apply_inspection_evaluated_camera(
+                request, &evaluated_scene)) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "evaluated-scene inspection camera failed at frame %d",
+                     frame_index);
             free(pixels);
             *out_preflight = preflight;
             return 13;
