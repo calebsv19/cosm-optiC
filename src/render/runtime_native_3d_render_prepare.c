@@ -1137,10 +1137,6 @@ static bool runtime_native_3d_prepare_frame_internal(
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
-    if (evaluated_scene) {
-        runtime_native_3d_render_apply_inspection_camera_overrides(
-            &frame.scene, &frame.scene.camera, true, true);
-    }
     if (!runtime_native_3d_render_attach_configured_volume(&frame.scene, frame_index)) {
         char previous_diagnostics[4096];
         snprintf(previous_diagnostics,
