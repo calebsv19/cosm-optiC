@@ -520,9 +520,12 @@ static void runtime_native_3d_render_configure_water_surface_object(
     object->reflectivity = runtime_native_3d_water_material_or_default(
         water->material.reflectivity,
         kRuntimeNative3DWaterSurfaceReflectivity);
-    object->roughness = runtime_native_3d_water_material_or_default(
-        water->material.roughness,
-        kRuntimeNative3DWaterSurfaceRoughness);
+    object->roughness =
+        water->material.valid && water->material.roughness_authored
+            ? runtime_native_3d_water_material_or_default(
+                  water->material.roughness,
+                  kRuntimeNative3DWaterSurfaceRoughness)
+            : kRuntimeNative3DWaterSurfaceRoughness;
     object->material_id = MATERIAL_PRESET_TRANSPARENT;
     SceneObjectSeedGlassTransportOverrideFromMaterial(object);
     object->glassTransmission = water_transparency;
@@ -533,6 +536,12 @@ static void runtime_native_3d_render_configure_water_surface_object(
     object->guideOnly = false;
 }
 
+bool runtime_native_3d_render_object_id_is_water_volume(const char* object_id) {
+    if (!object_id) return false;
+    return strcmp(object_id, "water_surface") == 0 ||
+           strcmp(object_id, "water_surface_placeholder") == 0;
+}
+
 static int runtime_native_3d_render_ensure_water_surface_object(
     const RuntimeWaterSurfaceFrame* water) {
     SceneObject* object = NULL;
@@ -541,6 +550,19 @@ static int runtime_native_3d_render_ensure_water_surface_object(
         if (strcmp(sceneSettings.sceneObjects[i].type, "water_surface") == 0) {
             runtime_native_3d_render_configure_water_surface_object(&sceneSettings.sceneObjects[i],
                                                                     water);
+            return i;
+        }
+    }
+    for (int i = 0; i < sceneSettings.objectCount && i < MAX_OBJECTS; ++i) {
+        char object_id[RUNTIME_SCENE_3D_MAX_OBJECT_ID] = {0};
+        if (runtime_scene_bridge_get_last_object_id_for_scene_index(
+                i,
+                object_id,
+                sizeof(object_id)) &&
+            runtime_native_3d_render_object_id_is_water_volume(object_id)) {
+            runtime_native_3d_render_configure_water_surface_object(
+                &sceneSettings.sceneObjects[i],
+                water);
             return i;
         }
     }
@@ -577,9 +599,12 @@ static bool runtime_native_3d_render_apply_water_surface_material(
     override.reflectivity = runtime_native_3d_water_material_or_default(
         water->material.reflectivity,
         kRuntimeNative3DWaterSurfaceReflectivity);
-    override.roughness = runtime_native_3d_water_material_or_default(
-        water->material.roughness,
-        kRuntimeNative3DWaterSurfaceRoughness);
+    override.roughness =
+        water->material.valid && water->material.roughness_authored
+            ? runtime_native_3d_water_material_or_default(
+                  water->material.roughness,
+                  kRuntimeNative3DWaterSurfaceRoughness)
+            : kRuntimeNative3DWaterSurfaceRoughness;
     return RuntimeWaterMaterial3D_Set(scene_object_index, &override);
 }
 

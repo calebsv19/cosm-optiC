@@ -165,6 +165,12 @@ typedef struct {
     double primaryTransmissionCameraThroughputR;
     double primaryTransmissionCameraThroughputG;
     double primaryTransmissionCameraThroughputB;
+    double primaryTransmissionCausticRadianceR;
+    double primaryTransmissionCausticRadianceG;
+    double primaryTransmissionCausticRadianceB;
+    bool primaryTransmissionCausticDirectMapSampled;
+    int primaryTransmissionCausticLookupCount;
+    int primaryTransmissionCausticContributingSampleCount;
     double primaryTransmissionReceiverRadiance;
     double primaryTransmissionReceiverRadianceR;
     double primaryTransmissionReceiverRadianceG;

@@ -177,6 +177,30 @@ void runtime_native_3d_render_apply_transmitted_surface_caustic_cache(
         !result->primaryTransmissionPathState.hit) {
         return;
     }
+    if (result->primaryTransmissionCausticDirectMapSampled) {
+        radiance = vec3(
+            result->primaryTransmissionCausticRadianceR,
+            result->primaryTransmissionCausticRadianceG,
+            result->primaryTransmissionCausticRadianceB);
+        stats->causticSurfaceCacheSampleLookupCount +=
+            result->primaryTransmissionCausticLookupCount;
+        luma = fmax(fmax(radiance.x, radiance.y), radiance.z);
+        if (!(luma > 0.0)) return;
+        *io_r += radiance.x;
+        *io_g += radiance.y;
+        *io_b += radiance.z;
+        *io_luma = fmax(fmax(*io_r, *io_g), *io_b);
+        if (io_visible) *io_visible = true;
+        stats->causticSurfaceCacheSampleContributingCount +=
+            result->primaryTransmissionCausticContributingSampleCount;
+        stats->totalCausticSurfaceRadianceR += radiance.x;
+        stats->totalCausticSurfaceRadianceG += radiance.y;
+        stats->totalCausticSurfaceRadianceB += radiance.z;
+        if (luma > stats->maxCausticSurfaceCacheRadiance) {
+            stats->maxCausticSurfaceCacheRadiance = luma;
+        }
+        return;
+    }
     stats->causticSurfaceCacheSampleLookupCount += 1;
     if (RuntimeCausticPhotonDirectConsumer3D_Active()) {
         if (!RuntimeCausticPhotonDirectConsumer3D_SampleSurface(

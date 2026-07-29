@@ -280,15 +280,19 @@ static int test_ppm29_incident_hemisphere_contract(void) {
     RuntimeCausticPhotonMapQueryResult3D result;
     RuntimeCausticPhotonMapRecord3D record = ppm29_record(3u, 0.01, 1.0);
     record.incidentDirection = vec3(0.0, 1.0, 0.0);
+    query.normal = vec3(0.0, -1.0, 0.0);
     RuntimeCausticPhotonMap3D_Init(&map);
     assert_true("ppm29_hemisphere_allocate",
                 RuntimeCausticPhotonMap3D_Allocate(&map, 1u));
     assert_true("ppm29_hemisphere_store",
                 RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
-    assert_true("ppm29_reverse_incident_rejected",
-                !RuntimeCausticPhotonMap3D_Query(&map, &query, &result) &&
-                    result.incidentHemisphereRejectCount == 1u &&
-                    result.effectiveSampleCount == 0u);
+    assert_true("ppm29_receiver_normal_faced_at_storage",
+                vec3_dot(map.records[0].normal,
+                         map.records[0].incidentDirection) < -0.999);
+    assert_true("ppm29_faced_incident_contributes",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &result) &&
+                    result.incidentHemisphereRejectCount == 0u &&
+                    result.effectiveSampleCount == 1u);
     RuntimeCausticPhotonMap3D_Free(&map);
     return 0;
 }

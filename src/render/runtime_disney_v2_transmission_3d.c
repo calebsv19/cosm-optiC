@@ -5,6 +5,7 @@
 #include "config/config_manager.h"
 #include "material/material.h"
 #include "render/runtime_direct_light_3d.h"
+#include "render/runtime_disney_v2_transmitted_caustic_3d.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
@@ -899,6 +900,15 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
         contributing_sample_count += 1;
         if (receiver_found) {
             receiver_sample_count += 1;
+            if (continuation_mode ==
+                RUNTIME_DISNEY_V2_3D_TRANSMISSION_CONTINUATION_PRIMARY) {
+                (void)RuntimeDisneyV2TransmittedCaustic3D_SampleDirectMap(
+                    io_result,
+                    &continuation_hit,
+                    path_throughput_r,
+                    path_throughput_g,
+                    path_throughput_b);
+            }
         }
         best_depth = receiver_depth;
         best_hit = continuation_hit;
@@ -911,6 +921,8 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
     if (contributing_sample_count <= 0) {
         return false;
     }
+    RuntimeDisneyV2TransmittedCaustic3D_Finalize(
+        io_result, contributing_sample_count);
 
     io_result->directRadianceR *= front_body_weight;
     io_result->directRadianceG *= front_body_weight;

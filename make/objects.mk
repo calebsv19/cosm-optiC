@@ -78,6 +78,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transmitted_caustic_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transmission_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \
@@ -447,6 +448,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transmitted_caustic_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transmission_policy_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \

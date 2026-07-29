@@ -110,10 +110,10 @@ const char* RuntimeCausticPhotonMapRebuildReason3D_Label(
 RuntimeCausticPhotonBudgetTier3D RuntimeCausticPhotonBudgetTier3D_FromBudget(
     int sample_budget,
     int max_path_depth) {
-    if (sample_budget <= 64 && max_path_depth <= 4) {
+    if (sample_budget <= 32768 && max_path_depth <= 4) {
         return RUNTIME_CAUSTIC_PHOTON_BUDGET_PREVIEW;
     }
-    if (sample_budget <= 512 && max_path_depth <= 8) {
+    if (sample_budget <= 131072 && max_path_depth <= 8) {
         return RUNTIME_CAUSTIC_PHOTON_BUDGET_INSPECTION;
     }
     return RUNTIME_CAUSTIC_PHOTON_BUDGET_FINAL;

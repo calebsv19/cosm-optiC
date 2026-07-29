@@ -17,6 +17,9 @@ typedef struct {
 
 void RuntimeCausticPhotonPathTransport3D_DefaultSettings(
     RuntimeCausticPhotonPathTransportSettings3D* settings);
+Vec3 RuntimeCausticPhotonPathTransport3D_ResolveGeometricNormal(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit);
 bool RuntimeCausticPhotonPathTransport3D_Trace(
     const RuntimeScene3D* scene,
     const RuntimeCausticPhotonSample3D* sample,

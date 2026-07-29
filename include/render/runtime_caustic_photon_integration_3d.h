@@ -8,6 +8,7 @@
 #include "render/runtime_caustic_photon_emit_3d.h"
 #include "render/runtime_caustic_photon_emission_proposal_3d.h"
 #include "render/runtime_caustic_photon_map_3d.h"
+#include "render/runtime_caustic_photon_medium_stack_3d.h"
 #include "render/runtime_caustic_photon_volume_beam_estimator_3d.h"
 #include "render/runtime_caustic_settings_3d.h"
 #include "render/runtime_scene_3d.h"
@@ -239,6 +240,18 @@ typedef struct {
     uint64_t pathMaterialResolveFailureCount;
     uint64_t pathMediumTransitionCount;
     uint64_t pathMediumTransitionFailureCount;
+    uint64_t pathMediumTransitionFailureReasons[
+        RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_REASON_COUNT];
+    uint64_t pathMediumTransitionFailureSceneObjectCounts[MAX_OBJECTS];
+    uint64_t pathMediumTransitionFailurePrimitiveCounts[MAX_OBJECTS];
+    uint64_t pathMediumTransitionFailureEnteringCount;
+    uint64_t pathMediumTransitionFailureExitingCount;
+    uint64_t pathMediumTransitionFailureDirectionUpCount;
+    uint64_t pathMediumTransitionFailureDirectionDownCount;
+    uint64_t pathMediumTransitionFailureNormalUpCount;
+    uint64_t pathMediumTransitionFailureNormalDownCount;
+    uint64_t pathMediumTransitionFailureDepthCounts[
+        RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS + 1u];
     uint64_t pathAttenuatedSegmentCount;
     uint64_t pathTotalInternalReflectionCount;
     uint64_t pathDielectricEntryCount;

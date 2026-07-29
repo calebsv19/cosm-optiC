@@ -1337,6 +1337,12 @@ focused verification commands are collected in
 - Ordinary runtime-scene authoring can carry mesh-dielectric lens descriptors,
   physical light radiometry, and separate glass interface tint/absorption.
   Photon mapping remains experimental, request-opt-in, and default-off.
+- Frame-selected water heightfields and their authored side/bottom shells now
+  share one dielectric-volume object identity. Dynamic-water subset-BVH hits
+  are remapped to prepared-scene global triangle indices, and photon transport
+  validates primitive/local-triangle identity before using a geometric normal.
+  This keeps medium entry/exit classification tied to the actual water
+  boundary instead of an unrelated cache-local triangle index.
 - Operator visual acceptance, quantitative optical certification, PVA-5,
   professional readiness, scene-pointer promotion, production default-on, and
   release readiness remain independent unproven gates.

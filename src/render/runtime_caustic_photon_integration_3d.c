@@ -12,7 +12,10 @@ enum {
     RUNTIME_CAUSTIC_PHOTON_INTEGRATION_DEFAULT_SAMPLE_BUDGET = 256,
     RUNTIME_CAUSTIC_PHOTON_INTEGRATION_MAX_SAMPLE_BUDGET = 4096,
     RUNTIME_CAUSTIC_PHOTON_INTEGRATION_DEFAULT_MAX_DEPTH = 4,
-    RUNTIME_CAUSTIC_PHOTON_INTEGRATION_MAX_DEPTH = 16
+    RUNTIME_CAUSTIC_PHOTON_INTEGRATION_MAX_DEPTH = 16,
+    RUNTIME_CAUSTIC_PHOTON_PREVIEW_SAMPLE_BUDGET = 32768,
+    RUNTIME_CAUSTIC_PHOTON_WORKING_SAMPLE_BUDGET = 131072,
+    RUNTIME_CAUSTIC_PHOTON_HERO_SAMPLE_BUDGET = 262144
 };
 
 static int photon_integration_clamp_int(int value, int min_value, int max_value) {
@@ -134,10 +137,14 @@ void RuntimeCausticPhotonIntegration3D_NormalizeSettings(
 
 RuntimeCausticPhotonBudgetTier3D RuntimeCausticPhotonQualityTier3D_FromLabel(
     const char* label) {
-    if (label && strcmp(label, "final") == 0) {
+    if (label &&
+        (strcmp(label, "final") == 0 || strcmp(label, "hero") == 0 ||
+         strcmp(label, "production") == 0)) {
         return RUNTIME_CAUSTIC_PHOTON_BUDGET_FINAL;
     }
-    if (label && strcmp(label, "inspection") == 0) {
+    if (label &&
+        (strcmp(label, "inspection") == 0 || strcmp(label, "working") == 0 ||
+         strcmp(label, "default") == 0)) {
         return RUNTIME_CAUSTIC_PHOTON_BUDGET_INSPECTION;
     }
     return RUNTIME_CAUSTIC_PHOTON_BUDGET_PREVIEW;
@@ -150,13 +157,15 @@ void RuntimeCausticPhotonIntegration3D_ApplyQualityTier(
     settings->qualityTier = tier;
     switch (tier) {
         case RUNTIME_CAUSTIC_PHOTON_BUDGET_FINAL:
-            settings->sampleBudget = 4096;
+            settings->sampleBudget =
+                RUNTIME_CAUSTIC_PHOTON_HERO_SAMPLE_BUDGET;
             settings->maxPathDepth = 16;
             settings->surfaceQueryRadius = 0.05;
             settings->volumeQueryRadius = 0.05;
             break;
         case RUNTIME_CAUSTIC_PHOTON_BUDGET_INSPECTION:
-            settings->sampleBudget = 512;
+            settings->sampleBudget =
+                RUNTIME_CAUSTIC_PHOTON_WORKING_SAMPLE_BUDGET;
             settings->maxPathDepth = 8;
             settings->surfaceQueryRadius = 0.10;
             settings->volumeQueryRadius = 0.10;
@@ -164,7 +173,8 @@ void RuntimeCausticPhotonIntegration3D_ApplyQualityTier(
         case RUNTIME_CAUSTIC_PHOTON_BUDGET_PREVIEW:
         default:
             settings->qualityTier = RUNTIME_CAUSTIC_PHOTON_BUDGET_PREVIEW;
-            settings->sampleBudget = 64;
+            settings->sampleBudget =
+                RUNTIME_CAUSTIC_PHOTON_PREVIEW_SAMPLE_BUDGET;
             settings->maxPathDepth = 4;
             settings->surfaceQueryRadius = 0.20;
             settings->volumeQueryRadius = 0.20;

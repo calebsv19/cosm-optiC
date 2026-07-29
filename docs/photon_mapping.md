@@ -51,6 +51,22 @@ These diagnostics expose receiver position, identity, flux, support, query
 radius, contributing sample counts, and rejection counters without changing
 the rendered result.
 
+### Dynamic Water Boundary Identity
+
+Imported dynamic water uses one dielectric-volume identity across its authored
+side/bottom shell and the frame-selected heightfield surface. The dynamic-water
+BVH stores only the changing surface subset, but traced hits are remapped to
+prepared-scene global triangle indices before material or medium resolution.
+Photon transport validates that the global triangle's primitive and local
+triangle identities match the hit before consuming its geometric normal, with
+an identity scan as a defensive fallback.
+
+These invariants prevent a cached heightfield hit from borrowing the geometric
+normal of an unrelated prepared-scene triangle and prevent the top surface from
+being treated as a second nested water object. The headless population summary
+includes medium-transition failure reason, depth, direction, normal, object,
+and primitive counts for diagnosing future boundary regressions.
+
 ## Implementation Map
 
 - `src/ui/menu/menu_caustic_product.c` owns desktop product selection and the
@@ -62,6 +78,10 @@ the rendered result.
   storage, estimators, lifecycle, and readback.
 - `src/render/runtime_caustic_photon_scene_descriptor_3d.c` bridges eligible
   ordinary runtime-mesh dielectric objects into photon preparation.
+- `src/render/runtime_dynamic_geometry_accel_3d.c` preserves prepared-scene
+  triangle identity when the dynamic-water cache traces its subset BVH.
+- `src/render/runtime_caustic_photon_path_transport_3d.c` resolves validated
+  geometric normals and owns medium-transition continuation.
 - `tests/test_ui_menu_contracts.c` proves the desktop selector and runtime-plan
   contract. `tests/README.md` lists the focused photon subsystem groups.
 
@@ -111,6 +131,25 @@ each cell without rendering frames. Its `quality_sweep_plan.json` is the
 auditable input manifest for the later local or worker-backed still sweep; the
 generated request paths are payload-relative so the frozen sweep can move
 between the Mac producer root and a worker package without path rewriting.
+
+### Photon Quality Presets
+
+Headless photon-map requests can select a bounded preset through
+`inspection.caustic_photon_quality`:
+
+- `preview` or `low`: 32,768 photons for fast composition and caustic-placement
+  checks.
+- `working`, `default`, or `inspection`: 131,072 photons for the normal
+  working-quality baseline.
+- `hero`, `production`, or `final`: 262,144 photons for production stills and
+  deeper temporal review.
+
+The canonical readback labels remain `preview`, `inspection`, and `final`.
+Explicit request fields such as `caustic_photon_sample_budget`, path depth,
+estimator, gather radius, and neighbor count are parsed after the preset and
+therefore remain authoritative overrides. Photon-map rendering itself remains
+opt-in/default-off; “default” here means the selected photon-map working preset,
+not that every ordinary render silently builds a 131K map.
 
 ## Current Boundary
 

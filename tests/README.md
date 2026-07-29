@@ -262,6 +262,12 @@ one receiver record plus both unique traversed beam segments. The same fixture
 proves per-path/batch accounting and zero map mutation for insufficient beam
 capacity, invalid traces, emissive terminal-before-storage paths, and
 transparent-only paths.
+The group also verifies that photon geometric-normal resolution rejects an
+ambiguous global triangle index and recovers the triangle whose primitive and
+local-triangle identities match the traced hit. The
+`water_surface_runtime` group separately proves that the dynamic-water
+subset-BVH remaps its cache-local triangle index back to the prepared scene's
+global triangle index before returning the hit.
 
 The glass-to-mirror fixture proves a solid entry above air. The same-object TIR
 fixture now begins from an explicit glass stack and proves stack-derived

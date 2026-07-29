@@ -782,7 +782,8 @@ static int test_water_surface_import_loads_scene_bundle_heightfield(void) {
         "  \"material\": {\n"
         "    \"ior\": 1.333,\n"
         "    \"absorption_distance_m\": 4.0,\n"
-        "    \"absorption_rgb\": [0.1, 0.035, 0.015]\n"
+        "    \"absorption_rgb\": [0.1, 0.035, 0.015],\n"
+        "    \"roughness\": 0.0\n"
         "  },\n"
         "  \"frames\": [\n"
         "    { \"path\": \"water_surface_000000.json\", \"frame_contract\": \"water_surface_heightfield_v1\" },\n"
@@ -913,6 +914,12 @@ static int test_water_surface_import_loads_scene_bundle_heightfield(void) {
     assert_close("water_surface_import_bundle_material_absorption_distance",
                  frame.material.absorption_distance_m,
                  4.0,
+                 1e-9);
+    assert_true("water_surface_import_bundle_material_roughness_authored",
+                frame.material.roughness_authored);
+    assert_close("water_surface_import_bundle_material_roughness",
+                 frame.material.roughness,
+                 0.0,
                  1e-9);
     assert_true("water_surface_import_bundle_wet_columns", frame.wet_columns == 5u);
     assert_true("water_surface_import_bundle_finite_normals", frame.finite_normals);

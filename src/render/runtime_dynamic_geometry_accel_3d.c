@@ -8,6 +8,7 @@
 
 static RuntimeDynamicGeometryWaterCacheDiagnostics3D gRuntimeDynamicGeometryWaterCache;
 static RuntimeTriangleMesh3D gRuntimeDynamicGeometryWaterMeshCache;
+static int gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex = -1;
 
 static double runtime_dynamic_geometry_accel_3d_elapsed_ms_since(
     const struct timespec* start_time) {
@@ -167,6 +168,7 @@ void RuntimeDynamicGeometryAcceleration3D_Classify(
 
 void RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle(void) {
     RuntimeTriangleMesh3D_Free(&gRuntimeDynamicGeometryWaterMeshCache);
+    gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex = -1;
     memset(&gRuntimeDynamicGeometryWaterCache,
            0,
            sizeof(gRuntimeDynamicGeometryWaterCache));
@@ -283,6 +285,7 @@ bool RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
 
     RuntimeTriangleMesh3D_Free(&gRuntimeDynamicGeometryWaterMeshCache);
     gRuntimeDynamicGeometryWaterMeshCache = mesh;
+    gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex = first_triangle_index;
     gRuntimeDynamicGeometryWaterCache.geometryCacheReady = true;
     gRuntimeDynamicGeometryWaterCache.geometryBVHReady =
         RuntimeTriangleMesh3D_HasReadyBVH(&gRuntimeDynamicGeometryWaterMeshCache);
@@ -334,6 +337,17 @@ bool RuntimeDynamicGeometryAcceleration3D_TraceWaterSurfaceFirstHit(
         t_max,
         &hit);
     if (trace_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_HIT) {
+        const int scene_triangle_index =
+            gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex +
+            hit.triangleIndex;
+        if (gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex < 0 ||
+            hit.triangleIndex < 0 ||
+            scene_triangle_index < 0 ||
+            scene_triangle_index >= scene->triangleMesh.triangleCount) {
+            gRuntimeDynamicGeometryWaterCache.routeTraceErrors += 1u;
+            return false;
+        }
+        hit.triangleIndex = scene_triangle_index;
         runtime_dynamic_geometry_apply_source_ref(scene, &hit);
         *out_hit = hit;
         gRuntimeDynamicGeometryWaterCache.routeTraceHits += 1u;

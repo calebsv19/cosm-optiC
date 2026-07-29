@@ -793,6 +793,9 @@ bool RuntimeCausticPhotonMap3D_StoreRecord(
     stored.normal = photon_map_normalize_or_default(stored.normal, vec3(0.0, 1.0, 0.0));
     stored.incidentDirection =
         photon_map_normalize_or_default(stored.incidentDirection, vec3(0.0, -1.0, 0.0));
+    if (vec3_dot(stored.normal, stored.incidentDirection) > 0.0) {
+        stored.normal = vec3_scale(stored.normal, -1.0);
+    }
     stored.queryRadius = photon_map_clamp(stored.queryRadius, 0.001, 10.0);
     stored.sampleCenteredSupportRadius = stored.queryRadius;
     stored.sampleCenteredSupportNeighborCount = 0u;

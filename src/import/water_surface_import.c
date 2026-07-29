@@ -293,6 +293,7 @@ static bool water_surface_import_resolve_manifest_path(
 static bool water_surface_import_parse_material(const cJSON* root,
                                                 RuntimeWaterSurfaceMaterial* out_material) {
     cJSON* material = cJSON_GetObjectItem((cJSON*)root, "material");
+    cJSON* roughness = NULL;
     cJSON* absorption = NULL;
 
     if (!out_material) return true;
@@ -308,9 +309,11 @@ static bool water_surface_import_parse_material(const cJSON* root,
     if (!water_surface_import_number(material, "reflectivity", &out_material->reflectivity, false)) {
         return false;
     }
+    roughness = cJSON_GetObjectItem(material, "roughness");
     if (!water_surface_import_number(material, "roughness", &out_material->roughness, false)) {
         return false;
     }
+    out_material->roughness_authored = cJSON_IsNumber(roughness);
     absorption = cJSON_GetObjectItem(material, "absorption_rgb");
     if (cJSON_IsArray(absorption)) {
         if (cJSON_GetArraySize(absorption) != 3) return false;

@@ -294,6 +294,187 @@ void ray_tracing_headless_write_caustic_state_summary(
                     (unsigned long long)population->traceSolvedPathCount);
             fprintf(file, "          \"trace_record_count\": %llu,\n",
                     (unsigned long long)population->traceRecordCount);
+            fprintf(file, "          \"path_transport_attempt_count\": %llu,\n",
+                    (unsigned long long)population->pathTransportAttemptCount);
+            fprintf(file, "          \"path_transport_succeeded_count\": %llu,\n",
+                    (unsigned long long)population->pathTransportSucceededCount);
+            fprintf(file, "          \"path_transport_rejected_count\": %llu,\n",
+                    (unsigned long long)population->pathTransportRejectedCount);
+            fprintf(file, "          \"path_intersection_count\": %llu,\n",
+                    (unsigned long long)population->pathIntersectionCount);
+            fprintf(file, "          \"path_material_resolve_failure_count\": %llu,\n",
+                    (unsigned long long)population->pathMaterialResolveFailureCount);
+            fprintf(file, "          \"path_medium_transition_count\": %llu,\n",
+                    (unsigned long long)population->pathMediumTransitionCount);
+            fprintf(file, "          \"path_medium_transition_failure_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathMediumTransitionFailureCount);
+            fprintf(file, "          \"path_medium_transition_failure_reasons\": {\n");
+            for (int reason = RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_NONE;
+                 reason < RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_REASON_COUNT;
+                 ++reason) {
+                fprintf(file,
+                        "            \"%s\": %llu%s\n",
+                        RuntimeCausticPhotonMediumTransitionReason3D_Label(
+                            (RuntimeCausticPhotonMediumTransitionReason3D)reason),
+                        (unsigned long long)population
+                            ->pathMediumTransitionFailureReasons[reason],
+                        reason + 1 <
+                                RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_REASON_COUNT
+                            ? ","
+                            : "");
+            }
+            fprintf(file, "          },\n");
+            fprintf(file,
+                    "          \"path_medium_transition_failure_scene_objects\": {");
+            {
+                bool wrote_failure_object = false;
+                for (int object_index = 0; object_index < MAX_OBJECTS;
+                     ++object_index) {
+                    const uint64_t count =
+                        population->pathMediumTransitionFailureSceneObjectCounts[
+                            object_index];
+                    if (count == 0u) continue;
+                    fprintf(file,
+                            "%s\n            \"%d\": %llu",
+                            wrote_failure_object ? "," : "",
+                            object_index,
+                            (unsigned long long)count);
+                    wrote_failure_object = true;
+                }
+                fprintf(file, "%s},\n", wrote_failure_object ? "\n          " : "");
+            }
+            fprintf(file,
+                    "          \"path_medium_transition_failure_primitives\": {");
+            {
+                bool wrote_failure_primitive = false;
+                for (int primitive_index = 0; primitive_index < MAX_OBJECTS;
+                     ++primitive_index) {
+                    const uint64_t count =
+                        population->pathMediumTransitionFailurePrimitiveCounts[
+                            primitive_index];
+                    if (count == 0u) continue;
+                    fprintf(file,
+                            "%s\n            \"%d\": %llu",
+                            wrote_failure_primitive ? "," : "",
+                            primitive_index,
+                            (unsigned long long)count);
+                    wrote_failure_primitive = true;
+                }
+                fprintf(file,
+                        "%s},\n",
+                        wrote_failure_primitive ? "\n          " : "");
+            }
+            fprintf(file,
+                    "          \"path_medium_transition_failure_entering_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathMediumTransitionFailureEnteringCount);
+            fprintf(file,
+                    "          \"path_medium_transition_failure_exiting_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathMediumTransitionFailureExitingCount);
+            fprintf(file,
+                    "          \"path_medium_transition_failure_direction_up_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathMediumTransitionFailureDirectionUpCount);
+            fprintf(file,
+                    "          \"path_medium_transition_failure_direction_down_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathMediumTransitionFailureDirectionDownCount);
+            fprintf(file,
+                    "          \"path_medium_transition_failure_normal_up_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathMediumTransitionFailureNormalUpCount);
+            fprintf(file,
+                    "          \"path_medium_transition_failure_normal_down_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathMediumTransitionFailureNormalDownCount);
+            fprintf(file,
+                    "          \"path_medium_transition_failure_depths\": {");
+            {
+                bool wrote_failure_depth = false;
+                for (uint32_t depth = 0u;
+                     depth <= RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS;
+                     ++depth) {
+                    const uint64_t count =
+                        population->pathMediumTransitionFailureDepthCounts[depth];
+                    if (count == 0u) continue;
+                    fprintf(file,
+                            "%s\n            \"%u\": %llu",
+                            wrote_failure_depth ? "," : "",
+                            depth,
+                            (unsigned long long)count);
+                    wrote_failure_depth = true;
+                }
+                fprintf(file,
+                        "%s},\n",
+                        wrote_failure_depth ? "\n          " : "");
+            }
+            fprintf(file, "          \"path_attenuated_segment_count\": %llu,\n",
+                    (unsigned long long)population->pathAttenuatedSegmentCount);
+            fprintf(file, "          \"path_total_internal_reflection_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathTotalInternalReflectionCount);
+            fprintf(file, "          \"path_dielectric_entry_count\": %llu,\n",
+                    (unsigned long long)population->pathDielectricEntryCount);
+            fprintf(file, "          \"path_dielectric_exit_count\": %llu,\n",
+                    (unsigned long long)population->pathDielectricExitCount);
+            fprintf(file, "          \"path_solid_medium_reconciled_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathSolidMediumReconciledCount);
+            fprintf(file, "          \"path_solid_medium_unreconciled_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathSolidMediumUnreconciledCount);
+            fprintf(file, "          \"emission_guided_sample_count\": %llu,\n",
+                    (unsigned long long)population->emissionGuidedSampleCount);
+            fprintf(file, "          \"emission_guided_corrected_count\": %llu,\n",
+                    (unsigned long long)population->emissionGuidedCorrectedCount);
+            fprintf(file, "          \"emission_guided_uncorrected_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->emissionGuidedUncorrectedCount);
+            fprintf(file, "          \"emission_unbiased_sample_count\": %llu,\n",
+                    (unsigned long long)population->emissionUnbiasedSampleCount);
+            fprintf(file, "          \"path_population_succeeded_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathPopulationSucceededCount);
+            fprintf(file, "          \"path_population_rejected_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathPopulationRejectedCount);
+            fprintf(file, "          \"path_population_capacity_reject_count\": %llu,\n",
+                    (unsigned long long)population
+                        ->pathPopulationCapacityRejectCount);
+            fprintf(file, "          \"surface_retention\": {\n");
+            for (int reason = 0;
+                 reason < RUNTIME_CAUSTIC_PHOTON_SURFACE_RETAIN_REASON_COUNT;
+                 ++reason) {
+                fprintf(file,
+                        "            \"%s\": %llu%s\n",
+                        RuntimeCausticPhotonSurfaceRetentionReason3D_Label(
+                            (RuntimeCausticPhotonSurfaceRetentionReason3D)reason),
+                        (unsigned long long)population->retention
+                            .surfaceRetained[reason],
+                        reason + 1 <
+                                RUNTIME_CAUSTIC_PHOTON_SURFACE_RETAIN_REASON_COUNT
+                            ? ","
+                            : "");
+            }
+            fprintf(file, "          },\n");
+            fprintf(file, "          \"surface_rejection\": {\n");
+            for (int reason = 0;
+                 reason < RUNTIME_CAUSTIC_PHOTON_RECORD_REJECT_REASON_COUNT;
+                 ++reason) {
+                fprintf(file,
+                        "            \"%s\": %llu%s\n",
+                        RuntimeCausticPhotonRecordRejectReason3D_Label(
+                            (RuntimeCausticPhotonRecordRejectReason3D)reason),
+                        (unsigned long long)population->retention
+                            .surfaceRejected[reason],
+                        reason + 1 <
+                                RUNTIME_CAUSTIC_PHOTON_RECORD_REJECT_REASON_COUNT
+                            ? ","
+                            : "");
+            }
+            fprintf(file, "          },\n");
             fprintf(file, "          \"receiver_lookup_attempt_count\": %llu,\n",
                     (unsigned long long)population->receiverLookupAttemptCount);
             fprintf(file, "          \"receiver_direct_hit_count\": %llu,\n",

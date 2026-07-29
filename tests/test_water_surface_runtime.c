@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "test_support.h"
@@ -160,10 +161,79 @@ static int test_water_surface_runtime_maps_physics_y_height_to_scene_z(void) {
     return 0;
 }
 
+static int test_water_surface_runtime_cache_preserves_scene_triangle_index(void) {
+    RuntimeScene3D scene;
+    Ray3D ray;
+    HitInfo3D hit;
+    RuntimeDynamicGeometryAcceleration3DInput input = {0};
+    RuntimeDynamicGeometryAcceleration3DClassification classification = {0};
+
+    RuntimeScene3D_Init(&scene);
+    scene.primitiveCapacity = 2;
+    scene.primitiveCount = 2;
+    scene.primitives = calloc(2u, sizeof(*scene.primitives));
+    scene.triangleMesh.triangleCapacity = 3;
+    scene.triangleMesh.triangleCount = 3;
+    scene.triangleMesh.triangles =
+        calloc(3u, sizeof(*scene.triangleMesh.triangles));
+    assert_true("water_surface_runtime_cache_scene_allocated",
+                scene.primitives && scene.triangleMesh.triangles);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+
+    scene.primitives[1].source.sceneObjectIndex = 7;
+    snprintf(scene.primitives[1].source.objectId,
+             sizeof(scene.primitives[1].source.objectId),
+             "%s",
+             "water_surface");
+    scene.triangleMesh.triangles[2].p0 = vec3(-1.0, -1.0, 1.0);
+    scene.triangleMesh.triangles[2].p1 = vec3(1.0, -1.0, 1.0);
+    scene.triangleMesh.triangles[2].p2 = vec3(0.0, 1.0, 1.0);
+    scene.triangleMesh.triangles[2].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[2].twoSided = true;
+    scene.triangleMesh.triangles[2].primitiveIndex = 1;
+    scene.triangleMesh.triangles[2].sceneObjectIndex = 7;
+    scene.triangleMesh.triangles[2].localTriangleIndex = 0;
+
+    RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle();
+    input.water_surface_source_found = true;
+    input.water_surface_loaded = true;
+    input.water_surface_frame_selection_built = true;
+    input.water_surface_mesh_attached = true;
+    input.water_surface_first_grid_w = 2u;
+    input.water_surface_first_grid_d = 2u;
+    input.water_surface_first_sample_count = 4u;
+    input.water_surface_last_grid_w = 2u;
+    input.water_surface_last_grid_d = 2u;
+    input.water_surface_last_sample_count = 4u;
+    input.water_surface_triangle_count = 1;
+    RuntimeDynamicGeometryAcceleration3D_Classify(&input, &classification);
+    (void)RuntimeDynamicGeometryAcceleration3D_RecordWaterSurfaceFrame(
+        &classification, 0u, 1);
+    assert_true("water_surface_runtime_cache_store",
+                RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
+                    &scene, 2, 1));
+    ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 2.0), vec3(0.0, 0.0, -1.0));
+    HitInfo3D_Reset(&hit);
+    assert_true("water_surface_runtime_cache_trace",
+                RuntimeDynamicGeometryAcceleration3D_TraceWaterSurfaceFirstHit(
+                    &scene, &ray, 1.0e-6, 100.0, &hit));
+    assert_true("water_surface_runtime_cache_global_triangle_index",
+                hit.triangleIndex == 2 && hit.localTriangleIndex == 0 &&
+                    hit.primitiveIndex == 1 && hit.sceneObjectIndex == 7);
+
+    RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle();
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 int run_test_water_surface_runtime_tests(void) {
     int before = test_support_failures();
     test_water_surface_runtime_appends_heightfield_surface();
     test_water_surface_runtime_skips_cutout_boundary_quads();
     test_water_surface_runtime_maps_physics_y_height_to_scene_z();
+    test_water_surface_runtime_cache_preserves_scene_triangle_index();
     return test_support_failures() - before;
 }
