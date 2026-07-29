@@ -1152,6 +1152,12 @@ static int test_runtime_caustic_photon_lifecycle_classifies_rebuilds(void) {
     assert_true("runtime_caustic_photon_lifecycle_geometry_change",
                 readback.rebuildReason ==
                     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_GEOMETRY_CHANGED);
+    input.dynamicGeometryKey = 100u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_dynamic_geometry_change",
+                readback.dynamicGeometryKey == 100u &&
+                    readback.rebuildReason ==
+                        RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_DYNAMIC_GEOMETRY_CHANGED);
     input.budgetKey += 1u;
     RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
     assert_true("runtime_caustic_photon_lifecycle_budget_change",

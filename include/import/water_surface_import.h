@@ -50,6 +50,9 @@ typedef struct RuntimeWaterSurfaceFrame {
     double surface_avg_y;
     double max_slope;
     bool finite_normals;
+    bool closed_volume_boundary;
+    double boundary_height_y;
+    char boundary_shell_object_id[64];
     float* heights_y;
     float* normals_xyz;
     RuntimeWaterSurfaceMaterial material;

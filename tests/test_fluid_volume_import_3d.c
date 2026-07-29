@@ -779,6 +779,12 @@ static int test_water_surface_import_loads_scene_bundle_heightfield(void) {
         "  \"volume_grid_h\": 3,\n"
         "  \"volume_grid_d\": 3,\n"
         "  \"density_threshold\": 0.5,\n"
+        "  \"water_body_boundary_v1\": {\n"
+        "    \"closure_mode\": \"heightfield_volume\",\n"
+        "    \"dry_sample_policy\": \"surface_min_epsilon_to_base\",\n"
+        "    \"base_surface_height_m\": 0.4,\n"
+        "    \"legacy_shell_object_id\": \"water_surface_placeholder\"\n"
+        "  },\n"
         "  \"material\": {\n"
         "    \"ior\": 1.333,\n"
         "    \"absorption_distance_m\": 4.0,\n"
@@ -923,6 +929,15 @@ static int test_water_surface_import_loads_scene_bundle_heightfield(void) {
                  1e-9);
     assert_true("water_surface_import_bundle_wet_columns", frame.wet_columns == 5u);
     assert_true("water_surface_import_bundle_finite_normals", frame.finite_normals);
+    assert_true("water_surface_import_bundle_closed_volume_boundary",
+                frame.closed_volume_boundary);
+    assert_close("water_surface_import_bundle_boundary_height",
+                 frame.boundary_height_y,
+                 0.4,
+                 1e-9);
+    assert_true("water_surface_import_bundle_boundary_shell_object",
+                strcmp(frame.boundary_shell_object_id,
+                       "water_surface_placeholder") == 0);
 
     RuntimeWaterSurfaceFrame_Free(&frame);
     unlink(bundle_path);

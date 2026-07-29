@@ -222,6 +222,8 @@ void ray_tracing_headless_write_caustic_state_summary(
                         callsite->mapLifecycle.budgetTier));
             fprintf(file, "          \"generation\": %llu,\n",
                     (unsigned long long)callsite->mapLifecycle.generation);
+            fprintf(file, "          \"dynamic_geometry_key\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.dynamicGeometryKey);
             fprintf(file, "          \"rebuild_count\": %llu,\n",
                     (unsigned long long)callsite->mapLifecycle.rebuildCount);
             fprintf(file, "          \"reuse_count\": %llu,\n",

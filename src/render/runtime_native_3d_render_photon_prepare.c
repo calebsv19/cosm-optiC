@@ -10,6 +10,7 @@
 #include "render/runtime_caustic_photon_path_scheduler_3d.h"
 #include "render/runtime_caustic_photon_scene_descriptor_3d.h"
 #include "render/runtime_caustic_photon_volume_segment_normalization_3d.h"
+#include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_volume_3d_sampling.h"
 
 static bool gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled = false;
@@ -116,6 +117,7 @@ void runtime_native_3d_prepare_populate_photon_render_prep(
     RuntimeCausticPhotonMapPopulationReadback3D harvest;
     RuntimeCausticPhotonMapLifecycleInput3D lifecycle_input;
     RuntimeCausticPhotonMapLifecycleReadback3D lifecycle_readback;
+    RuntimeDynamicGeometryWaterCacheDiagnostics3D dynamic_water;
     RuntimeCausticLensShape3D emission_lenses[MAX_OBJECTS];
     uint32_t emission_lens_count = 0u;
     struct timespec fingerprint_started_at = {0};
@@ -170,6 +172,12 @@ void runtime_native_3d_prepare_populate_photon_render_prep(
         settings.volumeQueryEnabled,
         true,
         &lifecycle_input);
+    memset(&dynamic_water, 0, sizeof(dynamic_water));
+    RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(
+        &dynamic_water);
+    RuntimeCausticPhotonMapLifecycle3D_BindDynamicGeometry(
+        &lifecycle_input,
+        dynamic_water.geometryCacheReady ? dynamic_water.geometryKey : 0u);
     if (!RuntimeCausticPhotonMapStore3D_Begin(
         &gRuntimeNative3DCausticPhotonMapStore,
         &lifecycle_input,
