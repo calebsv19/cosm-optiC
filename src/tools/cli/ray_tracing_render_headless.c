@@ -219,6 +219,8 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     preflight.denoise_enabled = animSettings.disneyDenoiseEnabled;
     sceneSettings.windowWidth = request->width;
     sceneSettings.windowHeight = request->height;
+    animSettings.startFrameIndex = request->start_frame;
+    animSettings.framesForTravel = request->frame_count;
 
     ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                   request,
@@ -479,16 +481,29 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   -1);
     RuntimeScene3DBuilder_TimingReset();
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-    preflight.prepared_frame =
-        RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene) &&
-        ray_tracing_headless_apply_inspection_evaluated_camera(
-            request, &evaluated_scene) &&
-        RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
-            &frame,
-            request->width,
-            request->height,
-            &evaluated_scene.snapshot,
-            NULL);
+    if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+        snprintf(preflight.diagnostics,
+                 sizeof(preflight.diagnostics),
+                 "evaluated-scene capture failed at frame %d: %.800s",
+                 request->start_frame,
+                 evaluated_scene.status_line);
+        preflight.prepared_frame = false;
+    } else if (!ray_tracing_headless_apply_inspection_evaluated_camera(
+                   request, &evaluated_scene)) {
+        snprintf(preflight.diagnostics,
+                 sizeof(preflight.diagnostics),
+                 "evaluated-scene inspection camera failed at frame %d",
+                 request->start_frame);
+        preflight.prepared_frame = false;
+    } else {
+        preflight.prepared_frame =
+            RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+                &frame,
+                request->width,
+                request->height,
+                &evaluated_scene.snapshot,
+                NULL);
+    }
     preflight.native_prepare_frame_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     RuntimeScene3DBuilder_TimingSnapshot(&preflight.scene_builder_timing_stats);
     RuntimeMeshBLASCache3D_SnapshotDiagnostics(&preflight.scene_acceleration_stats);
@@ -658,10 +673,13 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         RuntimeNative3DPreparedSceneCacheStatsSnapshot(
             &preflight.prepared_scene_cache_stats);
     } else {
-        snprintf(preflight.diagnostics,
-                 sizeof(preflight.diagnostics),
-                 "failed to prepare native 3D frame: %s",
-                 RuntimeNative3DPrepareFrameLastDiagnostics());
+        if (preflight.diagnostics[0] == '\0' ||
+            strcmp(preflight.diagnostics, "ok") == 0) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "failed to prepare native 3D frame: %s",
+                     RuntimeNative3DPrepareFrameLastDiagnostics());
+        }
         ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                       request,
                                       "failed",

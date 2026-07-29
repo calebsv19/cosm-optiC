@@ -161,12 +161,62 @@ static int test_water_surface_runtime_maps_physics_y_height_to_scene_z(void) {
     return 0;
 }
 
+static int test_water_surface_runtime_closes_authored_dry_perimeter(void) {
+    RuntimeScene3D scene;
+    RuntimeScene3DHeightfieldSurfaceDesc desc = {0};
+    float heights[9] = {
+        0.0f, 0.0f, 0.0f,
+        0.0f, 0.52f, 0.0f,
+        0.0f, 0.0f, 0.0f
+    };
+    int appended_triangle_count = 0;
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    desc.object_id = "water_surface";
+    desc.scene_object_index = 4;
+    desc.grid_w = 3u;
+    desc.grid_d = 3u;
+    desc.heights_y = heights;
+    desc.sample_origin_x = -1.0;
+    desc.sample_origin_z = -1.0;
+    desc.sample_spacing_x = 1.0;
+    desc.sample_spacing_z = 1.0;
+    desc.dry_height = 0.0;
+    desc.dry_height_epsilon = 1e-6;
+    desc.skip_dry_quads = true;
+    desc.close_dry_perimeter = true;
+    desc.closed_perimeter_height = 0.4;
+    desc.two_sided = false;
+    desc.map_y_height_to_scene_z = true;
+
+    ok = RuntimeScene3DBuilder_AppendHeightfieldSurface(
+        &scene, &desc, &appended_triangle_count);
+    assert_true("water_surface_runtime_closed_perimeter_ok", ok);
+    assert_true("water_surface_runtime_closed_perimeter_triangle_count",
+                scene.triangleMesh.triangleCount == 8 &&
+                    appended_triangle_count == 8);
+    if (ok && scene.triangleMesh.triangleCount > 0) {
+        assert_close("water_surface_runtime_closed_perimeter_height",
+                     scene.triangleMesh.triangles[0].p0.z,
+                     0.4,
+                     1e-9);
+        assert_true("water_surface_runtime_closed_perimeter_outward_only",
+                    !scene.triangleMesh.triangles[0].twoSided &&
+                        scene.triangleMesh.triangles[0].normal.z > 0.0);
+    }
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_water_surface_runtime_cache_preserves_scene_triangle_index(void) {
     RuntimeScene3D scene;
     Ray3D ray;
     HitInfo3D hit;
     RuntimeDynamicGeometryAcceleration3DInput input = {0};
     RuntimeDynamicGeometryAcceleration3DClassification classification = {0};
+    RuntimeDynamicGeometryWaterCacheDiagnostics3D cache_before = {0};
+    RuntimeDynamicGeometryWaterCacheDiagnostics3D cache_after = {0};
 
     RuntimeScene3D_Init(&scene);
     scene.primitiveCapacity = 2;
@@ -215,6 +265,10 @@ static int test_water_surface_runtime_cache_preserves_scene_triangle_index(void)
     assert_true("water_surface_runtime_cache_store",
                 RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
                     &scene, 2, 1));
+    RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(
+        &cache_before);
+    assert_true("water_surface_runtime_cache_geometry_key",
+                cache_before.geometryKey != 0u);
     ray = RuntimeRay3D_Make(vec3(0.0, 0.0, 2.0), vec3(0.0, 0.0, -1.0));
     HitInfo3D_Reset(&hit);
     assert_true("water_surface_runtime_cache_trace",
@@ -223,6 +277,15 @@ static int test_water_surface_runtime_cache_preserves_scene_triangle_index(void)
     assert_true("water_surface_runtime_cache_global_triangle_index",
                 hit.triangleIndex == 2 && hit.localTriangleIndex == 0 &&
                     hit.primitiveIndex == 1 && hit.sceneObjectIndex == 7);
+    scene.triangleMesh.triangles[2].p0.x -= 0.25;
+    assert_true("water_surface_runtime_cache_store_changed_geometry",
+                RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
+                    &scene, 2, 1));
+    RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(
+        &cache_after);
+    assert_true("water_surface_runtime_cache_geometry_key_changes",
+                cache_after.geometryKey != 0u &&
+                    cache_after.geometryKey != cache_before.geometryKey);
 
     RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle();
     RuntimeScene3D_Free(&scene);
@@ -234,6 +297,7 @@ int run_test_water_surface_runtime_tests(void) {
     test_water_surface_runtime_appends_heightfield_surface();
     test_water_surface_runtime_skips_cutout_boundary_quads();
     test_water_surface_runtime_maps_physics_y_height_to_scene_z();
+    test_water_surface_runtime_closes_authored_dry_perimeter();
     test_water_surface_runtime_cache_preserves_scene_triangle_index();
     return test_support_failures() - before;
 }

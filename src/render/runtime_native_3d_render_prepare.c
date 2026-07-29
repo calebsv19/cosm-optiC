@@ -596,6 +596,23 @@ static int runtime_native_3d_render_ensure_water_surface_object(
     const RuntimeWaterSurfaceFrame* water) {
     SceneObject* object = NULL;
     if (!water) return -1;
+    if (water->closed_volume_boundary &&
+        water->boundary_shell_object_id[0]) {
+        for (int i = 0; i < sceneSettings.objectCount && i < MAX_OBJECTS; ++i) {
+            char object_id[RUNTIME_SCENE_3D_MAX_OBJECT_ID] = {0};
+            if (runtime_scene_bridge_get_last_object_id_for_scene_index(
+                    i,
+                    object_id,
+                    sizeof(object_id)) &&
+                strcmp(object_id, water->boundary_shell_object_id) == 0) {
+                runtime_native_3d_render_configure_water_surface_object(
+                    &sceneSettings.sceneObjects[i],
+                    water);
+                return i;
+            }
+        }
+        return -1;
+    }
     for (int i = 0; i < sceneSettings.objectCount && i < MAX_OBJECTS; ++i) {
         if (strcmp(sceneSettings.sceneObjects[i].type, "water_surface") == 0) {
             runtime_native_3d_render_configure_water_surface_object(&sceneSettings.sceneObjects[i],
@@ -625,6 +642,56 @@ static int runtime_native_3d_render_ensure_water_surface_object(
     runtime_native_3d_render_configure_water_surface_object(object, water);
     sceneSettings.objectCount += 1;
     return sceneSettings.objectCount - 1;
+}
+
+static bool runtime_native_3d_render_closed_water_shell_matches(
+    const RuntimeScene3D* scene,
+    int scene_object_index,
+    const RuntimeWaterSurfaceFrame* water) {
+    Vec3 bounds_min = vec3(0.0, 0.0, 0.0);
+    Vec3 bounds_max = vec3(0.0, 0.0, 0.0);
+    bool found = false;
+    const double tolerance = 1.0e-5;
+    double expected_max_x;
+    double expected_max_y;
+
+    if (!scene || !water || scene_object_index < 0 ||
+        !water->closed_volume_boundary) {
+        return false;
+    }
+    for (int i = 0; i < scene->triangleMesh.triangleCount; ++i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[i];
+        const Vec3 points[3] = {triangle->p0, triangle->p1, triangle->p2};
+        if (triangle->sceneObjectIndex != scene_object_index) continue;
+        for (int point_i = 0; point_i < 3; ++point_i) {
+            const Vec3 point = points[point_i];
+            if (!found) {
+                bounds_min = point;
+                bounds_max = point;
+                found = true;
+            } else {
+                bounds_min.x = fmin(bounds_min.x, point.x);
+                bounds_min.y = fmin(bounds_min.y, point.y);
+                bounds_min.z = fmin(bounds_min.z, point.z);
+                bounds_max.x = fmax(bounds_max.x, point.x);
+                bounds_max.y = fmax(bounds_max.y, point.y);
+                bounds_max.z = fmax(bounds_max.z, point.z);
+            }
+        }
+    }
+    expected_max_x = water->sample_origin_x +
+                     ((double)water->grid_w - 1.0) *
+                         water->sample_spacing_x;
+    expected_max_y = water->sample_origin_z +
+                     ((double)water->grid_d - 1.0) *
+                         water->sample_spacing_z;
+    return found &&
+           fabs(bounds_min.x - water->sample_origin_x) <= tolerance &&
+           fabs(bounds_max.x - expected_max_x) <= tolerance &&
+           fabs(bounds_min.y - water->sample_origin_z) <= tolerance &&
+           fabs(bounds_max.y - expected_max_y) <= tolerance &&
+           fabs(bounds_max.z - water->boundary_height_y) <= tolerance &&
+           bounds_min.z < water->boundary_height_y - tolerance;
 }
 
 static bool runtime_native_3d_render_apply_water_surface_material(
@@ -737,6 +804,14 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
         RuntimeWaterSurfaceFrame_Free(&water);
         return false;
     }
+    if (water.closed_volume_boundary &&
+        !runtime_native_3d_render_closed_water_shell_matches(
+            scene, scene_object_index, &water)) {
+        runtime_native_3d_prepare_frame_set_diag(
+            "closed water surface shell bounds or identity mismatch");
+        RuntimeWaterSurfaceFrame_Free(&water);
+        return false;
+    }
 
     desc.object_id = "water_surface";
     desc.scene_object_index = scene_object_index;
@@ -750,7 +825,9 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     desc.dry_height = water.surface_min_y;
     desc.dry_height_epsilon = 1e-6;
     desc.skip_dry_quads = true;
-    desc.two_sided = true;
+    desc.close_dry_perimeter = water.closed_volume_boundary;
+    desc.closed_perimeter_height = water.boundary_height_y;
+    desc.two_sided = !water.closed_volume_boundary;
     desc.map_y_height_to_scene_z = true;
 
     first_water_triangle_index = scene->triangleMesh.triangleCount;

@@ -1,22 +1,56 @@
 #include "render/runtime_scene_3d_builder_internal.h"
 
+static bool runtime_scene_3d_builder_heightfield_sample_is_dry(
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc,
+    uint32_t x,
+    uint32_t z) {
+    const double threshold =
+        desc ? desc->dry_height + desc->dry_height_epsilon : 0.0;
+    if (!desc || !desc->heights_y || x >= desc->grid_w ||
+        z >= desc->grid_d) {
+        return true;
+    }
+    return desc->heights_y[(size_t)z * (size_t)desc->grid_w + (size_t)x] <=
+           threshold;
+}
+
+static bool runtime_scene_3d_builder_heightfield_sample_is_perimeter(
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc,
+    uint32_t x,
+    uint32_t z) {
+    return desc && (x == 0u || z == 0u || x + 1u == desc->grid_w ||
+                    z + 1u == desc->grid_d);
+}
+
+static bool runtime_scene_3d_builder_heightfield_sample_blocks_quad(
+    const RuntimeScene3DHeightfieldSurfaceDesc* desc,
+    uint32_t x,
+    uint32_t z) {
+    if (!runtime_scene_3d_builder_heightfield_sample_is_dry(desc, x, z)) {
+        return false;
+    }
+    return !desc->close_dry_perimeter ||
+           !runtime_scene_3d_builder_heightfield_sample_is_perimeter(desc,
+                                                                     x,
+                                                                     z);
+}
+
 static bool runtime_scene_3d_builder_heightfield_quad_is_dry(
     const RuntimeScene3DHeightfieldSurfaceDesc* desc,
     uint32_t x,
     uint32_t z) {
-    const uint32_t w = desc ? desc->grid_w : 0u;
-    const double threshold = desc ? desc->dry_height + desc->dry_height_epsilon : 0.0;
-    double h00;
-    double h10;
-    double h11;
-    double h01;
-    if (!desc || !desc->heights_y || w == 0u) return true;
+    if (!desc || !desc->heights_y || desc->grid_w == 0u) return true;
     if (!desc->skip_dry_quads) return false;
-    h00 = desc->heights_y[(size_t)z * (size_t)w + (size_t)x];
-    h10 = desc->heights_y[(size_t)z * (size_t)w + (size_t)(x + 1u)];
-    h11 = desc->heights_y[(size_t)(z + 1u) * (size_t)w + (size_t)(x + 1u)];
-    h01 = desc->heights_y[(size_t)(z + 1u) * (size_t)w + (size_t)x];
-    return h00 <= threshold || h10 <= threshold || h11 <= threshold || h01 <= threshold;
+    return runtime_scene_3d_builder_heightfield_sample_blocks_quad(desc, x, z) ||
+           runtime_scene_3d_builder_heightfield_sample_blocks_quad(desc,
+                                                                    x + 1u,
+                                                                    z) ||
+           runtime_scene_3d_builder_heightfield_sample_blocks_quad(desc,
+                                                                    x + 1u,
+                                                                    z + 1u) ||
+           runtime_scene_3d_builder_heightfield_sample_blocks_quad(desc,
+                                                                    x,
+                                                                    z + 1u);
 }
 
 static int runtime_scene_3d_builder_heightfield_quad_count(
@@ -40,7 +74,12 @@ static Vec3 runtime_scene_3d_builder_heightfield_point(
     const size_t index = (size_t)z * (size_t)desc->grid_w + (size_t)x;
     const double sample_x = desc->sample_origin_x + ((double)x * desc->sample_spacing_x);
     const double sample_z = desc->sample_origin_z + ((double)z * desc->sample_spacing_z);
-    const double height_y = desc->heights_y[index];
+    double height_y = desc->heights_y[index];
+    if (desc->close_dry_perimeter &&
+        runtime_scene_3d_builder_heightfield_sample_is_perimeter(desc, x, z) &&
+        runtime_scene_3d_builder_heightfield_sample_is_dry(desc, x, z)) {
+        height_y = desc->closed_perimeter_height;
+    }
     if (desc->map_y_height_to_scene_z) {
         return vec3(sample_x, sample_z, height_y);
     }
@@ -57,7 +96,9 @@ static bool runtime_scene_3d_builder_heightfield_desc_valid(
         !isfinite(desc->sample_spacing_x) ||
         !isfinite(desc->sample_spacing_z) ||
         !isfinite(desc->dry_height) ||
-        !isfinite(desc->dry_height_epsilon)) {
+        !isfinite(desc->dry_height_epsilon) ||
+        (desc->close_dry_perimeter &&
+         !isfinite(desc->closed_perimeter_height))) {
         return false;
     }
     for (uint64_t i = 0u; i < (uint64_t)desc->grid_w * (uint64_t)desc->grid_d; ++i) {

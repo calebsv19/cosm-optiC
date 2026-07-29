@@ -327,6 +327,61 @@ static bool water_surface_import_parse_material(const cJSON* root,
     return true;
 }
 
+static bool water_surface_import_parse_boundary_contract(
+    const cJSON* root,
+    bool* out_closed_volume_boundary,
+    double* out_boundary_height_y,
+    char* out_boundary_shell_object_id,
+    size_t out_boundary_shell_object_id_size) {
+    cJSON* boundary = cJSON_GetObjectItem((cJSON*)root,
+                                         "water_body_boundary_v1");
+    cJSON* closure_mode = NULL;
+    cJSON* dry_sample_policy = NULL;
+    cJSON* shell_object_id = NULL;
+    double boundary_height_y = 0.0;
+
+    if (out_closed_volume_boundary) *out_closed_volume_boundary = false;
+    if (out_boundary_height_y) *out_boundary_height_y = 0.0;
+    if (out_boundary_shell_object_id &&
+        out_boundary_shell_object_id_size > 0u) {
+        out_boundary_shell_object_id[0] = '\0';
+    }
+    if (!boundary) return true;
+    if (!cJSON_IsObject(boundary) || !out_closed_volume_boundary ||
+        !out_boundary_height_y || !out_boundary_shell_object_id ||
+        out_boundary_shell_object_id_size == 0u) {
+        return false;
+    }
+
+    closure_mode = cJSON_GetObjectItem(boundary, "closure_mode");
+    dry_sample_policy = cJSON_GetObjectItem(boundary, "dry_sample_policy");
+    shell_object_id =
+        cJSON_GetObjectItem(boundary, "legacy_shell_object_id");
+    if (!cJSON_IsString(closure_mode) || !closure_mode->valuestring ||
+        strcmp(closure_mode->valuestring, "heightfield_volume") != 0 ||
+        !cJSON_IsString(dry_sample_policy) ||
+        !dry_sample_policy->valuestring ||
+        strcmp(dry_sample_policy->valuestring,
+               "surface_min_epsilon_to_base") != 0 ||
+        !cJSON_IsString(shell_object_id) || !shell_object_id->valuestring ||
+        !shell_object_id->valuestring[0] ||
+        !water_surface_import_number(boundary,
+                                     "base_surface_height_m",
+                                     &boundary_height_y,
+                                     true) ||
+        !isfinite(boundary_height_y)) {
+        return false;
+    }
+    if (!water_surface_import_copy_string(out_boundary_shell_object_id,
+                                          out_boundary_shell_object_id_size,
+                                          shell_object_id->valuestring)) {
+        return false;
+    }
+    *out_closed_volume_boundary = true;
+    *out_boundary_height_y = boundary_height_y;
+    return true;
+}
+
 static bool water_surface_import_resolve_frame_path(
     const char* manifest_path,
     int requested_frame_index,
@@ -337,6 +392,10 @@ static bool water_surface_import_resolve_frame_path(
     uint32_t* out_volume_grid_h,
     uint32_t* out_volume_grid_d,
     double* out_density_threshold,
+    bool* out_closed_volume_boundary,
+    double* out_boundary_height_y,
+    char* out_boundary_shell_object_id,
+    size_t out_boundary_shell_object_id_size,
     char* out_diagnostics,
     size_t out_diagnostics_size) {
     cJSON* root = NULL;
@@ -389,6 +448,12 @@ static bool water_surface_import_resolve_frame_path(
     }
 
     if (!water_surface_import_parse_material(root, out_material) ||
+        !water_surface_import_parse_boundary_contract(
+            root,
+            out_closed_volume_boundary,
+            out_boundary_height_y,
+            out_boundary_shell_object_id,
+            out_boundary_shell_object_id_size) ||
         !water_surface_import_uint32(root, "volume_grid_w", out_volume_grid_w, false) ||
         !water_surface_import_uint32(root, "volume_grid_h", out_volume_grid_h, false) ||
         !water_surface_import_uint32(root, "volume_grid_d", out_volume_grid_d, false) ||
@@ -675,6 +740,10 @@ bool RuntimeWaterSurfaceImport_LoadSourceAtFrame(const char* source_path,
                                                  &volume_grid_h,
                                                  &volume_grid_d,
                                                  &density_threshold,
+                                                 &out_frame->closed_volume_boundary,
+                                                 &out_frame->boundary_height_y,
+                                                 out_frame->boundary_shell_object_id,
+                                                 sizeof(out_frame->boundary_shell_object_id),
                                                  out_diagnostics,
                                                  out_diagnostics_size)) {
         return false;

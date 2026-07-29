@@ -21,6 +21,8 @@ typedef struct RuntimeScene3DHeightfieldSurfaceDesc {
     double dry_height;
     double dry_height_epsilon;
     bool skip_dry_quads;
+    bool close_dry_perimeter;
+    double closed_perimeter_height;
     bool two_sided;
     bool map_y_height_to_scene_z;
 } RuntimeScene3DHeightfieldSurfaceDesc;

@@ -10,6 +10,40 @@ static RuntimeDynamicGeometryWaterCacheDiagnostics3D gRuntimeDynamicGeometryWate
 static RuntimeTriangleMesh3D gRuntimeDynamicGeometryWaterMeshCache;
 static int gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex = -1;
 
+static uint64_t runtime_dynamic_geometry_accel_3d_hash_bytes(
+    uint64_t hash,
+    const void* data,
+    size_t size) {
+    const unsigned char* bytes = (const unsigned char*)data;
+    if (!data) return hash;
+    for (size_t i = 0u; i < size; ++i) {
+        hash ^= (uint64_t)bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t runtime_dynamic_geometry_accel_3d_mesh_key(
+    const RuntimeTriangleMesh3D* mesh) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    if (!mesh || !mesh->triangles || mesh->triangleCount <= 0) return 0u;
+    hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+        hash, &mesh->triangleCount, sizeof(mesh->triangleCount));
+    for (int i = 0; i < mesh->triangleCount; ++i) {
+        const RuntimeTriangle3D* triangle = &mesh->triangles[i];
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->p0, sizeof(triangle->p0));
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->p1, sizeof(triangle->p1));
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->p2, sizeof(triangle->p2));
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->sceneObjectIndex,
+            sizeof(triangle->sceneObjectIndex));
+    }
+    return hash;
+}
+
 static double runtime_dynamic_geometry_accel_3d_elapsed_ms_since(
     const struct timespec* start_time) {
     struct timespec now = {0};
@@ -290,6 +324,9 @@ bool RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
     gRuntimeDynamicGeometryWaterCache.geometryBVHReady =
         RuntimeTriangleMesh3D_HasReadyBVH(&gRuntimeDynamicGeometryWaterMeshCache);
     gRuntimeDynamicGeometryWaterCache.geometryStores += 1u;
+    gRuntimeDynamicGeometryWaterCache.geometryKey =
+        runtime_dynamic_geometry_accel_3d_mesh_key(
+            &gRuntimeDynamicGeometryWaterMeshCache);
     if (status == RUNTIME_DYNAMIC_GEOMETRY_WATER_CACHE_REBUILT) {
         gRuntimeDynamicGeometryWaterCache.geometryRebuildStores += 1u;
     } else if (status == RUNTIME_DYNAMIC_GEOMETRY_WATER_CACHE_REFIT) {

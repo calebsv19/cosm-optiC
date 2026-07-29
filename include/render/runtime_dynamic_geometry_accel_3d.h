@@ -94,6 +94,7 @@ typedef struct RuntimeDynamicGeometryWaterCacheDiagnostics3D {
     bool geometryCacheReady;
     bool geometryBVHReady;
     uint64_t geometryStores;
+    uint64_t geometryKey;
     uint64_t geometryRebuildStores;
     uint64_t geometryRefitStores;
     uint64_t geometryReuseStores;

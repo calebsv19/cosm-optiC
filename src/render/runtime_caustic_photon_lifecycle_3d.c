@@ -91,12 +91,21 @@ void RuntimeCausticPhotonMapLifecycle3D_BuildInputFromScene(
     out_input->persistentMapOwnershipEnabled = persistent_map_ownership_enabled;
 }
 
+void RuntimeCausticPhotonMapLifecycle3D_BindDynamicGeometry(
+    RuntimeCausticPhotonMapLifecycleInput3D* input,
+    uint64_t dynamic_geometry_key) {
+    if (!input) return;
+    input->dynamicGeometryKey = dynamic_geometry_key;
+}
+
 const char* RuntimeCausticPhotonMapRebuildReason3D_Label(
     RuntimeCausticPhotonMapRebuildReason3D reason) {
     switch (reason) {
         case RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_FIRST_BUILD: return "first_build";
         case RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_PER_FRAME_POLICY: return "per_frame_policy";
         case RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_GEOMETRY_CHANGED: return "geometry_changed";
+        case RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_DYNAMIC_GEOMETRY_CHANGED:
+            return "dynamic_geometry_changed";
         case RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_LIGHT_CHANGED: return "light_changed";
         case RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_MATERIAL_CHANGED: return "material_changed";
         case RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_VOLUME_CHANGED: return "volume_changed";
@@ -141,6 +150,7 @@ void RuntimeCausticPhotonMapLifecycle3D_Evaluate(
     readback.evaluated = true;
     readback.persistentMapOwnershipEnabled = input->persistentMapOwnershipEnabled;
     readback.geometryKey = input->geometryKey;
+    readback.dynamicGeometryKey = input->dynamicGeometryKey;
     readback.lightKey = input->lightKey;
     readback.materialKey = input->materialKey;
     readback.volumeKey = input->volumeKey;
@@ -157,6 +167,11 @@ void RuntimeCausticPhotonMapLifecycle3D_Evaluate(
     } else if (input->geometryKey != io_state->input.geometryKey) {
         readback.rebuilt = true;
         readback.rebuildReason = RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_GEOMETRY_CHANGED;
+    } else if (input->dynamicGeometryKey !=
+               io_state->input.dynamicGeometryKey) {
+        readback.rebuilt = true;
+        readback.rebuildReason =
+            RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_DYNAMIC_GEOMETRY_CHANGED;
     } else if (input->lightKey != io_state->input.lightKey) {
         readback.rebuilt = true;
         readback.rebuildReason = RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_LIGHT_CHANGED;
