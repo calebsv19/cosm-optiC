@@ -41,6 +41,8 @@ TimelineStatus PreviewWorkspaceSetMode(PreviewWorkspace *workspace,
                                        PreviewTransportMode mode);
 TimelineStatus PreviewWorkspaceSeekFrameDelta(PreviewWorkspace *workspace,
                                               int frame_delta);
+TimelineStatus PreviewWorkspaceInspectSample(PreviewWorkspace *workspace,
+                                             TimelineSample sample);
 TimelineStatus PreviewWorkspacePointerDown(PreviewWorkspace *workspace, int x,
                                            int y);
 TimelineStatus PreviewWorkspacePointerMotion(PreviewWorkspace *workspace, int x,

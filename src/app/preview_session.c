@@ -7,6 +7,8 @@
 #include "app/preview_retained_scene_quality.h"
 #include "app/preview_retained_scene_renderer.h"
 #include "app/preview_retained_scene_surface.h"
+#include "app/preview_timeline_inspection.h"
+#include "app/preview_timeline_inspection_render.h"
 #include "app/preview_workspace.h"
 #include "app/preview_workspace_render.h"
 #include "app/runtime_time.h"
@@ -136,6 +138,8 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     bool running_preview = true;
     bool close_button_pressed = false;
     PreviewWorkspace preview_workspace = {0};
+    PreviewTimelineInspection timeline_inspection = {0};
+    RuntimeSceneLightTimelineDocument timeline_document = {0};
     TimelineRate preview_rate = {0};
     TimelineRange preview_range = {0};
     PreviewRetainedSceneQuality preview_quality =
@@ -256,6 +260,13 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         fprintf(stderr, "Preview transport initialization failed.\n");
         running_preview = false;
     }
+    if (RuntimeSceneLightTimelineGetLast(&timeline_document) &&
+        PreviewTimelineInspectionInit(&timeline_inspection,
+                                      &timeline_document) !=
+            TIMELINE_STATUS_OK) {
+        fprintf(stderr, "Preview timeline marker projection failed.\n");
+        memset(&timeline_inspection, 0, sizeof(timeline_inspection));
+    }
     prev_ns = runtime_time_now_ns();
     while (running_preview) {
         SDL_Event event;
@@ -301,8 +312,26 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                     event.button.y <= close_button_rect.y + close_button_rect.h) {
                     close_button_pressed = true;
                 } else {
-                    (void)PreviewWorkspacePointerDown(
-                        &preview_workspace, event.button.x, event.button.y);
+                    TimelineSample marker_sample = {0};
+                    if (PreviewTimelineInspectionSelectAt(
+                            &timeline_inspection,
+                            preview_workspace.layout.slider_track,
+                            event.button.x, event.button.y, 7,
+                            &marker_sample)) {
+                        (void)PreviewWorkspaceInspectSample(
+                            &preview_workspace, marker_sample);
+                    } else {
+                        if (event.button.y >=
+                                preview_workspace.layout.slider_track.y &&
+                            event.button.y <=
+                                preview_workspace.layout.slider_track.y +
+                                    preview_workspace.layout.slider_track.h) {
+                            PreviewTimelineInspectionClearSelection(
+                                &timeline_inspection);
+                        }
+                        (void)PreviewWorkspacePointerDown(
+                            &preview_workspace, event.button.x, event.button.y);
+                    }
                 }
             }
             if (event.type == SDL_MOUSEMOTION &&
@@ -416,6 +445,10 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                 sceneSettings.windowHeight,
                 &camera_sample);
         }
+        PreviewTimelineInspectionUpdateReadout(
+            &timeline_inspection, evaluation.snapshot.valid
+                                      ? &evaluation.snapshot
+                                      : NULL);
         if (preview_route.requestedMode == SPACE_MODE_3D) {
             SDL_Rect preview_viewport = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
             projector_ready = PreviewCameraProjectorBuild(&camera_sample, preview_viewport, &preview_projector);
@@ -513,11 +546,14 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                                &evaluation,
                                preview_quality);
         PreviewWorkspaceRender(preview_renderer, &preview_workspace);
+        PreviewTimelineInspectionRender(preview_renderer, &preview_workspace,
+                                        &timeline_inspection);
         DrawPreviewCloseButton(preview_renderer, close_button_rect, close_button_hovered);
         render_end_frame();
     }
 
     PreviewRetainedSceneSurfaceReset(preview_renderer);
+    PreviewTimelineInspectionReset(&timeline_inspection);
     if (standalone) {
         ray_tracing_font_runtime_detach_renderer(preview_renderer);
 #if USE_VULKAN

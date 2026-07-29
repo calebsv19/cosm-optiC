@@ -58,6 +58,7 @@
 #include "test_runtime_evaluated_scene_preview.h"
 #include "test_preview_transport.h"
 #include "test_preview_workspace.h"
+#include "test_preview_timeline_inspection.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_runtime_mesh_asset_loader.h"
@@ -239,6 +240,8 @@ int test_runner_main(int argc, char** argv) {
          run_test_runtime_evaluated_scene_preview_tests},
         {"preview_transport", run_test_preview_transport_tests},
         {"preview_workspace", run_test_preview_workspace_tests},
+        {"preview_timeline_inspection",
+         run_test_preview_timeline_inspection_tests},
         {"runtime_and_editor", run_test_runner_runtime_tests},
         {"fluid_volume_import_3d", run_test_fluid_volume_import_3d_tests},
         {"fluid_volume_pack_import_3d", run_test_fluid_volume_pack_import_3d_tests},

@@ -135,6 +135,21 @@ TimelineStatus PreviewWorkspaceSeekFrameDelta(PreviewWorkspace *workspace,
                               workspace->transport.direction);
 }
 
+TimelineStatus PreviewWorkspaceInspectSample(PreviewWorkspace *workspace,
+                                             TimelineSample sample) {
+  TimelineStatus status;
+  if (!workspace || !workspace->valid) {
+    return TIMELINE_STATUS_INVALID_ARGUMENT;
+  }
+  status = PreviewTransportPause(&workspace->transport);
+  if (status != TIMELINE_STATUS_OK)
+    return status;
+  workspace->scrubbing = false;
+  workspace->resume_after_scrub = false;
+  return PreviewTransportSeek(&workspace->transport, sample,
+                              workspace->transport.direction);
+}
+
 TimelineStatus PreviewWorkspacePointerDown(PreviewWorkspace *workspace, int x,
                                            int y) {
   TimelineStatus status;
