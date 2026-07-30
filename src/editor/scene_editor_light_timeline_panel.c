@@ -3,6 +3,7 @@
 #include "animation/timeline_document.h"
 #include "render/font_runtime.h"
 #include "render/text_draw.h"
+#include "scene_editor_light_timeline_curve_edit.h"
 #include "scene_editor_light_timeline_edit.h"
 #include "ui/shared_theme_font_adapter.h"
 
@@ -303,21 +304,50 @@ void scene_editor_light_timeline_panel_render(
 
     panel_mode_control(
         renderer, small_font, &geometry.constant_speed_button,
-        "CONST SPEED",
+        panel->w >= 460 ? "CONST SPEED" : "CONST",
         state->traversal_mode ==
             SCENE_EDITOR_LIGHT_TIMELINE_TRAVERSAL_CONSTANT_SPEED,
-        panel->w >= 420 ? 17 : 12, &palette);
+        panel->w >= 460 ? 17 : 16, &palette);
     panel_mode_control(
         renderer, small_font, &geometry.equal_segments_button,
-        "EQUAL TIME",
+        panel->w >= 460 ? "EQUAL TIME" : "EQUAL",
         state->traversal_mode ==
             SCENE_EDITOR_LIGHT_TIMELINE_TRAVERSAL_EQUAL_SEGMENTS,
-        panel->w >= 420 ? 17 : 12, &palette);
+        panel->w >= 460 ? 17 : 16, &palette);
     panel_mode_status(
         renderer, small_font, &geometry.custom_mode_indicator,
         state->traversal_mode ==
             SCENE_EDITOR_LIGHT_TIMELINE_TRAVERSAL_CUSTOM,
         &palette);
+    {
+        TimelineInterpolation interpolation =
+            TIMELINE_INTERPOLATION_STEP;
+        bool selectable =
+            state->selected_key_index >= 0 &&
+            state->selected_key_index + 1 < (int)track->key_count;
+        if (selectable) {
+            interpolation =
+                track->keys[state->selected_key_index].
+                    interpolation_to_next;
+        }
+        panel_mode_control(
+            renderer, small_font, &geometry.step_button, "STEP",
+            selectable &&
+                interpolation == TIMELINE_INTERPOLATION_STEP,
+            9, &palette);
+        panel_mode_control(
+            renderer, small_font, &geometry.linear_button, "LINEAR",
+            selectable &&
+                interpolation == TIMELINE_INTERPOLATION_LINEAR,
+            7, &palette);
+        panel_mode_control(
+            renderer, small_font, &geometry.bezier_button,
+            panel->w >= 460 ? "BEZIER" : "BEZ",
+            selectable &&
+                interpolation ==
+                    TIMELINE_INTERPOLATION_CUBIC_BEZIER,
+            panel->w >= 460 ? 6 : 9, &palette);
+    }
 
     {
         SDL_Color fill = panel_color_offset(palette.button_fill, -8, 255);
@@ -486,6 +516,48 @@ void scene_editor_light_timeline_panel_render(
         }
     }
 
+    if (state->selected_key_index >= 0 &&
+        (size_t)state->selected_key_index < track->key_count) {
+        const size_t key_index =
+            (size_t)state->selected_key_index;
+        int key_x = 0;
+        int key_y = 0;
+        scene_editor_light_timeline_key_point(
+            state->view, document, &graph, &track->keys[key_index],
+            &key_x, &key_y);
+        const SceneEditorLightTimelineHandle handles[] = {
+            SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_INCOMING,
+            SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING
+        };
+        for (size_t i = 0u;
+             i < sizeof(handles) / sizeof(handles[0]); ++i) {
+            int handle_x = 0;
+            int handle_y = 0;
+            if (!scene_editor_light_timeline_handle_point(
+                    state->view, document, track, key_index,
+                    handles[i], &graph, &handle_x, &handle_y)) {
+                continue;
+            }
+            SDL_SetRenderDrawColor(
+                renderer, 255, 218, 92, 185);
+            SDL_RenderDrawLine(
+                renderer, key_x, key_y, handle_x, handle_y);
+            {
+                SDL_Rect handle_rect = {
+                    handle_x - 4, handle_y - 4, 9, 9
+                };
+                SDL_SetRenderDrawColor(
+                    renderer, 255, 218, 92, 255);
+                SDL_RenderFillRect(renderer, &handle_rect);
+                SDL_SetRenderDrawColor(
+                    renderer, palette.panel_border.r,
+                    palette.panel_border.g, palette.panel_border.b,
+                    palette.panel_border.a);
+                SDL_RenderDrawRect(renderer, &handle_rect);
+            }
+        }
+    }
+
     for (size_t i = 0u; i < track->key_count; ++i) {
         int x = 0;
         int y = 0;
@@ -595,9 +667,9 @@ void scene_editor_light_timeline_panel_render(
         renderer, palette.panel_border.r, palette.panel_border.g,
         palette.panel_border.b, palette.panel_border.a);
     SDL_RenderDrawRect(renderer, &speed_strip);
-    panel_text(renderer, small_font, "SPEED world/s", speed_strip.x + 6,
+    panel_text(renderer, small_font, "AVG SPEED world/s", speed_strip.x + 6,
                speed_strip.y + 2, speed_color);
-    speed_header_width = panel_text_width(small_font, "SPEED world/s");
+    speed_header_width = panel_text_width(small_font, "AVG SPEED world/s");
     panel_text(renderer, small_font, "0", speed_strip.x - 16,
                speed_strip.y + speed_strip.h - 10, palette.text_muted);
     snprintf(label, sizeof(label), "%.2g", speed_axis_max);
@@ -774,7 +846,7 @@ void scene_editor_light_timeline_panel_render(
     panel_text(
         renderer, small_font,
         panel->w >= 620
-            ? "Drag key: time + path | Drag point: arrival | Double-click: add | Wheel: zoom | F: fit"
+            ? "Select key, choose STEP/LINEAR/BEZIER | Drag Bezier handles | Double-click: add | Wheel: zoom | F: fit"
             : "Drag | Double-click add | Wheel zoom | F fit",
         geometry.footer_hint.x, geometry.footer_hint.y,
         palette.text_muted);

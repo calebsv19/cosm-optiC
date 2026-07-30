@@ -184,6 +184,14 @@ TimelineStatus RuntimeSceneLightTimelineParseAuthoring(
     status = TimelineDocumentAddTrack(&candidate.timeline, &progress);
     if (status != TIMELINE_STATUS_OK) return status;
     candidate.progress_track_index = 0u;
+    status = TimelineLightMotionValidateProgressTrack(
+        &candidate.timeline.tracks[candidate.progress_track_index],
+        &candidate.timeline.range);
+    if (status != TIMELINE_STATUS_OK) {
+        light_timeline_diag(out_diagnostics, diagnostics_size,
+                            "invalid_path_progress_track");
+        return status;
+    }
 
     if (json_object_object_get_ex(root, "spatial_path", &spatial) &&
         json_object_is_type(spatial, json_type_object)) {
@@ -238,6 +246,10 @@ json_object* RuntimeSceneLightTimelineToJsonObject(
         TimelineDocumentValidate(&document->timeline) != TIMELINE_STATUS_OK ||
         document->progress_track_index >= document->timeline.track_count) return NULL;
     progress = &document->timeline.tracks[document->progress_track_index];
+    if (TimelineLightMotionValidateProgressTrack(
+            progress, &document->timeline.range) != TIMELINE_STATUS_OK) {
+        return NULL;
+    }
     authored_path = document->spatial_path;
     authored_path3d = document->spatial_path_3d;
     scale_path(&authored_path, 1.0 / world_scale);
@@ -332,6 +344,10 @@ TimelineStatus RuntimeSceneLightTimelineSetLast(
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
     TimelineStatus status = TimelineDocumentValidate(&document->timeline);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = TimelineLightMotionValidateProgressTrack(
+        &document->timeline.tracks[document->progress_track_index],
+        &document->timeline.range);
     if (status != TIMELINE_STATUS_OK) return status;
     if (document->spatial_path.numPoints < 2) return TIMELINE_STATUS_INVALID_ARGUMENT;
     g_last_light_timeline = *document;

@@ -16,6 +16,8 @@ TimelineStatus SceneEditorLightTimelineSelectTargetId(const char* target_id);
 const char* SceneEditorLightTimelineSelectedTargetId(void);
 TimelineStatus SceneEditorLightTimelineInsertKey(int64_t frame, double progress);
 TimelineStatus SceneEditorLightTimelineDeleteSelectedKey(void);
+TimelineStatus SceneEditorLightTimelineSetSelectedInterpolation(
+    TimelineInterpolation interpolation);
 bool SceneEditorLightTimelineUndo(void);
 bool SceneEditorLightTimelineRedo(void);
 bool SceneEditorLightTimelineInteractionActive(void);
