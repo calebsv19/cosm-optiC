@@ -427,6 +427,37 @@ arbitrary Boolean clipping, fracture-quality edge optimization,
 self-intersection repair for unbounded depths, or conformal moss/grime growth
 shells.
 
+PSG-22 adds a separate additive imported-surface growth compiler:
+
+- `procedural_imported_surface_growth` consumes the exact immutable source mesh
+  plus a digest-bound PSG-19 carrier and selects source-triangle anchors above
+  a typed threshold;
+- deterministic radius/height variation and conservative object-space
+  clearance choose a bounded set of non-overlapping growth elements;
+- each element is emitted as its own closed, positive-volume asymmetric
+  ellipsoid. Its exposed cap rises along the carrier triangle normal while its
+  attachment base penetrates the source surface by a declared depth;
+- the output is a distinct replaceable `core_mesh_asset` runtime document with
+  `exposed_growth` and `attachment_base` surface groups plus per-triangle
+  source-triangle, element-index, and role provenance;
+- acceptance requires exact source/file/carrier/config identity, byte-exact
+  repeat artifacts, immutable source readback, one closed manifold component
+  per element, positive aggregate volume, zero inter-element overlap pairs,
+  and zero self-intersection pairs.
+
+The focused PSG-22 fixture generates a new 4,320-triangle garden-finial STL on
+every run and compiles three separated attached components into a
+672-triangle derived growth asset. Its 1440 x 1080 proof retains a real beauty
+visibility threshold and separates source, hero, grazing silhouette,
+attachment-base, clearance, source-triangle provenance, and exact-repeat
+views.
+
+PSG-22 proves low-profile mound/coating components attached to locally smooth
+carrier triangles. It does not yet conform each mound footprint to a
+multi-triangle curved patch, boolean-union growth into the source shell,
+generate strand/fiber moss, simulate volumetric soil, or repair arbitrary
+growth collisions.
+
 Boundary decisions:
 
 - `core_mesh_asset` remains the intended derived-shell output contract.
@@ -461,6 +492,10 @@ make test-procedural-solid-psg12
 make test-procedural-solid-agent-flow
 make test-procedural-imported-surface-region-psg19
 make test-procedural-imported-surface-region-psg19-visual-proof
+make test-procedural-imported-surface-inset-psg21
+make test-procedural-imported-surface-inset-psg21-visual-proof
+make test-procedural-imported-surface-growth-psg22
+make test-procedural-imported-surface-growth-psg22-visual-proof
 make test-procedural-solid-psg11-flow
 make test-procedural-solid-psg12-flow
 make test-procedural-solid-psg12-visual-proof

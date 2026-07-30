@@ -1,0 +1,32 @@
+{
+  "schema": "ray_tracing.procedural_imported_surface_growth_psg22_visual_contract",
+  "schema_version": 1,
+  "proof_id": "psg22_imported_surface_attached_moss_growth",
+  "title": "PSG-22 Conforming Attached Moss Growth",
+  "visual_intent": "A fresh purpose-built stone garden finial is imported from STL. A digest-bound surface carrier places several low-profile moss mounds as a separate closed geometry asset, visibly attached to curved source regions without mound overlap.",
+  "expected_visual_signal": "Hero and grazing views must show real mound silhouette, parallax, and contact with the stone. Attachment-base, source-triangle provenance, clearance, and exact-repeat views must explain why the added geometry is closed, attached, separated, and deterministic.",
+  "rejection_condition": "Reject if growth is material-only, the source changes, attachment bases do not penetrate the carrier surface, components overlap, any growth edge is open or nonmanifold, provenance is incomplete, or repeated artifacts differ.",
+  "assertions": {
+    "minimum_growth_elements": 3,
+    "minimum_exposed_growth_triangles": 300,
+    "minimum_attachment_base_triangles": 100,
+    "minimum_beauty_changed_pixels": 3000,
+    "maximum_overlap_pairs": 0,
+    "maximum_self_intersection_pairs": 0,
+    "maximum_repeat_changed_pixels": 0
+  },
+  "render": {
+    "width": 1440,
+    "height": 1080,
+    "temporal_frames": 4,
+    "integrator_3d": "disney_v2",
+    "camera_zoom": 1.34
+  },
+  "lighting": {
+    "ambient_light": 0.42,
+    "direct_light": 1.36,
+    "light_direction": {"x": -0.48, "y": -0.70, "z": -0.52},
+    "light_color": {"r": 1.0, "g": 0.94, "b": 0.84},
+    "background_color": {"r": 0.075, "g": 0.085, "b": 0.095}
+  }
+}
