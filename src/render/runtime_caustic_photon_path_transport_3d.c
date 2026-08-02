@@ -53,13 +53,32 @@ static bool photon_path_transport_apply_segment_attenuation(
     return true;
 }
 
-static Vec3 photon_path_transport_geometric_normal(const RuntimeScene3D* scene,
-                                                   const HitInfo3D* hit) {
+Vec3 RuntimeCausticPhotonPathTransport3D_ResolveGeometricNormal(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit) {
     if (scene && hit && hit->triangleIndex >= 0 &&
         hit->triangleIndex < scene->triangleMesh.triangleCount &&
         scene->triangleMesh.triangles) {
-        Vec3 normal = scene->triangleMesh.triangles[hit->triangleIndex].normal;
-        if (vec3_length(normal) > 1.0e-12) return vec3_normalize(normal);
+        const RuntimeTriangle3D* triangle =
+            &scene->triangleMesh.triangles[hit->triangleIndex];
+        if (triangle->primitiveIndex == hit->primitiveIndex &&
+            triangle->localTriangleIndex == hit->localTriangleIndex &&
+            vec3_length(triangle->normal) > 1.0e-12) {
+            return vec3_normalize(triangle->normal);
+        }
+    }
+    if (scene && hit && scene->triangleMesh.triangles) {
+        for (int triangle_index = 0;
+             triangle_index < scene->triangleMesh.triangleCount;
+             ++triangle_index) {
+            const RuntimeTriangle3D* triangle =
+                &scene->triangleMesh.triangles[triangle_index];
+            if (triangle->primitiveIndex == hit->primitiveIndex &&
+                triangle->localTriangleIndex == hit->localTriangleIndex &&
+                vec3_length(triangle->normal) > 1.0e-12) {
+                return vec3_normalize(triangle->normal);
+            }
+        }
     }
     return hit ? vec3_normalize(hit->normal) : vec3(0.0, 0.0, 0.0);
 }
@@ -434,7 +453,8 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         state.transportWeight = photon_path_transport_multiply(
             state.transportWeight, hit_event->segmentTransmittance);
         throughput_before = state.throughput;
-        geometric_normal = photon_path_transport_geometric_normal(scene, &hit);
+        geometric_normal =
+            RuntimeCausticPhotonPathTransport3D_ResolveGeometricNormal(scene, &hit);
         hit.normal = geometric_normal;
         hit_event->hit.normal = geometric_normal;
         incident_cosine = fabs(vec3_dot(vec3_scale(state.direction, -1.0),

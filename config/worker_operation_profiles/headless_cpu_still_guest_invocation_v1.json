@@ -1,0 +1,83 @@
+{
+  "schema_family": "codework_application_execution_input_profile",
+  "schema_variant": "immutable_guest_invocation_inputs_v1",
+  "invocation_profile_id": "ray_tracing.headless_cpu_still.guest.v1",
+  "program": "ray_tracing",
+  "operation": "headless_cpu_still_render",
+  "entrypoint": "bin/ray_tracing_render_headless",
+  "operation_profile": {
+    "profile_id": "ray_tracing.headless_cpu_still.v1",
+    "digest": "f4431efa3c0fa7a6df1708070cc308e5e6a9dbc012211c584f5fed792011ea02"
+  },
+  "working_directory": "application/request",
+  "arguments": [
+    "--request",
+    "render_request.json",
+    "--render",
+    "--summary",
+    "/run/codework-output/render_summary.json",
+    "--summary-file-only",
+    "--job-id",
+    "${job_id}"
+  ],
+  "inputs": [
+    {
+      "input_id": "request",
+      "source_kind": "job_payload",
+      "relative_path": "",
+      "guest_path": "application/request/render_request.json",
+      "mode": "0444"
+    },
+    {
+      "input_id": "runtime_scene",
+      "source_kind": "job_payload_sibling",
+      "relative_path": "scene_runtime.json",
+      "guest_path": "application/request/scene_runtime.json",
+      "mode": "0444"
+    }
+  ],
+  "outputs": [
+    {
+      "artifact_id": "render_summary",
+      "logical_name": "render_summary",
+      "type": "result",
+      "media_type": "application/json",
+      "data_contract": {
+        "schema_family": "ray_tracing_output",
+        "schema_variant": "render_summary_v1"
+      },
+      "relative_path": "render_summary.json",
+      "max_bytes": 1048576
+    },
+    {
+      "artifact_id": "frame_0000",
+      "logical_name": "render_frame_0000",
+      "type": "image",
+      "media_type": "image/bmp",
+      "data_contract": {
+        "schema_family": "ray_tracing_output",
+        "schema_variant": "render_frame_bmp_v1"
+      },
+      "relative_path": "render/frames/frame_0000.bmp",
+      "max_bytes": 1048576
+    }
+  ],
+  "proof_limits": {
+    "application_semantics_owned_by_profile": true,
+    "job_inputs_physically_verified": false,
+    "payload_archive_written": false,
+    "schema68_admission_granted": false
+  },
+  "operations": {
+    "profile_describe": true,
+    "job_mutation": false,
+    "package_mutation": false,
+    "schema68_admission_create": false,
+    "qemu_process_launch": false,
+    "guest_job_execute": false,
+    "network_contact": false,
+    "remote_contact": false
+  },
+  "next_boundary": "bind_profile_to_selected_job_and_physical_inputs",
+  "profile_digest": "9a5b55938d66c092ee766b95985dbc49266253bce652dc6249733ce87d11fc2d"
+}

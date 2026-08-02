@@ -94,6 +94,7 @@ typedef struct RuntimeDynamicGeometryWaterCacheDiagnostics3D {
     bool geometryCacheReady;
     bool geometryBVHReady;
     uint64_t geometryStores;
+    uint64_t geometryKey;
     uint64_t geometryRebuildStores;
     uint64_t geometryRefitStores;
     uint64_t geometryReuseStores;
@@ -124,6 +125,9 @@ bool RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
     const RuntimeScene3D* scene,
     int first_triangle_index,
     int triangle_count);
+bool RuntimeDynamicGeometryAcceleration3D_OwnsScenePrimitive(
+    const RuntimeScene3D* scene,
+    int primitive_index);
 bool RuntimeDynamicGeometryAcceleration3D_TraceWaterSurfaceFirstHit(
     const RuntimeScene3D* scene,
     const Ray3D* ray,

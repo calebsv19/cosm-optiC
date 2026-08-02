@@ -11,6 +11,10 @@
 static RenderContext globalContext = {0};
 static bool s_device_lost = false;
 #if USE_VULKAN
+static int s_logged_logical_width = 0;
+static int s_logged_logical_height = 0;
+static int s_logged_drawable_width = 0;
+static int s_logged_drawable_height = 0;
 static int s_logged_extent_mismatch = 0;
 static int s_logged_begin_out_of_date = 0;
 static int s_logged_begin_failure = 0;
@@ -54,9 +58,19 @@ void setRenderContext(SDL_Renderer* renderer,
                       SDL_Window* window,
                       int width,
                       int height) {
+    int drawable_width = width;
+    int drawable_height = height;
     globalContext.renderer = renderer;
     globalContext.window = window;
-    render_context_update_dimensions(&globalContext, width, height, width, height);
+    if (window) {
+#if USE_VULKAN
+        SDL_Vulkan_GetDrawableSize(window, &drawable_width, &drawable_height);
+#else
+        SDL_GL_GetDrawableSize(window, &drawable_width, &drawable_height);
+#endif
+    }
+    render_context_update_dimensions(
+        &globalContext, width, height, drawable_width, drawable_height);
 }
 
 void render_set_clear_color(SDL_Renderer* renderer,
@@ -94,6 +108,24 @@ bool render_begin_frame(void) {
     vk_renderer_set_logical_size((VkRenderer*)ctx->renderer,
                                  (float)ctx->logical_width,
                                  (float)ctx->logical_height);
+
+    if (s_logged_logical_width != ctx->logical_width ||
+        s_logged_logical_height != ctx->logical_height ||
+        s_logged_drawable_width != ctx->width ||
+        s_logged_drawable_height != ctx->height) {
+        fprintf(stderr,
+                "[Render] Resolution logical=%dx%d drawable=%dx%d dpi=%.2fx%.2f.\n",
+                ctx->logical_width,
+                ctx->logical_height,
+                ctx->width,
+                ctx->height,
+                ctx->dpi_scale_x,
+                ctx->dpi_scale_y);
+        s_logged_logical_width = ctx->logical_width;
+        s_logged_logical_height = ctx->logical_height;
+        s_logged_drawable_width = ctx->width;
+        s_logged_drawable_height = ctx->height;
+    }
 
     VkRenderer* vk_renderer = (VkRenderer*)ctx->renderer;
     if (vk_renderer && drawableW > 0 && drawableH > 0) {

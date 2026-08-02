@@ -25,6 +25,7 @@
 #include "render/fluid/fluid_state.h"
 #include "editor/scene_editor.h"
 #include "app/animation.h"
+#include "app/evaluated_scene_service.h"
 #include "app/runtime_time.h"
 #include "camera/camera.h"
 #include "render/space_mode_adapter.h"
@@ -217,6 +218,7 @@ void CleanupRayTracing(void) {
                                     &native3DPreviewWidth,
                                     &native3DPreviewHeight);
     RayTracingPreview_ShutdownNative3DDirtyRect();
+    RayTracing2PreviewPresent_ReleaseNative3DPreviewHistory();
     TileGridFree(&tileGrid);
     UniformGridFree(&uniformGrid);
     IrradianceCacheClear(&irradianceCache);
@@ -306,10 +308,15 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         RenderContext* renderContext = getRenderContext();
         RuntimeNative3DRenderStats nativeStats = {0};
         RuntimeNative3DSamplingContext nativeSampling = NextNative3DSamplingContext();
+        RayEvaluatedSceneServiceResult evaluatedScene = {0};
+        TimelineSample evaluatedSample = {
+            .absolute_frame = AnimationCurrentAbsoluteFrameIndex(),
+            .subframe_numerator = 0,
+            .subframe_denominator = 1
+        };
         int blurRadius = 0;
         int nativeTileSize = 0;
         bool nativeRenderOk = false;
-        double normalized_t = AnimationCurrentNormalizedT();
         int renderScale = RuntimeNative3DClampRenderScale(animSettings.renderScale3D);
         int hostWidth = WIDTH;
         int hostHeight = HEIGHT;
@@ -320,6 +327,12 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         size_t nativePreviewByteCount =
             hostPixelCount * (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
 
+        if (!RayEvaluatedSceneCaptureSample(evaluatedSample, &evaluatedScene)) {
+            printf("ERROR: Native 3D evaluated-scene capture failed: %s\n",
+                   evaluatedScene.status_line);
+            memset(pixelBuffer, 0, pixelCount * sizeof(Uint8));
+            return;
+        }
         if (!RuntimeNative3DResolveHostDimensions(WIDTH,
                                                   HEIGHT,
                                                   renderContext ? renderContext->width : WIDTH,
@@ -341,8 +354,13 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
             return;
         }
         renderPixelCount = (size_t)renderWidth * (size_t)renderHeight;
-        nativeTileSize = RuntimeNative3DTileSchedulerResolveTileSizeForScale(animSettings.tileSize,
-                                                                             renderScale);
+        nativeTileSize = RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(
+            animSettings.tileSize,
+            renderScale,
+            WIDTH,
+            HEIGHT,
+            renderWidth,
+            renderHeight);
         if (!RayTracing2BuffersEnsureNative3DRenderBuffer(&native3DRenderBuffer,
                                                           &native3DRenderBufferCapacity,
                                                           renderPixelCount) ||
@@ -368,7 +386,8 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
         if (useTiles && tileGrid.tiles && tileGrid.count > 0) {
             TileGridEnsure(&tileGrid, renderWidth, renderHeight, nativeTileSize);
             TileGridClear(&tileGrid);
-            nativeRenderOk = RayTracing2PreviewPresent_RenderNative3DTilesPreview(
+            nativeRenderOk =
+                RayTracing2PreviewPresent_RenderNative3DTilesPreviewForEvaluatedScene(
                 renderer,
                 native3DPreviewBuffer,
                 hostWidth,
@@ -378,23 +397,20 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
                 renderHeight,
                 &tileGrid,
                 route.integratorMode3D,
-                normalized_t,
-                light.x,
-                light.y,
+                &evaluatedScene.snapshot,
                 &nativeSampling,
                 ResolveNative3DTemporalFrames(route.integratorMode3D),
                 animSettings.disneyDenoiseEnabled,
                 route.tilePreviewEnabled,
                 &nativeStats);
         } else {
-            nativeRenderOk = RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgress(
+            nativeRenderOk =
+                RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressForEvaluatedScene(
                 native3DRenderBuffer,
                 route.integratorMode3D,
                 renderWidth,
                 renderHeight,
-                normalized_t,
-                light.x,
-                light.y,
+                &evaluatedScene.snapshot,
                 &nativeSampling,
                 ResolveNative3DTemporalFrames(route.integratorMode3D),
                 UpdateNative3DProgressHUDTemporal,

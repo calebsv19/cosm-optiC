@@ -779,10 +779,17 @@ static int test_water_surface_import_loads_scene_bundle_heightfield(void) {
         "  \"volume_grid_h\": 3,\n"
         "  \"volume_grid_d\": 3,\n"
         "  \"density_threshold\": 0.5,\n"
+        "  \"water_body_boundary_v1\": {\n"
+        "    \"closure_mode\": \"heightfield_volume\",\n"
+        "    \"dry_sample_policy\": \"surface_min_epsilon_to_base\",\n"
+        "    \"base_surface_height_m\": 0.4,\n"
+        "    \"legacy_shell_object_id\": \"water_surface_placeholder\"\n"
+        "  },\n"
         "  \"material\": {\n"
         "    \"ior\": 1.333,\n"
         "    \"absorption_distance_m\": 4.0,\n"
-        "    \"absorption_rgb\": [0.1, 0.035, 0.015]\n"
+        "    \"absorption_rgb\": [0.1, 0.035, 0.015],\n"
+        "    \"roughness\": 0.0\n"
         "  },\n"
         "  \"frames\": [\n"
         "    { \"path\": \"water_surface_000000.json\", \"frame_contract\": \"water_surface_heightfield_v1\" },\n"
@@ -914,8 +921,23 @@ static int test_water_surface_import_loads_scene_bundle_heightfield(void) {
                  frame.material.absorption_distance_m,
                  4.0,
                  1e-9);
+    assert_true("water_surface_import_bundle_material_roughness_authored",
+                frame.material.roughness_authored);
+    assert_close("water_surface_import_bundle_material_roughness",
+                 frame.material.roughness,
+                 0.0,
+                 1e-9);
     assert_true("water_surface_import_bundle_wet_columns", frame.wet_columns == 5u);
     assert_true("water_surface_import_bundle_finite_normals", frame.finite_normals);
+    assert_true("water_surface_import_bundle_closed_volume_boundary",
+                frame.closed_volume_boundary);
+    assert_close("water_surface_import_bundle_boundary_height",
+                 frame.boundary_height_y,
+                 0.4,
+                 1e-9);
+    assert_true("water_surface_import_bundle_boundary_shell_object",
+                strcmp(frame.boundary_shell_object_id,
+                       "water_surface_placeholder") == 0);
 
     RuntimeWaterSurfaceFrame_Free(&frame);
     unlink(bundle_path);

@@ -1,6 +1,18 @@
 # optiC Current Truth
 
-Last updated: 2026-07-22
+Last updated: 2026-08-01
+
+## 2026-08-01 Consolidated Release Identities
+
+- Canonical GitHub and local `main` are aligned at the lossless water/photon
+  integration checkpoint `79c3f4064a74cf73f506977957fc4c3b2f58fb17`.
+- The next desktop/source identity is `0.11.0`.
+- The next worker identity is `0.5.4`. Worker `0.5.3` remains immutable and
+  bound to historical release commit `5149153f2770502f06ee541acd7d375711451caf`;
+  its package bytes must not be relabeled for the consolidated source.
+- These source version declarations do not prove package creation,
+  authentication, host distribution, installed runtime, coordinator
+  projection, Registry-current promotion, or render-submission readiness.
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
@@ -49,6 +61,30 @@ Last updated: 2026-07-22
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
   - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
 
+## Desktop HiDPI Default And Readback
+
+- Native `3D` render scale `0` means automatic HiDPI: use drawable pixels when
+  the display exposes more pixels than the logical window, otherwise use the
+  logical size.
+- Automatic HiDPI is the code and packaged fresh-state default. Missing or
+  invalid `renderScale3D` state resolves to that policy; `1x` remains an
+  explicit logical-resolution choice.
+- The Vulkan desktop host logs logical size, drawable size, and resolved DPI
+  scale whenever those dimensions change. Desktop async work consumes those
+  resolved drawable dimensions.
+- Initial render-context binding queries the window's drawable size immediately
+  instead of waiting for the first frame-begin call. Deep Render can snapshot
+  its host/render/tile dimensions before that later call.
+- Async Deep Render logs its resolved logical, drawable, host, render,
+  configured-tile, and resolved-tile dimensions when each frame starts.
+- Desktop tile size is expressed in logical display points. A configured
+  `16`-point tile therefore resolves to `32` render pixels on a `2x` drawable,
+  preserving the intended on-screen tile footprint instead of shrinking it by
+  half. Explicit headless tile sizes remain render-pixel values.
+- Headless workers remain display-neutral. Agent/remote render requests carry
+  explicit pixel `width` and `height`; they do not infer Retina state from the
+  worker host.
+
 ## Shared Complex-Mesh Preview Adoption
 
 - The managed shared subtree includes `core_mesh_preview` `0.5.0` coherent
@@ -61,6 +97,17 @@ Last updated: 2026-07-22
   only the runtime contract and instance transform, and frees the full document.
   Large preview geometry therefore does not enter final-render geometry or BVH
   ownership and is not retained as a full source document by the editor.
+- Preview presentation is now decided per mesh object. When a coherent LOD is
+  unavailable, the store retains validated local bounds from the runtime
+  contract or preview sidecar and both retained Wire and Solid/Shaded Preview
+  draw the same 12-edge AABB after the authored pivot, scale, XYZ rotation, and
+  translation. The Preview HUD reports aggregate AABB fallback count and the
+  object list labels affected objects individually.
+- The bounds proxy is deliberately truthful: if neither a validated runtime
+  document nor a validated preview sidecar supplies authoritative bounds, the
+  object remains `mesh skipped` instead of receiving an invented unit box.
+  This presentation fallback does not change evaluated frame identity,
+  transforms, final/headless geometry, materials, acceleration, or BVHs.
 - RayTracing owns Bounds/Wire/Solid/Material mode meaning and quality
   invalidation. Zoom, pan, projection, appearance, hover, and selection do not
   demote the established geometry tier; geometry and view-direction changes may.
@@ -83,6 +130,13 @@ Last updated: 2026-07-22
   packaged visual acceptance remains the next proof boundary.
 
 ## Stable Worker Routing Truth
+
+The local scene-project request writer now binds a valid promoted PhysicsSim
+active VF3D manifest into the native volume request before a local render.
+The CR-S3 compute-runtime proof consumed dynamic frames 0 through 2 and
+reported `volume_attached=true`, `volume_summary_built=true`, three rendered
+frames, and `diagnostics=ok`. This is local source-built proof only; it does not
+change the historical remote worker evidence below.
 
 - the current proven trio worker lane supports preferred-home-server routing
   with fallback still enabled
@@ -625,6 +679,18 @@ Last updated: 2026-07-22
     matching-generation tile progress is retained and presented by the desktop
     thread, output advances only after verified frame commit, and close/Escape
     drains cancellation before request teardown
+  - terminal observation performs a final progress-buffer drain before frame
+    completion validation. This closes the worker/desktop interleaving where
+    the final full-frame publication could arrive after the regular tile drain
+    and otherwise leave completion inspecting the preceding partial tile
+  - coalesced dirty-region presentation backed by a full-frame async buffer, so
+    the desktop thread cannot lose unseen tile updates when workers publish
+    faster than the display loop
+  - a main-thread progress HUD lifecycle for start, tile/subpass progress,
+    completed-frame promotion, cancellation, failure, and shutdown
+  - a compatible completed-frame preview-history underlay before fresh tiles
+    arrive; `Tile Preview` controls progressive pixel publication without
+    suppressing numeric progress or the terminal full-frame result
   - conservative synchronous fallback when native tiled routing is unavailable
     or dynamic volume/water frame dependencies are selected
   - authored Bezier light/camera path sampling in native `3D` deep render even
@@ -993,8 +1059,9 @@ Last updated: 2026-07-22
       skull as over budget, but the editor-only LOD store recovers it without
       retaining the 17.9 MiB source document; the object pane reports both mesh
       instances in `Mesh Preview`, labels the skull `mesh preview ... LOD from
-      17.9 MB`, and leaves an invalid/unrecoverable over-budget file labeled
-      `mesh skipped`
+      17.9 MB`, labels a bounds-only object `mesh bounds ... AABB fallback`,
+      and leaves a file with neither valid geometry nor authoritative bounds
+      labeled `mesh skipped`
     - loaded mesh preview edges now use a dedicated high-contrast editor
       diagnostic color and append a mesh-local bounds outline, so small
       default-material meshes such as the platform do not visually blend into
@@ -1301,6 +1368,12 @@ focused verification commands are collected in
 - Ordinary runtime-scene authoring can carry mesh-dielectric lens descriptors,
   physical light radiometry, and separate glass interface tint/absorption.
   Photon mapping remains experimental, request-opt-in, and default-off.
+- Frame-selected water heightfields and their authored side/bottom shells now
+  share one dielectric-volume object identity. Dynamic-water subset-BVH hits
+  are remapped to prepared-scene global triangle indices, and photon transport
+  validates primitive/local-triangle identity before using a geometric normal.
+  This keeps medium entry/exit classification tied to the actual water
+  boundary instead of an unrelated cache-local triangle index.
 - Operator visual acceptance, quantitative optical certification, PVA-5,
   professional readiness, scene-pointer promotion, production default-on, and
   release readiness remain independent unproven gates.
@@ -1485,6 +1558,14 @@ focused verification commands are collected in
   is the first exact independent worker release decision; do not edit
   `WORKER_VERSION`, build/distribute a package, or promote worker current
   without that typed authorization.
+- The headless CLI now accepts `--summary-file-only`: it requires a resolved
+  summary path, writes the canonical summary artifact, and omits only the
+  duplicate JSON summary from stdout. The immutable CPU-still guest invocation
+  profile binds that flag at digest
+  `7d4d4bc46e1d5746ec6628d230f3085e049b89b9fd2cdd1ea2f7905468f17434`.
+  Local build and preflight coverage pass. No changed Linux worker package has
+  been built under the existing `0.5.2` identity; a new exact worker-version
+  decision remains required before package and QEMU result/CAS proof.
 - Keep the new menu-render, digest-pick, and native `3D` test-family seams aligned with their current helper/file boundaries while larger file-split work continues.
 - Defer VF3D / `physics_sim` ingestion expansion until the next internal renderer boundary is chosen.
 

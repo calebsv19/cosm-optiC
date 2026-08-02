@@ -1,0 +1,113 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "light_timeline_editor_demo",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "space_mode_default": "3d",
+  "objects": [
+    {
+      "object_id": "timeline_stage",
+      "object_type": "plane",
+      "primitive": {
+        "kind": "plane",
+        "width": 8.0,
+        "height": 5.0,
+        "frame": {
+          "origin": { "x": 0.0, "y": -5.0, "z": 0.0 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": 1.0, "z": 0.0 }
+        }
+      },
+      "transform": {
+        "position": { "x": 0.0, "y": -5.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      }
+    }
+  ],
+  "materials": [],
+  "lights": [
+    {
+      "id": "timeline_key",
+      "kind": "sphere",
+      "enabled": true,
+      "position": { "x": -2.0, "y": -2.0, "z": 1.0 },
+      "radius": 0.18,
+      "intensity": 12.0,
+      "color": { "r": 1.0, "g": 0.82, "b": 0.55 }
+    }
+  ],
+  "cameras": [
+    {
+      "position": { "x": 0.0, "y": 1.5, "z": 1.5 },
+      "rotation": 0.0,
+      "look_pitch": 0.0,
+      "zoom": 1.0
+    }
+  ],
+  "constraints": [],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "light_timeline": {
+          "version": 1,
+          "rate": { "numerator": 20, "denominator": 1 },
+          "range": { "start_frame": 0, "frame_count": 101 },
+          "target_id": "light/timeline_key",
+          "spatial_path": {
+            "path": {
+              "mode": "BEZIER_CUBIC",
+              "points": [
+                {
+                  "x": -2.0,
+                  "y": -2.0,
+                  "velocity1": { "vx": 1.3333333333333333, "vy": 0.0 }
+                },
+                {
+                  "x": 2.0,
+                  "y": -2.0,
+                  "velocity2": { "vx": -1.3333333333333333, "vy": 0.0 }
+                }
+              ]
+            },
+            "depth": {
+              "points": [
+                { "z": 1.0 },
+                { "z": 2.5 }
+              ]
+            }
+          },
+          "progress_track": {
+            "id": "timeline_key_progress",
+            "enabled": true,
+            "keys": [
+              {
+                "frame": 0,
+                "value": 0.0,
+                "interpolation": "cubic_bezier",
+                "incoming_handle": { "frame_offset": 0, "value_offset": 0.0 },
+                "outgoing_handle": { "frame_offset": 12, "value_offset": 0.35 }
+              },
+              {
+                "frame": 35,
+                "value": 0.65,
+                "interpolation": "cubic_bezier",
+                "incoming_handle": { "frame_offset": -10, "value_offset": -0.18 },
+                "outgoing_handle": { "frame_offset": 28, "value_offset": 0.08 }
+              },
+              {
+                "frame": 100,
+                "value": 1.0,
+                "interpolation": "step",
+                "incoming_handle": { "frame_offset": -24, "value_offset": -0.12 },
+                "outgoing_handle": { "frame_offset": 0, "value_offset": 0.0 }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

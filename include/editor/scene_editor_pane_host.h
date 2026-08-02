@@ -17,18 +17,22 @@ typedef struct SceneEditorPaneLayout {
     SDL_Rect right_content_rect;
     SDL_Rect mode_router_rect;
     SDL_Rect viewport_rect;
+    SDL_Rect timeline_rect;
+    bool timeline_visible;
 } SceneEditorPaneLayout;
 
 typedef struct SceneEditorPaneHost {
-    CorePaneNode nodes[5];
+    CorePaneNode nodes[7];
     uint32_t node_count;
     uint32_t root_index;
-    CorePaneLeafRect leaves[3];
+    CorePaneLeafRect leaves[4];
     uint32_t leaf_count;
     float bounds_width;
     float bounds_height;
     int target_left_width;
     int target_right_width;
+    int target_timeline_height;
+    bool timeline_visible;
     KitPaneSplitterInteraction splitter_interaction;
     bool initialized;
     SceneEditorPaneLayout layout;
@@ -40,6 +44,9 @@ bool scene_editor_pane_host_rebuild(SceneEditorPaneHost* host, int width, int he
 void scene_editor_pane_host_set_targets(SceneEditorPaneHost* host,
                                         int left_width,
                                         int right_width);
+bool scene_editor_pane_host_set_timeline_visible(SceneEditorPaneHost* host,
+                                                 bool visible);
+bool scene_editor_pane_host_timeline_visible(const SceneEditorPaneHost* host);
 void scene_editor_pane_host_update_pointer(SceneEditorPaneHost* host,
                                            float pointer_x,
                                            float pointer_y);

@@ -50,6 +50,8 @@ typedef struct {
     double height;
     Vec3 color;
     double intensity;
+    bool hasPhotonEmissionEnergy;
+    double photonEmissionEnergy;
     RuntimeLightRadiometryMode3D radiometryMode;
     double radiance;
     double falloffDistance;

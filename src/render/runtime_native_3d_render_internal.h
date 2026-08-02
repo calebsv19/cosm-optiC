@@ -89,5 +89,6 @@ void runtime_native_3d_render_write_emitter_radiance_with_scatter(
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeCausticVolumeCache3D* caustic_cache,
     RuntimeNative3DRenderStats* io_stats);
+bool runtime_native_3d_render_object_id_is_water_volume(const char* object_id);
 
 #endif

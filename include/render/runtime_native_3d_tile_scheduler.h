@@ -73,6 +73,9 @@ typedef struct RuntimeNative3DTileSchedulerCheckpointControl {
 typedef struct RuntimeNative3DTileSchedulerControl {
     const RuntimeNative3DTileSchedulerCancelToken* cancelToken;
     const RuntimeNative3DTileSchedulerCheckpointControl* checkpoint;
+    /* A resolved render-pixel tile size supplied by desktop presentation
+     * policy. Zero preserves the display-neutral scheduler default. */
+    int tileSizeOverride;
 } RuntimeNative3DTileSchedulerControl;
 
 bool RuntimeNative3DTileSchedulerCancelToken_IsRequested(
@@ -80,6 +83,15 @@ bool RuntimeNative3DTileSchedulerCancelToken_IsRequested(
 
 int RuntimeNative3DTileSchedulerResolveTileSize(int requested);
 int RuntimeNative3DTileSchedulerResolveTileSizeForScale(int requested, int render_scale);
+int RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(int requested,
+                                                         int render_scale,
+                                                         int logical_width,
+                                                         int logical_height,
+                                                         int render_width,
+                                                         int render_height);
+int RuntimeNative3DTileSchedulerResolveEffectiveTileSize(int requested,
+                                                        int render_scale,
+                                                        int tile_size_override);
 int RuntimeNative3DTileSchedulerAdaptiveMinChildTileSize(void);
 size_t RuntimeNative3DTileSchedulerAdaptiveMaxSplitParents(void);
 bool RuntimeNative3DTileSchedulerTileEligibleForAdaptiveSplit(int tile_width,

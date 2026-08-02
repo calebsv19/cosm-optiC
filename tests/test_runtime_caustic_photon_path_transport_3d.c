@@ -126,6 +126,41 @@ static RuntimeMaterialPayload3D photon_path_transport_diffuse(void) {
     return material;
 }
 
+static int test_runtime_caustic_photon_path_transport_normal_identity_remap(void) {
+    RuntimeScene3D scene;
+    HitInfo3D hit;
+    Vec3 normal;
+
+    RuntimeScene3D_Init(&scene);
+    scene.triangleMesh.triangleCapacity = 2;
+    scene.triangleMesh.triangleCount = 2;
+    scene.triangleMesh.triangles =
+        calloc(2u, sizeof(*scene.triangleMesh.triangles));
+    assert_true("runtime_caustic_photon_path_normal_identity_allocated",
+                scene.triangleMesh.triangles != NULL);
+    if (!scene.triangleMesh.triangles) return 0;
+
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 0.0, -1.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 2;
+    scene.triangleMesh.triangles[0].localTriangleIndex = 0;
+    scene.triangleMesh.triangles[1].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[1].primitiveIndex = 3;
+    scene.triangleMesh.triangles[1].localTriangleIndex = 0;
+
+    HitInfo3D_Reset(&hit);
+    hit.triangleIndex = 0;
+    hit.primitiveIndex = 3;
+    hit.localTriangleIndex = 0;
+    hit.normal = vec3(0.0, 0.0, -1.0);
+    normal = RuntimeCausticPhotonPathTransport3D_ResolveGeometricNormal(
+        &scene, &hit);
+    assert_true("runtime_caustic_photon_path_normal_identity_remapped",
+                normal.z > 0.999);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static void photon_path_transport_set_triangle(RuntimeTriangle3D* triangle,
                                                double z,
                                                Vec3 normal,
@@ -962,6 +997,8 @@ static int test_runtime_caustic_photon_path_population_transaction(void) {
 
 int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
     int failures = 0;
+    failures +=
+        test_runtime_caustic_photon_path_transport_normal_identity_remap();
     failures += test_runtime_caustic_photon_path_transport_defaults();
     failures += test_runtime_caustic_photon_path_transport_reflective_depth_loop();
     failures += test_runtime_caustic_photon_path_transport_two_object_reflection();

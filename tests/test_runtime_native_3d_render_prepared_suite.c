@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "render/runtime_native_3d_render_internal.h"
 #include "render/runtime_volume_3d.h"
 #include "test_runtime_native_3d_render_internal.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
@@ -31,6 +32,22 @@ typedef struct VolumeFrameHeaderVf3dPreparedTestV1 {
 
 static const uint32_t kPreparedSuiteVf3dMagic =
     ('V' << 24) | ('F' << 16) | ('3' << 8) | ('D');
+
+static int test_runtime_native_3d_render_water_volume_object_identity(void) {
+    assert_true("runtime_native_water_volume_runtime_id",
+                runtime_native_3d_render_object_id_is_water_volume("water_surface"));
+    assert_true("runtime_native_water_volume_placeholder_id",
+                runtime_native_3d_render_object_id_is_water_volume(
+                    "water_surface_placeholder"));
+    assert_true("runtime_native_water_volume_rejects_unrelated_water_object",
+                !runtime_native_3d_render_object_id_is_water_volume("aquarium_glass_shell"));
+    assert_true("runtime_native_water_volume_rejects_prefix_match",
+                !runtime_native_3d_render_object_id_is_water_volume(
+                    "water_surface_decoration"));
+    assert_true("runtime_native_water_volume_rejects_null",
+                !runtime_native_3d_render_object_id_is_water_volume(NULL));
+    return 0;
+}
 
 bool prepared_suite_make_temp_dir(char* out_dir, size_t out_dir_size) {
     char tmp_template[] = "/tmp/rt_native_3d_volume_prepareXXXXXX";
@@ -144,6 +161,7 @@ bool prepared_suite_attach_dense_volume(RuntimeVolumeAttachment3D* volume,
 int run_test_runtime_native_3d_render_prepared_suite(void) {
     int before = test_support_failures();
 
+    test_runtime_native_3d_render_water_volume_object_identity();
     run_test_runtime_native_3d_render_prepared_parity_volume_suite();
     run_test_runtime_native_3d_render_prepared_scatter_preview_suite();
     return test_support_failures() - before;

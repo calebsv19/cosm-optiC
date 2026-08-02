@@ -41,6 +41,15 @@ static void InvalidateNative3DPreviewHistory(void) {
     g_native3d_preview_history_valid = false;
 }
 
+void RayTracing2PreviewPresent_ReleaseNative3DPreviewHistory(void) {
+    free(g_native3d_preview_history_buffer);
+    g_native3d_preview_history_buffer = NULL;
+    g_native3d_preview_history_capacity = 0u;
+    g_native3d_preview_history_width = 0;
+    g_native3d_preview_history_height = 0;
+    g_native3d_preview_history_valid = false;
+}
+
 static bool EnsureNative3DPreviewHistoryBuffer(size_t host_pixel_count,
                                                int host_width,
                                                int host_height) {
@@ -171,6 +180,18 @@ bool PromoteNative3DPreviewHistory(const Uint8* host_buffer,
     return true;
 }
 
+bool RayTracing2PreviewPresent_PromoteNative3DPreviewHistory(
+    const Uint8* host_buffer,
+    size_t host_pixel_count,
+    int host_width,
+    int host_height) {
+    return PromoteNative3DPreviewHistory(host_buffer,
+                                         host_pixel_count,
+                                         host_width,
+                                         host_height,
+                                         NULL);
+}
+
 bool RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(const char* path) {
     SDL_Surface* loaded = NULL;
     SDL_Surface* converted = NULL;
@@ -211,14 +232,38 @@ bool RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(const char* pat
                 ((size_t)y * (size_t)converted->w + (size_t)x) *
                 (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
             SDL_GetRGBA(row[x], converted->format, &r, &g, &b, &a);
-            g_native3d_preview_history_buffer[base] = b;
+            /*
+             * Native preview storage is byte-addressed RGBA. The ABGR naming
+             * refers to the packed little-endian presentation value, not this
+             * host-buffer byte order.
+             */
+            g_native3d_preview_history_buffer[base] = r;
             g_native3d_preview_history_buffer[base + 1u] = g;
-            g_native3d_preview_history_buffer[base + 2u] = r;
+            g_native3d_preview_history_buffer[base + 2u] = b;
             g_native3d_preview_history_buffer[base + 3u] = a;
         }
     }
 
     SDL_FreeSurface(converted);
     g_native3d_preview_history_valid = true;
+    return true;
+}
+
+bool RayTracing2PreviewPresent_CopyNative3DPreviewHistory(Uint8* host_buffer,
+                                                          size_t host_pixel_count,
+                                                          int host_width,
+                                                          int host_height) {
+    if (!host_buffer || host_pixel_count == 0u || host_width <= 0 ||
+        host_height <= 0 || !g_native3d_preview_history_valid ||
+        !g_native3d_preview_history_buffer ||
+        g_native3d_preview_history_width != host_width ||
+        g_native3d_preview_history_height != host_height) {
+        return false;
+    }
+    RayTracing2PreviewPresent_DimCopyABGR(g_native3d_preview_history_buffer,
+                                          host_buffer,
+                                          host_pixel_count,
+                                          NATIVE3D_PREVIEW_HISTORY_DIM_NUMERATOR,
+                                          NATIVE3D_PREVIEW_HISTORY_DIM_DENOMINATOR);
     return true;
 }

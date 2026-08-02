@@ -11,6 +11,7 @@ typedef enum {
     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_FIRST_BUILD,
     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_PER_FRAME_POLICY,
     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_GEOMETRY_CHANGED,
+    RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_DYNAMIC_GEOMETRY_CHANGED,
     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_LIGHT_CHANGED,
     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_MATERIAL_CHANGED,
     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_VOLUME_CHANGED,
@@ -26,6 +27,7 @@ typedef enum {
 
 typedef struct {
     uint64_t geometryKey;
+    uint64_t dynamicGeometryKey;
     uint64_t lightKey;
     uint64_t materialKey;
     uint64_t volumeKey;
@@ -46,6 +48,7 @@ typedef struct {
     bool persistentMapOwnershipEnabled;
     RuntimeCausticPhotonMapRebuildReason3D rebuildReason;
     uint64_t geometryKey;
+    uint64_t dynamicGeometryKey;
     uint64_t lightKey;
     uint64_t materialKey;
     uint64_t volumeKey;
@@ -77,6 +80,9 @@ void RuntimeCausticPhotonMapLifecycle3D_BuildInputFromScene(
     bool volume_query_enabled,
     bool persistent_map_ownership_enabled,
     RuntimeCausticPhotonMapLifecycleInput3D* out_input);
+void RuntimeCausticPhotonMapLifecycle3D_BindDynamicGeometry(
+    RuntimeCausticPhotonMapLifecycleInput3D* input,
+    uint64_t dynamic_geometry_key);
 const char* RuntimeCausticPhotonMapRebuildReason3D_Label(
     RuntimeCausticPhotonMapRebuildReason3D reason);
 RuntimeCausticPhotonBudgetTier3D RuntimeCausticPhotonBudgetTier3D_FromBudget(

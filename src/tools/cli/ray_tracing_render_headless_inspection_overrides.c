@@ -1,6 +1,9 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
+#include <math.h>
+
 #include "app/animation.h"
+#include "app/evaluated_scene_service.h"
 #include "render/runtime_caustic_bootstrap_3d.h"
 #include "render/runtime_caustic_transport_3d.h"
 #include "render/runtime_caustic_transport_debug_3d.h"
@@ -125,4 +128,56 @@ void ray_tracing_headless_apply_inspection_overrides(
                                        request->volume_albedo_g,
                                        request->volume_albedo_b);
     }
+}
+
+bool ray_tracing_headless_apply_inspection_evaluated_camera(
+    const RayTracingAgentRenderRequest *request,
+    RayEvaluatedSceneServiceResult *evaluated_scene) {
+    RayEvaluatedCamera camera;
+    double dx;
+    double dy;
+    double dz;
+    double horizontal;
+    double pitch;
+    const double max_pitch = 89.0 * M_PI / 180.0;
+
+    if (!request || !evaluated_scene || !evaluated_scene->valid ||
+        RayEvaluatedSceneSnapshotValidate(&evaluated_scene->snapshot) !=
+            TIMELINE_STATUS_OK) {
+        return false;
+    }
+
+    camera = evaluated_scene->snapshot.camera;
+    if (request->has_camera_position_override) {
+        camera.position.x = request->camera_position_x;
+        camera.position.y = request->camera_position_y;
+        camera.position.z = request->camera_position_z;
+    }
+    if (request->has_camera_zoom_override) {
+        camera.zoom = request->camera_zoom_override;
+    }
+    if (request->has_camera_look_at_override) {
+        dx = request->camera_look_at_x - camera.position.x;
+        dy = request->camera_look_at_y - camera.position.y;
+        dz = request->camera_look_at_z - camera.position.z;
+        horizontal = hypot(dx, dy);
+        if (horizontal > 1e-9 || fabs(dz) > 1e-9) {
+            if (horizontal > 1e-9) {
+                camera.yaw_radians = atan2(dx, -dy);
+            }
+            pitch = atan2(dz, horizontal);
+            if (pitch > max_pitch) pitch = max_pitch;
+            if (pitch < -max_pitch) pitch = -max_pitch;
+            camera.pitch_radians = pitch;
+        }
+    }
+
+    evaluated_scene->snapshot.camera = camera;
+    if (RayEvaluatedSceneSnapshotValidate(&evaluated_scene->snapshot) !=
+        TIMELINE_STATUS_OK) {
+        evaluated_scene->valid = false;
+        evaluated_scene->status = TIMELINE_STATUS_INVALID_SNAPSHOT;
+        return false;
+    }
+    return true;
 }

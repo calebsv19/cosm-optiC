@@ -7,6 +7,17 @@
 #include "render/runtime_caustic_photon_path_transport_3d.h"
 #include "render/runtime_caustic_photon_emission_proposal_3d.h"
 
+static bool photon_path_scheduler_source_is_collimated(
+    const RuntimeLightSource3D* source) {
+    if (!source ||
+        source->radiometryMode != RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY ||
+        source->emissionProfile != RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED) {
+        return false;
+    }
+    return source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT ||
+           source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_DISK;
+}
+
 bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     const RuntimeScene3D* scene,
     RuntimeCausticPhotonMap3D* surface_map,
@@ -99,15 +110,16 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     for (uint64_t i = 0u; i < batch.sampleCount; ++i) {
         RuntimeCausticPhotonSceneTrace3D trace;
         RuntimeCausticPhotonPathPopulationReadback3D path_population;
+        const RuntimeLightSource3D* emission_source =
+            RuntimeLightSet3D_GetEnabled(&scene->lightSet,
+                                         batch.samples[i].lightIndex);
         bool traced;
 
         if (settings->emissionProposalMode !=
                 RUNTIME_CAUSTIC_PHOTON_EMISSION_UNBIASED &&
-            emission_lenses && emission_lens_count > 0u) {
+            emission_lenses && emission_lens_count > 0u &&
+            !photon_path_scheduler_source_is_collimated(emission_source)) {
             RuntimeCausticPhotonEmissionProposalReadback3D proposal_readback;
-            const RuntimeLightSource3D* emission_source =
-                RuntimeLightSet3D_GetEnabled(&scene->lightSet,
-                                             batch.samples[i].lightIndex);
             (void)RuntimeCausticPhotonEmissionProposal3D_ApplyLensGuidanceMixture(
                 &batch.samples[i], emission_source, emission_lenses,
                 emission_lens_count, &proposal_readback);
@@ -136,6 +148,63 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
         readback.pathMediumTransitionCount += trace.readback.mediumTransitionCount;
         readback.pathMediumTransitionFailureCount +=
             trace.readback.mediumTransitionFailureCount;
+        if (trace.readback.mediumTransitionFailureCount > 0u &&
+            trace.readback.mediumFailureReason >=
+                RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_NONE &&
+            trace.readback.mediumFailureReason <
+                RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_REASON_COUNT) {
+            readback.pathMediumTransitionFailureReasons[
+                trace.readback.mediumFailureReason] +=
+                trace.readback.mediumTransitionFailureCount;
+            if (trace.readback.hitEventCount > 0u) {
+                const RuntimeCausticPhotonSceneHitEvent3D* failure_event =
+                    &trace.hitEvents[trace.readback.hitEventCount - 1u];
+                const int failure_object_index =
+                    failure_event->hit.sceneObjectIndex;
+                const int failure_primitive_index =
+                    failure_event->hit.primitiveIndex;
+                if (failure_object_index >= 0 &&
+                    failure_object_index < MAX_OBJECTS) {
+                    readback.pathMediumTransitionFailureSceneObjectCounts[
+                        failure_object_index] +=
+                        trace.readback.mediumTransitionFailureCount;
+                }
+                if (failure_primitive_index >= 0 &&
+                    failure_primitive_index < MAX_OBJECTS) {
+                    readback.pathMediumTransitionFailurePrimitiveCounts[
+                        failure_primitive_index] +=
+                        trace.readback.mediumTransitionFailureCount;
+                }
+                if (failure_event->mediumTransition.entering) {
+                    readback.pathMediumTransitionFailureEnteringCount +=
+                        trace.readback.mediumTransitionFailureCount;
+                } else {
+                    readback.pathMediumTransitionFailureExitingCount +=
+                        trace.readback.mediumTransitionFailureCount;
+                }
+                if (failure_event->hit.position.z - failure_event->pathStart.z >=
+                    0.0) {
+                    readback.pathMediumTransitionFailureDirectionUpCount +=
+                        trace.readback.mediumTransitionFailureCount;
+                } else {
+                    readback.pathMediumTransitionFailureDirectionDownCount +=
+                        trace.readback.mediumTransitionFailureCount;
+                }
+                if (failure_event->hit.normal.z >= 0.0) {
+                    readback.pathMediumTransitionFailureNormalUpCount +=
+                        trace.readback.mediumTransitionFailureCount;
+                } else {
+                    readback.pathMediumTransitionFailureNormalDownCount +=
+                        trace.readback.mediumTransitionFailureCount;
+                }
+                if (trace.readback.mediumFailureDepth <=
+                    RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS) {
+                    readback.pathMediumTransitionFailureDepthCounts[
+                        trace.readback.mediumFailureDepth] +=
+                        trace.readback.mediumTransitionFailureCount;
+                }
+            }
+        }
         readback.pathAttenuatedSegmentCount += trace.readback.attenuatedSegmentCount;
         readback.pathTotalInternalReflectionCount +=
             trace.trace.debug.totalInternalReflectionCount;

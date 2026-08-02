@@ -1,0 +1,6 @@
+#ifndef RAY_TRACING_TEST_PREVIEW_TIMELINE_INSPECTION_H
+#define RAY_TRACING_TEST_PREVIEW_TIMELINE_INSPECTION_H
+
+int run_test_preview_timeline_inspection_tests(void);
+
+#endif

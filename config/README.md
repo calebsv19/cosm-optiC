@@ -20,3 +20,9 @@ Tracked defaults consumed by the menu and renderer.
   - `forwardFalloffMode` – 0=quadratic (1/r²), 1=linear (1/r), 2=None. Controls how the forward integrator attenuates energy over distance.
 - `config.json` – Legacy/lightweight settings file kept for compatibility with older tools; current code primarily uses `animation_config.json`.
 - `default.ttf` – Font asset used when rendering UI text. `src/ui/menu/sdl_menu.c` and `src/render/helpers/render_helper.c` currently hard-code system fonts, but this file is available for future packaging.
+- `worker_operation_profiles/` – Application-owned, digest-bound descriptions
+  of operation-specific worker requirements. These profiles do not waive
+  loader or linked-library requirements and are not job-selection or execution
+  authority. The sibling guest-invocation profile declares app-owned argv,
+  input staging, working-directory, and bounded-output meaning without
+  mutating a reusable worker package. See `docs/worker_operation_profiles.md`.

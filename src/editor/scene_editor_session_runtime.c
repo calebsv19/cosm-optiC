@@ -6,6 +6,7 @@
 #include "app/scene_loop_policy.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_internal.h"
+#include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_viewport_render.h"
 #include "engine/Render/render_pipeline.h"
 #include "scene/object_manager.h"
@@ -42,6 +43,16 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
+    {
+        SceneEditorPaneLayout layout;
+        if (SceneEditorGetPaneLayout(&layout) &&
+            SceneEditorLightTimelineHandleEvent(event,
+                                                SceneEditorGetPaneHost(),
+                                                &layout,
+                                                SceneEditorGetViewportNavState())) {
+            return;
+        }
+    }
     if (SceneEditorHandlePaneSplitterEvent(editor, event)) {
         return;
     }
@@ -64,6 +75,7 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     if (!editor->running || sceneEditorExitFlag) {
         return;
     }
+    (void)SceneEditorLightTimelineAdvancePlayback();
 
     SceneEditorSyncWindowSize(editor);
     scene_editor_session_runtime_update_dirty_objects();
@@ -80,6 +92,12 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
                                   editor->currentMode,
                                   RenderSceneDigestOverlay);
     RenderSceneButtons(editor->renderer);
+    {
+        SceneEditorPaneLayout layout;
+        if (SceneEditorGetPaneLayout(&layout)) {
+            SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
+        }
+    }
     if (post_draw) {
         post_draw(editor, editor->renderer, context);
     }
@@ -157,6 +175,9 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 }
                 break;
             }
+            if (SceneEditorLightTimelineAdvancePlayback()) {
+                frame_dirty = true;
+            }
 
             heartbeat_due = (last_render_ms == 0u) ||
                             ((Uint32)(SDL_GetTicks() - last_render_ms) >= 250u);
@@ -189,6 +210,12 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                                           editor->currentMode,
                                           RenderSceneDigestOverlay);
             RenderSceneButtons(editor->renderer);
+            {
+                SceneEditorPaneLayout layout;
+                if (SceneEditorGetPaneLayout(&layout)) {
+                    SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
+                }
+            }
 
             render_end_frame();
             frame_dirty = false;

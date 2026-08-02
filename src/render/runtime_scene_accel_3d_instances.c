@@ -1,5 +1,6 @@
 #include "render/runtime_scene_accel_3d_internal.h"
 
+#include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
 
 #include <float.h>
@@ -63,6 +64,10 @@ bool RuntimeSceneAcceleration3D_CaptureInstanceBounds(
         RuntimeSceneAcceleration3DInstanceBounds bounds;
         bool valid = false;
         int max_local_triangle_index = -1;
+        if (RuntimeDynamicGeometryAcceleration3D_OwnsScenePrimitive(scene,
+                                                                    primitive_index)) {
+            continue;
+        }
         memset(&bounds, 0, sizeof(bounds));
         bounds.min = vec3(DBL_MAX, DBL_MAX, DBL_MAX);
         bounds.max = vec3(-DBL_MAX, -DBL_MAX, -DBL_MAX);

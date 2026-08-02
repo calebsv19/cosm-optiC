@@ -4,6 +4,6 @@
 
 void ray_tracing_render_headless_usage(const char *argv0) {
     fprintf(stderr,
-            "usage: %s --request <request.json> [--preflight|--render] [--summary <summary.json>] [--job-id <id>] [--job-status <job_status.json>]\n",
+            "usage: %s --request <request.json> [--preflight|--render] [--summary <summary.json>] [--summary-file-only] [--job-id <id>] [--job-status <job_status.json>]\n",
             argv0 ? argv0 : "ray_tracing_render_headless");
 }

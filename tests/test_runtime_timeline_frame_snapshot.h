@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_TIMELINE_FRAME_SNAPSHOT_H
+#define TEST_RUNTIME_TIMELINE_FRAME_SNAPSHOT_H
+
+int run_test_runtime_timeline_frame_snapshot_tests(void);
+
+#endif

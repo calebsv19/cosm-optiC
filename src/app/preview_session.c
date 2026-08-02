@@ -1,13 +1,20 @@
 #include "app/animation.h"
 #include "app/animation_input_helpers.h"
+#include "app/evaluated_scene_service.h"
 #include "app/preview_mode_route.h"
 #include "app/preview_camera_sample.h"
 #include "app/preview_camera_projector.h"
-#include "app/preview_playback.h"
+#include "app/preview_retained_scene_quality.h"
 #include "app/preview_retained_scene_renderer.h"
+#include "app/preview_retained_scene_surface.h"
+#include "app/preview_timeline_inspection.h"
+#include "app/preview_timeline_inspection_render.h"
+#include "app/preview_workspace.h"
+#include "app/preview_workspace_render.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
 #include "editor/material_editor_face_preview.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "render/ray_tracing2.h"
 #include "render/render_helper.h"
 #include "render/space_mode_adapter.h"
@@ -25,14 +32,18 @@
 
 static const double kPreviewBg = 60.0;
 
-static void DrawPreviewMarker(SDL_Renderer* renderer, Point world, SDL_Color color, int radius) {
+static void DrawPreviewMarker(SDL_Renderer* renderer,
+                              const Camera* camera,
+                              Point world,
+                              SDL_Color color,
+                              int radius) {
     SpaceModeViewContext view_ctx;
     CameraPoint screen;
     int dx = 0;
     int dy = 0;
-    if (!renderer) return;
+    if (!renderer || !camera) return;
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-    view_ctx = SpaceModeAdapter_BuildViewContext(&sceneSettings.camera,
+    view_ctx = SpaceModeAdapter_BuildViewContext(camera,
                                                  sceneSettings.windowWidth,
                                                  sceneSettings.windowHeight);
     screen = SpaceModeAdapter_WorldToScreen(&view_ctx, world.x, world.y);
@@ -47,18 +58,34 @@ static void DrawPreviewMarker(SDL_Renderer* renderer, Point world, SDL_Color col
 
 static void DrawPreviewRouteStatus(SDL_Renderer* renderer,
                                    const PreviewModeRouteDecision* decision,
-                                   const PreviewPlaybackSample* playback) {
+                                   const RayEvaluatedSceneServiceResult* evaluation,
+                                   PreviewRetainedSceneQuality quality) {
     SDL_Rect line1 = {12, 10, 360, 22};
     SDL_Rect line2 = {12, 32, 520, 38};
     SDL_Rect line3 = {12, 68, 520, 22};
+    SDL_Rect line4 = {12, 92, 520, 22};
+    SDL_Rect line5 = {12, 116, 520, 22};
     SDL_Color primary = {220, 224, 232, 255};
     SDL_Color secondary = {170, 176, 188, 255};
+    char quality_line[128];
+    char mesh_line[128];
     if (!renderer || !decision) return;
     RenderLabelTextLeft(renderer, line1, decision->branchLabel, primary);
     RenderLabelTextWrappedLeft(renderer, line2, decision->statusLine, secondary);
-    if (playback && playback->valid) {
-        RenderLabelTextWrappedLeft(renderer, line3, playback->status_line, secondary);
+    if (evaluation && evaluation->status_line[0] != '\0') {
+        RenderLabelTextWrappedLeft(renderer, line3, evaluation->status_line, secondary);
     }
+    snprintf(quality_line,
+             sizeof(quality_line),
+             "Preview quality: %s (Q cycles; wireframe is always retained)",
+             PreviewRetainedSceneQualityLabel(quality));
+    RenderLabelTextLeft(renderer, line4, quality_line, secondary);
+    snprintf(mesh_line,
+             sizeof(mesh_line),
+             "Mesh presentation: %d objects, %d AABB fallback",
+             SceneEditorMeshPreviewStoreInstanceCount(),
+             SceneEditorMeshPreviewStoreBoundsFallbackInstanceCount());
+    RenderLabelTextLeft(renderer, line5, mesh_line, secondary);
 }
 
 static SDL_Rect PreviewCloseButtonRect(int window_width) {
@@ -117,11 +144,15 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     SDL_Window* preview_window = NULL;
     SDL_Renderer* preview_renderer = NULL;
     uint64_t prev_ns = 0;
-    double elapsed = 0.0;
     bool running_preview = true;
     bool close_button_pressed = false;
-    Camera saved_camera = sceneSettings.camera;
-    double saved_camera_z = sceneSettings.cameraZ;
+    PreviewWorkspace preview_workspace = {0};
+    PreviewTimelineInspection timeline_inspection = {0};
+    RuntimeSceneLightTimelineDocument timeline_document = {0};
+    TimelineRate preview_rate = {0};
+    TimelineRange preview_range = {0};
+    PreviewRetainedSceneQuality preview_quality =
+        PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME;
 
     if (standalone) {
         if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -228,6 +259,23 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         }
     }
 
+    PreviewRetainedSceneSurfacePrepare();
+    if (RayEvaluatedSceneResolveTimelineClock(
+            &preview_rate, &preview_range) != TIMELINE_STATUS_OK ||
+        PreviewWorkspaceInit(
+            &preview_workspace, preview_rate, preview_range,
+            sceneSettings.windowWidth,
+            sceneSettings.windowHeight) != TIMELINE_STATUS_OK) {
+        fprintf(stderr, "Preview transport initialization failed.\n");
+        running_preview = false;
+    }
+    if (RuntimeSceneLightTimelineGetLast(&timeline_document) &&
+        PreviewTimelineInspectionInit(&timeline_inspection,
+                                      &timeline_document) !=
+            TIMELINE_STATUS_OK) {
+        fprintf(stderr, "Preview timeline marker projection failed.\n");
+        memset(&timeline_inspection, 0, sizeof(timeline_inspection));
+    }
     prev_ns = runtime_time_now_ns();
     while (running_preview) {
         SDL_Event event;
@@ -235,12 +283,17 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         int mouse_x = 0;
         int mouse_y = 0;
         bool close_button_hovered = false;
-        PreviewPlaybackSample playback_sample = {0};
-        double t = 0.0;
-        Point light_point;
-        double light_z = 0.0;
+        RayEvaluatedSceneServiceResult evaluation = {0};
+        TimelineSample selected_sample = {0};
+        PreviewTransportDirection selected_direction =
+            PREVIEW_TRANSPORT_DIRECTION_FORWARD;
+        PreviewRetainedSceneFrame retained_frame = {0};
+        Point light_point = {sceneSettings.bezierPath.points[0].x,
+                             sceneSettings.bezierPath.points[0].y};
+        double light_z = sceneSettings.bezierPath3D.point_z[0];
         Point camera_point = {sceneSettings.camera.x, sceneSettings.camera.y};
         PreviewCameraSample camera_sample = {0};
+        Camera evaluated_view_camera = sceneSettings.camera;
         PreviewCameraProjector preview_projector = {0};
         RuntimeSceneBridge3DDigestState preview_digest = {0};
         PreviewModeRouteDecision route_decision = {0};
@@ -261,12 +314,39 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             }
             if (event.type == SDL_MOUSEBUTTONDOWN &&
                 event.button.button == SDL_BUTTON_LEFT &&
-                event.button.windowID == preview_window_id &&
-                event.button.x >= close_button_rect.x &&
-                event.button.x <= close_button_rect.x + close_button_rect.w &&
-                event.button.y >= close_button_rect.y &&
-                event.button.y <= close_button_rect.y + close_button_rect.h) {
-                close_button_pressed = true;
+                event.button.windowID == preview_window_id) {
+                if (event.button.x >= close_button_rect.x &&
+                    event.button.x <= close_button_rect.x + close_button_rect.w &&
+                    event.button.y >= close_button_rect.y &&
+                    event.button.y <= close_button_rect.y + close_button_rect.h) {
+                    close_button_pressed = true;
+                } else {
+                    TimelineSample marker_sample = {0};
+                    if (PreviewTimelineInspectionSelectAt(
+                            &timeline_inspection,
+                            preview_workspace.layout.slider_track,
+                            event.button.x, event.button.y, 7,
+                            &marker_sample)) {
+                        (void)PreviewWorkspaceInspectSample(
+                            &preview_workspace, marker_sample);
+                    } else {
+                        if (event.button.y >=
+                                preview_workspace.layout.slider_track.y &&
+                            event.button.y <=
+                                preview_workspace.layout.slider_track.y +
+                                    preview_workspace.layout.slider_track.h) {
+                            PreviewTimelineInspectionClearSelection(
+                                &timeline_inspection);
+                        }
+                        (void)PreviewWorkspacePointerDown(
+                            &preview_workspace, event.button.x, event.button.y);
+                    }
+                }
+            }
+            if (event.type == SDL_MOUSEMOTION &&
+                event.motion.windowID == preview_window_id) {
+                (void)PreviewWorkspacePointerMotion(
+                    &preview_workspace, event.motion.x, event.motion.y);
             }
             if (event.type == SDL_MOUSEBUTTONUP &&
                 event.button.button == SDL_BUTTON_LEFT &&
@@ -280,8 +360,43 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                     running_preview = false;
                 }
                 close_button_pressed = false;
+                (void)PreviewWorkspacePointerUp(
+                    &preview_workspace, event.button.x, event.button.y);
             }
             if (event.type == SDL_KEYDOWN) {
+                if (event.key.windowID == preview_window_id &&
+                    event.key.keysym.sym == SDLK_SPACE) {
+                    (void)PreviewWorkspaceTogglePlayback(&preview_workspace);
+                    continue;
+                }
+                if (event.key.windowID == preview_window_id &&
+                    event.key.keysym.sym == SDLK_l) {
+                    (void)PreviewWorkspaceSetMode(
+                        &preview_workspace, PREVIEW_TRANSPORT_MODE_LOOP);
+                    continue;
+                }
+                if (event.key.windowID == preview_window_id &&
+                    event.key.keysym.sym == SDLK_b) {
+                    (void)PreviewWorkspaceSetMode(
+                        &preview_workspace, PREVIEW_TRANSPORT_MODE_BOUNCE);
+                    continue;
+                }
+                if (event.key.windowID == preview_window_id &&
+                    event.key.keysym.sym == SDLK_LEFT) {
+                    (void)PreviewWorkspaceSeekFrameDelta(&preview_workspace, -1);
+                    continue;
+                }
+                if (event.key.windowID == preview_window_id &&
+                    event.key.keysym.sym == SDLK_RIGHT) {
+                    (void)PreviewWorkspaceSeekFrameDelta(&preview_workspace, 1);
+                    continue;
+                }
+                if (event.key.windowID == preview_window_id &&
+                    event.key.keysym.sym == SDLK_q) {
+                    preview_quality =
+                        PreviewRetainedSceneQualityCycle(preview_quality);
+                    continue;
+                }
                 if (animation_handle_text_zoom_shortcut(&event.key)) {
                     continue;
                 }
@@ -297,47 +412,60 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         now_ns = runtime_time_now_ns();
         dt = runtime_time_diff_seconds(now_ns, prev_ns);
         prev_ns = now_ns;
-        elapsed += dt;
+        (void)PreviewWorkspaceAdvance(&preview_workspace, dt);
+        (void)PreviewWorkspaceCurrentSample(
+            &preview_workspace, &selected_sample, &selected_direction);
 
-        PreviewPlaybackEvaluate(elapsed,
-                                animSettings.previewDuration,
-                                animSettings.bounceMode,
-                                animSettings.loopMode,
-                                &playback_sample);
-        t = playback_sample.normalized_t;
-
-        light_point = (sceneSettings.bezierPath.numPoints >= 2)
-                          ? GetPositionAlongPathNormalized(&sceneSettings.bezierPath, t)
-                          : sceneSettings.bezierPath.points[0];
-        light_z = (sceneSettings.bezierPath.numPoints >= 2)
-                      ? CameraPath3D_GetPositionZNormalized(&sceneSettings.bezierPath,
-                                                            &sceneSettings.bezierPath3D,
-                                                            t)
-                      : sceneSettings.bezierPath3D.point_z[0];
-        animSettings.lightHeight = light_z;
-
-        if (PreviewCameraSampleEvaluate(&sceneSettings.camera,
-                                        sceneSettings.cameraZ,
-                                        &sceneSettings.cameraPath,
-                                        &sceneSettings.cameraPath3D,
-                                        t,
-                                        sceneSettings.windowWidth,
-                                        sceneSettings.windowHeight,
-                                        &camera_sample) &&
-            camera_sample.uses_authored_path) {
-            camera_point.x = camera_sample.position_x;
-            camera_point.y = camera_sample.position_y;
-            sceneSettings.camera.x = camera_sample.position_x;
-            sceneSettings.camera.y = camera_sample.position_y;
-            sceneSettings.cameraZ = camera_sample.position_z;
-            sceneSettings.camera.rotation = camera_sample.yaw_radians;
+        if (RayEvaluatedSceneCaptureSampleWithPlayback(
+                selected_sample,
+                PreviewTransportEvaluatedPlaybackMode(
+                    &preview_workspace.transport),
+                selected_direction == PREVIEW_TRANSPORT_DIRECTION_REVERSE,
+                false,
+                &evaluation)) {
+            const RayEvaluatedSceneSnapshot* snapshot = &evaluation.snapshot;
+            light_point.x = snapshot->light.position.x;
+            light_point.y = snapshot->light.position.y;
+            light_z = snapshot->light.position.z;
+            camera_point.x = snapshot->camera.position.x;
+            camera_point.y = snapshot->camera.position.y;
+            evaluated_view_camera.x = snapshot->camera.position.x;
+            evaluated_view_camera.y = snapshot->camera.position.y;
+            evaluated_view_camera.rotation = snapshot->camera.yaw_radians;
+            evaluated_view_camera.zoom = snapshot->camera.zoom;
+            camera_sample.valid = snapshot->camera.valid;
+            camera_sample.uses_authored_path =
+                snapshot->camera.uses_authored_path;
+            camera_sample.position_x = snapshot->camera.position.x;
+            camera_sample.position_y = snapshot->camera.position.y;
+            camera_sample.position_z = snapshot->camera.position.z;
+            camera_sample.yaw_radians = snapshot->camera.yaw_radians;
+            camera_sample.pitch_radians = snapshot->camera.pitch_radians;
+            camera_sample.fov_y_degrees = snapshot->camera.fov_y_degrees;
+            camera_sample.aspect_ratio = snapshot->camera.aspect_ratio;
+        } else {
+            (void)PreviewCameraSampleEvaluate(
+                &sceneSettings.camera,
+                sceneSettings.cameraZ,
+                &sceneSettings.cameraPath,
+                &sceneSettings.cameraPath3D,
+                0.0,
+                sceneSettings.windowWidth,
+                sceneSettings.windowHeight,
+                &camera_sample);
         }
+        PreviewTimelineInspectionUpdateReadout(
+            &timeline_inspection, evaluation.snapshot.valid
+                                      ? &evaluation.snapshot
+                                      : NULL);
         if (preview_route.requestedMode == SPACE_MODE_3D) {
             SDL_Rect preview_viewport = {0, 0, sceneSettings.windowWidth, sceneSettings.windowHeight};
             projector_ready = PreviewCameraProjectorBuild(&camera_sample, preview_viewport, &preview_projector);
             runtime_scene_bridge_get_last_3d_digest_state(&preview_digest);
             preview_digest_status = RayTracingModeBackend_BuildSceneDigestStatus(&preview_route);
         }
+        (void)PreviewRetainedSceneFrameBuild(
+            preview_quality, &evaluation.snapshot, &retained_frame);
         if (!PreviewModeRouteSelect(&preview_route,
                                     &preview_digest_status,
                                     projector_ready,
@@ -371,6 +499,12 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         }
 
         if (route_decision.branch == PREVIEW_RENDER_BRANCH_RETAINED_3D) {
+            if (PreviewRetainedSceneQualityUsesSurface(preview_quality)) {
+                (void)PreviewRetainedSceneSurfaceRender(preview_renderer,
+                                                        &preview_projector,
+                                                        &retained_frame,
+                                                        NULL);
+            }
             PreviewRetainedSceneRender(preview_renderer, &preview_digest, &preview_projector);
             PreviewRetainedSceneRenderLightMarker(preview_renderer,
                                                   &preview_projector,
@@ -386,7 +520,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             RenderBezierPathCameraStyled(preview_renderer,
                                          &sceneSettings.bezierPath,
                                          false,
-                                         &sceneSettings.camera,
+                                         &evaluated_view_camera,
                                          path_color,
                                          (SDL_Color){0, 0, 0, 0},
                                          -1,
@@ -395,24 +529,40 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             RenderBezierPathCameraStyled(preview_renderer,
                                          &sceneSettings.cameraPath,
                                          false,
-                                         &sceneSettings.camera,
+                                         &evaluated_view_camera,
                                          camera_path_color,
                                          (SDL_Color){0, 0, 0, 0},
                                          -1,
                                          select_color,
                                          4);
             SDL_SetRenderDrawColor(preview_renderer, 220, 220, 220, 255);
-            RenderSceneObjects(preview_renderer, !AnimationUseFluidScene());
-            DrawPreviewMarker(preview_renderer, light_point, (SDL_Color){255, 230, 120, 255}, 6);
-            DrawPreviewMarker(preview_renderer, camera_point, (SDL_Color){120, 200, 255, 255}, 6);
+            RenderSceneObjectsWithCamera(preview_renderer,
+                                         !AnimationUseFluidScene(),
+                                         &evaluated_view_camera);
+            DrawPreviewMarker(preview_renderer,
+                              &evaluated_view_camera,
+                              light_point,
+                              (SDL_Color){255, 230, 120, 255},
+                              6);
+            DrawPreviewMarker(preview_renderer,
+                              &evaluated_view_camera,
+                              camera_point,
+                              (SDL_Color){120, 200, 255, 255},
+                              6);
         }
-        DrawPreviewRouteStatus(preview_renderer, &route_decision, &playback_sample);
+        DrawPreviewRouteStatus(preview_renderer,
+                               &route_decision,
+                               &evaluation,
+                               preview_quality);
+        PreviewWorkspaceRender(preview_renderer, &preview_workspace);
+        PreviewTimelineInspectionRender(preview_renderer, &preview_workspace,
+                                        &timeline_inspection);
         DrawPreviewCloseButton(preview_renderer, close_button_rect, close_button_hovered);
         render_end_frame();
     }
 
-    sceneSettings.camera = saved_camera;
-    sceneSettings.cameraZ = saved_camera_z;
+    PreviewRetainedSceneSurfaceReset(preview_renderer);
+    PreviewTimelineInspectionReset(&timeline_inspection);
     if (standalone) {
         ray_tracing_font_runtime_detach_renderer(preview_renderer);
 #if USE_VULKAN

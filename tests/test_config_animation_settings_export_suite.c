@@ -1519,12 +1519,16 @@ static int test_animation_native_3d_render_scale_roundtrip_and_clamp(void) {
     LoadAnimationConfig();
     assert_true("native_3d_render_scale_missing_defaults",
                 animSettings.renderScale3D == RUNTIME_3D_RENDER_SCALE_DEFAULT);
+    assert_true("native_3d_render_scale_missing_defaults_hidpi",
+                animSettings.renderScale3D == RUNTIME_3D_RENDER_SCALE_HIDPI);
 
     assert_true("native_3d_render_scale_write_invalid",
                 write_text_file(kRuntimeAnimationConfigPath, json_invalid_scale));
     LoadAnimationConfig();
     assert_true("native_3d_render_scale_invalid_clamped_default",
                 animSettings.renderScale3D == RUNTIME_3D_RENDER_SCALE_DEFAULT);
+    assert_true("native_3d_render_scale_invalid_clamped_hidpi",
+                animSettings.renderScale3D == RUNTIME_3D_RENDER_SCALE_HIDPI);
 
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.renderScale3D = 4;
@@ -1585,6 +1589,9 @@ static int test_runtime_native_3d_resolution_scale_contract(void) {
                 RuntimeNative3DClampRenderScale(99) == RUNTIME_3D_RENDER_SCALE_MAX);
     assert_true("runtime_native_3d_scale_clamp_hidpi",
                 RuntimeNative3DClampRenderScale(RUNTIME_3D_RENDER_SCALE_HIDPI) ==
+                    RUNTIME_3D_RENDER_SCALE_HIDPI);
+    assert_true("runtime_native_3d_scale_default_is_hidpi",
+                RUNTIME_3D_RENDER_SCALE_DEFAULT ==
                     RUNTIME_3D_RENDER_SCALE_HIDPI);
 
     RuntimeNative3DUpscaleNearest(src, 2, 2, dst, 4, 4);
@@ -2035,6 +2042,52 @@ static int test_native_3d_export_frame_bmp_uses_preview_buffer_directly(void) {
     return 0;
 }
 
+static int test_native_3d_preview_history_bmp_roundtrip_preserves_rgb_channels(void) {
+    char tmp_template[] = "/tmp/ray_tracing_preview_history_XXXXXX";
+    char* tmp_root = mkdtemp(tmp_template);
+    char frame_path[PATH_MAX];
+    const uint8_t preview_rgba[8] = {
+        200u, 120u, 40u, 255u,
+        20u, 80u, 240u, 255u
+    };
+    uint8_t restored_rgba[8] = {0};
+
+    assert_true("native_3d_preview_history_tmpdir_created", tmp_root != NULL);
+    if (!tmp_root) return 0;
+
+    snprintf(frame_path, sizeof(frame_path), "%s/frame_0000.bmp", tmp_root);
+    assert_true("native_3d_preview_history_export_ok",
+                RayTracing2Native3DOverlay_ExportFrameBMP(frame_path,
+                                                          2,
+                                                          1,
+                                                          preview_rgba,
+                                                          NULL));
+
+    RayTracing2PreviewPresent_ReleaseNative3DPreviewHistory();
+    assert_true("native_3d_preview_history_load_ok",
+                RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(frame_path));
+    assert_true("native_3d_preview_history_copy_ok",
+                RayTracing2PreviewPresent_CopyNative3DPreviewHistory(restored_rgba,
+                                                                     2u,
+                                                                     2,
+                                                                     1));
+    assert_true("native_3d_preview_history_first_pixel_rgb_preserved",
+                restored_rgba[0] == 50u &&
+                    restored_rgba[1] == 30u &&
+                    restored_rgba[2] == 10u &&
+                    restored_rgba[3] == 255u);
+    assert_true("native_3d_preview_history_second_pixel_rgb_preserved",
+                restored_rgba[4] == 5u &&
+                    restored_rgba[5] == 20u &&
+                    restored_rgba[6] == 60u &&
+                    restored_rgba[7] == 255u);
+
+    RayTracing2PreviewPresent_ReleaseNative3DPreviewHistory();
+    unlink(frame_path);
+    rmdir(tmp_root);
+    return 0;
+}
+
 int run_test_config_animation_settings_export_suite(void) {
     int before = test_support_failures();
 
@@ -2078,5 +2131,6 @@ int run_test_config_animation_settings_export_suite(void) {
     test_render_export_batch_reports_highest_and_next_frame();
     test_render_export_batch_make_video_rejects_empty_frame_dir();
     test_native_3d_export_frame_bmp_uses_preview_buffer_directly();
+    test_native_3d_preview_history_bmp_roundtrip_preserves_rgb_channels();
     return test_support_failures() - before;
 }

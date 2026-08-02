@@ -8,11 +8,14 @@
 #include "app/animation.h"
 #include "app/preview_camera_projector.h"
 #include "app/preview_camera_sample.h"
+#include "app/preview_mesh_instance_bounds.h"
 #include "app/preview_mode_route.h"
 #include "app/preview_playback.h"
+#include "app/preview_retained_scene_quality.h"
 #include "app/preview_retained_scene_mesh.h"
 #include "app/preview_retained_scene_renderer.h"
 #include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_camera_3d_rays.h"
@@ -52,6 +55,108 @@ static bool test_runtime_preview_write_large_placeholder_file(const char* path, 
         remaining -= write_count;
     }
     return fclose(f) == 0;
+}
+
+static void test_preview_mesh_instance_bounds_preserve_exact_pivot_transform(void) {
+    const CoreMeshAssetBounds3 bounds = {
+        .min = {-1.0, -2.0, -3.0},
+        .max = {3.0, 2.0, 1.0}};
+    RayTracingRuntimeMeshAssetInstance instance = {
+        .position_x = 10.0,
+        .position_y = 20.0,
+        .position_z = 30.0,
+        .rotation_z = M_PI * 0.5,
+        .scale_x = 2.0,
+        .scale_y = 3.0,
+        .scale_z = 4.0,
+        .rotation_pivot_policy =
+            RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER};
+    PreviewMeshInstancePoint3 corners[8];
+    assert_true("preview_bounds_exact_transform_build",
+                PreviewMeshInstanceBuildBoundsCorners(
+                    &bounds, &instance, corners));
+    assert_close("preview_bounds_exact_transform_corner0_x",
+                 corners[0].x,
+                 18.0,
+                 1e-9);
+    assert_close("preview_bounds_exact_transform_corner0_y",
+                 corners[0].y,
+                 16.0,
+                 1e-9);
+    assert_close("preview_bounds_exact_transform_corner0_z",
+                 corners[0].z,
+                 18.0,
+                 1e-9);
+    assert_close("preview_bounds_exact_transform_corner6_x",
+                 corners[6].x,
+                 6.0,
+                 1e-9);
+    assert_close("preview_bounds_exact_transform_corner6_y",
+                 corners[6].y,
+                 24.0,
+                 1e-9);
+    assert_close("preview_bounds_exact_transform_corner6_z",
+                 corners[6].z,
+                 34.0,
+                 1e-9);
+}
+
+static void test_preview_retained_scene_uses_bounds_proxy_when_lod_is_unavailable(void) {
+    RayTracingRuntimeMeshAssetSet set;
+    PreviewRetainedSceneLineSegment segments[32];
+    const RayTracingRuntimeMeshAssetSet* active = NULL;
+    int count = 0;
+    bool saw_translated_corner = false;
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    set.skipped_instance_count = 1;
+    snprintf(set.skipped_instances[0].asset_id,
+             sizeof(set.skipped_instances[0].asset_id),
+             "%s",
+             "asset_bounds_only");
+    set.skipped_instances[0].preview.preview_metadata_valid = true;
+    snprintf(set.skipped_instances[0].preview.metadata.asset_id,
+             sizeof(set.skipped_instances[0].preview.metadata.asset_id),
+             "%s",
+             "asset_bounds_only");
+    set.skipped_instances[0].preview.metadata.local_bounds =
+        (CoreMeshAssetBounds3){
+            .min = {-2.0, -1.0, -0.5},
+            .max = {2.0, 1.0, 0.5}};
+    set.skipped_instances[0].preview_instance =
+        (RayTracingRuntimeMeshAssetInstance){
+            .asset_index = -1,
+            .scene_object_index = 7,
+            .position_x = 10.0,
+            .position_y = 20.0,
+            .position_z = 30.0,
+            .scale_x = 1.0,
+            .scale_y = 1.0,
+            .scale_z = 1.0};
+    snprintf(set.skipped_instances[0].preview_instance.asset_id,
+             sizeof(set.skipped_instances[0].preview_instance.asset_id),
+             "%s",
+             "asset_bounds_only");
+    ray_tracing_runtime_mesh_assets_take_last(&set);
+    active = ray_tracing_runtime_mesh_assets_last();
+    SceneEditorMeshPreviewStorePrepare(active);
+    PreviewRetainedSceneMeshAppendEdges(segments, 32, &count);
+    assert_true("preview_bounds_fallback_store_status",
+                SceneEditorMeshPreviewStoreInstanceCount() == 1 &&
+                    SceneEditorMeshPreviewStoreBoundsFallbackInstanceCount() == 1);
+    assert_true("preview_bounds_fallback_twelve_edges", count == 12);
+    for (int i = 0; i < count; ++i) {
+        if ((fabs(segments[i].ax - 8.0) < 1e-9 ||
+             fabs(segments[i].bx - 8.0) < 1e-9) &&
+            (fabs(segments[i].az - 29.5) < 1e-9 ||
+             fabs(segments[i].bz - 29.5) < 1e-9)) {
+            saw_translated_corner = true;
+            break;
+        }
+    }
+    assert_true("preview_bounds_fallback_uses_object_transform",
+                saw_translated_corner);
+    SceneEditorMeshPreviewStoreReset();
+    ray_tracing_runtime_mesh_assets_reset_last();
 }
 
 static int test_runtime_camera_projector_3d_preview_projection_parity(void) {
@@ -716,6 +821,35 @@ static void test_preview_retained_scene_large_mesh_silhouette_policy(void) {
                 !PreviewRetainedSceneMeshShouldBuildSilhouetteForTriangleCount(171246u));
 }
 
+static void test_preview_retained_scene_quality_policy(void) {
+    PreviewRetainedSceneQuality quality =
+        PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME;
+    assert_true("preview_quality_wire_has_no_surface",
+                !PreviewRetainedSceneQualityUsesSurface(quality));
+    quality = PreviewRetainedSceneQualityCycle(quality);
+    assert_true("preview_quality_cycle_solid",
+                quality == PREVIEW_RETAINED_SCENE_QUALITY_SOLID &&
+                PreviewRetainedSceneQualityUsesSurface(quality));
+    quality = PreviewRetainedSceneQualityCycle(quality);
+    assert_true("preview_quality_cycle_shaded",
+                quality == PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED &&
+                PreviewRetainedSceneQualityUsesSurface(quality));
+    quality = PreviewRetainedSceneQualityCycle(quality);
+    assert_true("preview_quality_cycle_wire",
+                quality == PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME);
+    assert_true("preview_quality_invalid_falls_back_to_wire",
+                PreviewRetainedSceneQualityNormalize(
+                    (PreviewRetainedSceneQuality)99) ==
+                    PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME);
+    assert_true("preview_quality_labels_are_explicit",
+                strcmp(PreviewRetainedSceneQualityLabel(
+                           PREVIEW_RETAINED_SCENE_QUALITY_SOLID),
+                       "Solid") == 0 &&
+                strstr(PreviewRetainedSceneQualityLabel(
+                           PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED),
+                       "shaded") != NULL);
+}
+
 static void test_preview_mode_route_select_contract(void) {
     RayTracingRuntimeRoute route = {0};
     RayTracingSceneDigestStatus digest_status = {0};
@@ -792,6 +926,8 @@ static void test_preview_playback_evaluate_contract(void) {
 int run_test_runtime_preview_editor_tests(void) {
     int before = test_support_failures();
 
+    test_preview_mesh_instance_bounds_preserve_exact_pivot_transform();
+    test_preview_retained_scene_uses_bounds_proxy_when_lod_is_unavailable();
     test_runtime_camera_projector_3d_preview_projection_parity();
     test_preview_camera_sample_evaluate_contract();
     test_preview_camera_projector_projection_contract();
@@ -801,6 +937,7 @@ int run_test_runtime_preview_editor_tests(void) {
     test_preview_retained_scene_includes_runtime_mesh_asset_edges();
     test_preview_retained_scene_deferred_path_keeps_small_mesh_edges();
     test_preview_retained_scene_large_mesh_silhouette_policy();
+    test_preview_retained_scene_quality_policy();
     test_preview_mode_route_select_contract();
     test_preview_playback_evaluate_contract();
     return test_support_failures() - before;

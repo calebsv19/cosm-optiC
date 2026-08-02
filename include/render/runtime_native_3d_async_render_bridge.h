@@ -44,6 +44,20 @@ typedef struct RuntimeNative3DAsyncRenderProgressSnapshot {
     size_t byteCount;
 } RuntimeNative3DAsyncRenderProgressSnapshot;
 
+/* Numeric scheduler state is transported separately from dirty pixels so the
+ * desktop HUD can advance even when no visible geometry changed. */
+typedef struct RuntimeNative3DAsyncRenderTileProgressSnapshot {
+    bool valid;
+    bool staleGeneration;
+    uint64_t generation;
+    uint64_t sequence;
+    int startedSubpasses;
+    int completedSubpasses;
+    int totalSubpasses;
+    size_t completedTilesInSubpass;
+    size_t totalTilesInSubpass;
+} RuntimeNative3DAsyncRenderTileProgressSnapshot;
+
 typedef struct RuntimeNative3DAsyncRenderProgressBuffer
     RuntimeNative3DAsyncRenderProgressBuffer;
 
@@ -74,5 +88,14 @@ bool RuntimeNative3DAsyncRenderProgressBuffer_CopyLatest(
     uint8_t* out_pixels,
     size_t out_pixel_capacity,
     size_t* out_required_bytes);
+
+bool RuntimeNative3DAsyncRenderProgressBuffer_PublishTileProgress(
+    RuntimeNative3DAsyncRenderProgressBuffer* progress,
+    uint64_t generation,
+    const RuntimeNative3DTileSchedulerProgress* tile_progress);
+bool RuntimeNative3DAsyncRenderProgressBuffer_CopyLatestTileProgress(
+    RuntimeNative3DAsyncRenderProgressBuffer* progress,
+    uint64_t current_generation,
+    RuntimeNative3DAsyncRenderTileProgressSnapshot* out_snapshot);
 
 #endif

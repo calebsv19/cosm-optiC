@@ -11,6 +11,7 @@
 #include "render/runtime_camera_3d_rays.h"
 #include "render/runtime_disney_3d.h"
 #include "render/runtime_disney_v2_3d.h"
+#include "render/runtime_disney_v2_transmitted_caustic_3d.h"
 #include "render/runtime_disney_v2_transmission_3d.h"
 #include "render/runtime_disney_v2_transmission_internal_3d.h"
 #include "render/runtime_diffuse_bounce_3d.h"
@@ -36,6 +37,38 @@ static double runtime_disney_v2_3d_test_peak(double r, double g, double b) {
     if (g > peak) peak = g;
     if (b > peak) peak = b;
     return peak;
+}
+
+static int test_runtime_disney_v2_transmitted_caustic_averages_support_samples(void) {
+    RuntimeDisneyV2_3DResult result = {0};
+
+    RuntimeDisneyV2TransmittedCaustic3D_AccumulateResolvedSample(
+        &result, true, vec3(2.0, 4.0, 6.0), 0.5, 0.5, 0.5);
+    RuntimeDisneyV2TransmittedCaustic3D_AccumulateResolvedSample(
+        &result, false, vec3(0.0, 0.0, 0.0), 1.0, 1.0, 1.0);
+    RuntimeDisneyV2TransmittedCaustic3D_AccumulateResolvedSample(
+        &result, true, vec3(1.0, 2.0, 3.0), 1.0, 1.0, 1.0);
+    RuntimeDisneyV2TransmittedCaustic3D_Finalize(&result, 3);
+
+    assert_true("runtime_disney_v2_transmitted_caustic_sampled",
+                result.primaryTransmissionCausticDirectMapSampled);
+    assert_true("runtime_disney_v2_transmitted_caustic_lookup_count",
+                result.primaryTransmissionCausticLookupCount == 3);
+    assert_true("runtime_disney_v2_transmitted_caustic_contributing_count",
+                result.primaryTransmissionCausticContributingSampleCount == 2);
+    assert_close("runtime_disney_v2_transmitted_caustic_average_r",
+                 result.primaryTransmissionCausticRadianceR,
+                 2.0 / 3.0,
+                 1e-9);
+    assert_close("runtime_disney_v2_transmitted_caustic_average_g",
+                 result.primaryTransmissionCausticRadianceG,
+                 4.0 / 3.0,
+                 1e-9);
+    assert_close("runtime_disney_v2_transmitted_caustic_average_b",
+                 result.primaryTransmissionCausticRadianceB,
+                 2.0,
+                 1e-9);
+    return 0;
 }
 
 static int test_runtime_disney_v2_3d_sampling_seed_ignores_triangle_topology(void) {
@@ -4847,6 +4880,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
 
     test_runtime_dielectric_transport_water_ior_fresnel_contract();
+    test_runtime_disney_v2_transmitted_caustic_averages_support_samples();
     test_runtime_disney_v2_3d_sampling_seed_ignores_triangle_topology();
     test_runtime_dielectric_transport_explicit_unit_ior_straight_through_contract();
     test_runtime_disney_v2_transmission_sample_uses_payload_ior_contract();

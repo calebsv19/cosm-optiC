@@ -51,6 +51,22 @@ These diagnostics expose receiver position, identity, flux, support, query
 radius, contributing sample counts, and rejection counters without changing
 the rendered result.
 
+### Dynamic Water Boundary Identity
+
+Imported dynamic water uses one dielectric-volume identity across its authored
+side/bottom shell and the frame-selected heightfield surface. The dynamic-water
+BVH stores only the changing surface subset, but traced hits are remapped to
+prepared-scene global triangle indices before material or medium resolution.
+Photon transport validates that the global triangle's primitive and local
+triangle identities match the hit before consuming its geometric normal, with
+an identity scan as a defensive fallback.
+
+These invariants prevent a cached heightfield hit from borrowing the geometric
+normal of an unrelated prepared-scene triangle and prevent the top surface from
+being treated as a second nested water object. The headless population summary
+includes medium-transition failure reason, depth, direction, normal, object,
+and primitive counts for diagnosing future boundary regressions.
+
 ## Implementation Map
 
 - `src/ui/menu/menu_caustic_product.c` owns desktop product selection and the
@@ -62,6 +78,10 @@ the rendered result.
   storage, estimators, lifecycle, and readback.
 - `src/render/runtime_caustic_photon_scene_descriptor_3d.c` bridges eligible
   ordinary runtime-mesh dielectric objects into photon preparation.
+- `src/render/runtime_dynamic_geometry_accel_3d.c` preserves prepared-scene
+  triangle identity when the dynamic-water cache traces its subset BVH.
+- `src/render/runtime_caustic_photon_path_transport_3d.c` resolves validated
+  geometric normals and owns medium-transition continuation.
 - `tests/test_ui_menu_contracts.c` proves the desktop selector and runtime-plan
   contract. `tests/README.md` lists the focused photon subsystem groups.
 
@@ -111,6 +131,88 @@ each cell without rendering frames. Its `quality_sweep_plan.json` is the
 auditable input manifest for the later local or worker-backed still sweep; the
 generated request paths are payload-relative so the frozen sweep can move
 between the Mac producer root and a worker package without path rewriting.
+
+### Photon Quality Presets
+
+Headless photon-map requests can select a bounded preset through
+`inspection.caustic_photon_quality`:
+
+- `preview` or `low`: 32,768 photons for fast composition and caustic-placement
+  checks.
+- `working`, `default`, or `inspection`: 131,072 photons for the normal
+  working-quality baseline.
+- `hero`, `production`, or `final`: 262,144 photons for production stills and
+  deeper temporal review.
+
+The canonical readback labels remain `preview`, `inspection`, and `final`.
+Explicit request fields such as `caustic_photon_sample_budget`, path depth,
+estimator, gather radius, and neighbor count are parsed after the preset and
+therefore remain authoritative overrides. Photon-map rendering itself remains
+opt-in/default-off; “default” here means the selected photon-map working preset,
+not that every ordinary render silently builds a 131K map.
+
+### Animated Water Contract
+
+Dynamic water geometry is part of the photon-map lifecycle identity. A new
+heightfield frame therefore rebuilds the map even when the static scene,
+emitter, and photon settings are unchanged. The water importer also recognizes
+the explicit `water_body_boundary_v1` heightfield-volume contract: dry perimeter
+samples become a fixed-height rim and the animated top is attached to the
+declared side/bottom shell object as one outward-facing medium boundary.
+Interior dry samples remain cutouts.
+
+The optional `dynamic_heightfield_volume` closure removes the fixed-rim visual
+constraint. With `dry_sample_policy=extend_interior_to_boundary` and a finite
+`bottom_height_m`, dry sentinel samples on the outer grid inherit the adjacent
+interior height. RayTracing then builds the animated top, four perimeter wall
+strips, and bottom cap as one outward-facing primitive and one water-medium
+identity. This mode must not also instance the legacy static side/bottom shell.
+
+For aquarium payloads, the heightfield footprint should be derived from the
+actual glass mesh's inner wall planes rather than an independently estimated
+cavity size. Retarget `sample_origin_*` and `sample_spacing_*` so the final grid
+lands just inside those planes with a small positive ray-safe clearance; do not
+make the water and glass coplanar. This footprint retarget changes only sample
+positions. It must preserve the authored height and normal arrays so water
+motion and optical-shape comparisons remain matched. The current collimated-sun
+working proof uses a `0.001 m` clearance from each measured inner wall.
+
+A one-sided `rect` or `disk` using legacy-intensity radiometry is treated as a
+collimated photon emitter. Its origins remain distributed over the authored
+area, its directions remain aligned with the authored normal, and the photon
+path scheduler does not replace those directions with lens-guided proposals.
+This is the current bounded sun-proxy lane; Lambertian-radiance area lights and
+omnidirectional point/sphere lights retain their existing angular behavior.
+`intensity` continues to scale direct-light shading. An authored legacy light
+may additionally provide `photon_emission_energy` to scale photon-source
+selection and emitted photon flux independently. When the field is absent,
+photon emission falls back to `intensity`, preserving existing scene behavior;
+an explicitly authored zero disables photon emission without disabling direct
+illumination. This is particularly useful for footprint-wide collimated
+rectangle or disk sun proxies whose direct and photon energy need different
+calibration.
+
+Authored rectangular direct lights use the complete deterministic 16-position
+area population for each shading evaluation. They do not use the generic
+four-sample visibility early exit: switching between four and eight samples on
+partially transmitting aquarium glass produced coherent bands and an abrupt
+band-to-speckle boundary. Compatibility sphere/point lights and bounded
+material-emitter rectangle budgets retain their existing adaptive policies.
+
+The current aquarium collimated-sun working profile keeps these fields matched
+for follow-up proofs: 131,072 photons, 12 transmission samples, direct intensity
+`9.0`, photon emission energy `0.00135`, the full authored-rectangle 16-position
+direct-light population, and no authored-rectangle adaptive visibility exit.
+This is a scene-proof baseline, not a global opt-in change for ordinary renders.
+
+For local motion review, first render two adjacent low-photon frames and reject
+the run if the water-to-shell rim separates, the dynamic geometry key does not
+change, or the caustic pattern is static. Then use a 12- or 16-frame,
+24-fps review at 131,072 photons with 12 transmission samples and denoising
+disabled. Keep camera, light, estimator, and seed fixed so only the animated
+water changes. After motion coherence is accepted, render four selected frames
+at 262,144 photons for hero-quality comparison; do not pay the hero cost across
+the full clip until that comparison shows a visible benefit.
 
 ## Current Boundary
 

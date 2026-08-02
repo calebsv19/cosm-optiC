@@ -80,8 +80,8 @@ bool RuntimeWaterMaterial3D_Set(int scene_object_index,
         1.0);
     normalized.reflectivity = runtime_water_material_3d_clamp(override->reflectivity, 0.0, 1.0);
     normalized.roughness = runtime_water_material_3d_clamp(
-        runtime_water_material_3d_positive_or(override->roughness, 0.02),
-        0.02,
+        runtime_water_material_3d_nonnegative_or(override->roughness, 0.02),
+        0.0,
         1.0);
 
     gWaterMaterialOverrides[scene_object_index] = normalized;

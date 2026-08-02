@@ -717,9 +717,11 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
     const RuntimeScene3D* trace_scene = NULL;
     const uint64_t frame_start_ticks = (uint64_t)SDL_GetPerformanceCounter();
     const int effective_temporal_frames = (temporal_frames <= 1) ? 1 : temporal_frames;
-    const int effective_tile_size = RuntimeNative3DTileSchedulerResolveTileSizeForScale(
-        animSettings.tileSize,
-        animSettings.renderScale3D);
+    const int effective_tile_size =
+        RuntimeNative3DTileSchedulerResolveEffectiveTileSize(
+            animSettings.tileSize,
+            animSettings.renderScale3D,
+            scheduler_control ? scheduler_control->tileSizeOverride : 0);
     bool occupancy_ok = false;
     bool ok = false;
     pthread_t* thread_slots = NULL;

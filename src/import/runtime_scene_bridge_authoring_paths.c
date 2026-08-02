@@ -323,6 +323,13 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
             runtime_scene_bridge_parse_double_field(light_obj, "brightness", &x)) {
             source.intensity = x;
         }
+        if (runtime_scene_bridge_parse_double_field(
+                light_obj, "photon_emission_energy", &x) ||
+            runtime_scene_bridge_parse_double_field(
+                light_obj, "photonEmissionEnergy", &x)) {
+            source.hasPhotonEmissionEnergy = true;
+            source.photonEmissionEnergy = x;
+        }
         if (runtime_scene_bridge_parse_double_field(light_obj, "radiance", &x)) {
             source.radiance = x;
         }

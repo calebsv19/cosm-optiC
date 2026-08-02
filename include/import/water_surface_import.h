@@ -5,6 +5,31 @@
 #include <stdint.h>
 
 #define RUNTIME_WATER_SURFACE_PATH_MAX 4096
+#define RUNTIME_WATER_BODY_ID_MAX 64
+
+typedef struct RuntimeWaterBodyBoundaryV1 {
+    bool present;
+    char closure_mode[32];
+    char body_id[RUNTIME_WATER_BODY_ID_MAX];
+    char container_id[RUNTIME_WATER_BODY_ID_MAX];
+    char object_id[RUNTIME_WATER_BODY_ID_MAX];
+    char material_id[RUNTIME_WATER_BODY_ID_MAX];
+    char medium_id[RUNTIME_WATER_BODY_ID_MAX];
+    char legacy_shell_object_id[RUNTIME_WATER_BODY_ID_MAX];
+    char dry_sample_policy[48];
+    char solid_occluder_policy[48];
+    char classification_metadata[48];
+    double min_x;
+    double max_x;
+    double min_y;
+    double max_y;
+    double min_z;
+    double max_z;
+    double boundary_inset_m;
+    double bottom_height_m;
+    double base_surface_height_m;
+    double dry_height_epsilon_m;
+} RuntimeWaterBodyBoundaryV1;
 
 typedef struct RuntimeWaterSurfaceMaterial {
     bool valid;
@@ -13,6 +38,7 @@ typedef struct RuntimeWaterSurfaceMaterial {
     double absorption_rgb[3];
     double reflectivity;
     double roughness;
+    bool roughness_authored;
 } RuntimeWaterSurfaceMaterial;
 
 typedef struct RuntimeWaterSurfaceFrame {
@@ -49,9 +75,15 @@ typedef struct RuntimeWaterSurfaceFrame {
     double surface_avg_y;
     double max_slope;
     bool finite_normals;
+    bool closed_volume_boundary;
+    bool dynamic_volume_boundary;
+    double boundary_height_y;
+    double boundary_bottom_height_y;
+    char boundary_shell_object_id[64];
     float* heights_y;
     float* normals_xyz;
     RuntimeWaterSurfaceMaterial material;
+    RuntimeWaterBodyBoundaryV1 water_body_boundary;
 } RuntimeWaterSurfaceFrame;
 
 void RuntimeWaterSurfaceFrame_Init(RuntimeWaterSurfaceFrame* frame);

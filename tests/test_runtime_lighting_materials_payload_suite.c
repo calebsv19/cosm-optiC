@@ -1100,7 +1100,7 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
     override.absorptionB = 0.015;
     override.transparency = 0.92;
     override.reflectivity = 0.12;
-    override.roughness = 0.02;
+    override.roughness = 0.0;
     ok = RuntimeWaterMaterial3D_Set(0, &override);
     assert_true("runtime_material_payload_water_override_set", ok);
     RuntimeWaterMaterial3D_ComputeTransmittanceTint(override.absorptionDistance,
@@ -1148,7 +1148,7 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
                  1e-9);
     assert_close("runtime_material_payload_water_override_roughness",
                  payload.bsdf.roughness,
-                 0.02,
+                 0.0,
                  1e-9);
     assert_true("runtime_material_payload_water_override_ggx",
                 payload.bsdf.model == MATERIAL_BSDF_GGX);

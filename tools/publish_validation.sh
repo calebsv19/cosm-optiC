@@ -1,5 +1,15 @@
 #!/bin/sh
 
+rt_publish_workspace_root() {
+  program_root="$1"
+  candidate="${CODEWORK_ROOT:-$program_root/..}"
+  if [ ! -d "$candidate/skills" ] && [ -d "$program_root/../../skills" ]; then
+    candidate="$program_root/../.."
+  fi
+  cd "$candidate" >/dev/null 2>&1 || return 1
+  pwd -P
+}
+
 rt_publish_die() {
   echo "$1" >&2
   exit 2

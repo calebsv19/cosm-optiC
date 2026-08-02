@@ -223,6 +223,28 @@ static int test_runtime_caustic_photon_integration_modes_and_settings(void) {
     assert_true("runtime_caustic_photon_integration_default_off",
                 integration.productMode == RUNTIME_CAUSTIC_PRODUCT_MODE_OFF &&
                     !integration.renderContributionEnabled);
+    RuntimeCausticPhotonIntegration3D_ApplyQualityTier(
+        &integration,
+        RuntimeCausticPhotonQualityTier3D_FromLabel("low"));
+    assert_true("runtime_caustic_photon_preview_preset",
+                integration.qualityTier ==
+                        RUNTIME_CAUSTIC_PHOTON_BUDGET_PREVIEW &&
+                    integration.sampleBudget == 32768);
+    RuntimeCausticPhotonIntegration3D_ApplyQualityTier(
+        &integration,
+        RuntimeCausticPhotonQualityTier3D_FromLabel("default"));
+    assert_true("runtime_caustic_photon_working_default_preset",
+                integration.qualityTier ==
+                        RUNTIME_CAUSTIC_PHOTON_BUDGET_INSPECTION &&
+                    integration.sampleBudget == 131072);
+    RuntimeCausticPhotonIntegration3D_ApplyQualityTier(
+        &integration,
+        RuntimeCausticPhotonQualityTier3D_FromLabel("hero"));
+    assert_true("runtime_caustic_photon_hero_preset",
+                integration.qualityTier ==
+                        RUNTIME_CAUSTIC_PHOTON_BUDGET_FINAL &&
+                    integration.sampleBudget == 262144);
+    RuntimeCausticPhotonIntegration3D_DefaultSettings(&integration);
     RuntimeCausticPhotonIntegration3D_ApplyToCausticSettings(&integration, &caustic);
     assert_true("runtime_caustic_photon_integration_default_off_route",
                 caustic.mode == RUNTIME_CAUSTIC_MODE_OFF);
@@ -1130,6 +1152,12 @@ static int test_runtime_caustic_photon_lifecycle_classifies_rebuilds(void) {
     assert_true("runtime_caustic_photon_lifecycle_geometry_change",
                 readback.rebuildReason ==
                     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_GEOMETRY_CHANGED);
+    input.dynamicGeometryKey = 100u;
+    RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
+    assert_true("runtime_caustic_photon_lifecycle_dynamic_geometry_change",
+                readback.dynamicGeometryKey == 100u &&
+                    readback.rebuildReason ==
+                        RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_DYNAMIC_GEOMETRY_CHANGED);
     input.budgetKey += 1u;
     RuntimeCausticPhotonMapLifecycle3D_Evaluate(&input, &state, &readback);
     assert_true("runtime_caustic_photon_lifecycle_budget_change",
@@ -1141,11 +1169,11 @@ static int test_runtime_caustic_photon_lifecycle_classifies_rebuilds(void) {
                 readback.rebuildReason ==
                     RUNTIME_CAUSTIC_PHOTON_MAP_REBUILD_EXPLICIT_REQUEST);
     assert_true("runtime_caustic_photon_budget_tiers",
-                RuntimeCausticPhotonBudgetTier3D_FromBudget(64, 4) ==
+                RuntimeCausticPhotonBudgetTier3D_FromBudget(32768, 4) ==
                     RUNTIME_CAUSTIC_PHOTON_BUDGET_PREVIEW &&
-                    RuntimeCausticPhotonBudgetTier3D_FromBudget(512, 8) ==
+                    RuntimeCausticPhotonBudgetTier3D_FromBudget(131072, 8) ==
                         RUNTIME_CAUSTIC_PHOTON_BUDGET_INSPECTION &&
-                    RuntimeCausticPhotonBudgetTier3D_FromBudget(513, 8) ==
+                    RuntimeCausticPhotonBudgetTier3D_FromBudget(262144, 8) ==
                         RUNTIME_CAUSTIC_PHOTON_BUDGET_FINAL);
     return 0;
 }

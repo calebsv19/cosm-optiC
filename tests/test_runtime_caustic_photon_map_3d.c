@@ -63,6 +63,40 @@ static int test_runtime_caustic_photon_map_allocate_store_query(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_map_faces_receiver_normal(void) {
+    RuntimeCausticPhotonMap3D map;
+    RuntimeCausticPhotonMapRecord3D record = {0};
+    RuntimeCausticPhotonMapQuery3D query =
+        test_query(vec3(0.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0));
+    RuntimeCausticPhotonMapQueryResult3D result;
+
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("runtime_caustic_photon_map_receiver_face_allocate",
+                RuntimeCausticPhotonMap3D_Allocate(&map, 1u));
+    record.photonId = 2u;
+    record.position = vec3(0.0, 0.0, 0.0);
+    record.normal = vec3(0.0, -1.0, 0.0);
+    record.incidentDirection = vec3(0.0, -1.0, 0.0);
+    record.flux = vec3(1.0, 1.0, 1.0);
+    record.pathPdf = 1.0;
+    record.queryRadius = 0.20;
+    record.sceneObjectIndex = 9;
+    record.primitiveIndex = 8;
+    record.triangleIndex = 7;
+    record.materialId = 6;
+
+    assert_true("runtime_caustic_photon_map_receiver_face_store",
+                RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    assert_true("runtime_caustic_photon_map_receiver_face_invariant",
+                vec3_dot(map.records[0].normal,
+                         map.records[0].incidentDirection) < -0.999);
+    assert_true("runtime_caustic_photon_map_receiver_face_query",
+                RuntimeCausticPhotonMap3D_Query(&map, &query, &result) &&
+                    result.contributingCount == 1u && result.flux.x > 0.0);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
 static int test_runtime_caustic_photon_map_trace_receiver_store(void) {
     RuntimeCausticSphereLens3DDescriptor sphere;
     RuntimeCausticSphereLens3DLight light;
@@ -460,6 +494,7 @@ static int test_runtime_caustic_photon_map_neighbor_gather(void) {
 int run_test_runtime_caustic_photon_map_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_map_allocate_store_query();
+    failures += test_runtime_caustic_photon_map_faces_receiver_normal();
     failures += test_runtime_caustic_photon_map_trace_receiver_store();
     failures += test_runtime_caustic_photon_map_rejects_capacity_and_identity();
     failures += test_runtime_caustic_photon_map_query_cost_and_energy_ledgers();

@@ -10,6 +10,7 @@ struct RuntimeNative3DAsyncRenderProgressBuffer {
     pthread_mutex_t mutex;
     bool mutexReady;
     bool valid;
+    bool pending;
     uint64_t generation;
     uint64_t sequence;
     int hostWidth;
@@ -18,6 +19,14 @@ struct RuntimeNative3DAsyncRenderProgressBuffer {
     uint8_t* pixels;
     size_t byteCount;
     size_t capacity;
+    bool tileProgressValid;
+    uint64_t tileProgressGeneration;
+    uint64_t tileProgressSequence;
+    int startedSubpasses;
+    int completedSubpasses;
+    int totalSubpasses;
+    size_t completedTilesInSubpass;
+    size_t totalTilesInSubpass;
 };
 
 static RuntimeNative3DAsyncRenderAssessment runtime_native_3d_async_assessment(
@@ -136,12 +145,21 @@ void RuntimeNative3DAsyncRenderProgressBuffer_Reset(
     if (!progress) return;
     pthread_mutex_lock(&progress->mutex);
     progress->valid = false;
+    progress->pending = false;
     progress->generation = 0u;
     progress->sequence = 0u;
     progress->hostWidth = 0;
     progress->hostHeight = 0;
     memset(&progress->rect, 0, sizeof(progress->rect));
     progress->byteCount = 0u;
+    progress->tileProgressValid = false;
+    progress->tileProgressGeneration = 0u;
+    progress->tileProgressSequence = 0u;
+    progress->startedSubpasses = 0;
+    progress->completedSubpasses = 0;
+    progress->totalSubpasses = 0;
+    progress->completedTilesInSubpass = 0u;
+    progress->totalTilesInSubpass = 0u;
     pthread_mutex_unlock(&progress->mutex);
 }
 
@@ -167,9 +185,11 @@ bool RuntimeNative3DAsyncRenderProgressBuffer_PublishDirtyRectABGR(
     int host_height,
     RuntimeNative3DAsyncRenderProgressRect rect) {
     size_t stride;
+    size_t full_required;
     size_t row_bytes;
-    size_t required;
     uint8_t* pixels = NULL;
+    RuntimeNative3DAsyncRenderProgressRect pending;
+    bool identity_changed = false;
 
     if (!progress || generation == 0u || !host_buffer ||
         !runtime_native_3d_async_progress_rect_valid(host_width, host_height, rect)) {
@@ -177,32 +197,69 @@ bool RuntimeNative3DAsyncRenderProgressBuffer_PublishDirtyRectABGR(
     }
 
     stride = (size_t)host_width * 4u;
+    full_required = stride * (size_t)host_height;
     row_bytes = (size_t)rect.width * 4u;
-    required = row_bytes * (size_t)rect.height;
 
     pthread_mutex_lock(&progress->mutex);
-    if (required > progress->capacity) {
-        pixels = (uint8_t*)realloc(progress->pixels, required);
+    identity_changed = progress->generation != generation ||
+                       progress->hostWidth != host_width ||
+                       progress->hostHeight != host_height;
+    if (full_required > progress->capacity) {
+        pixels = (uint8_t*)realloc(progress->pixels, full_required);
         if (!pixels) {
             pthread_mutex_unlock(&progress->mutex);
             return false;
         }
         progress->pixels = pixels;
-        progress->capacity = required;
+        progress->capacity = full_required;
+    }
+    if (identity_changed) {
+        memset(progress->pixels, 0, full_required);
+        for (size_t offset = 3u; offset < full_required; offset += 4u) {
+            progress->pixels[offset] = 255u;
+        }
+        progress->valid = false;
+        progress->pending = false;
+        progress->generation = generation;
+        progress->hostWidth = host_width;
+        progress->hostHeight = host_height;
+        memset(&progress->rect, 0, sizeof(progress->rect));
+        progress->byteCount = 0u;
     }
     for (int y = 0; y < rect.height; ++y) {
         const size_t src_offset =
             ((size_t)(rect.y + y) * stride) + ((size_t)rect.x * 4u);
-        const size_t dst_offset = (size_t)y * row_bytes;
+        const size_t dst_offset = src_offset;
         memcpy(progress->pixels + dst_offset, host_buffer + src_offset, row_bytes);
     }
+    pending = rect;
+    if (progress->pending) {
+        const int min_x = progress->rect.x < rect.x ? progress->rect.x : rect.x;
+        const int min_y = progress->rect.y < rect.y ? progress->rect.y : rect.y;
+        const int max_x =
+            progress->rect.x + progress->rect.width > rect.x + rect.width
+                ? progress->rect.x + progress->rect.width
+                : rect.x + rect.width;
+        const int max_y =
+            progress->rect.y + progress->rect.height > rect.y + rect.height
+                ? progress->rect.y + progress->rect.height
+                : rect.y + rect.height;
+        pending = (RuntimeNative3DAsyncRenderProgressRect){
+            .x = min_x,
+            .y = min_y,
+            .width = max_x - min_x,
+            .height = max_y - min_y,
+        };
+    }
     progress->valid = true;
+    progress->pending = true;
     progress->generation = generation;
     progress->sequence += 1u;
     progress->hostWidth = host_width;
     progress->hostHeight = host_height;
-    progress->rect = rect;
-    progress->byteCount = required;
+    progress->rect = pending;
+    progress->byteCount =
+        (size_t)pending.width * 4u * (size_t)pending.height;
     pthread_mutex_unlock(&progress->mutex);
     return true;
 }
@@ -236,9 +293,22 @@ bool RuntimeNative3DAsyncRenderProgressBuffer_CopyLatest(
     snapshot.byteCount = progress->byteCount;
     if (current_generation != progress->generation) {
         snapshot.staleGeneration = true;
+    } else if (!progress->pending) {
+        pthread_mutex_unlock(&progress->mutex);
+        return false;
     } else if (out_pixels && out_pixel_capacity >= progress->byteCount) {
-        memcpy(out_pixels, progress->pixels, progress->byteCount);
+        const size_t source_stride = (size_t)progress->hostWidth * 4u;
+        const size_t row_bytes = (size_t)progress->rect.width * 4u;
+        for (int y = 0; y < progress->rect.height; ++y) {
+            const size_t source_offset =
+                ((size_t)(progress->rect.y + y) * source_stride) +
+                ((size_t)progress->rect.x * 4u);
+            memcpy(out_pixels + ((size_t)y * row_bytes),
+                   progress->pixels + source_offset,
+                   row_bytes);
+        }
         copied = true;
+        progress->pending = false;
     }
     if (out_required_bytes) {
         *out_required_bytes = progress->byteCount;
@@ -248,4 +318,46 @@ bool RuntimeNative3DAsyncRenderProgressBuffer_CopyLatest(
     }
     pthread_mutex_unlock(&progress->mutex);
     return copied;
+}
+
+bool RuntimeNative3DAsyncRenderProgressBuffer_PublishTileProgress(
+    RuntimeNative3DAsyncRenderProgressBuffer* progress,
+    uint64_t generation,
+    const RuntimeNative3DTileSchedulerProgress* tile_progress) {
+    if (!progress || generation == 0u || !tile_progress) return false;
+    pthread_mutex_lock(&progress->mutex);
+    progress->tileProgressValid = true;
+    progress->tileProgressGeneration = generation;
+    progress->tileProgressSequence += 1u;
+    progress->startedSubpasses = tile_progress->startedSubpasses;
+    progress->completedSubpasses = tile_progress->completedSubpasses;
+    progress->totalSubpasses = tile_progress->totalSubpasses;
+    progress->completedTilesInSubpass = tile_progress->completedTilesInSubpass;
+    progress->totalTilesInSubpass = tile_progress->totalTilesInSubpass;
+    pthread_mutex_unlock(&progress->mutex);
+    return true;
+}
+
+bool RuntimeNative3DAsyncRenderProgressBuffer_CopyLatestTileProgress(
+    RuntimeNative3DAsyncRenderProgressBuffer* progress,
+    uint64_t current_generation,
+    RuntimeNative3DAsyncRenderTileProgressSnapshot* out_snapshot) {
+    RuntimeNative3DAsyncRenderTileProgressSnapshot snapshot = {0};
+    if (out_snapshot) memset(out_snapshot, 0, sizeof(*out_snapshot));
+    if (!progress || !out_snapshot) return false;
+    pthread_mutex_lock(&progress->mutex);
+    if (progress->tileProgressValid) {
+        snapshot.valid = true;
+        snapshot.generation = progress->tileProgressGeneration;
+        snapshot.sequence = progress->tileProgressSequence;
+        snapshot.startedSubpasses = progress->startedSubpasses;
+        snapshot.completedSubpasses = progress->completedSubpasses;
+        snapshot.totalSubpasses = progress->totalSubpasses;
+        snapshot.completedTilesInSubpass = progress->completedTilesInSubpass;
+        snapshot.totalTilesInSubpass = progress->totalTilesInSubpass;
+        snapshot.staleGeneration = current_generation != snapshot.generation;
+    }
+    pthread_mutex_unlock(&progress->mutex);
+    *out_snapshot = snapshot;
+    return snapshot.valid && !snapshot.staleGeneration;
 }

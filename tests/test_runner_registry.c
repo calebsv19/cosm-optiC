@@ -50,6 +50,15 @@
 #include "test_runtime_path_policy.h"
 #include "test_runtime_mode_backend_policy.h"
 #include "test_runtime_object_motion_tracks.h"
+#include "test_runtime_timeline_foundation.h"
+#include "test_runtime_timeline_property_registry.h"
+#include "test_runtime_timeline_frame_snapshot.h"
+#include "test_runtime_timeline_light_motion.h"
+#include "test_runtime_timeline_light_persistence.h"
+#include "test_runtime_evaluated_scene_preview.h"
+#include "test_preview_transport.h"
+#include "test_preview_workspace.h"
+#include "test_preview_timeline_inspection.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
 #include "test_runtime_curve_scene_material_dispatch.h"
@@ -208,6 +217,8 @@ int test_runner_main(int argc, char** argv) {
          run_test_ray_tracing_deep_render_desktop_host_tests},
         {"runtime_native_3d_render", run_test_runtime_native_3d_render_tests},
         {"runtime_native_3d_render_live", run_test_runtime_native_3d_render_live_suite},
+        {"runtime_native_3d_light_timeline_render",
+         run_test_runtime_native_3d_light_timeline_render_suite},
         {"runtime_native_3d_render_prepared", run_test_runtime_native_3d_render_prepared_suite},
         {"runtime_native_3d_render_prepared_parity_volume",
          run_test_runtime_native_3d_render_prepared_parity_volume_suite},
@@ -219,6 +230,21 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_path_policy", run_test_runtime_path_policy_tests},
         {"runtime_mode_backend_policy", run_test_runtime_mode_backend_policy_tests},
         {"runtime_object_motion_tracks", run_test_runtime_object_motion_tracks_tests},
+        {"runtime_timeline_foundation", run_test_runtime_timeline_foundation_tests},
+        {"runtime_timeline_property_registry",
+         run_test_runtime_timeline_property_registry_tests},
+        {"runtime_timeline_frame_snapshot",
+         run_test_runtime_timeline_frame_snapshot_tests},
+        {"runtime_timeline_light_motion",
+         run_test_runtime_timeline_light_motion_tests},
+        {"runtime_timeline_light_persistence",
+         run_test_runtime_timeline_light_persistence_tests},
+        {"runtime_evaluated_scene_preview",
+         run_test_runtime_evaluated_scene_preview_tests},
+        {"preview_transport", run_test_preview_transport_tests},
+        {"preview_workspace", run_test_preview_workspace_tests},
+        {"preview_timeline_inspection",
+         run_test_preview_timeline_inspection_tests},
         {"runtime_and_editor", run_test_runner_runtime_tests},
         {"fluid_volume_import_3d", run_test_fluid_volume_import_3d_tests},
         {"fluid_volume_pack_import_3d", run_test_fluid_volume_pack_import_3d_tests},

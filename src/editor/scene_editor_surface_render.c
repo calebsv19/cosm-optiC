@@ -177,9 +177,13 @@ static int SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
         runtime_scene_bridge_get_last_3d_digest_state(&digest);
         primitive = SceneEditorSurfaceFindPrimitiveDigest(&digest, i);
         if (loaded_mesh) {
-            role = "mesh loaded";
+            role = SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(i)
+                       ? "mesh bounds"
+                       : "mesh loaded";
         } else if (skipped_mesh && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
-            role = "mesh preview";
+            role = SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(i)
+                       ? "mesh bounds"
+                       : "mesh preview";
         } else if (skipped_mesh) {
             role = "mesh skipped";
         } else if (primitive) {
@@ -192,7 +196,14 @@ static int SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
         SDL_RenderDrawRect(renderer, &row);
         ObjectEditorRegisterObjectListRow(i, row);
-        if (skipped_mesh && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
+        if (SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(i)) {
+            snprintf(line,
+                     sizeof(line),
+                     "#%d  %s  %s  AABB fallback",
+                     i,
+                     role,
+                     short_id);
+        } else if (skipped_mesh && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
             snprintf(line,
                      sizeof(line),
                      "#%d  %s  %s  LOD from %.1f MB",

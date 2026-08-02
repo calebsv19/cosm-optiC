@@ -10,6 +10,7 @@
 #include "editor/material_editor.h"
 #include "editor/camera_editor.h"
 #include "editor/scene_editor_pane_host.h"
+#include "editor/scene_editor_digest_overlay.h"
 
 extern SDL_Rect applyButton;
 extern SDL_Rect previewButton;
@@ -51,6 +52,9 @@ void HandleSceneEditorEvents(SceneEditor* editor, SDL_Event* event);
 bool IsClickingButtonMain(int mx,int my);
 bool SceneEditorIsPaneToolButton(int mx, int my);
 bool SceneEditorGetPaneLayout(SceneEditorPaneLayout* out_layout);
+SceneEditorPaneHost* SceneEditorGetPaneHost(void);
+const SceneEditorDigestOverlayNavState* SceneEditorGetViewportNavState(void);
+bool SceneEditorToggleSelectedLightTimeline(void);
 
 // Scene Mode Management
 void SetSceneMode(SceneEditor* editor, int mode);

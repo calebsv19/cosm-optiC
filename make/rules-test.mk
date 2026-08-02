@@ -65,6 +65,7 @@ STABLE_TEST_TARGETS := \
 	test-scene-editor-viewport3d-bridge-contract \
 	test-ray-tracing-render-headless-preflight \
 	test-ray-tracing-render-headless-image-export \
+	test-ray-tracing-artifact-comparison \
 	test-ray-tracing-render-headless-mesh-asset-spheres \
 	test-ray-tracing-render-headless-mesh-asset-sphere-pressure \
 	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt8 \
@@ -520,21 +521,6 @@ $(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN): $(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SR
 		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SRCS) $(JSON_LIBS) -lm
 procedural-solid-mesh-digest-tool: $(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN)
 	@echo "procedural solid mesh digest tool ready: $<"
-
-test-procedural-surface-feature-selection-psg24: \
-	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
-	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
-	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN)
-	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
-	@python3 tests/integration/test_procedural_surface_feature_selection_psg24.py \
-		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
-		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
-		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
-		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
-	@echo "PSG-24 field-selected carrier bridge passed"
 
 PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS := \
 	$(SRC_DIR)/procedural/procedural_surface_field_graph.c \
@@ -1273,6 +1259,10 @@ test-procedural-surface-agent-iteration: \
 		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
 		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
 
+test-ray-tracing-artifact-comparison:
+	PYTHONPYCACHEPREFIX="$(CURDIR)/build/pycache" \
+		python3 -m unittest tests/test_compare_render_artifacts.py
+
 STARTER_SCENE_PROFILE_TEST_BIN := $(BUILD_DIR)/tests/starter_scene_profile_test
 STARTER_SCENE_PROFILE_TEST_SRCS := \
 	$(TEST_DIR)/starter_scene_profile_test.c \
@@ -1675,6 +1665,21 @@ test-procedural-imported-surface-growth-psg22: \
 		../../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-22 imported surface attached growth lane passed"
+
+test-procedural-surface-feature-selection-psg24: \
+	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_surface_feature_selection_psg24.py \
+		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-24 field-selected carrier bridge passed"
 
 test-procedural-imported-surface-growth-psg22-visual-proof: \
 	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
@@ -2513,7 +2518,7 @@ test-ray-tracing-job-runner-bundle-smoke: \
 	$(RAY_TRACING_WORKER_RUNTIME_BIN)
 	tests/integration/run_ray_tracing_job_runner_bundle_smoke.sh
 
-test-ray-tracing-job-runner-policy: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
+test-ray-tracing-job-runner-policy: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_WORKER_RUNTIME_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	tests/integration/run_ray_tracing_job_runner_policy.sh
 
 test-ray-tracing-worker-protocol-phase-b: \
@@ -2539,6 +2544,9 @@ test-ray-tracing-wtr66-preview-matrix-planner-dry-run:
 
 test-ray-tracing-wtr66-preview-matrix-local-job-runner: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
 	bash tests/integration/run_ray_tracing_wtr66_preview_matrix_local_job_runner.sh
+
+test-ray-tracing-evaluated-scene-preview-parity:
+	TEST_RUNNER_GROUP=runtime_evaluated_scene_preview $(MAKE) test
 
 test-ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_material_preview_headless.sh

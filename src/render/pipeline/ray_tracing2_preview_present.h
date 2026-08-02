@@ -106,6 +106,18 @@ bool RayTracing2PreviewPresent_ReconstructNative3DHostTruth(
     Runtime3DUpscaleMode upscale_mode,
     RuntimeNative3DRenderStats* stats);
 bool RayTracing2PreviewPresent_LoadNative3DPreviewHistoryFromBMP(const char* path);
+/* Copies a dimmed last-complete frame into an equal-sized progressive preview
+ * buffer. False means no compatible complete-frame history is available. */
+bool RayTracing2PreviewPresent_CopyNative3DPreviewHistory(Uint8* host_buffer,
+                                                          size_t host_pixel_count,
+                                                          int host_width,
+                                                          int host_height);
+bool RayTracing2PreviewPresent_PromoteNative3DPreviewHistory(
+    const Uint8* host_buffer,
+    size_t host_pixel_count,
+    int host_width,
+    int host_height);
+void RayTracing2PreviewPresent_ReleaseNative3DPreviewHistory(void);
 bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     SDL_Renderer* renderer,
     Uint8* host_buffer,
@@ -119,6 +131,22 @@ bool RayTracing2PreviewPresent_RenderNative3DTilesPreview(
     double normalized_t,
     double light_x,
     double light_y,
+    const RuntimeNative3DSamplingContext* sampling,
+    int temporal_frames,
+    bool disney_denoise_enabled,
+    bool present_progress,
+    RuntimeNative3DRenderStats* out_stats);
+bool RayTracing2PreviewPresent_RenderNative3DTilesPreviewForEvaluatedScene(
+    SDL_Renderer* renderer,
+    Uint8* host_buffer,
+    int host_width,
+    int host_height,
+    Uint8* render_buffer,
+    int render_width,
+    int render_height,
+    TileGrid* grid,
+    RayTracing3DIntegratorId integrator_id,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
     const RuntimeNative3DSamplingContext* sampling,
     int temporal_frames,
     bool disney_denoise_enabled,

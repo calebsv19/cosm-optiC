@@ -153,9 +153,101 @@ static int test_runtime_native_3d_async_bridge_progress_deep_copies_dirty_rect(v
     return 0;
 }
 
+static int test_runtime_native_3d_async_bridge_progress_copies_tile_state(void) {
+    RuntimeNative3DAsyncRenderProgressBuffer* progress =
+        RuntimeNative3DAsyncRenderProgressBuffer_Create();
+    RuntimeNative3DAsyncRenderTileProgressSnapshot snapshot = {0};
+    RuntimeNative3DTileSchedulerProgress tile_progress = {
+        .startedSubpasses = 2,
+        .completedSubpasses = 1,
+        .totalSubpasses = 4,
+        .completedTilesInSubpass = 7u,
+        .totalTilesInSubpass = 13u,
+    };
+    assert_true("runtime_native_3d_async_bridge_tile_progress_create", progress != NULL);
+    if (!progress) return 0;
+    assert_true("runtime_native_3d_async_bridge_tile_progress_publish",
+                RuntimeNative3DAsyncRenderProgressBuffer_PublishTileProgress(
+                    progress, 12u, &tile_progress));
+    assert_true("runtime_native_3d_async_bridge_tile_progress_copy",
+                RuntimeNative3DAsyncRenderProgressBuffer_CopyLatestTileProgress(
+                    progress, 12u, &snapshot));
+    assert_true("runtime_native_3d_async_bridge_tile_progress_snapshot",
+                snapshot.valid && !snapshot.staleGeneration &&
+                    snapshot.generation == 12u && snapshot.sequence == 1u &&
+                    snapshot.startedSubpasses == 2 &&
+                    snapshot.completedSubpasses == 1 &&
+                    snapshot.totalSubpasses == 4 &&
+                    snapshot.completedTilesInSubpass == 7u &&
+                    snapshot.totalTilesInSubpass == 13u);
+    assert_true("runtime_native_3d_async_bridge_tile_progress_stale_rejected",
+                !RuntimeNative3DAsyncRenderProgressBuffer_CopyLatestTileProgress(
+                    progress, 13u, &snapshot) &&
+                    snapshot.valid && snapshot.staleGeneration);
+    RuntimeNative3DAsyncRenderProgressBuffer_Destroy(progress);
+    return 0;
+}
+
+static int test_runtime_native_3d_async_bridge_progress_coalesces_unseen_rects(void) {
+    RuntimeNative3DAsyncRenderProgressBuffer* progress =
+        RuntimeNative3DAsyncRenderProgressBuffer_Create();
+    uint8_t host_buffer[4 * 3 * 4];
+    uint8_t copied[4 * 2 * 4];
+    RuntimeNative3DAsyncRenderProgressSnapshot snapshot = {0};
+    size_t required = 0u;
+    RuntimeNative3DAsyncRenderProgressRect left = {
+        .x = 0, .y = 1, .width = 1, .height = 1};
+    RuntimeNative3DAsyncRenderProgressRect right = {
+        .x = 3, .y = 2, .width = 1, .height = 1};
+
+    assert_true("runtime_native_3d_async_bridge_coalesce_create", progress != NULL);
+    if (!progress) return 0;
+    for (size_t i = 0; i < sizeof(host_buffer); ++i) {
+        host_buffer[i] = (uint8_t)(i + 1u);
+    }
+    assert_true("runtime_native_3d_async_bridge_coalesce_left",
+                RuntimeNative3DAsyncRenderProgressBuffer_PublishDirtyRectABGR(
+                    progress, 19u, host_buffer, 4, 3, left));
+    assert_true("runtime_native_3d_async_bridge_coalesce_right",
+                RuntimeNative3DAsyncRenderProgressBuffer_PublishDirtyRectABGR(
+                    progress, 19u, host_buffer, 4, 3, right));
+    assert_true("runtime_native_3d_async_bridge_coalesce_copy",
+                RuntimeNative3DAsyncRenderProgressBuffer_CopyLatest(
+                    progress,
+                    19u,
+                    &snapshot,
+                    copied,
+                    sizeof(copied),
+                    &required));
+    assert_true("runtime_native_3d_async_bridge_coalesce_union",
+                snapshot.valid && snapshot.sequence == 2u &&
+                    snapshot.rect.x == 0 && snapshot.rect.y == 1 &&
+                    snapshot.rect.width == 4 && snapshot.rect.height == 2 &&
+                    snapshot.byteCount == sizeof(copied) &&
+                    required == sizeof(copied));
+    assert_true("runtime_native_3d_async_bridge_coalesce_left_pixel",
+                memcmp(copied, host_buffer + (4u * 4u), 4u) == 0);
+    assert_true("runtime_native_3d_async_bridge_coalesce_right_pixel",
+                memcmp(copied + ((4u + 3u) * 4u),
+                       host_buffer + ((8u + 3u) * 4u),
+                       4u) == 0);
+    assert_true("runtime_native_3d_async_bridge_coalesce_consumed",
+                !RuntimeNative3DAsyncRenderProgressBuffer_CopyLatest(
+                    progress,
+                    19u,
+                    &snapshot,
+                    copied,
+                    sizeof(copied),
+                    &required));
+    RuntimeNative3DAsyncRenderProgressBuffer_Destroy(progress);
+    return 0;
+}
+
 int run_test_runtime_native_3d_async_render_bridge_tests(void) {
     test_runtime_native_3d_async_bridge_assesses_static_tlas_ready();
     test_runtime_native_3d_async_bridge_blocks_unsafe_routes();
     test_runtime_native_3d_async_bridge_progress_deep_copies_dirty_rect();
+    test_runtime_native_3d_async_bridge_progress_coalesces_unseen_rects();
+    test_runtime_native_3d_async_bridge_progress_copies_tile_state();
     return test_support_failures();
 }

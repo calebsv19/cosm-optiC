@@ -1,0 +1,24 @@
+{
+  "schema": "physics_sim_water_manifest_v1",
+  "frame_contract": "water_surface_heightfield_v1",
+  "surface_representation": "heightfield",
+  "material": {"ior": 1.333, "absorption_distance_m": 4.0, "absorption_rgb": [0.1, 0.035, 0.015], "reflectivity": 0.08, "roughness": 0.02},
+  "water_body_boundary_v1": {
+    "closure_mode": "heightfield_volume",
+    "body_id": "fixture_unified_water_body",
+    "container_id": "fixture_glass_container",
+    "object_id": "fixture_unified_water_body",
+    "material_id": "fixture_water_material",
+    "medium_id": "fixture_water_medium",
+    "legacy_shell_object_id": "fixture_legacy_water_shell",
+    "container_inner_bounds_m": {"min_x": -1.6, "max_x": 1.6, "min_y": 0.0, "max_y": 1.5, "min_z": -0.8, "max_z": 0.8},
+    "boundary_inset_m": 0.1,
+    "bottom_height_m": 0.1,
+    "base_surface_height_m": 0.8,
+    "dry_sample_policy": "surface_min_epsilon_to_base",
+    "dry_height_epsilon_m": 0.000001,
+    "solid_occluder_policy": "ordinary_geometry_occlusion",
+    "classification_metadata": "legacy_height_sentinel"
+  },
+  "frames": [{"path": "frame_000000.json", "frame_contract": "water_surface_heightfield_v1"}]
+}

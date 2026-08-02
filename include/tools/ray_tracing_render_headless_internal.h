@@ -7,6 +7,7 @@
 
 #include "app/agent_render_request.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/ray_tracing_mode_backend.h"
@@ -19,6 +20,8 @@
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_volume_3d_debug.h"
+
+typedef struct RayEvaluatedSceneServiceResult RayEvaluatedSceneServiceResult;
 
 #define RAY_TRACING_HEADLESS_OBJECT_AUDIT_MAX 64
 
@@ -67,6 +70,13 @@ typedef struct RayTracingHeadlessPreflight {
     bool volume_summary_built;
     bool route_native_3d;
     bool prepared_frame;
+    bool evaluated_scene_bound;
+    int evaluated_scene_source;
+    int64_t evaluated_scene_first_frame;
+    int64_t evaluated_scene_last_frame;
+    uint64_t evaluated_scene_scene_revision;
+    uint64_t evaluated_scene_timeline_revision;
+    char evaluated_scene_light_id[TIMELINE_ID_CAPACITY];
     bool rendered_frames;
     bool denoise_enabled;
     int frames_rendered;
@@ -108,6 +118,8 @@ typedef struct RayTracingHeadlessPreflight {
     double registered_light_first_color_r;
     double registered_light_first_color_g;
     double registered_light_first_color_b;
+    bool light_timeline_sampled;
+    TimelineLightMotionSample light_timeline_sample;
     RuntimeVolumeDebugSummary3D volume_summary;
     bool volume_frame_selection_built;
     bool volume_frame_selection_dynamic;
@@ -162,6 +174,33 @@ typedef struct RayTracingHeadlessPreflight {
     double water_surface_payload_tint_g;
     double water_surface_payload_tint_b;
     int water_surface_triangle_count;
+    bool water_body_boundary_present;
+    bool water_body_active;
+    bool water_body_legacy_shell_suppressed;
+    bool water_body_material_parity_valid;
+    bool water_body_topology_valid;
+    char water_body_closure_mode[32];
+    char water_body_id[64];
+    char water_body_container_id[64];
+    char water_body_material_id[64];
+    char water_body_medium_id[64];
+    double water_body_min_x;
+    double water_body_max_x;
+    double water_body_min_y;
+    double water_body_max_y;
+    double water_body_min_z;
+    double water_body_max_z;
+    uint32_t water_body_wet_samples;
+    uint32_t water_body_dry_container_samples;
+    uint32_t water_body_solid_occluder_samples;
+    int water_body_component_count;
+    int water_body_boundary_edge_count;
+    int water_body_nonmanifold_edge_count;
+    int water_body_top_triangle_count;
+    int water_body_side_triangle_count;
+    int water_body_bottom_triangle_count;
+    double water_body_signed_volume;
+    double water_body_max_seam_error_m;
     RuntimeNative3DRenderStats stats;
     RuntimeCausticPhotonRenderCallsiteReadback3D causticPhotonCallsiteReadback;
     bool causticPhotonCallsiteReadbackBuilt;
@@ -279,6 +318,9 @@ void ray_tracing_headless_note_water_surface_mesh(
     const RuntimeNative3DPreparedFrame *frame);
 void ray_tracing_headless_apply_inspection_overrides(
     const RayTracingAgentRenderRequest *request);
+bool ray_tracing_headless_apply_inspection_evaluated_camera(
+    const RayTracingAgentRenderRequest *request,
+    RayEvaluatedSceneServiceResult *evaluated_scene);
 size_t ray_tracing_headless_count_nonzero_pixels(const uint8_t *pixels,
                                                  int width,
                                                  int height,

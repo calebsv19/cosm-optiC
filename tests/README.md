@@ -88,6 +88,12 @@ make -C ray_tracing test-scene-editor-viewport3d-bridge-contract
 make -C ray_tracing test-scene-editor-viewport-nav-contract
 make -C ray_tracing test-scene-editor-primitive-preview-geometry
 make -C ray_tracing test-ray-tracing-worker-version-contract
+TEST_RUNNER_GROUP=runtime_timeline_foundation make -C ray_tracing test
+TEST_RUNNER_GROUP=runtime_evaluated_scene_preview make -C ray_tracing test
+TEST_RUNNER_GROUP=preview_transport make -C ray_tracing test
+make -C ray_tracing test-ray-tracing-evaluated-scene-preview-parity
+TEST_RUNNER_GROUP=runtime_timeline_property_registry make -C ray_tracing test
+TEST_RUNNER_GROUP=runtime_timeline_frame_snapshot make -C ray_tracing test
 ```
 
 The procedural-surface recipe target is the PSG-0 UI-free foundation. It
@@ -278,6 +284,27 @@ rect-prism face coverage, including the rule that guide primitives stay
 outline-only. Solid/Material integration uses these bounded triangles in the
 same depth surface as imported mesh preview LODs.
 
+`runtime_timeline_foundation` proves the TAF0-TAF1 UI-free frame-authored
+clock/context and detached scalar/vector track-document evaluator. It covers
+exact frames, range offsets, subframes, chunk/resume equivalence, invalid input,
+sorted/duplicate keys, step/linear interpolation, type mismatch, independent
+multi-track results, and equivalent authored motion across frame rates. It does
+not apply values to scene state or claim persistence/editor integration.
+
+`runtime_timeline_property_registry` proves the TAF2 typed binding layer over
+the detached evaluator: foundation descriptors, stable lookup, target/type/
+unit/ownership/interpolation/range refusal, copied invalidation metadata,
+multi-track evaluation, and output nonmutation on failed validation. It does
+not apply evaluated values or invalidate renderer state.
+
+`runtime_timeline_frame_snapshot` proves the TAF3 immutable evaluated-frame
+boundary: copied context/property provenance, aggregate invalidation domains,
+detachment from later document edits, deterministic typed application into a
+caller-owned scene copy, exact static-scene copying, and transactional refusal
+for missing targets, tampered snapshots, invalid property values, and failed
+candidate-scene validation. It does not mutate live `SceneConfig`, route
+renderer caches, persist JSON, or add timeline UI.
+
 The viewport3d bridge target proves Ray orientation conversion, canonical pan,
 anchor zoom, orbit, frame, resize, validation, and invalid-input nonmutation against shared
 `core_viewport3d >= 0.1.0`. The retained viewport-navigation target remains the
@@ -460,6 +487,12 @@ one receiver record plus both unique traversed beam segments. The same fixture
 proves per-path/batch accounting and zero map mutation for insufficient beam
 capacity, invalid traces, emissive terminal-before-storage paths, and
 transparent-only paths.
+The group also verifies that photon geometric-normal resolution rejects an
+ambiguous global triangle index and recovers the triangle whose primitive and
+local-triangle identities match the traced hit. The
+`water_surface_runtime` group separately proves that the dynamic-water
+subset-BVH remaps its cache-local triangle index back to the prepared scene's
+global triangle index before returning the hit.
 
 The glass-to-mirror fixture proves a solid entry above air. The same-object TIR
 fixture now begins from an explicit glass stack and proves stack-derived
@@ -867,3 +900,29 @@ stays in `test-stable`; the full render runs through
 
 The authoritative stable target list is `STABLE_TEST_TARGETS` in
 `ray_tracing/make/rules-test.mk`.
+
+`runtime_evaluated_scene_preview` proves immutable evaluated-scene capture,
+authored-frame Preview/final light parity, authoring-global non-mutation,
+explicit simulation identity, and the unequal-path equal-time versus
+constant-speed distinction used by the ESP-1/ESP-2 Preview slice. It also
+proves that ESP-4 Wireframe, Solid, and Interactive shaded selection preserves
+the snapshot byte-for-byte, including provenance and simulation-frame identity,
+while the shaded approximation responds only to the evaluated light.
+ESP-5 coverage adds compatibility rigid-transform capture, exact-frame
+provenance, transactional detachment, complete simulation-cache frame binding,
+and wrong-frame rejection.
+`preview_transport` proves the UI-free PVI-1 transport contract: paused
+initialization, Loop as the default, forward/reverse wrapping, Bounce endpoint
+reflection, exact rational seek preservation, pause invariance, resumed
+direction, and rejection without mutation. The transport selects only the
+canonical `TimelineSample`, playback mode, and direction; evaluated-scene
+capture remains the sole property/scene evaluator.
+`preview_workspace` proves the PVI-2 workspace contract: Preview auto-plays
+with Loop selected, Play/Pause and Loop/Bounce controls route through
+`PreviewTransport`, scrubbing emits denominator-1 exact frames, playing
+scrubs resume while paused scrubs remain paused, endpoints and frame steps
+clamp deterministically, and layout updates remain presentation-only.
+`runtime_evaluated_scene_preview` additionally proves that playback-aware
+capture changes only Loop/Bounce/direction metadata for one selected sample;
+the evaluated frame, light/camera values, transforms, provenance, and
+simulation identity remain byte-identical.

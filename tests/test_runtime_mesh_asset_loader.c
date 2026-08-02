@@ -1687,6 +1687,22 @@ static int test_runtime_mesh_asset_loader_preview_limited_keeps_sidecar_metadata
                             fabs(recovered->scale_x - 1.5) < 1e-9);
         }
         SceneEditorMeshPreviewStoreReset();
+        assert_true("mrt_preview_limited_meta_remove_runtime_for_fallback",
+                    remove(asset_path) == 0);
+        SceneEditorMeshPreviewStorePrepare(&set);
+        assert_true("mrt_preview_limited_meta_bounds_fallback_instance",
+                    SceneEditorMeshPreviewStoreInstanceCount() == 1 &&
+                        SceneEditorMeshPreviewStoreBoundsFallbackInstanceCount() == 1);
+        assert_true("mrt_preview_limited_meta_bounds_fallback_has_no_lod",
+                    SceneEditorMeshPreviewStoreGet(0) == NULL);
+        assert_true("mrt_preview_limited_meta_bounds_fallback_keeps_bounds",
+                    SceneEditorMeshPreviewStoreGetBounds(0) != NULL &&
+                        SceneEditorMeshPreviewStoreInstanceUsesBoundsFallback(0));
+        assert_true("mrt_preview_limited_meta_bounds_fallback_keeps_transform",
+                    SceneEditorMeshPreviewStoreGetInstance(0) &&
+                        fabs(SceneEditorMeshPreviewStoreGetInstance(0)->position_x -
+                             2.0) < 1e-9);
+        SceneEditorMeshPreviewStoreReset();
     }
 
     ray_tracing_runtime_mesh_asset_set_free(&set);

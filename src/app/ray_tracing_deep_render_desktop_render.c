@@ -5,9 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "app/evaluated_scene_service.h"
 #include "config/config_manager.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/integrators/integrator_common.h"
+#include "render/pipeline/ray_tracing2_preview_present.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_native_3d_preview_reconstruction.h"
 #include "render/runtime_native_3d_resolution.h"
@@ -105,7 +107,13 @@ static bool deep_render_desktop_publish_progress(
         (RayTracingDeepRenderDesktopRenderUnit*)user_data;
     SDL_Rect dirty = {0};
     RuntimeNative3DAsyncRenderProgressRect rect = {0};
-    if (!unit || !unit->progress || !unit->hostPixels ||
+    if (!unit || !unit->progress || !progress ||
+        !RuntimeNative3DAsyncRenderProgressBuffer_PublishTileProgress(
+            unit->progress, unit->generation, progress)) {
+        return false;
+    }
+    if (!unit->progressivePreviewEnabled) return true;
+    if (!unit->hostPixels ||
         !deep_render_desktop_resolve_dirty_union(progress, unit, &dirty)) {
         return unit != NULL;
     }
@@ -166,7 +174,10 @@ static bool deep_render_desktop_worker(
         (RayTracingDeepRenderDesktopRenderUnit*)user_data;
     RayTracingDeepRenderFrameRequest* request = NULL;
     RuntimeNative3DRenderStats stats = {0};
-    RuntimeNative3DTileSchedulerControl control = {.cancelToken = cancel_token};
+    RuntimeNative3DTileSchedulerControl control = {
+        .cancelToken = cancel_token,
+        .tileSizeOverride = unit ? unit->tileSize : 0,
+    };
     bool ok = false;
     bool canceled = false;
     if (!unit || !unit->session || !snapshot || !cancel_token || !out_result) {
@@ -242,6 +253,12 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     RuntimeNative3DRenderRequestSnapshot snapshot = {0};
     RuntimeNative3DRenderRequestSnapshot dispatch = {0};
     RuntimeNative3DRenderRequestSnapshotDesc snapshot_desc = {0};
+    RayEvaluatedSceneServiceResult evaluated_scene = {0};
+    TimelineSample evaluated_sample = {
+        .absolute_frame = desc ? desc->absoluteFrameIndex : 0,
+        .subframe_numerator = 0,
+        .subframe_denominator = 1
+    };
     RuntimeNative3DSamplingContext sampling;
     RuntimeSceneAcceleration3DDiagnostics accel =
         RuntimeSceneAcceleration3DDiagnostics_Disabled();
@@ -259,6 +276,11 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     deep_render_desktop_set_reason(out_reason, "invalid async desktop request");
     if (!unit || !session || !job || !desc || desc->generation == 0u ||
         !desc->outputRoot || !desc->frameDirectory || !desc->finalFramePath) {
+        return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
+    }
+    if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+        deep_render_desktop_set_reason(
+            out_reason, "evaluated-scene capture failed");
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
     }
     route = RayTracingModeBackend_ResolveRoute();
@@ -293,9 +315,30 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     }
     unit->generation = desc->generation;
     unit->integratorId = route.integratorMode3D;
+    unit->progressivePreviewEnabled = route.tilePreviewEnabled;
     unit->temporalFrames = deep_render_desktop_temporal_frames(unit->integratorId);
-    unit->tileSize = RuntimeNative3DTileSchedulerResolveTileSizeForScale(
-        animSettings.tileSize, animSettings.renderScale3D);
+    unit->tileSize = RuntimeNative3DTileSchedulerResolveTileSizeForDisplay(
+        animSettings.tileSize,
+        animSettings.renderScale3D,
+        desc->outputWidth,
+        desc->outputHeight,
+        unit->renderWidth,
+        unit->renderHeight);
+    fprintf(stderr,
+            "[deep_render_async] dimensions logical=%dx%d drawable=%dx%d "
+            "host=%dx%d render=%dx%d configured_tile=%d resolved_tile=%d "
+            "render_scale=%d\n",
+            desc->outputWidth,
+            desc->outputHeight,
+            render_context ? render_context->width : desc->outputWidth,
+            render_context ? render_context->height : desc->outputHeight,
+            unit->hostWidth,
+            unit->hostHeight,
+            unit->renderWidth,
+            unit->renderHeight,
+            animSettings.tileSize,
+            unit->tileSize,
+            animSettings.renderScale3D);
     unit->upscaleMode = (Runtime3DUpscaleMode)animSettings.upscaleMode3D;
     render_bytes = (size_t)unit->renderWidth * (size_t)unit->renderHeight *
                    (size_t)RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES;
@@ -322,16 +365,34 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     RuntimeNative3DFillPixelBufferEnvironment(
         unit->hostPixels,
         (size_t)unit->hostWidth * (size_t)unit->hostHeight);
+    if (unit->progressivePreviewEnabled) {
+        RuntimeNative3DAsyncRenderProgressRect initial_rect = {
+            .width = unit->hostWidth,
+            .height = unit->hostHeight,
+        };
+        (void)RayTracing2PreviewPresent_CopyNative3DPreviewHistory(
+            unit->hostPixels,
+            (size_t)unit->hostWidth * (size_t)unit->hostHeight,
+            unit->hostWidth,
+            unit->hostHeight);
+        if (!RuntimeNative3DAsyncRenderProgressBuffer_PublishDirtyRectABGR(
+                unit->progress,
+                unit->generation,
+                unit->hostPixels,
+                unit->hostWidth,
+                unit->hostHeight,
+                initial_rect)) {
+            deep_render_desktop_set_reason(out_reason, "async preview seed failed");
+            return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
+        }
+    }
 
     sampling = deep_render_desktop_next_sampling();
-    if (!RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
+    if (!RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
             &prepared,
             unit->renderWidth,
             unit->renderHeight,
-            desc->normalizedT,
-            desc->absoluteFrameIndex,
-            desc->lightX,
-            desc->lightY,
+            &evaluated_scene.snapshot,
             &sampling)) {
         deep_render_desktop_set_reason(out_reason, "native 3D frame preparation failed");
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
@@ -348,8 +409,10 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     snapshot_desc.renderHeight = unit->renderHeight;
     snapshot_desc.hostWidth = unit->hostWidth;
     snapshot_desc.hostHeight = unit->hostHeight;
-    snapshot_desc.frameIndex = desc->absoluteFrameIndex;
-    snapshot_desc.frameCount = desc->frameCount;
+    snapshot_desc.frameIndex =
+        (int)evaluated_scene.snapshot.frame.sample.absolute_frame;
+    snapshot_desc.frameCount =
+        (int)evaluated_scene.snapshot.frame.range.frame_count;
     snapshot_desc.temporalFrames = unit->temporalFrames;
     snapshot_desc.tileSize = unit->tileSize;
     snapshot_desc.integratorId = unit->integratorId;
@@ -375,11 +438,17 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     RayTracingDeepRenderFrameRequest_Init(&request);
     request_desc.generation = desc->generation;
     request_desc.localFrameIndex = desc->localFrameIndex;
-    request_desc.absoluteFrameIndex = desc->absoluteFrameIndex;
-    request_desc.frameCount = desc->frameCount;
-    request_desc.frameDurationSeconds = desc->frameDurationSeconds;
-    request_desc.animationTimeSeconds = desc->animationTimeSeconds;
-    request_desc.normalizedT = desc->normalizedT;
+    request_desc.absoluteFrameIndex =
+        (int)evaluated_scene.snapshot.frame.sample.absolute_frame;
+    request_desc.frameCount =
+        (int)evaluated_scene.snapshot.frame.range.frame_count;
+    request_desc.frameDurationSeconds =
+        (double)evaluated_scene.snapshot.frame.rate.frames_per_second_denominator /
+        (double)evaluated_scene.snapshot.frame.rate.frames_per_second_numerator;
+    request_desc.animationTimeSeconds =
+        evaluated_scene.snapshot.frame.absolute_time_seconds;
+    request_desc.normalizedT =
+        evaluated_scene.snapshot.frame.normalized_t;
     request_desc.camera = &prepared.scene.camera;
     request_desc.light = &prepared.scene.light;
     request_desc.renderSnapshot = &snapshot;

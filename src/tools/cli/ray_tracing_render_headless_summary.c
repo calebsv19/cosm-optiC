@@ -70,6 +70,27 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, ",\n");
     fprintf(file, "  \"route_native_3d\": %s,\n", preflight->route_native_3d ? "true" : "false");
     fprintf(file, "  \"prepared_frame\": %s,\n", preflight->prepared_frame ? "true" : "false");
+    fprintf(file,
+            "  \"evaluated_scene_bound\": %s,\n",
+            preflight->evaluated_scene_bound ? "true" : "false");
+    fprintf(file,
+            "  \"evaluated_scene_source\": %d,\n",
+            preflight->evaluated_scene_source);
+    fprintf(file,
+            "  \"evaluated_scene_first_frame\": %lld,\n",
+            (long long)preflight->evaluated_scene_first_frame);
+    fprintf(file,
+            "  \"evaluated_scene_last_frame\": %lld,\n",
+            (long long)preflight->evaluated_scene_last_frame);
+    fprintf(file,
+            "  \"evaluated_scene_scene_revision\": %llu,\n",
+            (unsigned long long)preflight->evaluated_scene_scene_revision);
+    fprintf(file,
+            "  \"evaluated_scene_timeline_revision\": %llu,\n",
+            (unsigned long long)preflight->evaluated_scene_timeline_revision);
+    fprintf(file, "  \"evaluated_scene_light_id\": ");
+    RayTracingJsonWriteString(file, preflight->evaluated_scene_light_id);
+    fprintf(file, ",\n");
     fprintf(file, "  \"rendered_frames\": %s,\n", preflight->rendered_frames ? "true" : "false");
     fprintf(file, "  \"frames_rendered\": %d,\n", preflight->frames_rendered);
     fprintf(file, "  \"checkpoint\": {\n");
@@ -469,6 +490,26 @@ void ray_tracing_render_headless_write_summary(
             preflight->registered_light_first_color_g,
             preflight->registered_light_first_color_b);
     fprintf(file, "  },\n");
+    fprintf(file, "  \"light_timeline\": {\n");
+    fprintf(file, "    \"sampled\": %s,\n",
+            preflight->light_timeline_sampled ? "true" : "false");
+    fprintf(file, "    \"frame\": %d,\n", request->start_frame);
+    fprintf(file, "    \"target_id\": ");
+    RayTracingJsonWriteString(file,
+        preflight->light_timeline_sampled
+            ? preflight->light_timeline_sample.target_id : "");
+    fprintf(file, ",\n");
+    fprintf(file, "    \"progress\": %.9f,\n",
+            preflight->light_timeline_sample.progress);
+    fprintf(file, "    \"position\": [%.9f, %.9f, %.9f],\n",
+            preflight->light_timeline_sample.position.x,
+            preflight->light_timeline_sample.position.y,
+            preflight->light_timeline_sample.position.z);
+    fprintf(file, "    \"world_speed_per_second\": %.9f,\n",
+            preflight->light_timeline_sample.world_speed_per_second);
+    fprintf(file, "    \"speed_valid\": %s\n",
+            preflight->light_timeline_sample.speed_valid ? "true" : "false");
+    fprintf(file, "  },\n");
     fprintf(file, "  \"object_audit_summary\": {\n");
     fprintf(file, "    \"enabled\": %s,\n", preflight->object_audit_enabled ? "true" : "false");
     fprintf(file, "    \"requested_max_dimension\": %d,\n", request->object_audit_max_dimension);
@@ -646,6 +687,54 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"max_slope\": %.9f,\n", preflight->water_surface_max_slope);
     fprintf(file, "    \"finite_normals\": %s,\n",
             preflight->water_surface_finite_normals ? "true" : "false");
+    fprintf(file, "    \"water_body\": {\n");
+    fprintf(file, "      \"boundary_contract_present\": %s,\n",
+            preflight->water_body_boundary_present ? "true" : "false");
+    fprintf(file, "      \"active\": %s,\n",
+            preflight->water_body_active ? "true" : "false");
+    fprintf(file, "      \"closure_mode\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_closure_mode);
+    fprintf(file, ",\n      \"body_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_id);
+    fprintf(file, ",\n      \"container_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_container_id);
+    fprintf(file, ",\n      \"material_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_material_id);
+    fprintf(file, ",\n      \"medium_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_medium_id);
+    fprintf(file,
+            ",\n      \"container_inner_bounds_m\": {\"min_x\": %.9f, "
+            "\"max_x\": %.9f, \"min_y\": %.9f, \"max_y\": %.9f, "
+            "\"min_z\": %.9f, \"max_z\": %.9f},\n",
+            preflight->water_body_min_x, preflight->water_body_max_x,
+            preflight->water_body_min_y, preflight->water_body_max_y,
+            preflight->water_body_min_z, preflight->water_body_max_z);
+    fprintf(file,
+            "      \"sample_classification\": {\"wet\": %u, "
+            "\"dry_container\": %u, \"solid_occluder\": %u},\n",
+            preflight->water_body_wet_samples,
+            preflight->water_body_dry_container_samples,
+            preflight->water_body_solid_occluder_samples);
+    fprintf(file, "      \"legacy_shell_suppressed\": %s,\n",
+            preflight->water_body_legacy_shell_suppressed ? "true" : "false");
+    fprintf(file, "      \"material_parity_valid\": %s,\n",
+            preflight->water_body_material_parity_valid ? "true" : "false");
+    fprintf(file,
+            "      \"topology\": {\"components\": %d, \"boundary_edges\": %d, "
+            "\"nonmanifold_edges\": %d, \"top_triangles\": %d, "
+            "\"side_triangles\": %d, \"bottom_triangles\": %d, "
+            "\"signed_volume\": %.12g, \"max_seam_error_m\": %.12g, "
+            "\"valid\": %s}\n",
+            preflight->water_body_component_count,
+            preflight->water_body_boundary_edge_count,
+            preflight->water_body_nonmanifold_edge_count,
+            preflight->water_body_top_triangle_count,
+            preflight->water_body_side_triangle_count,
+            preflight->water_body_bottom_triangle_count,
+            preflight->water_body_signed_volume,
+            preflight->water_body_max_seam_error_m,
+            preflight->water_body_topology_valid ? "true" : "false");
+    fprintf(file, "    },\n");
     fprintf(file, "    \"material\": {\n");
     fprintf(file, "      \"ior\": %.9f,\n", preflight->water_surface_material_ior);
     fprintf(file, "      \"absorption_distance_m\": %.9f,\n",

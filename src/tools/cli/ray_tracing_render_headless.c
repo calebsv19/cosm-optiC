@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "app/agent_render_request.h"
+#include "app/evaluated_scene_service.h"
 #include "app/ray_tracing_sha256.h"
 #include "app/ray_tracing_temporal_checkpoint.h"
 #include "config/config_file_io.h"
@@ -127,13 +128,44 @@ static void ray_tracing_headless_note_registered_lights(
     }
 }
 
+static void ray_tracing_headless_note_evaluated_scene(
+    RayTracingHeadlessPreflight* preflight,
+    const RayEvaluatedSceneSnapshot* snapshot,
+    bool first_sample) {
+    if (!preflight || !snapshot ||
+        RayEvaluatedSceneSnapshotValidate(snapshot) != TIMELINE_STATUS_OK) {
+        return;
+    }
+    preflight->evaluated_scene_bound = true;
+    preflight->evaluated_scene_source = (int)snapshot->source;
+    if (first_sample) {
+        preflight->evaluated_scene_first_frame =
+            snapshot->frame.sample.absolute_frame;
+    }
+    preflight->evaluated_scene_last_frame =
+        snapshot->frame.sample.absolute_frame;
+    preflight->evaluated_scene_scene_revision =
+        snapshot->identity.scene_revision;
+    preflight->evaluated_scene_timeline_revision =
+        snapshot->identity.timeline_revision;
+    snprintf(preflight->evaluated_scene_light_id,
+             sizeof(preflight->evaluated_scene_light_id),
+             "%s",
+             snapshot->light.runtime_light_id);
+}
+
 static int run_preflight(const RayTracingAgentRenderRequest *request,
                          RayTracingHeadlessPreflight *out_preflight,
                          const char *job_status_path,
                          const char *job_id,
                          const char *request_path) {
     RuntimeNative3DPreparedFrame frame = {0};
-    Point light_point = {0.0, 0.0};
+    RayEvaluatedSceneServiceResult evaluated_scene = {0};
+    TimelineSample evaluated_sample = {
+        .absolute_frame = request ? request->start_frame : 0,
+        .subframe_numerator = 0,
+        .subframe_denominator = 1
+    };
     RayTracingHeadlessPreflight preflight = {0};
     struct timespec preflight_started_at = {0};
     struct timespec stage_started_at = {0};
@@ -187,6 +219,8 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     preflight.denoise_enabled = animSettings.disneyDenoiseEnabled;
     sceneSettings.windowWidth = request->width;
     sceneSettings.windowHeight = request->height;
+    animSettings.startFrameIndex = request->start_frame;
+    animSettings.framesForTravel = request->frame_count;
 
     ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                   request,
@@ -212,6 +246,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                    request->runtime_scene_path,
                                    true);
     runtime_scene_motion_bridge_get_last_summary(&preflight.object_motion_summary);
+    preflight.light_timeline_sampled =
+        RuntimeSceneLightTimelineInspectLast(
+            (TimelineSample){request->start_frame, 0u, 1u},
+            &preflight.light_timeline_sample) == TIMELINE_STATUS_OK;
     preflight.runtime_scene_apply_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     ray_tracing_runtime_mesh_assets_timing_snapshot(&preflight.mesh_asset_timing_stats);
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
@@ -423,9 +461,6 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         return 5;
     }
 
-    if (sceneSettings.bezierPath.numPoints >= 1) {
-        light_point = sceneSettings.bezierPath.points[0];
-    }
     ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                   request,
                                   "preparing_native_frame",
@@ -446,14 +481,29 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   -1);
     RuntimeScene3DBuilder_TimingReset();
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-    preflight.prepared_frame =
-        RuntimeNative3DPrepareFrameAtFrameIndex(&frame,
-                                                request->width,
-                                                request->height,
-                                                request->normalized_t,
-                                                request->start_frame,
-                                                light_point.x,
-                                                light_point.y);
+    if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+        snprintf(preflight.diagnostics,
+                 sizeof(preflight.diagnostics),
+                 "evaluated-scene capture failed at frame %d: %.800s",
+                 request->start_frame,
+                 evaluated_scene.status_line);
+        preflight.prepared_frame = false;
+    } else if (!ray_tracing_headless_apply_inspection_evaluated_camera(
+                   request, &evaluated_scene)) {
+        snprintf(preflight.diagnostics,
+                 sizeof(preflight.diagnostics),
+                 "evaluated-scene inspection camera failed at frame %d",
+                 request->start_frame);
+        preflight.prepared_frame = false;
+    } else {
+        preflight.prepared_frame =
+            RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+                &frame,
+                request->width,
+                request->height,
+                &evaluated_scene.snapshot,
+                NULL);
+    }
     preflight.native_prepare_frame_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     RuntimeScene3DBuilder_TimingSnapshot(&preflight.scene_builder_timing_stats);
     RuntimeMeshBLASCache3D_SnapshotDiagnostics(&preflight.scene_acceleration_stats);
@@ -463,6 +513,8 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         &preflight.dynamic_water_cache_stats);
     preflight.caustic_cache_prep_ms = frame.causticCachePrepMs;
     if (preflight.prepared_frame) {
+        ray_tracing_headless_note_evaluated_scene(
+            &preflight, &evaluated_scene.snapshot, true);
         bool flattened_bvh_required =
             preflight.ray_trace_route_stats.requestedRoute !=
             RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
@@ -638,10 +690,13 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         RuntimeNative3DPreparedSceneCacheStatsSnapshot(
             &preflight.prepared_scene_cache_stats);
     } else {
-        snprintf(preflight.diagnostics,
-                 sizeof(preflight.diagnostics),
-                 "failed to prepare native 3D frame: %s",
-                 RuntimeNative3DPrepareFrameLastDiagnostics());
+        if (preflight.diagnostics[0] == '\0' ||
+            strcmp(preflight.diagnostics, "ok") == 0) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "failed to prepare native 3D frame: %s",
+                     RuntimeNative3DPrepareFrameLastDiagnostics());
+        }
         ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                       request,
                                       "failed",
@@ -694,8 +749,6 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                       const char *request_path) {
     RayTracingHeadlessPreflight preflight = {0};
     uint8_t *pixels = NULL;
-    double light_x = 0.0;
-    double light_y = 0.0;
     int preflight_code = 0;
     int setup_code = 0;
     struct timespec render_started_at = {0};
@@ -723,7 +776,6 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         return setup_code;
     }
 
-    ray_tracing_headless_initial_light_point(&light_x, &light_y);
     ray_tracing_headless_reset_render_trace_state();
     if (request->render_trace_cost_ledger_enabled) {
         RuntimeRenderTraceCostLedger3D_SetEnabled(true);
@@ -731,6 +783,12 @@ static int run_render(const RayTracingAgentRenderRequest *request,
 
     for (int i = 0; i < request->frame_count; ++i) {
         char frame_path[PATH_MAX];
+        RayEvaluatedSceneServiceResult evaluated_scene = {0};
+        TimelineSample evaluated_sample = {
+            .absolute_frame = request->start_frame + i,
+            .subframe_numerator = 0,
+            .subframe_denominator = 1
+        };
         RuntimeNative3DRenderStats stats = {0};
         RayTracingTemporalProgressContext temporal_progress = {0};
         RayTracingTemporalCheckpointSession checkpoint_session;
@@ -746,8 +804,30 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             preflight.water_surface_selected_last_frame_path
         };
         const int frame_index = request->start_frame + i;
-        const double t = ray_tracing_headless_frame_normalized_t(request, i);
         int frame_status = 0;
+
+        if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "evaluated-scene capture failed at frame %d: %.800s",
+                     frame_index,
+                     evaluated_scene.status_line);
+            free(pixels);
+            *out_preflight = preflight;
+            return 13;
+        }
+        if (!ray_tracing_headless_apply_inspection_evaluated_camera(
+                request, &evaluated_scene)) {
+            snprintf(preflight.diagnostics,
+                     sizeof(preflight.diagnostics),
+                     "evaluated-scene inspection camera failed at frame %d",
+                     frame_index);
+            free(pixels);
+            *out_preflight = preflight;
+            return 13;
+        }
+        ray_tracing_headless_note_evaluated_scene(
+            &preflight, &evaluated_scene.snapshot, i == 0);
 
         frame_status = ray_tracing_headless_prepare_frame_output(frame_path,
                                                                  sizeof(frame_path),
@@ -815,15 +895,12 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         }
 
         (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledAtFrameIndex(
+        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedScene(
                 pixels,
                 preflight.route.integratorMode3D,
                 request->width,
                 request->height,
-                t,
-                frame_index,
-                light_x,
-                light_y,
+                &evaluated_scene.snapshot,
                 NULL,
                 request->temporal_frames,
                 ray_tracing_temporal_progress_callback,
@@ -950,6 +1027,7 @@ int main(int argc, char **argv) {
     const char *job_id = NULL;
     const char *job_status_path = NULL;
     bool render_mode = false;
+    bool summary_file_only = false;
     RayTracingAgentRenderRequest request;
     RayTracingHeadlessPreflight preflight = {0};
     char diagnostics[256] = {0};
@@ -966,6 +1044,8 @@ int main(int argc, char **argv) {
             request_path = argv[++i];
         } else if (strcmp(argv[i], "--summary") == 0 && i + 1 < argc) {
             summary_override = argv[++i];
+        } else if (strcmp(argv[i], "--summary-file-only") == 0) {
+            summary_file_only = true;
         } else if (strcmp(argv[i], "--job-id") == 0 && i + 1 < argc) {
             job_id = argv[++i];
         } else if (strcmp(argv[i], "--job-status") == 0 && i + 1 < argc) {
@@ -1017,6 +1097,11 @@ int main(int argc, char **argv) {
     if (summary_override && summary_override[0]) {
         snprintf(request.summary_path, sizeof(request.summary_path), "%s", summary_override);
     }
+    if (summary_file_only && request.summary_path[0] == '\0') {
+        fprintf(stderr,
+                "ray_tracing_render_headless: --summary-file-only requires a resolved summary path\n");
+        return 2;
+    }
     ray_tracing_render_headless_write_process_started_status(job_status_path,
                                                              job_id,
                                                              request_path,
@@ -1034,7 +1119,9 @@ int main(int argc, char **argv) {
                                    job_status_path,
                                    job_id,
                                    request_path);
-    ray_tracing_render_headless_write_summary(stdout, &request, &preflight);
+    if (!summary_file_only) {
+        ray_tracing_render_headless_write_summary(stdout, &request, &preflight);
+    }
     ray_tracing_render_headless_write_process_finished_status(job_status_path,
                                                               job_id,
                                                               request_path,

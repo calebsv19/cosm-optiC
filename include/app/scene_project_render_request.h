@@ -14,6 +14,7 @@ typedef struct RayTracingSceneProjectRenderRequest {
     char request_path[PATH_MAX];
     char request_relpath[PATH_MAX];
     char physics_cache_relpath[PATH_MAX];
+    char volume_manifest_relpath[PATH_MAX];
     char output_root_relpath[PATH_MAX];
     int simulation_start_frame;
     int simulation_frame_count;

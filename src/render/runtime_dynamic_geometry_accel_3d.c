@@ -2,12 +2,54 @@
 
 #include "render/runtime_triangle_bvh_3d.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 static RuntimeDynamicGeometryWaterCacheDiagnostics3D gRuntimeDynamicGeometryWaterCache;
 static RuntimeTriangleMesh3D gRuntimeDynamicGeometryWaterMeshCache;
+static int gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex = -1;
+
+static uint64_t runtime_dynamic_geometry_accel_3d_hash_bytes(
+    uint64_t hash,
+    const void* data,
+    size_t size) {
+    const unsigned char* bytes = (const unsigned char*)data;
+    if (!data) return hash;
+    for (size_t i = 0u; i < size; ++i) {
+        hash ^= (uint64_t)bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static uint64_t runtime_dynamic_geometry_accel_3d_mesh_key(
+    const RuntimeTriangleMesh3D* mesh) {
+    uint64_t hash = UINT64_C(1469598103934665603);
+    if (!mesh || !mesh->triangles || mesh->triangleCount <= 0) return 0u;
+    hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+        hash, &mesh->triangleCount, sizeof(mesh->triangleCount));
+    for (int i = 0; i < mesh->triangleCount; ++i) {
+        const RuntimeTriangle3D* triangle = &mesh->triangles[i];
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->p0, sizeof(triangle->p0));
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->p1, sizeof(triangle->p1));
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->p2, sizeof(triangle->p2));
+        hash = runtime_dynamic_geometry_accel_3d_hash_bytes(
+            hash, &triangle->sceneObjectIndex,
+            sizeof(triangle->sceneObjectIndex));
+    }
+    return hash;
+}
+static struct {
+    bool valid;
+    int primitiveIndex;
+    int sceneObjectIndex;
+    char objectId[RUNTIME_SCENE_3D_MAX_OBJECT_ID];
+} gRuntimeDynamicGeometryWaterPrimitiveIdentity;
 
 static double runtime_dynamic_geometry_accel_3d_elapsed_ms_since(
     const struct timespec* start_time) {
@@ -167,9 +209,13 @@ void RuntimeDynamicGeometryAcceleration3D_Classify(
 
 void RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle(void) {
     RuntimeTriangleMesh3D_Free(&gRuntimeDynamicGeometryWaterMeshCache);
+    gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex = -1;
     memset(&gRuntimeDynamicGeometryWaterCache,
            0,
            sizeof(gRuntimeDynamicGeometryWaterCache));
+    memset(&gRuntimeDynamicGeometryWaterPrimitiveIdentity,
+           0,
+           sizeof(gRuntimeDynamicGeometryWaterPrimitiveIdentity));
     gRuntimeDynamicGeometryWaterCache.lastStatus =
         RUNTIME_DYNAMIC_GEOMETRY_WATER_CACHE_DISABLED;
     gRuntimeDynamicGeometryWaterCache.lastDecision =
@@ -238,6 +284,8 @@ bool RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
     RuntimeTriangleMesh3D mesh;
     RuntimeDynamicGeometryWaterCacheStatus3D status =
         gRuntimeDynamicGeometryWaterCache.lastStatus;
+    int primitive_index = -1;
+    int scene_object_index = -1;
     struct timespec store_start = {0};
     struct timespec bvh_start = {0};
 
@@ -251,6 +299,27 @@ bool RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
         gRuntimeDynamicGeometryWaterCache.geometryStoreMs +=
             runtime_dynamic_geometry_accel_3d_elapsed_ms_since(&store_start);
         return false;
+    }
+
+    primitive_index = scene->triangleMesh.triangles[first_triangle_index].primitiveIndex;
+    scene_object_index =
+        scene->triangleMesh.triangles[first_triangle_index].sceneObjectIndex;
+    if (primitive_index < 0 || primitive_index >= scene->primitiveCount) {
+        gRuntimeDynamicGeometryWaterCache.geometryStoreFailures += 1u;
+        gRuntimeDynamicGeometryWaterCache.geometryStoreMs +=
+            runtime_dynamic_geometry_accel_3d_elapsed_ms_since(&store_start);
+        return false;
+    }
+    for (int i = 0; i < triangle_count; ++i) {
+        const RuntimeTriangle3D* triangle =
+            &scene->triangleMesh.triangles[first_triangle_index + i];
+        if (triangle->primitiveIndex != primitive_index ||
+            triangle->sceneObjectIndex != scene_object_index) {
+            gRuntimeDynamicGeometryWaterCache.geometryStoreFailures += 1u;
+            gRuntimeDynamicGeometryWaterCache.geometryStoreMs +=
+                runtime_dynamic_geometry_accel_3d_elapsed_ms_since(&store_start);
+            return false;
+        }
     }
 
     mesh.triangles = (RuntimeTriangle3D*)malloc(sizeof(*mesh.triangles) *
@@ -283,10 +352,21 @@ bool RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
 
     RuntimeTriangleMesh3D_Free(&gRuntimeDynamicGeometryWaterMeshCache);
     gRuntimeDynamicGeometryWaterMeshCache = mesh;
+    gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex = first_triangle_index;
+    gRuntimeDynamicGeometryWaterPrimitiveIdentity.valid = true;
+    gRuntimeDynamicGeometryWaterPrimitiveIdentity.primitiveIndex = primitive_index;
+    gRuntimeDynamicGeometryWaterPrimitiveIdentity.sceneObjectIndex = scene_object_index;
+    snprintf(gRuntimeDynamicGeometryWaterPrimitiveIdentity.objectId,
+             sizeof(gRuntimeDynamicGeometryWaterPrimitiveIdentity.objectId),
+             "%s",
+             scene->primitives[primitive_index].source.objectId);
     gRuntimeDynamicGeometryWaterCache.geometryCacheReady = true;
     gRuntimeDynamicGeometryWaterCache.geometryBVHReady =
         RuntimeTriangleMesh3D_HasReadyBVH(&gRuntimeDynamicGeometryWaterMeshCache);
     gRuntimeDynamicGeometryWaterCache.geometryStores += 1u;
+    gRuntimeDynamicGeometryWaterCache.geometryKey =
+        runtime_dynamic_geometry_accel_3d_mesh_key(
+            &gRuntimeDynamicGeometryWaterMeshCache);
     if (status == RUNTIME_DYNAMIC_GEOMETRY_WATER_CACHE_REBUILT) {
         gRuntimeDynamicGeometryWaterCache.geometryRebuildStores += 1u;
     } else if (status == RUNTIME_DYNAMIC_GEOMETRY_WATER_CACHE_REFIT) {
@@ -301,6 +381,25 @@ bool RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
     gRuntimeDynamicGeometryWaterCache.geometryStoreMs +=
         runtime_dynamic_geometry_accel_3d_elapsed_ms_since(&store_start);
     return true;
+}
+
+bool RuntimeDynamicGeometryAcceleration3D_OwnsScenePrimitive(
+    const RuntimeScene3D* scene,
+    int primitive_index) {
+    const RuntimePrimitive3D* primitive = NULL;
+    if (!scene || primitive_index < 0 || primitive_index >= scene->primitiveCount ||
+        !gRuntimeDynamicGeometryWaterCache.valid ||
+        !gRuntimeDynamicGeometryWaterCache.geometryCacheReady ||
+        !gRuntimeDynamicGeometryWaterCache.geometryBVHReady ||
+        !gRuntimeDynamicGeometryWaterPrimitiveIdentity.valid ||
+        primitive_index != gRuntimeDynamicGeometryWaterPrimitiveIdentity.primitiveIndex) {
+        return false;
+    }
+    primitive = &scene->primitives[primitive_index];
+    return primitive->source.sceneObjectIndex ==
+               gRuntimeDynamicGeometryWaterPrimitiveIdentity.sceneObjectIndex &&
+           strcmp(primitive->source.objectId,
+                  gRuntimeDynamicGeometryWaterPrimitiveIdentity.objectId) == 0;
 }
 
 bool RuntimeDynamicGeometryAcceleration3D_TraceWaterSurfaceFirstHit(
@@ -334,6 +433,17 @@ bool RuntimeDynamicGeometryAcceleration3D_TraceWaterSurfaceFirstHit(
         t_max,
         &hit);
     if (trace_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_HIT) {
+        const int scene_triangle_index =
+            gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex +
+            hit.triangleIndex;
+        if (gRuntimeDynamicGeometryWaterFirstSceneTriangleIndex < 0 ||
+            hit.triangleIndex < 0 ||
+            scene_triangle_index < 0 ||
+            scene_triangle_index >= scene->triangleMesh.triangleCount) {
+            gRuntimeDynamicGeometryWaterCache.routeTraceErrors += 1u;
+            return false;
+        }
+        hit.triangleIndex = scene_triangle_index;
         runtime_dynamic_geometry_apply_source_ref(scene, &hit);
         *out_hit = hit;
         gRuntimeDynamicGeometryWaterCache.routeTraceHits += 1u;

@@ -1,4 +1,5 @@
 #include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
 
 #include <math.h>
@@ -366,6 +367,10 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                               active_mode,
                                               selected_object_index,
                                               hover_object_index);
+    SceneEditorLightTimelineRenderViewportProxies(renderer,
+                                                  &projector,
+                                                  mouse_x,
+                                                  mouse_y);
     if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL) {
         SceneEditorDigestOverlayRenderMotionLayer(renderer,
                                                   &projector,

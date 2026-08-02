@@ -1,0 +1,102 @@
+#ifndef RAY_TRACING_TIMELINE_TRACK_H
+#define RAY_TRACING_TIMELINE_TRACK_H
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "animation/timeline_value.h"
+
+#define TIMELINE_ID_CAPACITY 64u
+#define TIMELINE_TRACK_KEY_CAPACITY 128u
+
+typedef enum TimelineInterpolation {
+    TIMELINE_INTERPOLATION_STEP = 0,
+    TIMELINE_INTERPOLATION_LINEAR,
+    TIMELINE_INTERPOLATION_CUBIC_BEZIER
+} TimelineInterpolation;
+
+typedef enum TimelineChannelSource {
+    TIMELINE_CHANNEL_SOURCE_AUTHORED = 0,
+    TIMELINE_CHANNEL_SOURCE_SIMULATION_RESERVED,
+    TIMELINE_CHANNEL_SOURCE_PROCEDURAL_RESERVED,
+    TIMELINE_CHANNEL_SOURCE_CONSTRAINT_RESERVED,
+    TIMELINE_CHANNEL_SOURCE_DERIVED_RESERVED
+} TimelineChannelSource;
+
+typedef struct TimelineKeyframe {
+    int64_t frame;
+    TimelineValue value;
+    TimelineInterpolation interpolation_to_next;
+    double incoming_frame_offset;
+    double incoming_value_offset;
+    double outgoing_frame_offset;
+    double outgoing_value_offset;
+} TimelineKeyframe;
+
+typedef struct TimelineTrack {
+    char track_id[TIMELINE_ID_CAPACITY];
+    char target_id[TIMELINE_ID_CAPACITY];
+    char property_id[TIMELINE_ID_CAPACITY];
+    TimelineValueType value_type;
+    TimelineUnit unit;
+    TimelineChannelSource source;
+    bool enabled;
+    size_t key_count;
+    TimelineKeyframe keys[TIMELINE_TRACK_KEY_CAPACITY];
+} TimelineTrack;
+
+typedef struct TimelineEvaluationResult {
+    bool valid;
+    bool exact_key;
+    bool held;
+    bool interpolated;
+    size_t track_index;
+    char track_id[TIMELINE_ID_CAPACITY];
+    char target_id[TIMELINE_ID_CAPACITY];
+    char property_id[TIMELINE_ID_CAPACITY];
+    TimelineChannelSource source;
+    TimelineValue value;
+    int64_t left_frame;
+    int64_t right_frame;
+    double alpha;
+    double curve_parameter;
+    double derivative_per_frame;
+    bool derivative_valid;
+    TimelineStatus status;
+} TimelineEvaluationResult;
+
+const char* TimelineInterpolationLabel(TimelineInterpolation interpolation);
+const char* TimelineChannelSourceLabel(TimelineChannelSource source);
+TimelineStatus TimelineTrackInit(TimelineTrack* track,
+                                 const char* track_id,
+                                 const char* target_id,
+                                 const char* property_id,
+                                 TimelineValueType value_type);
+TimelineStatus TimelineTrackAddKey(TimelineTrack* track,
+                                   int64_t frame,
+                                   TimelineValue value,
+                                   TimelineInterpolation interpolation_to_next);
+TimelineStatus TimelineTrackInsertKey(TimelineTrack* track,
+                                      TimelineKeyframe key,
+                                      size_t* out_key_index);
+TimelineStatus TimelineTrackRemoveKey(TimelineTrack* track, size_t key_index);
+TimelineStatus TimelineTrackMoveScalarKey(TimelineTrack* track,
+                                          size_t key_index,
+                                          int64_t frame,
+                                          double value);
+TimelineStatus TimelineTrackSetScalarTemporalHandles(
+    TimelineTrack* track,
+    size_t key_index,
+    double incoming_frame_offset,
+    double incoming_value_offset,
+    double outgoing_frame_offset,
+    double outgoing_value_offset);
+TimelineStatus TimelineTrackSetUnit(TimelineTrack* track, TimelineUnit unit);
+TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
+                                     const TimelineRange* range);
+TimelineStatus TimelineTrackEvaluate(const TimelineTrack* track,
+                                     const TimelineEvaluationContext* context,
+                                     TimelineEvaluationResult* out_result);
+
+#endif

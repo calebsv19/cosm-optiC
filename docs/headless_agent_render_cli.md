@@ -35,6 +35,23 @@ ray_tracing/build/arm64/tools/cli/ray_tracing_render_headless \
   --render
 ```
 
+When a caller already declares a durable summary artifact, it may suppress
+only the duplicate JSON summary written to stdout:
+
+```bash
+ray_tracing/build/arm64/tools/cli/ray_tracing_render_headless \
+  --request ray_tracing/tests/fixtures/agent_render_preflight_request.json \
+  --preflight \
+  --summary /tmp/render_summary.json \
+  --summary-file-only
+```
+
+`--summary-file-only` requires a resolved summary path, either from
+`--summary` or the request. It preserves small legacy startup diagnostics on
+stdout; it does not promise a globally silent process. The immutable
+CPU-still guest invocation profile uses this mode so the durable JSON artifact
+is not duplicated into the compute runtime's bounded stdout channel.
+
 For the baseline unattended visual proof, use the make target:
 
 ```bash
@@ -92,7 +109,10 @@ ray_tracing/build/toolchains/clang/arm64/tools/cli/scene_project_render_request_
 
 The tool uses the same resolver and JSON-preserving writer as the desktop
 menu. It writes only a project-owned request, preserves unknown request fields,
-and rejects unsafe or external write targets.
+and rejects unsafe or external write targets. When PhysicsSim has promoted a
+valid project-owned active VF3D cache, the writer also enables the native
+volume request and binds its contained active manifest. An absent cache keeps
+the compatibility behavior; an invalid existing cache fails closed.
 
 Validate the complete LineDrawing -> PhysicsSim -> RayTracing project contract
 before export:

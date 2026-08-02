@@ -1,0 +1,6 @@
+#ifndef TEST_RUNTIME_TIMELINE_LIGHT_MOTION_H
+#define TEST_RUNTIME_TIMELINE_LIGHT_MOTION_H
+
+int run_test_runtime_timeline_light_motion_tests(void);
+
+#endif

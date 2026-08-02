@@ -3,8 +3,9 @@ set -eu
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 . "$ROOT_DIR/tools/publish_validation.sh"
+WORKSPACE_ROOT="$(rt_publish_workspace_root "$ROOT_DIR")"
 PUBLISH_SCRIPT="$ROOT_DIR/tools/publish_render_outputs.sh"
-DEFAULT_RUNS_ROOT="$ROOT_DIR/../_private_workspace_artifacts/agent_runs/ray_tracing"
+DEFAULT_RUNS_ROOT="$WORKSPACE_ROOT/_private_workspace_artifacts/agent_runs/ray_tracing"
 
 RUN_ROOT=""
 RUNS_ROOT="$DEFAULT_RUNS_ROOT"

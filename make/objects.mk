@@ -1,5 +1,8 @@
 NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_sha256.o \
+	$(BUILD_DIR)/animation/evaluated_scene_snapshot.o \
+	$(BUILD_DIR)/app/evaluated_scene_service.o \
+	$(BUILD_DIR)/app/preview_camera_sample.o \
 	$(BUILD_DIR)/procedural/procedural_surface_recipe.o \
 	$(BUILD_DIR)/procedural/procedural_surface_derived_asset.o \
 	$(BUILD_DIR)/procedural/procedural_surface_field_3d.o \
@@ -110,6 +113,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_transmitted_caustic_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transmission_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \
@@ -181,6 +185,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_environment_3d.o \
+	$(BUILD_DIR)/render/runtime_evaluated_scene_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_capabilities.o \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_3d.o \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_cache_3d.o \
@@ -194,6 +199,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
+	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
+	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
@@ -216,6 +223,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_bridge_authoring_paths.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge_file.o \
 	$(BUILD_DIR)/import/runtime_scene_motion_bridge.o \
+	$(BUILD_DIR)/import/runtime_scene_light_timeline_bridge.o \
+	$(BUILD_DIR)/import/runtime_scene_light_timeline_io.o \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
@@ -229,6 +238,13 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/camera/camera.o \
 	$(BUILD_DIR)/camera/camera_path_3d.o \
 	$(BUILD_DIR)/motion/runtime_motion_track_3d.o \
+	$(BUILD_DIR)/animation/timeline_clock.o \
+	$(BUILD_DIR)/animation/timeline_document.o \
+	$(BUILD_DIR)/animation/timeline_frame_snapshot.o \
+	$(BUILD_DIR)/animation/timeline_light_motion.o \
+	$(BUILD_DIR)/animation/timeline_property_registry.o \
+	$(BUILD_DIR)/animation/timeline_track.o \
+	$(BUILD_DIR)/animation/timeline_value.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
@@ -345,6 +361,15 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \
 	$(BUILD_DIR)/tests/test_runtime_object_motion_tracks.o \
+	$(BUILD_DIR)/tests/test_runtime_timeline_foundation.o \
+	$(BUILD_DIR)/tests/test_runtime_timeline_property_registry.o \
+	$(BUILD_DIR)/tests/test_runtime_timeline_frame_snapshot.o \
+	$(BUILD_DIR)/tests/test_runtime_timeline_light_motion.o \
+	$(BUILD_DIR)/tests/test_runtime_timeline_light_persistence.o \
+	$(BUILD_DIR)/tests/test_runtime_evaluated_scene_preview.o \
+	$(BUILD_DIR)/tests/test_preview_transport.o \
+	$(BUILD_DIR)/tests/test_preview_workspace.o \
+	$(BUILD_DIR)/tests/test_preview_timeline_inspection.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_builder_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_3d_geometry_trace_suite.o \
@@ -487,6 +512,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_transmitted_caustic_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transmission_policy_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_emissive_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transport_sampling_3d.o \
@@ -558,6 +584,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
+	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
+	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
@@ -806,6 +834,7 @@ KIT_WORKSPACE_AUTHORING_OBJS := $(patsubst $(KIT_WORKSPACE_AUTHORING_DIR)/src/%.
 
 TEST_DEPS += $(KIT_RENDER_OBJS) $(CORE_PANE_OBJS) $(CORE_PANE_MODULE_OBJS) $(KIT_PANE_OBJS) $(KIT_WORKSPACE_AUTHORING_OBJS) \
 	$(BUILD_DIR)/editor/scene_editor_pane_host.o \
+	$(BUILD_DIR)/editor/scene_editor_light_timeline.o \
 	$(BUILD_DIR)/ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.o \
 	$(BUILD_DIR)/ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.o
 

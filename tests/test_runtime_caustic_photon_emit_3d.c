@@ -259,11 +259,65 @@ static int test_runtime_caustic_photon_emit_rect_radiance_power_contract(void) {
     return 0;
 }
 
+static int test_runtime_caustic_photon_emit_legacy_energy_override_contract(void) {
+    RuntimeLightSet3D set;
+    RuntimeLightSource3D light;
+    RuntimeCausticPhotonEmissionSettings3D settings;
+    RuntimeCausticPhotonEmissionBatch3D batch;
+    RuntimeCausticPhotonEmissionDiagnostics3D diag;
+
+    RuntimeLightSet3D_Init(&set);
+    RuntimeLightSource3D_Init(&light);
+    light.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_RECT;
+    light.emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED;
+    light.width = 4.0;
+    light.height = 2.0;
+    light.color = vec3(1.0, 0.5, 0.25);
+    light.intensity = 9.0;
+    light.hasPhotonEmissionEnergy = true;
+    light.photonEmissionEnergy = 0.00125;
+    assert_true("runtime_caustic_photon_emit_energy_override_append",
+                RuntimeLightSet3D_Append(&set, &light, NULL));
+
+    RuntimeCausticPhotonEmission3D_DefaultSettings(&settings);
+    settings.sampleBudget = 32u;
+    RuntimeCausticPhotonEmission3D_InitBatch(&batch);
+    assert_true("runtime_caustic_photon_emit_energy_override_allocate",
+                RuntimeCausticPhotonEmission3D_AllocateBatch(&batch, 32u));
+    assert_true("runtime_caustic_photon_emit_energy_override_emit",
+                RuntimeCausticPhotonEmission3D_EmitFromLightSet(
+                    &batch, &set, &settings, &diag));
+    assert_close("runtime_caustic_photon_emit_energy_override_total_r",
+                 diag.totalEmittedFlux.x,
+                 0.01,
+                 1e-12);
+    assert_close("runtime_caustic_photon_emit_energy_override_total_g",
+                 diag.totalEmittedFlux.y,
+                 0.005,
+                 1e-12);
+    assert_close("runtime_caustic_photon_emit_energy_override_direct_unchanged",
+                 set.lights[0].intensity,
+                 9.0,
+                 1e-12);
+    set.lights[0].photonEmissionEnergy = 0.0;
+    assert_true("runtime_caustic_photon_emit_zero_energy_disables_photons",
+                !RuntimeCausticPhotonEmission3D_EmitFromLightSet(
+                    &batch, &set, &settings, &diag));
+    assert_true("runtime_caustic_photon_emit_zero_energy_keeps_direct",
+                diag.emittedPhotonCount == 0u &&
+                    set.lights[0].intensity == 9.0);
+
+    RuntimeCausticPhotonEmission3D_FreeBatch(&batch);
+    RuntimeLightSet3D_Free(&set);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_emit_3d_tests(void) {
     int failures = 0;
     failures += test_runtime_caustic_photon_emit_deterministic_samples();
     failures += test_runtime_caustic_photon_emit_populates_surface_map_proxy();
     failures += test_runtime_caustic_photon_emit_map_capacity_rejects();
     failures += test_runtime_caustic_photon_emit_rect_radiance_power_contract();
+    failures += test_runtime_caustic_photon_emit_legacy_energy_override_contract();
     return failures;
 }

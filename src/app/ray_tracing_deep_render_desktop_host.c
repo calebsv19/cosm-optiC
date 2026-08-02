@@ -272,6 +272,7 @@ static void deep_render_desktop_mark_failed(
     RuntimeNative3DAsyncRenderJobStatus job_status =
         RUNTIME_NATIVE_3D_ASYNC_RENDER_JOB_IDLE;
     if (!state) return;
+    RuntimeNative3DProgressHUD_Reset();
     if (state->job) {
         job_status = RuntimeNative3DAsyncRenderJob_GetStatus(state->job);
         if (job_status == RUNTIME_NATIVE_3D_ASYNC_RENDER_JOB_RUNNING) {
@@ -404,6 +405,11 @@ static bool deep_render_desktop_start_current_frame(
         &state->renderUnit, &state->session, state->job, &desc, &reason);
     if (start_status == RAY_TRACING_DEEP_RENDER_DESKTOP_START_READY) {
         RayTracingDeepRenderCancellation_Reset(&state->cancellation);
+        RuntimeNative3DProgressHUD_BeginFrame(
+            state->renderUnit.integratorId,
+            state->renderUnit.temporalFrames,
+            state->session.currentAbsoluteFrameIndex,
+            AnimationConfiguredPathFrameCount());
         return true;
     }
     if (start_status == RAY_TRACING_DEEP_RENDER_DESKTOP_START_UNSUPPORTED &&
@@ -435,6 +441,8 @@ static void deep_render_desktop_request_cancel(
     if (!RayTracingDeepRenderCancellation_Request(
             &state->cancellation, &state->session, job, &result)) {
         deep_render_desktop_mark_failed(state, "cancel request failed", running);
+    } else {
+        RuntimeNative3DProgressHUD_Reset();
     }
 }
 
@@ -456,6 +464,7 @@ static void deep_render_desktop_consume_terminal(
                 RayTracingDeepRenderCancellationStatus_Name(cancel_result.status),
                 running);
         }
+        RuntimeNative3DProgressHUD_Reset();
         return;
     }
     {
@@ -476,6 +485,14 @@ static void deep_render_desktop_consume_terminal(
         }
         if (frame_counter) {
             *frame_counter = state->session.completedFrameCount;
+        }
+        if (completion.frameAdvanced) {
+            (void)RayTracing2PreviewPresent_PromoteNative3DPreviewHistory(
+                view.pixels,
+                (size_t)view.hostWidth * (size_t)view.hostHeight,
+                view.hostWidth,
+                view.hostHeight);
+            RuntimeNative3DProgressHUD_CompleteFrame();
         }
         if (state->session.state == RAY_TRACING_DEEP_RENDER_SESSION_COMPLETED) {
             printf("Deep render mode complete. Final frame saved.\n");
@@ -549,6 +566,22 @@ bool RayTracingDeepRenderDesktopHost_SubmitFrame(SDL_Window* window,
             deep_render_desktop_consume_terminal(
                 state, &poll, frame_counter, running);
         }
+        {
+            RuntimeNative3DAsyncRenderTileProgressSnapshot tile_progress = {0};
+            if (RuntimeNative3DAsyncRenderProgressBuffer_CopyLatestTileProgress(
+                    state->renderUnit.progress,
+                    state->session.generation,
+                    &tile_progress)) {
+                const RuntimeNative3DTileSchedulerProgress hud_progress = {
+                    .startedSubpasses = tile_progress.startedSubpasses,
+                    .completedSubpasses = tile_progress.completedSubpasses,
+                    .totalSubpasses = tile_progress.totalSubpasses,
+                    .completedTilesInSubpass = tile_progress.completedTilesInSubpass,
+                    .totalTilesInSubpass = tile_progress.totalTilesInSubpass,
+                };
+                RuntimeNative3DProgressHUD_UpdateTileProgress(&hud_progress);
+            }
+        }
     }
     if (timer_hud) {
         ts_session_stop_timer(timer_hud, "Render Scene Frame");
@@ -590,5 +623,6 @@ void RayTracingDeepRenderDesktopHost_Shutdown(void) {
     RayTracingDeepRenderDesktopRenderUnit_Destroy(&state->renderUnit);
     RayTracingDeepRenderListener_Destroy(&state->listener);
     RayTracingDeepRenderSession_Reset(&state->session);
+    RuntimeNative3DProgressHUD_Reset();
     memset(state, 0, sizeof(*state));
 }
