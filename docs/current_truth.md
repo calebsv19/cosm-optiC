@@ -119,6 +119,13 @@ Last updated: 2026-07-29
 
 ## Stable Worker Routing Truth
 
+The local scene-project request writer now binds a valid promoted PhysicsSim
+active VF3D manifest into the native volume request before a local render.
+The CR-S3 compute-runtime proof consumed dynamic frames 0 through 2 and
+reported `volume_attached=true`, `volume_summary_built=true`, three rendered
+frames, and `diagnostics=ok`. This is local source-built proof only; it does not
+change the historical remote worker evidence below.
+
 - the current proven trio worker lane supports preferred-home-server routing
   with fallback still enabled
 - a fresh forced-Linux-PC lean trio proof now completes through the normal VPS
@@ -1539,6 +1546,14 @@ focused verification commands are collected in
   is the first exact independent worker release decision; do not edit
   `WORKER_VERSION`, build/distribute a package, or promote worker current
   without that typed authorization.
+- The headless CLI now accepts `--summary-file-only`: it requires a resolved
+  summary path, writes the canonical summary artifact, and omits only the
+  duplicate JSON summary from stdout. The immutable CPU-still guest invocation
+  profile binds that flag at digest
+  `7d4d4bc46e1d5746ec6628d230f3085e049b89b9fd2cdd1ea2f7905468f17434`.
+  Local build and preflight coverage pass. No changed Linux worker package has
+  been built under the existing `0.5.2` identity; a new exact worker-version
+  decision remains required before package and QEMU result/CAS proof.
 - Keep the new menu-render, digest-pick, and native `3D` test-family seams aligned with their current helper/file boundaries while larger file-split work continues.
 - Defer VF3D / `physics_sim` ingestion expansion until the next internal renderer boundary is chosen.
 

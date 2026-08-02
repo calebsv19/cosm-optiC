@@ -1010,6 +1010,7 @@ int main(int argc, char **argv) {
     const char *job_id = NULL;
     const char *job_status_path = NULL;
     bool render_mode = false;
+    bool summary_file_only = false;
     RayTracingAgentRenderRequest request;
     RayTracingHeadlessPreflight preflight = {0};
     char diagnostics[256] = {0};
@@ -1026,6 +1027,8 @@ int main(int argc, char **argv) {
             request_path = argv[++i];
         } else if (strcmp(argv[i], "--summary") == 0 && i + 1 < argc) {
             summary_override = argv[++i];
+        } else if (strcmp(argv[i], "--summary-file-only") == 0) {
+            summary_file_only = true;
         } else if (strcmp(argv[i], "--job-id") == 0 && i + 1 < argc) {
             job_id = argv[++i];
         } else if (strcmp(argv[i], "--job-status") == 0 && i + 1 < argc) {
@@ -1077,6 +1080,11 @@ int main(int argc, char **argv) {
     if (summary_override && summary_override[0]) {
         snprintf(request.summary_path, sizeof(request.summary_path), "%s", summary_override);
     }
+    if (summary_file_only && request.summary_path[0] == '\0') {
+        fprintf(stderr,
+                "ray_tracing_render_headless: --summary-file-only requires a resolved summary path\n");
+        return 2;
+    }
     ray_tracing_render_headless_write_process_started_status(job_status_path,
                                                              job_id,
                                                              request_path,
@@ -1094,7 +1102,9 @@ int main(int argc, char **argv) {
                                    job_status_path,
                                    job_id,
                                    request_path);
-    ray_tracing_render_headless_write_summary(stdout, &request, &preflight);
+    if (!summary_file_only) {
+        ray_tracing_render_headless_write_summary(stdout, &request, &preflight);
+    }
     ray_tracing_render_headless_write_process_finished_status(job_status_path,
                                                               job_id,
                                                               request_path,

@@ -1,0 +1,65 @@
+{
+  "schema_family": "codework_application_operation_profile",
+  "schema_variant": "runtime_requirements_v1",
+  "profile_id": "ray_tracing.headless_cpu_still.v1",
+  "program": "ray_tracing",
+  "operation": "headless_cpu_still_render",
+  "entrypoint": "bin/ray_tracing_render_headless",
+  "request_schema": {
+    "schema_family": "ray_tracing_request",
+    "schema_variant": "ray_tracing_agent_render_request_v1",
+    "payload_discriminator_path": "schema_version",
+    "payload_discriminator_value": "ray_tracing_agent_render_request_v1"
+  },
+  "request_constraints": [
+    {
+      "path": "output.video.enabled",
+      "operator": "equals",
+      "value": false
+    }
+  ],
+  "external_tools": [],
+  "runtime_features": [],
+  "linkage_only_features": [
+    {
+      "soname": "libvulkan.so.1",
+      "features": [
+        "display_server",
+        "gpu_device",
+        "vulkan_icd"
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/AGENT_CONTROL.md",
+      "digest": "sha256:a4457d08f5b57929d8c500c91e665fc6828cebcd6246f4505b3d3112a9a803f5",
+      "claim": "FFmpeg is required only when video assembly is requested."
+    },
+    {
+      "path": "src/tools/cli/ray_tracing_render_headless.c",
+      "digest": "sha256:0126b1d33530c450f9a384048ae04fede81dda34a0ed1180241aafe29627c272",
+      "claim": "The CPU headless path passes no presentation renderer."
+    },
+    {
+      "path": "src/tools/cli/ray_tracing_render_headless_render_completion.c",
+      "digest": "sha256:8fc2315fbbbcf5f94337bed598a0bee7f294ea54d674d7cad0ef193799b79755",
+      "claim": "Video assembly is invoked only when output.video.enabled is true."
+    }
+  ],
+  "proof_limits": {
+    "profile_selection_for_job_verified": false,
+    "elf_requirement_waiver_permitted": false
+  },
+  "operations": {
+    "profile_describe": true,
+    "job_profile_select": false,
+    "binary_requirement_waive": false,
+    "runtime_acquisition": false,
+    "qemu_process_launch": false,
+    "network_contact": false,
+    "remote_contact": false
+  },
+  "next_boundary": "bind_profile_to_one_immutable_job_request",
+  "profile_digest": "f4431efa3c0fa7a6df1708070cc308e5e6a9dbc012211c584f5fed792011ea02"
+}

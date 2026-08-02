@@ -17,12 +17,24 @@ LEDGER_TLAS_SKIP_DISABLED_SUMMARY="$WORK_ROOT/frame_dataflow_tlas_skip_disabled_
 LEDGER_PARITY_SKIP_SUMMARY="$WORK_ROOT/frame_dataflow_parity_skip_summary.json"
 LEDGER_FLATTENED_SKIP_SUMMARY="$WORK_ROOT/frame_dataflow_flattened_skip_summary.json"
 STDOUT_SUMMARY="$WORK_ROOT/stdout_summary.json"
+FILE_ONLY_SUMMARY="$WORK_ROOT/file_only_summary.json"
+FILE_ONLY_STDOUT="$WORK_ROOT/file_only_stdout.txt"
 NEGATIVE_ROOT="$WORK_ROOT/negative_requests"
 DIAG_ROOT="$WORK_ROOT/diagnostics"
 ROUTE_ROOT="$WORK_ROOT/route_requests"
 
 mkdir -p "$NEGATIVE_ROOT" "$DIAG_ROOT" "$ROUTE_ROOT"
 "$CLI" --request "$REQUEST" --preflight --summary "$SUMMARY" > "$STDOUT_SUMMARY"
+"$CLI" --request "$REQUEST" --preflight --summary "$FILE_ONLY_SUMMARY" \
+  --summary-file-only > "$FILE_ONLY_STDOUT"
+
+test -s "$FILE_ONLY_SUMMARY"
+grep -q '"schema_version": "ray_tracing_headless_summary_v1"' "$FILE_ONLY_SUMMARY"
+if grep -q '"schema_version": "ray_tracing_headless_summary_v1"' "$FILE_ONLY_STDOUT"; then
+  echo "file-only summary mode duplicated the summary to stdout" >&2
+  exit 1
+fi
+test "$(wc -c < "$FILE_ONLY_STDOUT")" -lt 4096
 
 grep -q '"schema_version": "ray_tracing_headless_summary_v1"' "$SUMMARY"
 grep -q '"scene_applied": true' "$SUMMARY"

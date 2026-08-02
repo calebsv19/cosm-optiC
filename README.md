@@ -165,6 +165,8 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 - runtime controls: `docs/KEYBINDS.md`
 - photon mapping opt-in and verification: `docs/photon_mapping.md`
 - current-state contract: `docs/current_truth.md`
+- deterministic old/new render comparison:
+  `docs/render_artifact_comparison.md`
 - near-term direction: `docs/future_intent.md`
 
 Read the subdirectory READMEs under `src/` and `include/` for subsystem-specific notes.

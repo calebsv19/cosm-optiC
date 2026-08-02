@@ -17,6 +17,7 @@
 #define SCENE_PROJECT_RENDER_REQUEST_DEFAULT "ray_tracing/render_request.json"
 #define SCENE_PROJECT_PHYSICS_CACHE_DEFAULT "physics_sim/active_cache_manifest.json"
 #define SCENE_PROJECT_OUTPUT_ROOT_DEFAULT "ray_tracing/frames_temp"
+#define PHYSICS_SIM_ACTIVE_CACHE_SCHEMA "physics_sim_active_cache_manifest_v1"
 
 static void set_error(char *error, size_t error_size, const char *format, ...) {
     va_list args;
@@ -165,6 +166,53 @@ static bool load_json_object(const char *path, json_object **out, char *error, s
         return false;
     }
     *out = root;
+    return true;
+}
+
+static bool resolve_active_volume_manifest(
+    RayTracingSceneProjectRenderRequest *request,
+    char *error,
+    size_t error_size
+) {
+    char cache_path[PATH_MAX];
+    char volume_manifest_path[PATH_MAX];
+    json_object *cache = NULL;
+    const char *schema;
+    const char *vf3d_active_dir;
+    if (!request || !request->project_backed ||
+        !portable_project_relpath(request->physics_cache_relpath) ||
+        !join_path(request->project_root,
+                   request->physics_cache_relpath,
+                   cache_path,
+                   sizeof(cache_path))) {
+        return false;
+    }
+    request->volume_manifest_relpath[0] = '\0';
+    if (!path_is_file(cache_path)) return true;
+    if (!load_json_object(cache_path, &cache, error, error_size)) return false;
+    schema = json_string_member(cache, "schema");
+    vf3d_active_dir = json_string_member(cache, "vf3d_active_dir");
+    if (!schema || strcmp(schema, PHYSICS_SIM_ACTIVE_CACHE_SCHEMA) != 0 ||
+        !vf3d_active_dir || !portable_project_relpath(vf3d_active_dir) ||
+        snprintf(request->volume_manifest_relpath,
+                 sizeof(request->volume_manifest_relpath),
+                 "%s/manifest.json",
+                 vf3d_active_dir) >= (int)sizeof(request->volume_manifest_relpath) ||
+        !portable_project_relpath(request->volume_manifest_relpath) ||
+        !join_path(request->project_root,
+                   request->volume_manifest_relpath,
+                   volume_manifest_path,
+                   sizeof(volume_manifest_path)) ||
+        !path_is_file(volume_manifest_path)) {
+        set_error(error,
+                  error_size,
+                  "scene-project physics cache has no valid active VF3D manifest: %s",
+                  cache_path);
+        request->volume_manifest_relpath[0] = '\0';
+        json_object_put(cache);
+        return false;
+    }
+    json_object_put(cache);
     return true;
 }
 
@@ -336,6 +384,9 @@ bool ray_tracing_scene_project_render_request_resolve(
                     sizeof(request.output_root_relpath),
                     SCENE_PROJECT_OUTPUT_ROOT_DEFAULT);
         json_object_put(manifest);
+        if (!resolve_active_volume_manifest(&request, error, error_size)) {
+            return false;
+        }
     }
 
     if (explicit_request_path && explicit_request_path[0]) {
@@ -428,6 +479,7 @@ bool ray_tracing_scene_project_render_request_write(
     char output_request_relpath[PATH_MAX];
     char summary_request_relpath[PATH_MAX];
     char progress_request_relpath[PATH_MAX];
+    char volume_request_relpath[PATH_MAX];
     char tmp_path[PATH_MAX];
     FILE *file;
     const char *json_text;
@@ -497,6 +549,23 @@ bool ray_tracing_scene_project_render_request_write(
         volume = json_object_new_object();
         json_object_object_add(root, "volume", volume);
         json_object_object_add(volume, "enabled", json_object_new_boolean(false));
+    }
+    if (request->volume_manifest_relpath[0]) {
+        json_object *visible = NULL;
+        if (!request_relative_project_path(request->request_relpath,
+                                           request->volume_manifest_relpath,
+                                           volume_request_relpath,
+                                           sizeof(volume_request_relpath))) {
+            set_error(error, error_size, "failed to build portable volume manifest path");
+            json_object_put(root);
+            return false;
+        }
+        replace_object_member(volume, "enabled", json_object_new_boolean(true));
+        replace_object_member(volume, "source_kind", json_object_new_string("manifest"));
+        replace_object_member(volume, "source_path", json_object_new_string(volume_request_relpath));
+        if (!json_object_object_get_ex(volume, "visible", &visible)) {
+            json_object_object_add(volume, "visible", json_object_new_boolean(true));
+        }
     }
 
     output = json_object_member(root, "output");

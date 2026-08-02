@@ -155,6 +155,119 @@ static int test_existing_request_round_trip_preserves_unknown_fields(void) {
     return 0;
 }
 
+static int test_active_cache_binds_native_volume_manifest(void) {
+    char root_template[] = "/tmp/ray_scene_project_request_volume_XXXXXX";
+    char *root = mkdtemp(root_template);
+    char path[PATH_MAX];
+    char error[256];
+    RayTracingSceneProjectRenderRequest request;
+    json_object *json;
+    json_object *volume;
+
+    assert_true("project_request_volume_tmpdir", root != NULL);
+    if (!root) return 0;
+    snprintf(path, sizeof(path), "%s/ray_tracing", root);
+    assert_true("project_request_volume_ray_dir", make_dir(path));
+    snprintf(path, sizeof(path), "%s/physics_sim", root);
+    assert_true("project_request_volume_physics_dir", make_dir(path));
+    snprintf(path, sizeof(path), "%s/assets", root);
+    assert_true("project_request_volume_assets_dir", make_dir(path));
+    snprintf(path, sizeof(path), "%s/assets/vf3d", root);
+    assert_true("project_request_volume_vf3d_dir", make_dir(path));
+    snprintf(path, sizeof(path), "%s/assets/vf3d/active", root);
+    assert_true("project_request_volume_active_dir", make_dir(path));
+    snprintf(path, sizeof(path), "%s/assets/vf3d/active/manifest.json", root);
+    assert_true("project_request_volume_manifest", write_text_file(path, "{}\n"));
+    snprintf(path, sizeof(path), "%s/physics_sim/active_cache_manifest.json", root);
+    assert_true(
+        "project_request_volume_cache",
+        write_text_file(
+            path,
+            "{\"schema\":\"physics_sim_active_cache_manifest_v1\","
+            "\"vf3d_active_dir\":\"assets/vf3d/active\"}\n"));
+    snprintf(path, sizeof(path), "%s/scene_runtime.json", root);
+    assert_true("project_request_volume_runtime", write_text_file(path, "{}\n"));
+    snprintf(path, sizeof(path), "%s/scene_project.json", root);
+    assert_true(
+        "project_request_volume_project",
+        write_text_file(
+            path,
+            "{\"active\":{\"render_request\":\"ray_tracing/render_request.json\","
+            "\"physics_cache\":\"physics_sim/active_cache_manifest.json\"}}\n"));
+
+    snprintf(path, sizeof(path), "%s/scene_runtime.json", root);
+    assert_true(
+        "project_request_volume_resolve",
+        ray_tracing_scene_project_render_request_resolve(
+            path, NULL, &request, error, sizeof(error)));
+    assert_true(
+        "project_request_volume_resolved_manifest",
+        strcmp(request.volume_manifest_relpath,
+               "assets/vf3d/active/manifest.json") == 0);
+    assert_true(
+        "project_request_volume_write",
+        ray_tracing_scene_project_render_request_write(
+            &request, 0, 2, 1, error, sizeof(error)));
+    json = json_object_from_file(request.request_path);
+    volume = json ? json_object_object_get(json, "volume") : NULL;
+    assert_true(
+        "project_request_volume_enabled",
+        volume &&
+            json_object_get_boolean(
+                json_object_object_get(volume, "enabled")));
+    assert_true(
+        "project_request_volume_kind",
+        volume &&
+            strcmp(
+                json_object_get_string(
+                    json_object_object_get(volume, "source_kind")),
+                "manifest") == 0);
+    assert_true(
+        "project_request_volume_source",
+        volume &&
+            strcmp(
+                json_object_get_string(
+                    json_object_object_get(volume, "source_path")),
+                "../assets/vf3d/active/manifest.json") == 0);
+    if (json) json_object_put(json);
+
+    snprintf(path, sizeof(path), "%s/physics_sim/active_cache_manifest.json", root);
+    assert_true(
+        "project_request_volume_invalid_cache_write",
+        write_text_file(
+            path,
+            "{\"schema\":\"physics_sim_active_cache_manifest_v1\","
+            "\"vf3d_active_dir\":\"../outside\"}\n"));
+    snprintf(path, sizeof(path), "%s/scene_runtime.json", root);
+    assert_true(
+        "project_request_volume_invalid_cache_rejected",
+        !ray_tracing_scene_project_render_request_resolve(
+            path, NULL, &request, error, sizeof(error)));
+
+    snprintf(path, sizeof(path), "%s/ray_tracing/render_request.json", root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/ray_tracing", root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/physics_sim/active_cache_manifest.json", root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/physics_sim", root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/assets/vf3d/active/manifest.json", root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/assets/vf3d/active", root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/assets/vf3d", root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/assets", root);
+    rmdir(path);
+    snprintf(path, sizeof(path), "%s/scene_runtime.json", root);
+    unlink(path);
+    snprintf(path, sizeof(path), "%s/scene_project.json", root);
+    unlink(path);
+    rmdir(root);
+    return 0;
+}
+
 static int test_unsafe_project_pointer_rejected_and_external_explicit_is_read_only(void) {
     char root_template[] = "/tmp/ray_scene_project_request_unsafe_XXXXXX";
     char external_template[] = "/tmp/ray_external_render_request_XXXXXX";
@@ -203,6 +316,7 @@ int run_test_scene_project_render_request_tests(void) {
     int before = test_support_failures();
     test_absent_request_creates_canonical_project_sidecar();
     test_existing_request_round_trip_preserves_unknown_fields();
+    test_active_cache_binds_native_volume_manifest();
     test_unsafe_project_pointer_rejected_and_external_explicit_is_read_only();
     return test_support_failures() - before;
 }
