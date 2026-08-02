@@ -414,6 +414,185 @@ static bool water_surface_import_parse_boundary_contract(
     return true;
 }
 
+static bool water_surface_import_parse_boundary_string(const cJSON* root,
+                                                       const char* key,
+                                                       char* out,
+                                                       size_t out_size,
+                                                       char* diagnostics,
+                                                       size_t diagnostics_size) {
+    cJSON* item = cJSON_GetObjectItem((cJSON*)root, key);
+    if (!cJSON_IsString(item) || !item->valuestring || !item->valuestring[0] ||
+        !water_surface_import_copy_string(out, out_size, item->valuestring)) {
+        char message[160];
+        snprintf(message, sizeof(message), "water_body_boundary_v1.%s invalid", key);
+        water_surface_import_diag(diagnostics, diagnostics_size, message);
+        return false;
+    }
+    return true;
+}
+
+static bool water_surface_import_parse_boundary_number(const cJSON* root,
+                                                       const char* key,
+                                                       double* out,
+                                                       char* diagnostics,
+                                                       size_t diagnostics_size) {
+    cJSON* item = cJSON_GetObjectItem((cJSON*)root, key);
+    if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble)) {
+        char message[160];
+        snprintf(message, sizeof(message), "water_body_boundary_v1.%s invalid", key);
+        water_surface_import_diag(diagnostics, diagnostics_size, message);
+        return false;
+    }
+    *out = item->valuedouble;
+    return true;
+}
+
+static bool water_surface_import_parse_water_body_boundary(
+    const char* manifest_path,
+    RuntimeWaterBodyBoundaryV1* out_boundary,
+    char* diagnostics,
+    size_t diagnostics_size) {
+    cJSON* root = NULL;
+    cJSON* boundary = NULL;
+    cJSON* bounds = NULL;
+
+    if (!out_boundary) return false;
+    memset(out_boundary, 0, sizeof(*out_boundary));
+    if (!water_surface_import_read_json(manifest_path, &root, diagnostics, diagnostics_size)) {
+        return false;
+    }
+    boundary = cJSON_GetObjectItem(root, "water_body_boundary_v1");
+    if (!boundary) {
+        cJSON_Delete(root);
+        return true;
+    }
+    if (!cJSON_IsObject(boundary)) {
+        cJSON_Delete(root);
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 must be an object");
+        return false;
+    }
+    bounds = cJSON_GetObjectItem(boundary, "container_inner_bounds_m");
+    if (!bounds) {
+        cJSON_Delete(root);
+        return true;
+    }
+    out_boundary->present = true;
+    if (!cJSON_IsObject(bounds) ||
+        !water_surface_import_parse_boundary_string(boundary, "closure_mode",
+                                                    out_boundary->closure_mode,
+                                                    sizeof(out_boundary->closure_mode),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "body_id",
+                                                    out_boundary->body_id,
+                                                    sizeof(out_boundary->body_id),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "container_id",
+                                                    out_boundary->container_id,
+                                                    sizeof(out_boundary->container_id),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "object_id",
+                                                    out_boundary->object_id,
+                                                    sizeof(out_boundary->object_id),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "material_id",
+                                                    out_boundary->material_id,
+                                                    sizeof(out_boundary->material_id),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "medium_id",
+                                                    out_boundary->medium_id,
+                                                    sizeof(out_boundary->medium_id),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "legacy_shell_object_id",
+                                                    out_boundary->legacy_shell_object_id,
+                                                    sizeof(out_boundary->legacy_shell_object_id),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "dry_sample_policy",
+                                                    out_boundary->dry_sample_policy,
+                                                    sizeof(out_boundary->dry_sample_policy),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "solid_occluder_policy",
+                                                    out_boundary->solid_occluder_policy,
+                                                    sizeof(out_boundary->solid_occluder_policy),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_string(boundary, "classification_metadata",
+                                                    out_boundary->classification_metadata,
+                                                    sizeof(out_boundary->classification_metadata),
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(bounds, "min_x", &out_boundary->min_x,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(bounds, "max_x", &out_boundary->max_x,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(bounds, "min_y", &out_boundary->min_y,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(bounds, "max_y", &out_boundary->max_y,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(bounds, "min_z", &out_boundary->min_z,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(bounds, "max_z", &out_boundary->max_z,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(boundary, "boundary_inset_m",
+                                                    &out_boundary->boundary_inset_m,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(boundary, "bottom_height_m",
+                                                    &out_boundary->bottom_height_m,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(boundary, "base_surface_height_m",
+                                                    &out_boundary->base_surface_height_m,
+                                                    diagnostics, diagnostics_size) ||
+        !water_surface_import_parse_boundary_number(boundary, "dry_height_epsilon_m",
+                                                    &out_boundary->dry_height_epsilon_m,
+                                                    diagnostics, diagnostics_size)) {
+        if (!cJSON_IsObject(bounds)) {
+            water_surface_import_diag(diagnostics, diagnostics_size,
+                                      "water_body_boundary_v1.container_inner_bounds_m invalid");
+        }
+        cJSON_Delete(root);
+        return false;
+    }
+    if (strcmp(out_boundary->closure_mode, "heightfield_volume") != 0) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1.closure_mode unsupported");
+    } else if (strcmp(out_boundary->body_id, out_boundary->object_id) != 0) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 body_id/object_id mismatch");
+    } else if (!(out_boundary->min_x < out_boundary->max_x) ||
+               !(out_boundary->min_y < out_boundary->max_y) ||
+               !(out_boundary->min_z < out_boundary->max_z)) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 container bounds inverted");
+    } else if (out_boundary->boundary_inset_m < 0.0 ||
+               2.0 * out_boundary->boundary_inset_m >= out_boundary->max_x - out_boundary->min_x ||
+               2.0 * out_boundary->boundary_inset_m >= out_boundary->max_z - out_boundary->min_z) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 boundary inset invalid");
+    } else if (!(out_boundary->bottom_height_m >= out_boundary->min_y &&
+                 out_boundary->bottom_height_m < out_boundary->base_surface_height_m &&
+                 out_boundary->base_surface_height_m <= out_boundary->max_y)) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 base/bottom heights invalid");
+    } else if (out_boundary->dry_height_epsilon_m < 0.0) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 dry height epsilon invalid");
+    } else if (strcmp(out_boundary->dry_sample_policy,
+                      "surface_min_epsilon_to_base") != 0) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 dry sample policy unsupported");
+    } else if (strcmp(out_boundary->solid_occluder_policy, "ordinary_geometry_occlusion") != 0) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 solid occluder policy unsupported");
+    } else if (strcmp(out_boundary->classification_metadata, "legacy_height_sentinel") != 0) {
+        water_surface_import_diag(diagnostics, diagnostics_size,
+                                  "water_body_boundary_v1 classification metadata unsupported");
+    } else {
+        cJSON_Delete(root);
+        water_surface_import_diag(diagnostics, diagnostics_size, "ok");
+        return true;
+    }
+    cJSON_Delete(root);
+    return false;
+}
+
 static bool water_surface_import_resolve_frame_path(
     const char* manifest_path,
     int requested_frame_index,
@@ -799,6 +978,15 @@ bool RuntimeWaterSurfaceImport_LoadSourceAtFrame(const char* source_path,
     out_frame->volume_grid_h = volume_grid_h;
     out_frame->volume_grid_d = volume_grid_d;
     out_frame->density_threshold = density_threshold;
+
+    if (!water_surface_import_parse_water_body_boundary(
+            manifest_path,
+            &out_frame->water_body_boundary,
+            out_diagnostics,
+            out_diagnostics_size)) {
+        RuntimeWaterSurfaceFrame_Reset(out_frame);
+        return false;
+    }
 
     if (!water_surface_import_load_frame_json(frame_path,
                                               out_frame,

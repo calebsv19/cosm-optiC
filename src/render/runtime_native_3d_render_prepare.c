@@ -31,6 +31,7 @@
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_water_material_3d.h"
+#include "render/runtime_water_body_prepare_3d.h"
 #include "render/runtime_native_3d_prepare_diagnostics.h"
 #include "render/runtime_native_3d_prepared_scene_cache_internal.h"
 #include "render/runtime_native_3d_render_photon_prepare.h"
@@ -763,6 +764,7 @@ static void runtime_native_3d_record_water_surface_accel_lifecycle(
 static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScene3D* scene,
                                                                      int frame_index) {
     RuntimeWaterSurfaceFrame water = {0};
+    RuntimeWaterBodyPrepare3DReport body_report = {0};
     RuntimeScene3DHeightfieldSurfaceDesc desc = {0};
     bool found = false;
     char diagnostics[1024] = {0};
@@ -771,6 +773,7 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     int appended_triangle_count = 0;
 
     if (!scene) return false;
+    RuntimeWaterBodyPrepare3D_ResetLastReport();
     if (animSettings.volumeSourceKind != VOLUME_SOURCE_MANIFEST ||
         animSettings.volumeSourcePath[0] == '\0') {
         return true;
@@ -805,12 +808,44 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
         return false;
     }
     if (water.closed_volume_boundary && !water.dynamic_volume_boundary &&
+        !water.water_body_boundary.present &&
         !runtime_native_3d_render_closed_water_shell_matches(
             scene, scene_object_index, &water)) {
         runtime_native_3d_prepare_frame_set_diag(
             "closed water surface shell bounds or identity mismatch");
         RuntimeWaterSurfaceFrame_Free(&water);
         return false;
+    }
+
+    first_water_triangle_index = scene->triangleMesh.triangleCount;
+    if (water.water_body_boundary.present) {
+        if (!RuntimeWaterBodyPrepare3D_Append(scene,
+                                             &water,
+                                             scene_object_index,
+                                             &body_report,
+                                             diagnostics,
+                                             sizeof(diagnostics))) {
+            runtime_native_3d_prepare_frame_set_diag(
+                diagnostics[0] ? diagnostics : "unified water body prepare failed");
+            RuntimeWaterSurfaceFrame_Free(&water);
+            return false;
+        }
+        appended_triangle_count = body_report.geometry.total_triangle_count;
+        first_water_triangle_index = scene->triangleMesh.triangleCount - appended_triangle_count;
+        runtime_native_3d_record_water_surface_accel_lifecycle(&water,
+                                                               scene,
+                                                               first_water_triangle_index,
+                                                               appended_triangle_count);
+        if (RuntimeRay3D_CurrentTraceRoute() == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS &&
+            !RuntimeSceneAcceleration3D_RebuildTLASFromScene(scene)) {
+            runtime_native_3d_prepare_frame_set_diagf(
+                "unified water body TLAS rebuild failed: %s",
+                RuntimeSceneAcceleration3D_LastDiagnostics());
+            RuntimeWaterSurfaceFrame_Free(&water);
+            return false;
+        }
+        RuntimeWaterSurfaceFrame_Free(&water);
+        return true;
     }
 
     desc.object_id = "water_surface";
@@ -834,7 +869,6 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     desc.two_sided = !water.closed_volume_boundary;
     desc.map_y_height_to_scene_z = true;
 
-    first_water_triangle_index = scene->triangleMesh.triangleCount;
     if (!RuntimeScene3DBuilder_AppendHeightfieldSurface(scene,
                                                         &desc,
                                                         &appended_triangle_count)) {

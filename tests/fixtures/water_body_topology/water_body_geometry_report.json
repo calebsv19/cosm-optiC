@@ -1,0 +1,11 @@
+{
+  "schema": "ray_tracing_water_body_geometry_report_v1",
+  "proof_scope": "local_geometry_only",
+  "grid": {"width": 16, "depth": 16},
+  "topology_stable": true,
+  "fixtures": [
+    {"id": "water_body_flat_current_baseline", "corner_height": 1, "object_count": 1, "component_count": 1, "boundary_edges": 0, "nonmanifold_edges": 0, "signed_volume": 3.6, "winding_consistent": true, "top_triangles": 450, "side_triangles": 120, "bottom_triangles": 450, "total_triangles": 1020, "max_seam_error_m": 0, "topology_signature": "9ebf801eb02593fe", "object_id": "fixture_unified_water_body", "material_id": "fixture_water_material", "medium_id": "fixture_water_medium", "topology_valid": true},
+    {"id": "water_body_raised_corner", "corner_height": 1.25, "object_count": 1, "component_count": 1, "boundary_edges": 0, "nonmanifold_edges": 0, "signed_volume": 3.60166666667, "winding_consistent": true, "top_triangles": 450, "side_triangles": 120, "bottom_triangles": 450, "total_triangles": 1020, "max_seam_error_m": 0, "topology_signature": "9ebf801eb02593fe", "object_id": "fixture_unified_water_body", "material_id": "fixture_water_material", "medium_id": "fixture_water_medium", "topology_valid": true},
+    {"id": "water_body_depressed_corner", "corner_height": 0.75, "object_count": 1, "component_count": 1, "boundary_edges": 0, "nonmanifold_edges": 0, "signed_volume": 3.59833333333, "winding_consistent": true, "top_triangles": 450, "side_triangles": 120, "bottom_triangles": 450, "total_triangles": 1020, "max_seam_error_m": 0, "topology_signature": "9ebf801eb02593fe", "object_id": "fixture_unified_water_body", "material_id": "fixture_water_material", "medium_id": "fixture_water_medium", "topology_valid": true}
+  ]
+}

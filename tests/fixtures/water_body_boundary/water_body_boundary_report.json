@@ -1,0 +1,15 @@
+{
+  "schema": "ray_tracing_water_body_boundary_report_v1",
+  "proof_scope": "local_contract_and_geometry_only",
+  "closure_mode": "heightfield_volume",
+  "body_id": "fixture_unified_water_body",
+  "container_id": "fixture_glass_container",
+  "material_id": "fixture_water_material",
+  "medium_id": "fixture_water_medium",
+  "selected_frame": 0,
+  "bounds_m": {"min_x": -1.6, "max_x": 1.6, "min_y": 0, "max_y": 1.5, "min_z": -0.8, "max_z": 0.8},
+  "sample_classification": {"wet": 15, "dry_container": 1, "solid_occluder": 0},
+  "legacy_shell_suppressed": true,
+  "material_parity_valid": true,
+  "topology": {"components": 1, "boundary_edges": 0, "nonmanifold_edges": 0, "signed_volume": 3.76444445001, "max_seam_error_m": 0, "valid": true}
+}

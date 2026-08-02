@@ -1,0 +1,35 @@
+{
+  "schema": "physics_sim_water_surface_heightfield_v1",
+  "version": 1,
+  "frame_contract": "water_surface_heightfield_v1",
+  "frame_index": 0,
+  "time_seconds": 0.0,
+  "dt_seconds": 0.0625,
+  "layout": "row_major_z_x",
+  "surface_axis": "y",
+  "grid_w": 4,
+  "grid_d": 4,
+  "sample_count": 16,
+  "sample_origin_x": -1.5,
+  "sample_origin_z": -0.75,
+  "sample_spacing_x": 1.0,
+  "sample_spacing_z": 0.5,
+  "summary": {
+    "wet_columns": 15,
+    "dry_columns": 1,
+    "solid_columns": 0,
+    "water_cells": 30,
+    "surface_min_y": 0.0,
+    "surface_max_y": 1.1,
+    "surface_avg_y": 0.95,
+    "max_slope": 0.2,
+    "finite_normals": true
+  },
+  "heights_y": [0.0,1.0,1.0,1.0, 1.0,1.0,1.0,1.0, 1.0,1.0,1.0,1.0, 1.0,1.0,1.0,1.1],
+  "normals_xyz": [
+    0,1,0, 0,1,0, 0,1,0, 0,1,0,
+    0,1,0, 0,1,0, 0,1,0, 0,1,0,
+    0,1,0, 0,1,0, 0,1,0, 0,1,0,
+    0,1,0, 0,1,0, 0,1,0, 0,1,0
+  ]
+}

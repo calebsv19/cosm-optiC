@@ -163,6 +163,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
+	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
+	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
@@ -538,6 +540,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
+	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
+	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \

@@ -687,6 +687,54 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"max_slope\": %.9f,\n", preflight->water_surface_max_slope);
     fprintf(file, "    \"finite_normals\": %s,\n",
             preflight->water_surface_finite_normals ? "true" : "false");
+    fprintf(file, "    \"water_body\": {\n");
+    fprintf(file, "      \"boundary_contract_present\": %s,\n",
+            preflight->water_body_boundary_present ? "true" : "false");
+    fprintf(file, "      \"active\": %s,\n",
+            preflight->water_body_active ? "true" : "false");
+    fprintf(file, "      \"closure_mode\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_closure_mode);
+    fprintf(file, ",\n      \"body_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_id);
+    fprintf(file, ",\n      \"container_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_container_id);
+    fprintf(file, ",\n      \"material_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_material_id);
+    fprintf(file, ",\n      \"medium_id\": ");
+    RayTracingJsonWriteString(file, preflight->water_body_medium_id);
+    fprintf(file,
+            ",\n      \"container_inner_bounds_m\": {\"min_x\": %.9f, "
+            "\"max_x\": %.9f, \"min_y\": %.9f, \"max_y\": %.9f, "
+            "\"min_z\": %.9f, \"max_z\": %.9f},\n",
+            preflight->water_body_min_x, preflight->water_body_max_x,
+            preflight->water_body_min_y, preflight->water_body_max_y,
+            preflight->water_body_min_z, preflight->water_body_max_z);
+    fprintf(file,
+            "      \"sample_classification\": {\"wet\": %u, "
+            "\"dry_container\": %u, \"solid_occluder\": %u},\n",
+            preflight->water_body_wet_samples,
+            preflight->water_body_dry_container_samples,
+            preflight->water_body_solid_occluder_samples);
+    fprintf(file, "      \"legacy_shell_suppressed\": %s,\n",
+            preflight->water_body_legacy_shell_suppressed ? "true" : "false");
+    fprintf(file, "      \"material_parity_valid\": %s,\n",
+            preflight->water_body_material_parity_valid ? "true" : "false");
+    fprintf(file,
+            "      \"topology\": {\"components\": %d, \"boundary_edges\": %d, "
+            "\"nonmanifold_edges\": %d, \"top_triangles\": %d, "
+            "\"side_triangles\": %d, \"bottom_triangles\": %d, "
+            "\"signed_volume\": %.12g, \"max_seam_error_m\": %.12g, "
+            "\"valid\": %s}\n",
+            preflight->water_body_component_count,
+            preflight->water_body_boundary_edge_count,
+            preflight->water_body_nonmanifold_edge_count,
+            preflight->water_body_top_triangle_count,
+            preflight->water_body_side_triangle_count,
+            preflight->water_body_bottom_triangle_count,
+            preflight->water_body_signed_volume,
+            preflight->water_body_max_seam_error_m,
+            preflight->water_body_topology_valid ? "true" : "false");
+    fprintf(file, "    },\n");
     fprintf(file, "    \"material\": {\n");
     fprintf(file, "      \"ior\": %.9f,\n", preflight->water_surface_material_ior);
     fprintf(file, "      \"absorption_distance_m\": %.9f,\n",

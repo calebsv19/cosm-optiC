@@ -10,6 +10,7 @@
 #include "config/config_manager.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
+#include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_mesh_accel_pack_3d.h"
 #include "render/runtime_mesh_blas_cache_3d.h"
 #include "render/runtime_ray_3d.h"
@@ -1127,6 +1128,133 @@ static int test_tlas_bind_rejects_same_count_geometry_drift(void) {
     return 0;
 }
 
+static int test_tlas_excludes_dynamic_water_cache_owned_primitive(void) {
+    RuntimeScene3D scene;
+    RuntimeSceneAcceleration3DDiagnostics diagnostics = {0};
+    RuntimeSceneAcceleration3DTraceStats trace_stats = {0};
+    RuntimeDynamicGeometryAcceleration3DInput water_input = {0};
+    RuntimeDynamicGeometryAcceleration3DClassification water_classification = {0};
+    RuntimeDynamicGeometryWaterCacheDiagnostics3D water_stats = {0};
+    HitInfo3D hit = {0};
+    Ray3D ray = RuntimeRay3D_Make(vec3(0.25, 0.25, 2.0),
+                                  vec3(0.0, 0.0, -1.0));
+    RuntimeSceneAcceleration3DTraceStatus status;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    scene.primitives = calloc(2u, sizeof(*scene.primitives));
+    scene.triangleMesh.triangles = calloc(3u, sizeof(*scene.triangleMesh.triangles));
+    assert_true("mrt3_dynamic_water_owned_alloc",
+                scene.primitives && scene.triangleMesh.triangles);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        return 0;
+    }
+    scene.primitiveCount = 2;
+    scene.primitiveCapacity = 2;
+    scene.triangleMesh.triangleCount = 3;
+    scene.triangleMesh.triangleCapacity = 3;
+    scene.scope.triangleMeshEnabled = true;
+
+    scene.primitives[0].kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    scene.primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    scene.primitives[0].source.sceneObjectIndex = 60;
+    snprintf(scene.primitives[0].source.objectId,
+             sizeof(scene.primitives[0].source.objectId),
+             "static_floor");
+    scene.primitives[1].kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    scene.primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+    scene.primitives[1].source.sceneObjectIndex = 61;
+    snprintf(scene.primitives[1].source.objectId,
+             sizeof(scene.primitives[1].source.objectId),
+             "aquarium_unified_water_body");
+
+    scene.triangleMesh.triangles[0].p0 = vec3(-1.0, -1.0, 0.0);
+    scene.triangleMesh.triangles[0].p1 = vec3(1.0, -1.0, 0.0);
+    scene.triangleMesh.triangles[0].p2 = vec3(0.0, 1.0, 0.0);
+    scene.triangleMesh.triangles[0].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[0].primitiveIndex = 0;
+    scene.triangleMesh.triangles[0].sceneObjectIndex = 60;
+    scene.triangleMesh.triangles[0].localTriangleIndex = 0;
+
+    scene.triangleMesh.triangles[1].p0 = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(1.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(1.0, 1.0, 1.0);
+    scene.triangleMesh.triangles[1].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[1].primitiveIndex = 1;
+    scene.triangleMesh.triangles[1].sceneObjectIndex = 61;
+    scene.triangleMesh.triangles[1].localTriangleIndex = 0;
+    scene.triangleMesh.triangles[2].p0 = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[2].p1 = vec3(1.0, 1.0, 1.0);
+    scene.triangleMesh.triangles[2].p2 = vec3(0.0, 1.0, 1.0);
+    scene.triangleMesh.triangles[2].normal = vec3(0.0, 0.0, 1.0);
+    scene.triangleMesh.triangles[2].primitiveIndex = 1;
+    scene.triangleMesh.triangles[2].sceneObjectIndex = 61;
+    scene.triangleMesh.triangles[2].localTriangleIndex = 1;
+
+    water_input.water_surface_source_found = true;
+    water_input.water_surface_loaded = true;
+    water_input.water_surface_frame_selection_built = true;
+    water_input.water_surface_mesh_attached = true;
+    water_input.water_surface_first_grid_w = 2u;
+    water_input.water_surface_first_grid_d = 2u;
+    water_input.water_surface_first_sample_count = 4u;
+    water_input.water_surface_last_grid_w = 2u;
+    water_input.water_surface_last_grid_d = 2u;
+    water_input.water_surface_last_sample_count = 4u;
+    water_input.water_surface_triangle_count = 2;
+    RuntimeDynamicGeometryAcceleration3D_Classify(&water_input,
+                                                   &water_classification);
+    assert_true("mrt3_dynamic_water_owned_record",
+                RuntimeDynamicGeometryAcceleration3D_RecordWaterSurfaceFrame(
+                    &water_classification,
+                    200u,
+                    2) == RUNTIME_DYNAMIC_GEOMETRY_WATER_CACHE_REBUILT);
+    assert_true("mrt3_dynamic_water_owned_store",
+                RuntimeDynamicGeometryAcceleration3D_StoreWaterSurfaceMeshFromScene(
+                    &scene,
+                    1,
+                    2));
+    assert_true("mrt3_dynamic_water_owned_query",
+                RuntimeDynamicGeometryAcceleration3D_OwnsScenePrimitive(&scene, 1));
+    assert_true("mrt3_dynamic_water_static_not_owned",
+                !RuntimeDynamicGeometryAcceleration3D_OwnsScenePrimitive(&scene, 0));
+    assert_true("mrt3_dynamic_water_owned_tlas_rebuild",
+                RuntimeSceneAcceleration3D_RebuildTLASFromScene(&scene));
+    RuntimeSceneAcceleration3D_AppendTLASDiagnostics(&diagnostics);
+    assert_true("mrt3_dynamic_water_owned_tlas_one_instance",
+                diagnostics.tlasInstanceCount == 1u);
+
+    RuntimeSceneAcceleration3D_ResetTraceStats();
+    status = RuntimeSceneAcceleration3D_TraceFirstHit(&scene,
+                                                      &ray,
+                                                      0.001,
+                                                      10.0,
+                                                      &hit);
+    assert_true("mrt3_dynamic_water_owned_trace_hit",
+                status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT);
+    if (status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT) {
+        assert_true("mrt3_dynamic_water_owned_hit_primitive", hit.primitiveIndex == 1);
+        assert_true("mrt3_dynamic_water_owned_hit_object", hit.sceneObjectIndex == 61);
+    }
+    RuntimeSceneAcceleration3D_SnapshotTraceStats(&trace_stats);
+    RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(&water_stats);
+    assert_true("mrt3_dynamic_water_owned_no_tlas_instance_test",
+                trace_stats.tlasInstanceTests == 0u);
+    assert_true("mrt3_dynamic_water_owned_no_identity_scan",
+                trace_stats.identityRemapFallbackScans == 0u);
+    assert_true("mrt3_dynamic_water_owned_no_identity_failure",
+                trace_stats.identityRemapFailures == 0u);
+    assert_true("mrt3_dynamic_water_owned_cache_trace",
+                water_stats.routeTraceCalls == 1u && water_stats.routeTraceHits == 1u);
+
+    RuntimeScene3D_Free(&scene);
+    RuntimeDynamicGeometryAcceleration3D_ResetWaterCacheLifecycle();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    return 0;
+}
+
 static int test_bridge_builder_consumes_retained_mesh_assets(void) {
     RuntimeScene3D scene;
     char diagnostics[256] = {0};
@@ -1161,6 +1289,7 @@ int main(void) {
     test_append_mesh_asset_set_skips_degenerate_triangles();
     test_tlas_bind_accepts_copied_prepared_scene();
     test_tlas_bind_rejects_same_count_geometry_drift();
+    test_tlas_excludes_dynamic_water_cache_owned_primitive();
     test_bridge_builder_consumes_retained_mesh_assets();
     return g_failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

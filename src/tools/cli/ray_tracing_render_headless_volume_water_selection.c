@@ -5,6 +5,7 @@
 #include "import/fluid_volume_import_3d.h"
 #include "import/water_surface_import.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_water_body_prepare_3d.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -277,6 +278,26 @@ static void ray_tracing_headless_copy_water_surface_first_frame(
     preflight->water_surface_avg_y = frame->surface_avg_y;
     preflight->water_surface_max_slope = frame->max_slope;
     preflight->water_surface_finite_normals = frame->finite_normals;
+    preflight->water_body_boundary_present = frame->water_body_boundary.present;
+    if (frame->water_body_boundary.present) {
+        const RuntimeWaterBodyBoundaryV1 *boundary = &frame->water_body_boundary;
+        snprintf(preflight->water_body_closure_mode,
+                 sizeof(preflight->water_body_closure_mode), "%s", boundary->closure_mode);
+        snprintf(preflight->water_body_id,
+                 sizeof(preflight->water_body_id), "%s", boundary->body_id);
+        snprintf(preflight->water_body_container_id,
+                 sizeof(preflight->water_body_container_id), "%s", boundary->container_id);
+        snprintf(preflight->water_body_material_id,
+                 sizeof(preflight->water_body_material_id), "%s", boundary->material_id);
+        snprintf(preflight->water_body_medium_id,
+                 sizeof(preflight->water_body_medium_id), "%s", boundary->medium_id);
+        preflight->water_body_min_x = boundary->min_x;
+        preflight->water_body_max_x = boundary->max_x;
+        preflight->water_body_min_y = boundary->min_y;
+        preflight->water_body_max_y = boundary->max_y;
+        preflight->water_body_min_z = boundary->min_z;
+        preflight->water_body_max_z = boundary->max_z;
+    }
     if (frame->material.valid) {
         preflight->water_surface_material_ior = frame->material.ior;
         preflight->water_surface_absorption_distance_m =
@@ -379,6 +400,7 @@ void ray_tracing_headless_note_water_surface_mesh(
     const RuntimeNative3DPreparedFrame *frame) {
     int triangle_count = 0;
     int payload_scene_object_index = -1;
+    RuntimeWaterBodyPrepare3DReport body_report = {0};
     if (!preflight || !frame || !preflight->water_surface_source_found) return;
     for (int i = 0; i < frame->scene.triangleMesh.triangleCount; ++i) {
         const int scene_object_index = frame->scene.triangleMesh.triangles[i].sceneObjectIndex;
@@ -393,6 +415,29 @@ void ray_tracing_headless_note_water_surface_mesh(
     }
     preflight->water_surface_triangle_count = triangle_count;
     preflight->water_surface_mesh_attached = triangle_count > 0;
+    if (RuntimeWaterBodyPrepare3D_GetLastReport(&body_report)) {
+        preflight->water_body_active = body_report.active;
+        preflight->water_body_legacy_shell_suppressed =
+            body_report.legacy_shell_suppressed;
+        preflight->water_body_material_parity_valid = body_report.material_parity_valid;
+        preflight->water_body_topology_valid = body_report.geometry.topology_valid;
+        preflight->water_body_wet_samples = body_report.wet_sample_count;
+        preflight->water_body_dry_container_samples =
+            body_report.dry_container_sample_count;
+        preflight->water_body_solid_occluder_samples =
+            body_report.solid_occluder_sample_count;
+        preflight->water_body_component_count =
+            body_report.geometry.connected_component_count;
+        preflight->water_body_boundary_edge_count = body_report.geometry.boundary_edge_count;
+        preflight->water_body_nonmanifold_edge_count =
+            body_report.geometry.nonmanifold_edge_count;
+        preflight->water_body_top_triangle_count = body_report.geometry.top_triangle_count;
+        preflight->water_body_side_triangle_count = body_report.geometry.side_triangle_count;
+        preflight->water_body_bottom_triangle_count = body_report.geometry.bottom_triangle_count;
+        preflight->water_body_signed_volume = body_report.geometry.signed_volume;
+        preflight->water_body_max_seam_error_m =
+            body_report.geometry.max_perimeter_seam_error;
+    }
     if (payload_scene_object_index >= 0) {
         RuntimeMaterialPayload3D payload = {0};
         if (RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(payload_scene_object_index,

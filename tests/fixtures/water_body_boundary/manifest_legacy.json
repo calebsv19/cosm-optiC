@@ -1,0 +1,7 @@
+{
+  "schema": "physics_sim_water_manifest_v1",
+  "frame_contract": "water_surface_heightfield_v1",
+  "surface_representation": "heightfield",
+  "material": {"ior": 1.333, "absorption_distance_m": 4.0, "absorption_rgb": [0.1, 0.035, 0.015], "reflectivity": 0.08, "roughness": 0.02},
+  "frames": [{"path": "frame_000000.json", "frame_contract": "water_surface_heightfield_v1"}]
+}
