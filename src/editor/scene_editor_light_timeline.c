@@ -424,8 +424,8 @@ static bool create_default_document_for_selected(void) {
     TimelineTrack track;
     const char* target = SceneEditorLightTimelineSelectedTargetId();
     int fps = animSettings.fps > 0 ? animSettings.fps : 30;
-    int frame_count = animSettings.frameLimit >= 3
-        ? animSettings.frameLimit
+    int frame_count = animSettings.framesForTravel >= 3
+        ? animSettings.framesForTravel
         : fps * 5 + 1;
     if (!target[0] || sceneSettings.bezierPath.numPoints < 2) return false;
     memset(&document, 0, sizeof(document));

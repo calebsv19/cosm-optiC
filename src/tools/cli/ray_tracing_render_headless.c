@@ -220,7 +220,11 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     sceneSettings.windowWidth = request->width;
     sceneSettings.windowHeight = request->height;
     animSettings.startFrameIndex = request->start_frame;
-    animSettings.framesForTravel = request->frame_count;
+    animSettings.framesForTravel =
+        request->start_frame > 0 &&
+                request->start_frame <= INT_MAX - request->frame_count
+            ? request->start_frame + request->frame_count
+            : request->frame_count;
 
     ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                   request,
