@@ -1492,7 +1492,9 @@ PROCEDURAL_SOLID_MATERIAL_GRAPH_LOAD_SRCS := \
 	$(SRC_DIR)/procedural/procedural_solid_material_graph_json.c \
 	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry.c \
 	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry_corner.c \
-	$(SRC_DIR)/procedural/procedural_solid_material_runtime_program.c
+	$(SRC_DIR)/procedural/procedural_solid_material_runtime_program.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_field.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_curve.c
 
 PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN := \
 	$(BUILD_DIR)/tools/cli/procedural_imported_surface_region_tool
