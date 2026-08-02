@@ -1,6 +1,18 @@
 # optiC Current Truth
 
-Last updated: 2026-07-29
+Last updated: 2026-08-01
+
+## 2026-08-01 Consolidated Release Identities
+
+- Canonical GitHub and local `main` are aligned at the lossless water/photon
+  integration checkpoint `79c3f4064a74cf73f506977957fc4c3b2f58fb17`.
+- The next desktop/source identity is `0.11.0`.
+- The next worker identity is `0.5.4`. Worker `0.5.3` remains immutable and
+  bound to historical release commit `5149153f2770502f06ee541acd7d375711451caf`;
+  its package bytes must not be relabeled for the consolidated source.
+- These source version declarations do not prove package creation,
+  authentication, host distribution, installed runtime, coordinator
+  projection, Registry-current promotion, or render-submission readiness.
 
 ## Program Identity
 - Repository directory: `ray_tracing/`
