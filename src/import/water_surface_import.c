@@ -330,7 +330,9 @@ static bool water_surface_import_parse_material(const cJSON* root,
 static bool water_surface_import_parse_boundary_contract(
     const cJSON* root,
     bool* out_closed_volume_boundary,
+    bool* out_dynamic_volume_boundary,
     double* out_boundary_height_y,
+    double* out_boundary_bottom_height_y,
     char* out_boundary_shell_object_id,
     size_t out_boundary_shell_object_id_size) {
     cJSON* boundary = cJSON_GetObjectItem((cJSON*)root,
@@ -339,16 +341,21 @@ static bool water_surface_import_parse_boundary_contract(
     cJSON* dry_sample_policy = NULL;
     cJSON* shell_object_id = NULL;
     double boundary_height_y = 0.0;
+    double boundary_bottom_height_y = 0.0;
+    bool dynamic_volume_boundary = false;
 
     if (out_closed_volume_boundary) *out_closed_volume_boundary = false;
+    if (out_dynamic_volume_boundary) *out_dynamic_volume_boundary = false;
     if (out_boundary_height_y) *out_boundary_height_y = 0.0;
+    if (out_boundary_bottom_height_y) *out_boundary_bottom_height_y = 0.0;
     if (out_boundary_shell_object_id &&
         out_boundary_shell_object_id_size > 0u) {
         out_boundary_shell_object_id[0] = '\0';
     }
     if (!boundary) return true;
     if (!cJSON_IsObject(boundary) || !out_closed_volume_boundary ||
-        !out_boundary_height_y || !out_boundary_shell_object_id ||
+        !out_dynamic_volume_boundary || !out_boundary_height_y ||
+        !out_boundary_bottom_height_y || !out_boundary_shell_object_id ||
         out_boundary_shell_object_id_size == 0u) {
         return false;
     }
@@ -357,14 +364,20 @@ static bool water_surface_import_parse_boundary_contract(
     dry_sample_policy = cJSON_GetObjectItem(boundary, "dry_sample_policy");
     shell_object_id =
         cJSON_GetObjectItem(boundary, "legacy_shell_object_id");
+    dynamic_volume_boundary =
+        cJSON_IsString(closure_mode) && closure_mode->valuestring &&
+        strcmp(closure_mode->valuestring, "dynamic_heightfield_volume") == 0;
     if (!cJSON_IsString(closure_mode) || !closure_mode->valuestring ||
-        strcmp(closure_mode->valuestring, "heightfield_volume") != 0 ||
+        (strcmp(closure_mode->valuestring, "heightfield_volume") != 0 &&
+         !dynamic_volume_boundary) ||
         !cJSON_IsString(dry_sample_policy) ||
         !dry_sample_policy->valuestring ||
-        strcmp(dry_sample_policy->valuestring,
-               "surface_min_epsilon_to_base") != 0 ||
-        !cJSON_IsString(shell_object_id) || !shell_object_id->valuestring ||
-        !shell_object_id->valuestring[0] ||
+        ((!dynamic_volume_boundary &&
+          strcmp(dry_sample_policy->valuestring,
+                 "surface_min_epsilon_to_base") != 0) ||
+         (dynamic_volume_boundary &&
+          strcmp(dry_sample_policy->valuestring,
+                 "extend_interior_to_boundary") != 0)) ||
         !water_surface_import_number(boundary,
                                      "base_surface_height_m",
                                      &boundary_height_y,
@@ -372,13 +385,32 @@ static bool water_surface_import_parse_boundary_contract(
         !isfinite(boundary_height_y)) {
         return false;
     }
-    if (!water_surface_import_copy_string(out_boundary_shell_object_id,
+    if (dynamic_volume_boundary) {
+        if (!water_surface_import_number(boundary,
+                                         "bottom_height_m",
+                                         &boundary_bottom_height_y,
+                                         true) ||
+            !isfinite(boundary_bottom_height_y) ||
+            !(boundary_bottom_height_y < boundary_height_y)) {
+            return false;
+        }
+    } else {
+        if (!cJSON_IsString(shell_object_id) || !shell_object_id->valuestring ||
+            !shell_object_id->valuestring[0]) {
+            return false;
+        }
+    }
+    if (cJSON_IsString(shell_object_id) && shell_object_id->valuestring &&
+        shell_object_id->valuestring[0] &&
+        !water_surface_import_copy_string(out_boundary_shell_object_id,
                                           out_boundary_shell_object_id_size,
                                           shell_object_id->valuestring)) {
         return false;
     }
     *out_closed_volume_boundary = true;
+    *out_dynamic_volume_boundary = dynamic_volume_boundary;
     *out_boundary_height_y = boundary_height_y;
+    *out_boundary_bottom_height_y = boundary_bottom_height_y;
     return true;
 }
 
@@ -393,7 +425,9 @@ static bool water_surface_import_resolve_frame_path(
     uint32_t* out_volume_grid_d,
     double* out_density_threshold,
     bool* out_closed_volume_boundary,
+    bool* out_dynamic_volume_boundary,
     double* out_boundary_height_y,
+    double* out_boundary_bottom_height_y,
     char* out_boundary_shell_object_id,
     size_t out_boundary_shell_object_id_size,
     char* out_diagnostics,
@@ -451,7 +485,9 @@ static bool water_surface_import_resolve_frame_path(
         !water_surface_import_parse_boundary_contract(
             root,
             out_closed_volume_boundary,
+            out_dynamic_volume_boundary,
             out_boundary_height_y,
+            out_boundary_bottom_height_y,
             out_boundary_shell_object_id,
             out_boundary_shell_object_id_size) ||
         !water_surface_import_uint32(root, "volume_grid_w", out_volume_grid_w, false) ||
@@ -741,7 +777,9 @@ bool RuntimeWaterSurfaceImport_LoadSourceAtFrame(const char* source_path,
                                                  &volume_grid_d,
                                                  &density_threshold,
                                                  &out_frame->closed_volume_boundary,
+                                                 &out_frame->dynamic_volume_boundary,
                                                  &out_frame->boundary_height_y,
+                                                 &out_frame->boundary_bottom_height_y,
                                                  out_frame->boundary_shell_object_id,
                                                  sizeof(out_frame->boundary_shell_object_id),
                                                  out_diagnostics,

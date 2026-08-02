@@ -1,5 +1,6 @@
 #include "test_water_surface_runtime.h"
 
+#include <math.h>
 #include <string.h>
 
 #include "render/runtime_dynamic_geometry_accel_3d.h"
@@ -209,6 +210,66 @@ static int test_water_surface_runtime_closes_authored_dry_perimeter(void) {
     return 0;
 }
 
+static int test_water_surface_runtime_builds_dynamic_closed_volume(void) {
+    RuntimeScene3D scene;
+    RuntimeScene3DHeightfieldSurfaceDesc desc = {0};
+    float heights[9] = {
+        0.0f, 0.0f, 0.0f,
+        0.0f, 0.52f, 0.61f,
+        0.0f, 0.57f, 0.66f
+    };
+    int appended_triangle_count = 0;
+    bool ok = false;
+    bool found_dynamic_wall_top = false;
+    bool found_bottom = false;
+
+    RuntimeScene3D_Init(&scene);
+    desc.object_id = "water_surface";
+    desc.scene_object_index = 4;
+    desc.grid_w = 3u;
+    desc.grid_d = 3u;
+    desc.heights_y = heights;
+    desc.sample_origin_x = -1.0;
+    desc.sample_origin_z = -1.0;
+    desc.sample_spacing_x = 1.0;
+    desc.sample_spacing_z = 1.0;
+    desc.dry_height = 0.0;
+    desc.dry_height_epsilon = 1e-6;
+    desc.skip_dry_quads = true;
+    desc.extend_dry_perimeter_from_interior = true;
+    desc.close_volume_to_bottom = true;
+    desc.closed_volume_bottom_height = 0.08;
+    desc.two_sided = false;
+    desc.map_y_height_to_scene_z = true;
+
+    ok = RuntimeScene3DBuilder_AppendHeightfieldSurface(
+        &scene, &desc, &appended_triangle_count);
+    assert_true("water_surface_runtime_dynamic_closed_volume_ok", ok);
+    assert_true("water_surface_runtime_dynamic_closed_volume_triangle_count",
+                scene.triangleMesh.triangleCount == 26 &&
+                    appended_triangle_count == 26);
+    for (int i = 0; ok && i < scene.triangleMesh.triangleCount; ++i) {
+        const RuntimeTriangle3D* triangle = &scene.triangleMesh.triangles[i];
+        const double max_z = fmax(triangle->p0.z, fmax(triangle->p1.z, triangle->p2.z));
+        const double min_z = fmin(triangle->p0.z, fmin(triangle->p1.z, triangle->p2.z));
+        if (max_z > 0.60 && min_z <= 0.0800001 && fabs(triangle->normal.z) < 0.5) {
+            found_dynamic_wall_top = true;
+        }
+        if (fabs(triangle->p0.z - 0.08) < 1e-9 &&
+            fabs(triangle->p1.z - 0.08) < 1e-9 &&
+            fabs(triangle->p2.z - 0.08) < 1e-9 && triangle->normal.z < 0.0) {
+            found_bottom = true;
+        }
+    }
+    assert_true("water_surface_runtime_dynamic_closed_volume_wall_follows_surface",
+                found_dynamic_wall_top);
+    assert_true("water_surface_runtime_dynamic_closed_volume_bottom_cap",
+                found_bottom);
+
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
 static int test_water_surface_runtime_cache_preserves_scene_triangle_index(void) {
     RuntimeScene3D scene;
     Ray3D ray;
@@ -298,6 +359,7 @@ int run_test_water_surface_runtime_tests(void) {
     test_water_surface_runtime_skips_cutout_boundary_quads();
     test_water_surface_runtime_maps_physics_y_height_to_scene_z();
     test_water_surface_runtime_closes_authored_dry_perimeter();
+    test_water_surface_runtime_builds_dynamic_closed_volume();
     test_water_surface_runtime_cache_preserves_scene_triangle_index();
     return test_support_failures() - before;
 }

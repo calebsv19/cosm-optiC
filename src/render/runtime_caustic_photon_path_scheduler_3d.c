@@ -7,6 +7,17 @@
 #include "render/runtime_caustic_photon_path_transport_3d.h"
 #include "render/runtime_caustic_photon_emission_proposal_3d.h"
 
+static bool photon_path_scheduler_source_is_collimated(
+    const RuntimeLightSource3D* source) {
+    if (!source ||
+        source->radiometryMode != RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY ||
+        source->emissionProfile != RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED) {
+        return false;
+    }
+    return source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT ||
+           source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_DISK;
+}
+
 bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     const RuntimeScene3D* scene,
     RuntimeCausticPhotonMap3D* surface_map,
@@ -99,15 +110,16 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     for (uint64_t i = 0u; i < batch.sampleCount; ++i) {
         RuntimeCausticPhotonSceneTrace3D trace;
         RuntimeCausticPhotonPathPopulationReadback3D path_population;
+        const RuntimeLightSource3D* emission_source =
+            RuntimeLightSet3D_GetEnabled(&scene->lightSet,
+                                         batch.samples[i].lightIndex);
         bool traced;
 
         if (settings->emissionProposalMode !=
                 RUNTIME_CAUSTIC_PHOTON_EMISSION_UNBIASED &&
-            emission_lenses && emission_lens_count > 0u) {
+            emission_lenses && emission_lens_count > 0u &&
+            !photon_path_scheduler_source_is_collimated(emission_source)) {
             RuntimeCausticPhotonEmissionProposalReadback3D proposal_readback;
-            const RuntimeLightSource3D* emission_source =
-                RuntimeLightSet3D_GetEnabled(&scene->lightSet,
-                                             batch.samples[i].lightIndex);
             (void)RuntimeCausticPhotonEmissionProposal3D_ApplyLensGuidanceMixture(
                 &batch.samples[i], emission_source, emission_lenses,
                 emission_lens_count, &proposal_readback);

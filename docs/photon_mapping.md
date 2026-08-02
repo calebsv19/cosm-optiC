@@ -161,6 +161,50 @@ samples become a fixed-height rim and the animated top is attached to the
 declared side/bottom shell object as one outward-facing medium boundary.
 Interior dry samples remain cutouts.
 
+The optional `dynamic_heightfield_volume` closure removes the fixed-rim visual
+constraint. With `dry_sample_policy=extend_interior_to_boundary` and a finite
+`bottom_height_m`, dry sentinel samples on the outer grid inherit the adjacent
+interior height. RayTracing then builds the animated top, four perimeter wall
+strips, and bottom cap as one outward-facing primitive and one water-medium
+identity. This mode must not also instance the legacy static side/bottom shell.
+
+For aquarium payloads, the heightfield footprint should be derived from the
+actual glass mesh's inner wall planes rather than an independently estimated
+cavity size. Retarget `sample_origin_*` and `sample_spacing_*` so the final grid
+lands just inside those planes with a small positive ray-safe clearance; do not
+make the water and glass coplanar. This footprint retarget changes only sample
+positions. It must preserve the authored height and normal arrays so water
+motion and optical-shape comparisons remain matched. The current collimated-sun
+working proof uses a `0.001 m` clearance from each measured inner wall.
+
+A one-sided `rect` or `disk` using legacy-intensity radiometry is treated as a
+collimated photon emitter. Its origins remain distributed over the authored
+area, its directions remain aligned with the authored normal, and the photon
+path scheduler does not replace those directions with lens-guided proposals.
+This is the current bounded sun-proxy lane; Lambertian-radiance area lights and
+omnidirectional point/sphere lights retain their existing angular behavior.
+`intensity` continues to scale direct-light shading. An authored legacy light
+may additionally provide `photon_emission_energy` to scale photon-source
+selection and emitted photon flux independently. When the field is absent,
+photon emission falls back to `intensity`, preserving existing scene behavior;
+an explicitly authored zero disables photon emission without disabling direct
+illumination. This is particularly useful for footprint-wide collimated
+rectangle or disk sun proxies whose direct and photon energy need different
+calibration.
+
+Authored rectangular direct lights use the complete deterministic 16-position
+area population for each shading evaluation. They do not use the generic
+four-sample visibility early exit: switching between four and eight samples on
+partially transmitting aquarium glass produced coherent bands and an abrupt
+band-to-speckle boundary. Compatibility sphere/point lights and bounded
+material-emitter rectangle budgets retain their existing adaptive policies.
+
+The current aquarium collimated-sun working profile keeps these fields matched
+for follow-up proofs: 131,072 photons, 12 transmission samples, direct intensity
+`9.0`, photon emission energy `0.00135`, the full authored-rectangle 16-position
+direct-light population, and no authored-rectangle adaptive visibility exit.
+This is a scene-proof baseline, not a global opt-in change for ordinary renders.
+
 For local motion review, first render two adjacent low-photon frames and reject
 the run if the water-to-shell rim separates, the dynamic geometry key does not
 change, or the caustic pattern is static. Then use a 12- or 16-frame,

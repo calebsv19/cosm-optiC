@@ -596,7 +596,7 @@ static int runtime_native_3d_render_ensure_water_surface_object(
     const RuntimeWaterSurfaceFrame* water) {
     SceneObject* object = NULL;
     if (!water) return -1;
-    if (water->closed_volume_boundary &&
+    if (water->closed_volume_boundary && !water->dynamic_volume_boundary &&
         water->boundary_shell_object_id[0]) {
         for (int i = 0; i < sceneSettings.objectCount && i < MAX_OBJECTS; ++i) {
             char object_id[RUNTIME_SCENE_3D_MAX_OBJECT_ID] = {0};
@@ -804,7 +804,7 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
         RuntimeWaterSurfaceFrame_Free(&water);
         return false;
     }
-    if (water.closed_volume_boundary &&
+    if (water.closed_volume_boundary && !water.dynamic_volume_boundary &&
         !runtime_native_3d_render_closed_water_shell_matches(
             scene, scene_object_index, &water)) {
         runtime_native_3d_prepare_frame_set_diag(
@@ -825,8 +825,12 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     desc.dry_height = water.surface_min_y;
     desc.dry_height_epsilon = 1e-6;
     desc.skip_dry_quads = true;
-    desc.close_dry_perimeter = water.closed_volume_boundary;
+    desc.close_dry_perimeter =
+        water.closed_volume_boundary && !water.dynamic_volume_boundary;
     desc.closed_perimeter_height = water.boundary_height_y;
+    desc.extend_dry_perimeter_from_interior = water.dynamic_volume_boundary;
+    desc.close_volume_to_bottom = water.dynamic_volume_boundary;
+    desc.closed_volume_bottom_height = water.boundary_bottom_height_y;
     desc.two_sided = !water.closed_volume_boundary;
     desc.map_y_height_to_scene_z = true;
 

@@ -19,6 +19,7 @@ static const double kRuntimeDirectLight3DVisibilityStablePartialSpan = 0.02;
 static const double kRuntimeDirectLight3DMaterialEmitterRectLowImportancePeak = 0.01;
 #define RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_POPULATION_COUNT 16
 #define RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_ACTIVE_COUNT 8
+#define RUNTIME_DIRECT_LIGHT_3D_AUTHORED_RECT_SAMPLE_COUNT 16
 #define RUNTIME_DIRECT_LIGHT_3D_MATERIAL_EMITTER_RECT_SAMPLE_COUNT 6
 #define RUNTIME_DIRECT_LIGHT_3D_AREA_LIGHT_DECISION_COUNT 4
 
@@ -192,6 +193,10 @@ static int runtime_direct_light_3d_source_area_light_sample_count(
     const RuntimeLightSource3D* source,
     const RuntimeLight3D* light) {
     const int base_count = runtime_direct_light_3d_area_light_sample_count(light);
+    if (source && source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT &&
+        source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT) {
+        return RUNTIME_DIRECT_LIGHT_3D_AUTHORED_RECT_SAMPLE_COUNT;
+    }
     if (base_count > RUNTIME_DIRECT_LIGHT_3D_MATERIAL_EMITTER_RECT_SAMPLE_COUNT &&
         runtime_direct_light_3d_uses_material_emitter_rect_budget(source)) {
         return RUNTIME_DIRECT_LIGHT_3D_MATERIAL_EMITTER_RECT_SAMPLE_COUNT;
@@ -717,6 +722,10 @@ void runtime_direct_light_3d_accumulate_source(
     light_sample_count = runtime_direct_light_3d_source_area_light_sample_count(source, &light);
     light_sample_decision_count =
         runtime_direct_light_3d_area_light_decision_count_for_samples(light_sample_count);
+    if (source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT &&
+        source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT) {
+        light_sample_decision_count = light_sample_count;
+    }
     clear_visible_decision_count =
         runtime_direct_light_3d_clear_visible_decision_count_for_samples(
             light_sample_count,

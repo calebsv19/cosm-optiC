@@ -72,6 +72,13 @@ static double photon_emit_light_area(const RuntimeLightSource3D* light) {
     }
 }
 
+static double photon_emit_legacy_energy(const RuntimeLightSource3D* light) {
+    if (!light) return 0.0;
+    return photon_emit_nonnegative(
+        light->hasPhotonEmissionEnergy ? light->photonEmissionEnergy
+                                       : light->intensity);
+}
+
 static double photon_emit_light_weight(const RuntimeLightSource3D* light) {
     RuntimeLightRadiometry3DEvaluation radiometry;
     double color_luma = 0.0;
@@ -83,7 +90,7 @@ static double photon_emit_light_weight(const RuntimeLightSource3D* light) {
     }
     color_luma = photon_emit_luma(light->color);
     if (!(color_luma > 0.0)) color_luma = 1.0;
-    return photon_emit_nonnegative(light->intensity) *
+    return photon_emit_legacy_energy(light) *
            color_luma *
            photon_emit_light_area(light);
 }
@@ -399,7 +406,7 @@ bool RuntimeCausticPhotonEmission3D_EmitFromLightSet(
         } else {
             /* Compatibility contract for existing scenes. */
             sample.flux = vec3_scale(light->color,
-                                     photon_emit_nonnegative(light->intensity) *
+                                     photon_emit_legacy_energy(light) *
                                          photon_emit_light_area(light) /
                                          (source_pdf * (double)requested));
         }

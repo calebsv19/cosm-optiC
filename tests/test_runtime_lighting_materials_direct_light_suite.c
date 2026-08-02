@@ -1504,6 +1504,76 @@ static int test_runtime_direct_light_3d_area_light_clear_visibility_stops_after_
     return 0;
 }
 
+static int test_runtime_direct_light_3d_authored_rect_uses_full_population(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimeLightSet3D light_set;
+    RuntimeLightSource3D light;
+    HitInfo3D hit = {0};
+    RuntimeDirectLight3DResult result = {0};
+    RuntimeTriangleBVH3DTraceStats stats = {0};
+    bool ok = false;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeLightSet3D_Init(&light_set);
+    runtime_lighting_materials_direct_reset_authoring_state();
+    sceneSettings.objectCount = 1;
+    sceneSettings.sceneObjects[0].material_id = MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[0].color = 0xFFFFFF;
+
+    ok = runtime_direct_light_3d_setup_wall_scene(&scene, &hit, false);
+    assert_true("runtime_direct_light_3d_authored_rect_scene_ok", ok);
+    if (!ok) {
+        RuntimeLightSet3D_Free(&light_set);
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_direct_light_3d_authored_rect_bvh_ok", ok);
+
+    runtime_direct_light_3d_init_light_source(&light,
+                                             "authored_rect",
+                                             vec3(0.0, -2.0, 0.0),
+                                             vec3(1.0, 1.0, 1.0),
+                                             10.0,
+                                             true);
+    light.kind = RUNTIME_LIGHT_SOURCE_3D_KIND_RECT;
+    light.width = 2.0;
+    light.height = 1.0;
+    light.axisU = vec3(1.0, 0.0, 0.0);
+    light.axisV = vec3(0.0, 0.0, 1.0);
+    light.normal = vec3(0.0, -1.0, 0.0);
+    light.emissionProfile = RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED;
+    ok = RuntimeLightSet3D_Append(&light_set, &light, NULL);
+    assert_true("runtime_direct_light_3d_authored_rect_append_ok", ok);
+
+    RuntimeTriangleBVH3D_ResetTraceStats();
+    ok = RuntimeDirectLight3D_ShadeHitWithLightSet(&scene,
+                                                  &hit,
+                                                  &light_set,
+                                                  NULL,
+                                                  &result);
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&stats);
+    RuntimeTriangleBVH3D_DisableTraceStats();
+    assert_true("runtime_direct_light_3d_authored_rect_shade_ok", ok);
+    assert_true("runtime_direct_light_3d_authored_rect_visible", result.visible);
+    assert_true("runtime_direct_light_3d_authored_rect_full_samples",
+                result.rectSampleCount == 16);
+    assert_true("runtime_direct_light_3d_authored_rect_full_shadow_traces",
+                stats.traceCalls == 16u);
+    assert_true("runtime_direct_light_3d_authored_rect_radiance_positive",
+                result.radiance > 0.0);
+
+    RuntimeLightSet3D_Free(&light_set);
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_direct_light_3d_clear_visible_probe_stops_after_two(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -2441,6 +2511,7 @@ int run_test_runtime_lighting_materials_direct_light_suite(void) {
     test_runtime_direct_light_3d_area_light_softens_edge_shadow_contract();
     test_runtime_direct_light_3d_area_light_sampling_sequence_changes_shadow();
     test_runtime_direct_light_3d_area_light_clear_visibility_stops_after_four();
+    test_runtime_direct_light_3d_authored_rect_uses_full_population();
     test_runtime_direct_light_3d_clear_visible_probe_stops_after_two();
     test_runtime_direct_light_3d_clear_visible_probe_keeps_transparent_receiver_four();
     test_runtime_direct_light_3d_low_contribution_skips_shadow_trace();

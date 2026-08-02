@@ -893,6 +893,7 @@ static int test_runtime_scene_3d_builder_imports_authored_light_set(void) {
             "\"radiance\":3.5,"
             "\"color\":{\"x\":0.0,\"y\":0.0,\"z\":0.5},"
             "\"intensity\":1.5,"
+            "\"photon_emission_energy\":0.0025,"
             "\"enabled\":true"
           "},"
           "{"
@@ -973,6 +974,12 @@ static int test_runtime_scene_3d_builder_imports_authored_light_set(void) {
     assert_close("runtime_scene_3d_builder_light_set_rect_radiance",
                  scene.lightSet.lights[1].radiance,
                  3.5,
+                 1e-9);
+    assert_true("runtime_scene_3d_builder_light_set_rect_photon_energy_authored",
+                scene.lightSet.lights[1].hasPhotonEmissionEnergy);
+    assert_close("runtime_scene_3d_builder_light_set_rect_photon_energy",
+                 scene.lightSet.lights[1].photonEmissionEnergy,
+                 0.0025,
                  1e-9);
     assert_true("runtime_scene_3d_builder_light_set_disabled_kept",
                 !scene.lightSet.lights[2].enabled);
