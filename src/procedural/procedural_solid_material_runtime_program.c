@@ -117,6 +117,28 @@ bool ProceduralSolidMaterialRuntimeProgramV1_BuildWithImportedRegion(
     return true;
 }
 
+bool ProceduralSolidMaterialRuntimeProgramV1_AttachFeatureField(
+    ProceduralSolidMaterialRuntimeProgramV1 *program,
+    const ProceduralSurfaceFeatureFieldV1 *field) {
+    if (!program || !program->valid || !field ||
+        !ProceduralSurfaceFeatureFieldV1_Validate(field) ||
+        field->grid_index_count == 0u) return false;
+    program->feature_field = *field;
+    program->feature_field_valid = true;
+    return true;
+}
+
+bool ProceduralSolidMaterialRuntimeProgramV1_AttachCurveField(
+    ProceduralSolidMaterialRuntimeProgramV1 *program,
+    const ProceduralSurfaceFeatureCurveFieldV1 *field) {
+    if (!program || !program->valid || !field ||
+        !ProceduralSurfaceFeatureCurveFieldV1_Validate(field) ||
+        field->grid_index_count == 0u) return false;
+    program->curve_field = *field;
+    program->curve_field_valid = true;
+    return true;
+}
+
 bool ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
     const ProceduralSolidMaterialRuntimeProgramV1 *program,
     size_t triangle_index,
@@ -153,7 +175,40 @@ bool ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
     INTERPOLATE_FIELD(object_x);
     INTERPOLATE_FIELD(object_y);
     INTERPOLATE_FIELD(object_z);
+    INTERPOLATE_FIELD(normal_x);
+    INTERPOLATE_FIELD(normal_y);
+    INTERPOLATE_FIELD(normal_z);
 #undef INTERPOLATE_FIELD
+    if (program->feature_field_valid) {
+        ProceduralSurfaceFeatureSampleV1 feature;
+        double normal_length = sqrt(sample.geometry.normal_x * sample.geometry.normal_x +
+            sample.geometry.normal_y * sample.geometry.normal_y +
+            sample.geometry.normal_z * sample.geometry.normal_z);
+        if (!isfinite(normal_length) || normal_length <= 1e-12) return false;
+        if (!ProceduralSurfaceFeatureFieldV1_Sample(&program->feature_field,
+                (ProceduralSurfaceFeatureVec3){sample.geometry.object_x,
+                    sample.geometry.object_y, sample.geometry.object_z},
+                (ProceduralSurfaceFeatureVec3){sample.geometry.normal_x / normal_length,
+                    sample.geometry.normal_y / normal_length,
+                    sample.geometry.normal_z / normal_length}, &feature)) return false;
+        sample.geometry.feature_coverage = feature.coverage;
+        sample.geometry.feature_interior = feature.interior;
+        sample.geometry.feature_rim = feature.rim;
+        sample.geometry.feature_id = (double)feature.feature_id;
+    }
+    if (program->curve_field_valid) {
+        double normal_length = sqrt(sample.geometry.normal_x * sample.geometry.normal_x +
+            sample.geometry.normal_y * sample.geometry.normal_y +
+            sample.geometry.normal_z * sample.geometry.normal_z);
+        if (!isfinite(normal_length) || normal_length <= 1e-12 ||
+            !ProceduralSurfaceFeatureCurveFieldV1_Sample(&program->curve_field,
+                (ProceduralSurfaceFeatureVec3){sample.geometry.object_x,
+                    sample.geometry.object_y, sample.geometry.object_z},
+                (ProceduralSurfaceFeatureVec3){sample.geometry.normal_x / normal_length,
+                    sample.geometry.normal_y / normal_length,
+                    sample.geometry.normal_z / normal_length}, &sample.curve_feature))
+            return false;
+    }
     if (!ProceduralSolidMaterialGraphV1_EvaluateWithReadback(
             &program->graph, &sample.geometry, program->materials,
             program->material_count, &sample.surface,

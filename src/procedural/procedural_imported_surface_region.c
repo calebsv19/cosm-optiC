@@ -158,6 +158,28 @@ void ProceduralImportedSurfaceRegionV1_Free(
     memset(region, 0, sizeof(*region));
 }
 
+bool ProceduralImportedSurfaceRegionV1_RefreshValues(
+    ProceduralImportedSurfaceRegionV1 *region) {
+    double sum = 0.0;
+    if (!region || !region->vertex_weights || region->vertex_count == 0u)
+        return false;
+    region->minimum = 1.0;
+    region->maximum = 0.0;
+    region->transition_vertex_count = 0u;
+    for (size_t i = 0u; i < region->vertex_count; ++i) {
+        double value = region->vertex_weights[i];
+        if (!isfinite(value) || value < 0.0 || value > 1.0) return false;
+        if (value < region->minimum) region->minimum = value;
+        if (value > region->maximum) region->maximum = value;
+        if (value > 1e-6 && value < 1.0 - 1e-6)
+            ++region->transition_vertex_count;
+        sum += value;
+    }
+    region->mean = sum / (double)region->vertex_count;
+    return values_digest(region->vertex_weights, region->vertex_count,
+                         region->value_digest_sha256);
+}
+
 bool ProceduralImportedSurfaceRegionRecipeV1_LoadJsonFile(
     const char *path,
     ProceduralImportedSurfaceRegionRecipeV1 *out_recipe,

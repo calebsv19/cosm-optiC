@@ -40,7 +40,8 @@ const char *ProceduralSolidMaterialNodeKind_Name(
     static const char *names[] = {
         "constant", "height", "slope", "curvature", "cavity",
         "authored_region", "region", "boundary_distance", "noise", "add",
-        "multiply", "invert", "smoothstep", "bands"};
+        "multiply", "invert", "smoothstep", "bands", "feature_coverage",
+        "feature_interior", "feature_rim", "feature_id", "clamp", "subtract", "remap"};
     if ((unsigned)kind >= sizeof(names) / sizeof(names[0])) return "invalid";
     return names[(unsigned)kind];
 }
@@ -49,7 +50,7 @@ bool ProceduralSolidMaterialNodeKind_FromName(
     const char *name, ProceduralSolidMaterialNodeKind *out_kind) {
     if (!name || !out_kind) return false;
     for (int i = PROCEDURAL_SOLID_MATERIAL_NODE_CONSTANT;
-         i <= PROCEDURAL_SOLID_MATERIAL_NODE_BANDS; ++i) {
+         i <= PROCEDURAL_SOLID_MATERIAL_NODE_REMAP; ++i) {
         if (strcmp(name, ProceduralSolidMaterialNodeKind_Name(
                              (ProceduralSolidMaterialNodeKind)i)) == 0) {
             *out_kind = (ProceduralSolidMaterialNodeKind)i;
@@ -200,12 +201,16 @@ static bool node_needs_a(ProceduralSolidMaterialNodeKind kind) {
     return kind == PROCEDURAL_SOLID_MATERIAL_NODE_ADD ||
            kind == PROCEDURAL_SOLID_MATERIAL_NODE_MULTIPLY ||
            kind == PROCEDURAL_SOLID_MATERIAL_NODE_INVERT ||
-           kind == PROCEDURAL_SOLID_MATERIAL_NODE_SMOOTHSTEP;
+           kind == PROCEDURAL_SOLID_MATERIAL_NODE_SMOOTHSTEP ||
+           kind == PROCEDURAL_SOLID_MATERIAL_NODE_CLAMP ||
+           kind == PROCEDURAL_SOLID_MATERIAL_NODE_SUBTRACT ||
+           kind == PROCEDURAL_SOLID_MATERIAL_NODE_REMAP;
 }
 
 static bool node_needs_b(ProceduralSolidMaterialNodeKind kind) {
     return kind == PROCEDURAL_SOLID_MATERIAL_NODE_ADD ||
-           kind == PROCEDURAL_SOLID_MATERIAL_NODE_MULTIPLY;
+           kind == PROCEDURAL_SOLID_MATERIAL_NODE_MULTIPLY ||
+           kind == PROCEDURAL_SOLID_MATERIAL_NODE_SUBTRACT;
 }
 
 static bool visit_node(
@@ -253,11 +258,12 @@ bool ProceduralSolidMaterialGraphV1_Validate(
         if (!stable_id(node->node_id, sizeof(node->node_id)) ||
             find_node(graph, node->node_id) != (int)i ||
             (unsigned)node->kind >
-                (unsigned)PROCEDURAL_SOLID_MATERIAL_NODE_BANDS ||
+                (unsigned)PROCEDURAL_SOLID_MATERIAL_NODE_REMAP ||
             !isfinite(node->value) || !isfinite(node->minimum) ||
             !isfinite(node->maximum) || !isfinite(node->scale) ||
             !isfinite(node->offset) ||
-            (node->kind == PROCEDURAL_SOLID_MATERIAL_NODE_SMOOTHSTEP &&
+            ((node->kind == PROCEDURAL_SOLID_MATERIAL_NODE_SMOOTHSTEP ||
+              node->kind == PROCEDURAL_SOLID_MATERIAL_NODE_REMAP) &&
              node->minimum >= node->maximum) ||
             (node->kind == PROCEDURAL_SOLID_MATERIAL_NODE_REGION &&
              strcmp(node->region_kind, "retained") != 0 &&
@@ -428,6 +434,15 @@ static bool eval_node(
             t = 0.5 + 0.5 * sin((in->object_z * node->scale +
                                  in->object_x * 0.35 * node->scale +
                                  node->offset) * 6.283185307179586);
+            break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_COVERAGE: t = in->feature_coverage; break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_INTERIOR: t = in->feature_interior; break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_RIM: t = in->feature_rim; break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_ID: t = in->feature_id; break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_CLAMP: t = clamp01(a); break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_SUBTRACT: t = a - b; break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_REMAP:
+            t = clamp01((a - node->minimum) / (node->maximum - node->minimum));
             break;
     }
     values[index] = clamp01(t);

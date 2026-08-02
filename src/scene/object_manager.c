@@ -59,6 +59,14 @@ static void InitDefaultMaterial(SceneObject* obj) {
                            0.0,
                            1.0);
     obj->mirrorTint = obj->color & 0xFFFFFF;
+    obj->hasHairOpticsOverride = false;
+    obj->hairAbsorptionR = 0.35;
+    obj->hairAbsorptionG = 0.70;
+    obj->hairAbsorptionB = 1.20;
+    obj->hairLongitudinalRoughness = 0.30;
+    obj->hairAzimuthalRoughness = 0.35;
+    obj->hairIor = 1.55;
+    obj->hairCuticleTiltDegrees = 2.0;
     obj->guideOnly = false;
 }
 

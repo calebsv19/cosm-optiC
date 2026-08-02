@@ -1,0 +1,26 @@
+{
+  "schema": "ray_tracing.procedural_imported_surface_region_recipe",
+  "schema_version": 1,
+  "region_id": "scalp_hair_roots",
+  "source_asset_id": "psg23a_scalp_bust",
+  "patches": [
+    {
+      "center": [0.50, 0.50, 0.83],
+      "radius": [0.39, 0.39, 0.22],
+      "feather": 0.24,
+      "noise_scale": 13.0,
+      "noise_strength": 0.08,
+      "strength": 1.0,
+      "seed": 2301
+    },
+    {
+      "center": [0.50, 0.50, 0.68],
+      "radius": [0.43, 0.43, 0.18],
+      "feather": 0.30,
+      "noise_scale": 17.0,
+      "noise_strength": 0.06,
+      "strength": 0.88,
+      "seed": 2302
+    }
+  ]
+}

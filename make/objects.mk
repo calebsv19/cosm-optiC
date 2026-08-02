@@ -7,6 +7,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/procedural/procedural_surface_field_graph_json.o \
 	$(BUILD_DIR)/procedural/procedural_surface_field_graph_eval.o \
 	$(BUILD_DIR)/procedural/procedural_surface_field_graph_noise.o \
+	$(BUILD_DIR)/procedural/procedural_surface_feature_field.o \
+	$(BUILD_DIR)/procedural/procedural_surface_feature_curve.o \
+	$(BUILD_DIR)/procedural/procedural_surface_feature_selection.o \
 	$(BUILD_DIR)/procedural/procedural_surface_binding.o \
 	$(BUILD_DIR)/procedural/procedural_surface_material.o \
 	$(BUILD_DIR)/procedural/procedural_surface_material_runtime_adapter.o \
@@ -47,6 +50,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
+	$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
@@ -167,6 +171,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
 	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_primitive_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_blas_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_curve_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
@@ -188,6 +195,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/scene/object_manager.o \
@@ -211,6 +219,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
+	$(BUILD_DIR)/import/runtime_curve_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_authored_material.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
@@ -375,6 +384,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_direct_light_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_transport_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_curve_scene_material_dispatch.o \
 	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
 	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
@@ -439,6 +449,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
+		$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
@@ -525,6 +536,9 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
 		$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_primitive_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_blas_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_curve_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
@@ -545,6 +559,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
@@ -645,6 +660,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
+	$(BUILD_DIR)/import/runtime_curve_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \

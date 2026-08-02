@@ -74,6 +74,10 @@ def parse_args() -> argparse.Namespace:
                         default=fixture / "statue_fragment.recipe.json")
     parser.add_argument("--region-recipe", type=Path,
                         default=fixture / "plaster_peel.region_recipe.json")
+    parser.add_argument("--surface-feature-field", type=Path,
+                        help="Optional digest-bound PSG-24 field used as the overlay weight.")
+    parser.add_argument("--force-render", action="store_true",
+                        help="Regenerate native frames even when prior proof files exist.")
     parser.add_argument("--output-root", type=Path)
     return parser.parse_args()
 
@@ -138,6 +142,8 @@ def create_graph(
     base_material: Path,
     overlay_material: Path,
     authored_weight: bool,
+    feature_weight: bool = False,
+    feature_channel: str = "feature_coverage",
 ) -> tuple[Path, dict]:
     graph = root / f"{name}.json"
     current = receipt([
@@ -165,7 +171,8 @@ def create_graph(
         },
         {
             "node_id": "coating_exposure",
-            "kind": "authored_region" if authored_weight else "constant",
+            "kind": (feature_channel if feature_weight else
+                     "authored_region" if authored_weight else "constant"),
             "inputs": {},
             "parameters": {
                 "value": 0.0, "minimum": 0.0, "maximum": 1.0,
@@ -187,6 +194,7 @@ def make_scene(
     authored_binding: Path,
     graph: Path,
     surface_region: Path,
+    surface_feature_field: Path | None = None,
 ) -> dict:
     return {
         "schema_family": "codework_scene",
@@ -276,13 +284,19 @@ def render(
     region_binding: Path,
     authored_binding: Path,
     surface_region: Path,
+    surface_feature_field: Path | None = None,
+    force_render: bool = False,
 ) -> tuple[list, dict, dict, Path]:
     scene = generated / f"{name}.scene.json"
     request = generated / "requests" / f"{name}.request.json"
     raw = generated / "raw" / name
-    write_json(scene, make_scene(
-        "psg19_plaster_statue_fragment", region_binding,
-        authored_binding, graph, surface_region))
+    scene_document = make_scene(
+        load(surface_region)["source_asset_id"], region_binding,
+        authored_binding, graph, surface_region, surface_feature_field)
+    if surface_feature_field:
+        scene_document["objects"][0]["procedural_solid_material_ref"][
+            "surface_feature_field_path"] = str(surface_feature_field.resolve())
+    write_json(scene, scene_document)
     request_contract = {
         "render": contract["render"],
         "lighting": contract["lighting"],
@@ -292,7 +306,7 @@ def render(
         scene, request, raw, request_contract))
     summary_path = raw / "render_summary.json"
     frame = raw / "frames" / "frame_0000.bmp"
-    if not (summary_path.is_file() and frame.is_file()):
+    if force_render or not (summary_path.is_file() and frame.is_file()):
         run_render_cli(render_cli, request, summary_path)
     summary = load(summary_path)
     audit = object_audit(summary, "psg19_statue_object")
@@ -448,23 +462,21 @@ def main() -> int:
         sys.executable, str(args.stl_tool.resolve()), "create",
         "--recipe", str(args.recipe.resolve()),
         "--out-root", str(fresh_stl_root)])
-    stl = (
-        fresh_stl_root / "curated"
-        / "psg19_plaster_statue_fragment" / "source"
-        / "psg19_plaster_statue_fragment.stl"
-    )
+    recipe_document = load(args.recipe.resolve())
+    asset_id = recipe_document["asset_id"]
+    stl = fresh_stl_root / "curated" / asset_id / "source" / f"{asset_id}.stl"
     durable_stl = generated / "fresh_stl" / f"{run_token}.stl"
     durable_stl.write_bytes(stl.read_bytes())
     imported = staging_root / "imported"
     run([
         str(args.import_harness.resolve()), "--stl", str(stl),
         "--out", str(imported),
-        "--asset-id", "psg19_plaster_statue_fragment",
+        "--asset-id", asset_id,
         "--scene-id", "psg19_imported_surface_region",
         "--object-id", "psg19_statue"])
     imported_mesh = (
         imported / "assets" / "mesh_assets"
-        / "psg19_plaster_statue_fragment.runtime.json")
+        / f"{asset_id}.runtime.json")
     mesh = generated / "assets" / "mesh_assets" / imported_mesh.name
     mesh.write_bytes(imported_mesh.read_bytes())
 
@@ -558,7 +570,7 @@ def main() -> int:
         args.graph_tool.resolve(), graphs, "psg19_plaster_concrete",
         "psg19_imported_authored",
         authored_receipt["binding_digest_sha256"],
-        plaster, concrete, True)
+        plaster, concrete, True, args.surface_feature_field is not None)
     control_graph, control_graph_receipt = create_graph(
         args.graph_tool.resolve(), graphs, "psg19_all_plaster_control",
         "psg19_imported_authored",
@@ -570,19 +582,42 @@ def main() -> int:
         authored_receipt["binding_digest_sha256"],
         black, white, True)
 
+    feature_mask_graphs: dict[str, tuple[Path, dict]] = {}
+    if args.surface_feature_field:
+        for channel in ("feature_coverage", "feature_interior", "feature_rim"):
+            feature_mask_graphs[channel] = create_graph(
+                args.graph_tool.resolve(), graphs, f"psg24_{channel}_mask",
+                "psg19_imported_authored",
+                authored_receipt["binding_digest_sha256"],
+                black, white, False, True, channel)
+
     view_set = views(mesh_document)
     renders: dict[str, tuple[list, dict, dict, Path]] = {}
-    for name, graph, view_name in (
+    render_specs = [
         ("all_plaster_control", control_graph, "hero"),
         ("plaster_concrete_layered", beauty_graph, "hero"),
         ("plaster_concrete_detail", beauty_graph, "detail"),
-        ("native_region_mask", mask_graph, "hero"),
         ("plaster_concrete_repeat", beauty_graph, "hero"),
-    ):
+    ]
+    if args.surface_feature_field:
+        render_specs.extend(
+            (f"{channel}_mask", value[0], "hero")
+            for channel, value in feature_mask_graphs.items()
+        )
+    else:
+        render_specs.append(("native_region_mask", mask_graph, "hero"))
+    feature_graph_paths = {
+        value[0] for value in feature_mask_graphs.values()
+    }
+    for name, graph, view_name in render_specs:
         renders[name] = render(
             args.render_cli.resolve(), fixture_contract,
             generated, review, name, graph, view_set[view_name],
-            region_binding, authored_binding, surface_region)
+            region_binding, authored_binding, surface_region,
+            (args.surface_feature_field
+             if graph == beauty_graph or graph in feature_graph_paths
+             else None),
+            args.force_render)
 
     width = fixture_contract["render"]["width"]
     height = fixture_contract["render"]["height"]
@@ -600,7 +635,6 @@ def main() -> int:
     control_pixels = renders["all_plaster_control"][0]
     layered_pixels = renders["plaster_concrete_layered"][0]
     repeat_pixels = renders["plaster_concrete_repeat"][0]
-    native_mask_pixels = renders["native_region_mask"][0]
     changed = changed_pixels(control_pixels, layered_pixels)
     repeat_changed = changed_pixels(layered_pixels, repeat_pixels)
     assertions = fixture_contract["assertions"]
@@ -610,15 +644,24 @@ def main() -> int:
             failures.append(f"{name}: source triangle count drift")
         if audit["primary_hit_pixels"] < assertions["minimum_primary_hit_pixels"]:
             failures.append(f"{name}: insufficient source-mesh coverage")
-        if metrics["luma_standard_deviation"] < 8.0:
+        minimum_luma = (
+            assertions["minimum_mask_luma_standard_deviation"]
+            if name.endswith("_mask") else 8.0
+        )
+        if metrics["luma_standard_deviation"] < minimum_luma:
             failures.append(f"{name}: visually flat")
     if changed < assertions["minimum_beauty_changed_pixels"]:
         failures.append("layered beauty is too similar to all-plaster control")
     if repeat_changed > assertions["maximum_repeat_changed_pixels"]:
         failures.append("exact repeat pixels differ")
-    if image_metrics(native_mask_pixels)["luma_standard_deviation"] < (
-            assertions["minimum_mask_luma_standard_deviation"]):
-        failures.append("native region mask is visually flat")
+    mask_names = (
+        [f"{channel}_mask" for channel in feature_mask_graphs]
+        if args.surface_feature_field else ["native_region_mask"]
+    )
+    for name in mask_names:
+        if image_metrics(renders[name][0])["luma_standard_deviation"] < (
+                assertions["minimum_mask_luma_standard_deviation"]):
+            failures.append(f"{name} is visually flat")
     if region_receipt["transition_vertex_count"] < (
             assertions["minimum_transition_vertices"]):
         failures.append("continuous transition band is undersampled")
@@ -629,17 +672,38 @@ def main() -> int:
     ):
         failures.append("source identity or provenance contract failed")
 
-    contact = review / "psg19_plaster_concrete_high_quality_matrix.png"
-    write_labeled_contact_sheet(contact, [
-        ("ALL PLASTER CONTROL", control_pixels),
-        ("LAYERED HERO", layered_pixels),
-        ("LAYERED DETAIL", renders["plaster_concrete_detail"][0]),
-        ("NATIVE REGION MASK", native_mask_pixels),
-        ("RAW CONTINUOUS FIELD", raw_mask),
-        ("SOURCE TRIANGLES", wire),
-    ], columns=3)
+    if args.surface_feature_field:
+        contact = review / "psg24_surface_feature_field_review.png"
+        write_labeled_contact_sheet(contact, [
+            ("CLEAN PLASTER CONTROL", control_pixels),
+            ("SPOT BEAUTY - HERO", layered_pixels),
+            ("SPOT BEAUTY - DETAIL", renders["plaster_concrete_detail"][0]),
+            ("SPOT COVERAGE", renders["feature_coverage_mask"][0]),
+            ("SPOT INTERIOR", renders["feature_interior_mask"][0]),
+            ("SPOT RIM", renders["feature_rim_mask"][0]),
+        ], columns=3)
+        lineage_contact = review / "psg24_source_lineage_review.png"
+        write_labeled_contact_sheet(lineage_contact, [
+            ("LEGACY PSG-19 CARRIER - NOT SPOTS", raw_mask),
+            ("SOURCE TRIANGLES", wire),
+        ], columns=2)
+    else:
+        contact = review / "psg19_plaster_concrete_high_quality_matrix.png"
+        lineage_contact = None
+        write_labeled_contact_sheet(contact, [
+            ("ALL PLASTER CONTROL", control_pixels),
+            ("LAYERED HERO", layered_pixels),
+            ("LAYERED DETAIL", renders["plaster_concrete_detail"][0]),
+            ("NATIVE REGION MASK", renders["native_region_mask"][0]),
+            ("RAW CONTINUOUS FIELD", raw_mask),
+            ("SOURCE TRIANGLES", wire),
+        ], columns=3)
     summary = {
-        "schema": "ray_tracing.procedural_imported_surface_region_psg19_proof",
+        "schema": (
+            "ray_tracing.surface_feature_fields_psg24a_proof"
+            if args.surface_feature_field else
+            "ray_tracing.procedural_imported_surface_region_psg19_proof"
+        ),
         "schema_version": 1,
         "status": "passed" if not failures else "failed",
         "failures": failures,
@@ -655,6 +719,10 @@ def main() -> int:
             "runtime_mesh_file_digest_sha256": digest(mesh),
         },
         "surface_region": region_receipt,
+        "surface_feature_field": ({
+            "path": str(args.surface_feature_field.resolve()),
+            "digest_sha256": digest(args.surface_feature_field.resolve()),
+        } if args.surface_feature_field else None),
         "bindings": {
             "region_binding_digest_sha256":
                 region_applied["binding_digest_sha256"],
@@ -665,6 +733,9 @@ def main() -> int:
             "beauty": beauty_graph_receipt,
             "control": control_graph_receipt,
             "mask": mask_graph_receipt,
+            "feature_masks": {
+                name: value[1] for name, value in feature_mask_graphs.items()
+            },
         },
         "acceptance": {
             "beauty_changed_pixels": changed,
@@ -677,6 +748,9 @@ def main() -> int:
             "topology_unchanged": region_receipt["topology_unchanged"],
             "source_triangle_provenance_retained":
                 region_receipt["source_triangle_provenance_retained"],
+            "resolved_environment_lighting": load(
+                generated / "raw" / "plaster_concrete_layered"
+                / "render_summary.json")["environment_lighting"],
         },
         "images": {
             name: str(value[3]) for name, value in renders.items()
@@ -684,7 +758,8 @@ def main() -> int:
             "raw_authored_region": str(raw_mask_path),
             "source_triangle_provenance": str(wire_path),
             "contact_sheet": str(contact),
-        },
+        } | ({"source_lineage_contact_sheet": str(lineage_contact)}
+             if lineage_contact else {}),
     }
     write_json(output / "proof_summary.json", summary)
     print(json.dumps(summary, indent=2, sort_keys=True))

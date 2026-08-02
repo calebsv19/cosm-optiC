@@ -49,6 +49,7 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
     size_t texture_count = 0u;
     RuntimeMaterialSurfaceEval base_eval;
     RuntimeMaterialSurfaceEval final_eval;
+    ProceduralSurfaceFeatureCurveSampleV1 curve_feature = {0};
     double u = 0.0;
     double v = 0.0;
     double metallic;
@@ -66,6 +67,7 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
         surface = &runtime_sample.surface;
         textures = runtime_sample.textures;
         texture_count = runtime_sample.texture_count;
+        curve_feature = runtime_sample.curve_feature;
     } else if (surface->texture.enabled) {
         memset(&fallback_texture, 0, sizeof(fallback_texture));
         fallback_texture.texture = surface->texture;
@@ -96,6 +98,26 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
     }
     if (!RuntimeMaterialPayload3D_ApplySurfaceEval(&final_eval, payload)) {
         return false;
+    }
+    if (curve_feature.coverage > 0.0) {
+        Vec3 normal = hit->geometricNormal;
+        Vec3 helper;
+        Vec3 tangent;
+        Vec3 bitangent;
+        Vec3 direction = vec3(curve_feature.direction.x, curve_feature.direction.y,
+                              curve_feature.direction.z);
+        double scale = fmin(0.35, -curve_feature.signed_depth) * curve_feature.coverage;
+        if (vec3_length(normal) <= 1e-9) normal = hit->normal;
+        if (vec3_length(normal) > 1e-9 && vec3_length(direction) > 1e-9 && scale > 0.0) {
+            normal = vec3_normalize(normal);
+            helper = fabs(normal.z) < 0.999 ? vec3(0.0,0.0,1.0) : vec3(0.0,1.0,0.0);
+            tangent = vec3_normalize(vec3_cross(helper, normal));
+            bitangent = vec3_normalize(vec3_cross(normal, tangent));
+            payload->hasMicrodetailNormal = true;
+            payload->microdetailHeight = scale;
+            payload->microdetailSlopeU = scale * vec3_dot(direction, tangent);
+            payload->microdetailSlopeV = scale * vec3_dot(direction, bitangent);
+        }
     }
     (void)RuntimeMaterialPayload3D_ResolveShadingNormal(hit, payload);
     payload->emissive = fmax(

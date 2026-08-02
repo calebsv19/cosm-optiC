@@ -632,6 +632,18 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
                                         ? (double)(object_copy.glassAbsorptionColor & 0xFF) /
                                               255.0
                                         : payload.baseColorB;
+    payload.hairOptics.enabled = object_copy.hasHairOpticsOverride;
+    payload.hairOptics.absorptionR = object_copy.hairAbsorptionR;
+    payload.hairOptics.absorptionG = object_copy.hairAbsorptionG;
+    payload.hairOptics.absorptionB = object_copy.hairAbsorptionB;
+    payload.hairOptics.longitudinalRoughness =
+        object_copy.hairLongitudinalRoughness;
+    payload.hairOptics.azimuthalRoughness =
+        object_copy.hairAzimuthalRoughness;
+    payload.hairOptics.ior = object_copy.hairIor;
+    payload.hairOptics.cuticleTiltDegrees =
+        object_copy.hairCuticleTiltDegrees;
+    payload.hairOptics = RuntimeHairOptics3D_Normalize(&payload.hairOptics);
 
     *out_payload = payload;
     return true;

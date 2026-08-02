@@ -125,6 +125,8 @@ static void test_continuous_hit_program(void) {
     ProceduralSolidMaterialRuntimeSampleV1 weight_49;
     ProceduralSolidMaterialRuntimeSampleV1 weight_50;
     ProceduralSolidMaterialRuntimeSampleV1 weight_51;
+    ProceduralSurfaceFeatureFieldV1 feature_field = {0};
+    ProceduralSurfaceFeatureCurveFieldV1 curve_field = {0};
     const char *kinds[2] = {"retained", "retained"};
     const char *binding_digest =
         "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
@@ -152,6 +154,38 @@ static void test_continuous_hit_program(void) {
     ProceduralSolidMaterialRuntimeProgramV1_Init(&program);
     assert(ProceduralSolidMaterialRuntimeProgramV1_Build(
         &graph, materials, 2u, &mesh, kinds, &program, &report));
+    feature_field.feature_count = 1u;
+    memset(feature_field.source_mesh_digest_sha256, 'a', 64u);
+    feature_field.source_mesh_digest_sha256[64] = '\0';
+    memset(feature_field.authoring_digest_sha256, 'b', 64u);
+    feature_field.authoring_digest_sha256[64] = '\0';
+    feature_field.normal_compatibility_cosine = 0.5;
+    feature_field.features[0].source_triangle = 0u;
+    feature_field.features[0].barycentric[0] = 0.6;
+    feature_field.features[0].barycentric[2] = 0.4;
+    feature_field.features[0].position = (ProceduralSurfaceFeatureVec3){-0.2, -0.2, 0.4};
+    feature_field.features[0].normal.z = 1.0;
+    feature_field.features[0].tangent.x = 1.0;
+    feature_field.features[0].bitangent.y = 1.0;
+    feature_field.features[0].radius = 0.5;
+    feature_field.features[0].aspect = 1.0;
+    feature_field.features[0].edge_softness = 0.1;
+    feature_field.features[0].rim_width = 0.2;
+    feature_field.features[0].feature_id = 24u;
+    assert(ProceduralSurfaceFeatureFieldV1_BuildIndex(&feature_field));
+    assert(ProceduralSolidMaterialRuntimeProgramV1_AttachFeatureField(
+        &program, &feature_field));
+    curve_field.segment_count = 1u;
+    curve_field.normal_compatibility_cosine = .5;
+    curve_field.segments[0] = (ProceduralSurfaceFeatureCurveSegmentV1){
+        .curve_id = 24u, .segment_id = 1u, .source_triangle = 0u,
+        .barycentric_root = {.6, 0.0, .4},
+        .start = {-.5, -.2, .4}, .end = {.5, -.2, .4},
+        .normal = {0, 0, 1}, .tangent = {1, 0, 0},
+        .width = .2, .depth = .08, .edge_softness = .1};
+    assert(ProceduralSurfaceFeatureCurveFieldV1_BuildIndex(&curve_field));
+    assert(ProceduralSolidMaterialRuntimeProgramV1_AttachCurveField(
+        &program, &curve_field));
     assert(memcmp(vertices, original_vertices, sizeof(vertices)) == 0);
     assert(memcmp(triangles, original_triangles, sizeof(triangles)) == 0);
 
@@ -166,6 +200,12 @@ static void test_continuous_hit_program(void) {
                 right.primary_layer_weight) < 1e-12);
     assert(fabs(left.surface.base_color_r -
                 right.surface.base_color_r) < 1e-12);
+    assert(left.geometry.feature_coverage > 0.99 &&
+           left.geometry.feature_id == 24.0 &&
+           fabs(left.geometry.feature_coverage - right.geometry.feature_coverage) < 1e-12 &&
+           left.curve_feature.coverage > 0.99 &&
+           left.curve_feature.signed_depth < 0.0 &&
+           fabs(left.curve_feature.coverage - right.curve_feature.coverage) < 1e-12);
 
     assert(ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
         &program, 0u, 0.8, 0.0, 0.2, &low, &report));
@@ -206,11 +246,82 @@ static void test_continuous_hit_program(void) {
     ProceduralSolidMaterialRuntimeProgramV1_Free(&program);
 }
 
+static void test_missing_vertex_normals_feature_fallback(void) {
+    CoreMeshAssetRuntimeVertex vertices[3] = {
+        {{-1.0, -1.0, 0.0}, {0.0, 0.0, 0.0}},
+        {{ 1.0, -1.0, 0.0}, {0.0, 0.0, 0.0}},
+        {{ 0.0,  1.0, 0.0}, {0.0, 0.0, 0.0}},
+    };
+    CoreMeshAssetRuntimeTriangle triangles[1] = {
+        {0u, 1u, 2u, "retained.shell"},
+    };
+    CoreMeshAssetRuntimeDocument mesh = {0};
+    ProceduralSolidMaterialGraphV1 graph;
+    ProceduralSolidMaterialGraphReport report = {0};
+    ProceduralSolidAuthoredMaterialV1 materials[2];
+    ProceduralSolidAuthoredMaterialReport material_report;
+    ProceduralSolidMaterialRuntimeProgramV1 program;
+    ProceduralSolidMaterialRuntimeSampleV1 sample;
+    ProceduralSurfaceFeatureFieldV1 field = {0};
+    const char *kinds[1] = {"retained"};
+    const char *binding_digest =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    mesh.vertex_count = 3u;
+    mesh.vertex_normal_count = 0u;
+    mesh.vertices = vertices;
+    mesh.triangle_count = 1u;
+    mesh.triangles = triangles;
+    mesh.contract.local_bounds.min.x = -1.0;
+    mesh.contract.local_bounds.min.y = -1.0;
+    mesh.contract.local_bounds.max.x = 1.0;
+    mesh.contract.local_bounds.max.y = 1.0;
+    assert(ProceduralSolidMaterialGraphV1_FromTemplate(
+        "snow_accumulation", "missing_normals", "authored_binding",
+        binding_digest, &graph, &report));
+    assert(ProceduralSolidAuthoredMaterialV1_FromTemplate(
+        "weathered_rock", "base_material", &materials[0],
+        &material_report));
+    assert(ProceduralSolidAuthoredMaterialV1_FromTemplate(
+        "snow", "snow_material", &materials[1], &material_report));
+    ProceduralSolidMaterialRuntimeProgramV1_Init(&program);
+    assert(ProceduralSolidMaterialRuntimeProgramV1_Build(
+        &graph, materials, 2u, &mesh, kinds, &program, &report));
+    field.feature_count = 1u;
+    memset(field.source_mesh_digest_sha256, 'a', 64u);
+    field.source_mesh_digest_sha256[64] = '\0';
+    memset(field.authoring_digest_sha256, 'b', 64u);
+    field.authoring_digest_sha256[64] = '\0';
+    field.normal_compatibility_cosine = 0.5;
+    field.features[0].source_triangle = 0u;
+    field.features[0].barycentric[0] = 0.25;
+    field.features[0].barycentric[1] = 0.25;
+    field.features[0].barycentric[2] = 0.50;
+    field.features[0].position = (ProceduralSurfaceFeatureVec3){0.0, 0.0, 0.0};
+    field.features[0].normal.z = 1.0;
+    field.features[0].tangent.x = 1.0;
+    field.features[0].bitangent.y = 1.0;
+    field.features[0].radius = 0.5;
+    field.features[0].aspect = 1.0;
+    field.features[0].edge_softness = 0.1;
+    field.features[0].rim_width = 0.2;
+    field.features[0].feature_id = 240u;
+    assert(ProceduralSurfaceFeatureFieldV1_BuildIndex(&field));
+    assert(ProceduralSolidMaterialRuntimeProgramV1_AttachFeatureField(
+        &program, &field));
+    assert(ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
+        &program, 0u, 0.25, 0.25, 0.50, &sample, &report));
+    assert(sample.geometry.feature_coverage > 0.99);
+    assert(sample.geometry.feature_id == 240.0);
+    assert(fabs(sample.geometry.normal_z - 1.0) < 1e-12);
+    ProceduralSolidMaterialRuntimeProgramV1_Free(&program);
+}
+
 int main(void) {
     test_snow_composition();
     test_typed_edit_connect_and_cycle_rejection();
     test_all_geometry_inputs();
     test_continuous_hit_program();
+    test_missing_vertex_normals_feature_fallback();
     puts("procedural solid material graph tests passed");
     return 0;
 }

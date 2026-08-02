@@ -458,6 +458,182 @@ multi-triangle curved patch, boolean-union growth into the source shell,
 generate strand/fiber moss, simulate volumetric soil, or repair arbitrary
 growth collisions.
 
+PSG-23A adds a typed rooted strand/fiber authoring foundation:
+
+- `procedural_imported_surface_strands` consumes the exact PSG-19 carrier and
+  selects deterministic, clearance-bounded source-triangle roots;
+- every strand retains a stable index, source triangle, barycentric root,
+  surface normal/tangent frame, ordered control points, and tapered per-point
+  radii in a digest-bound semantic strand asset;
+- root control points penetrate the carrier by a declared positive distance,
+  while deterministic length variation, bend, and curl shape the exposed
+  control-point chain;
+- continuous segment-to-segment collision checks reject inter-strand overlap
+  and non-adjacent self-intersection between control points;
+- a bounded triangle-tube proof backend emits one closed positive-volume
+  component per strand with `root_cap`, `strand_shaft`, and `tip_cap` surface
+  groups plus per-triangle source/strand/segment/role provenance;
+- the imported semantic source stays byte-identical and the typed strand asset
+  plus proof mesh remain separately replaceable.
+
+The focused fixture generates a new 3,456-triangle smooth scalp-and-neck STL
+on every run. It authors 24 strands with 216 control points and compiles 3,456
+closed proof triangles. The 1440 x 1080 matrix separates source, hero, grazing,
+crown distribution, root/shaft/tip roles, strand IDs, source-triangle roots,
+and exact repeat.
+
+PSG-23A does not add a native renderer curve primitive, curve BVH/intersection
+lane, motion/deformation, clump-child generation, dynamics, grooming UI, or a
+Disney/Chiang hair BSDF. The triangle tubes are a bounded visibility and
+attachment proof backend, not a scalable production-hair representation.
+
+PSG-23B consumes the durable PSG-23A asset through a native curve lane:
+
+- `ProceduralImportedSurfaceStrands_BuildCurveAsset` converts every adjacent
+  control-point pair into a finite positive tapered curve segment while
+  retaining strand/segment identity, endpoint tangents, and root/tip caps;
+- `RuntimeCurveAsset3D_BuildBLAS` builds a deterministic object-space BVH from
+  radius-expanded primitive bounds;
+- analytic side and endpoint-cap intersection returns closest-hit identity,
+  segment-local `curveU`, interpolated positive radius, and a finite unit
+  `curveTangent` through the shared `HitInfo3D` payload;
+- curve trace statistics use atomic counters so the readback remains safe
+  under the renderer's multithreaded trace shape;
+- focused flat-versus-BLAS rays and an independent 64-sided triangle-tube BVH
+  provide intersection and tessellation parity rather than self-comparison.
+
+The strict parity set covers 145 side/cap rays with zero hit-state mismatches
+and a maximum interior hit-depth delta of 0.0004675102 units. The 1528 x 836
+dense diagnostic covers 79,200 rays, reports zero hit-state mismatches, and
+retains the expected maximum 0.005716506-unit grazing depth difference between
+an analytic circular silhouette and the faceted tube oracle.
+
+PSG-23C makes the native PSG-23B curve asset scene-addressable at runtime:
+
+- `RuntimeScene3D_AddCurveInstance` deep-copies an immutable curve asset plus
+  stable asset/object/scene-object identity and a finite position, Euler
+  rotation, and positive uniform scale;
+- curve instance bounds enter the same scene TLAS as triangle mesh instances,
+  and mixed closest-hit traversal preserves deterministic triangle/curve and
+  curve-instance tie rules;
+- curve hits retain scene instance identity, primitive/strand/segment identity,
+  tangent, local parameter, and scaled radius through flattened/TLAS parity;
+- `RuntimeSceneCurve3D_ResolveMaterial` delegates curve hits to the existing
+  scene-object material payload resolver instead of introducing a curve-only
+  material system;
+- scene copy/free owns curve data deeply, and geometry signatures include the
+  curve primitives and instance transforms.
+
+The focused fixture proves curve-only, triangle-only, and mixed scenes,
+translated/rotated/scaled curve instances, scene deep-copy independence,
+TLAS diagnostics/statistics, flattened-versus-TLAS parity, and real glossy
+material dispatch. PSG-23C still does not serialize curve assets through scene
+authoring, support non-uniform curve scaling, add motion blur/dynamics/grooming,
+or implement a Disney/Chiang hair BSDF.
+
+PSG-23D adds digest-bound `curve_asset_runtime_v1` sidecars and
+`curve_asset_instance` ingestion. Ordered finite control points and positive
+radii are loaded into the PSG-23B native curve lane, curve-only scenes select
+the native renderer, and deterministic authoring exposes density, spacing,
+length, direction, bend, curl, control-point count, and taper. Its
+900x700-per-cell variation proof distinguishes six independently generated
+curve assets without claiming carrier-aware hair placement.
+
+PSG-23E adds carrier-aware guide and clump authoring:
+
+- `procedural_carrier_curve_groom_authoring.py` binds one authoring document to
+  the exact source mesh file, PSG-19 carrier file, carrier value digest, and
+  source topology;
+- deterministic carrier-weighted farthest-point sampling chooses triangle
+  roots and a smaller spatially distributed guide set;
+- every child strand retains source-triangle, barycentric root, root normal,
+  carrier weight, guide index, and embedded root provenance;
+- nearest-guide clump assignment combines length variation, part axis,
+  object-space comb, lift, bend/curl, clump strength, tip spread, and taper
+  into the existing serialized native-curve asset contract;
+- compile fails closed for source or carrier drift, malformed topology,
+  impossible guide/strand counts, or stale digest-guarded edits.
+
+The focused contract regenerates a fresh scalp carrier and proves exact repeat,
+64 roots, eight covering guides, 576 ordered controls, decreasing positive
+radii, exact embedded roots, strong-versus-loose clump convergence, and actual
+mixed scalp/curve render hits. The 2716x1456 proof uses a single freshly
+generated scalp to isolate six groom states at 900x700 each: loose natural,
+soft clumps, strong locks, center part, side sweep, and curled clumps. A
+separate guide-assignment view colors roots by guide.
+
+PSG-23E is guide-level deterministic geometry, not production hair density or
+shading. It does not add interpolated render children, density/LOD controls,
+curve-BLAS performance work, opacity/transmission, a Disney/Chiang hair BSDF,
+dynamics, or motion blur. Dense overlapping clumps are intentionally retained
+as a later performance/scaling boundary.
+
+PSG-23F adds deterministic guide-to-render-child compilation and a bounded
+dense-curve acceleration profile:
+
+- `procedural_curve_render_children_authoring.py` binds its authoring document
+  to the exact PSG-23E guide asset and exact source mesh;
+- each guide becomes a selectable preview, interactive, or final set of thin
+  render children while the thick guide geometry is excluded from the output;
+- child roots remain inside the parent's source triangle, retain source
+  triangle/barycentric/root-normal/carrier/guide provenance, and preserve the
+  guide's embedded-root relationship to the carrier;
+- stable render-child IDs are allocated against the final LOD, so preview and
+  interactive assets are exact deterministic subsets of final rather than
+  separately jittered representations;
+- bounded root spread, length/shape variation, radius scales, seed, and
+  monotonic `4 / 16 / 48` children-per-guide defaults remain editable through
+  init/inspect/digest-guarded edit/compile operations;
+- the curve BLAS now uses deterministic heap sorting instead of quadratic
+  insertion sorting and a fixed bounded traversal stack instead of allocating
+  per ray.
+
+The focused contract proves exact regeneration, immutable guide/source inputs,
+128/320/640-child selectable LOD fixtures, retained provenance, materially
+thinner taper, fail-closed stale edits and source drift, and a real 640-child
+mixed scalp render. The dense acceleration proof builds 2,048 eight-control
+strands (14,336 primitives) into 8,191 nodes at depth 13, traces 4,096 rays
+with 22,640 primitive tests, reaches maximum stack depth 5, and reports no
+overflow. The high-resolution visual proof holds one fresh scalp and one
+104-guide groom constant while comparing 104 thick guides against 416,
+1,664, and 4,992 thin render fibers at 900x700 per cell.
+
+PSG-23F proves geometric density, deterministic LOD identity, and bounded
+native curve acceleration. Its fibers still use the ordinary surface material
+response: no longitudinal/azimuthal hair scattering, multiple scattering,
+opacity/transmission model, dynamics, collision simulation, or motion blur is
+claimed.
+
+PSG-23G adds an explicit curve-only Disney-v2 single-fiber optics payload:
+
+- `hair_optics_enabled` must be true on the curve object's ordinary
+  `object_materials` row; tangent-bearing curve identity is the second
+  dispatch key, so triangles and ordinary curves retain their prior response;
+- absorption RGB, longitudinal and azimuthal roughness, IOR, and cuticle tilt
+  are normalized into a bounded `RuntimeHairOptics3D` payload;
+- the isolated evaluator composes deterministic R, TT, TRT, and aggregate
+  higher-order internal-reflection lobes using longitudinal distributions,
+  trimmed-logistic azimuthal distributions, Fresnel, and absorption;
+- tangent-bearing curves now participate in direct-light receiver evaluation,
+  and native render stats expose `hair_scattering_pixels` for proof;
+- the corrected 2x2 900x700 proof holds one fresh 4,992-fiber groom fixed
+  across a surface-BSDF control and brunette, copper, and blond optical
+  variants. Every cell retains 115,236 curve-hit pixels, enabled cells record
+  115,357 evaluated hair-light samples, maximum radiance remains at or below
+  1.793, and clipped-channel plus near-white coverage remain zero;
+- curve scene-instance world bounds now participate in conservative tile
+  occupancy. Unprojectable bounds fail open, while the normal tiled brunette
+  proof skips 257 empty tiles and still matches a full serial reference
+  exactly with zero changed pixels and zero maximum channel delta;
+- the proof emits tiled/serial/difference/clipped-channel debug views. The
+  earlier clipped and saturated PSG-23G matrix is superseded and is not valid
+  acceptance evidence.
+
+This is a bounded Chiang-inspired direct-light single-fiber foundation, not
+the full production path-traced model. It does not add inter-fiber multiple
+scattering, stochastic hair-lobe sampling, opacity/transmission transport,
+dynamics, collision simulation, or motion blur.
+
 Boundary decisions:
 
 - `core_mesh_asset` remains the intended derived-shell output contract.
@@ -496,6 +672,17 @@ make test-procedural-imported-surface-inset-psg21
 make test-procedural-imported-surface-inset-psg21-visual-proof
 make test-procedural-imported-surface-growth-psg22
 make test-procedural-imported-surface-growth-psg22-visual-proof
+make test-procedural-imported-surface-strands-psg23a
+make test-procedural-imported-surface-strands-psg23a-visual-proof
+make test-procedural-imported-surface-strands-psg23b
+make test-procedural-imported-surface-strands-psg23b-visual-proof
+make test-procedural-imported-surface-strands-psg23c
+make test-procedural-imported-surface-strands-psg23d
+make test-procedural-imported-surface-strands-psg23d-visual-proof
+make test-procedural-imported-surface-strands-psg23e
+make test-procedural-imported-surface-strands-psg23e-visual-proof
+make test-procedural-imported-surface-strands-psg23f
+make test-procedural-imported-surface-strands-psg23f-visual-proof
 make test-procedural-solid-psg11-flow
 make test-procedural-solid-psg12-flow
 make test-procedural-solid-psg12-visual-proof

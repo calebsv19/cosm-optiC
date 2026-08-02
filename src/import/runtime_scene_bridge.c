@@ -1,4 +1,5 @@
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_curve_asset_loader.h"
 #include "import/runtime_scene_bridge_internal.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "import/runtime_mesh_asset_loader.h"
@@ -796,6 +797,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     if (!runtime_scene_json || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
     ray_tracing_runtime_mesh_assets_reset_last();
+    ray_tracing_runtime_curve_assets_reset_last();
     RuntimeNative3DPreparedSceneMarkDirty("runtime_scene_bridge_apply_json");
 
     root = json_tokener_parse(runtime_scene_json);

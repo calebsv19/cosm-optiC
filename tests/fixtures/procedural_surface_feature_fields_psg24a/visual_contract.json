@@ -1,0 +1,33 @@
+{
+  "schema": "ray_tracing.surface_feature_fields_psg24a_visual_contract",
+  "schema_version": 1,
+  "proof_id": "psg24a_closed_curved_plaster_spot_scatter",
+  "title": "PSG-24A Deterministic Surface Feature Fields",
+  "visual_intent": "A closed curved plaster proof object shows discrete fine speckles, dried droplets, and sparse mud drops over a clean plaster base, with ambient fill making the convex ridge, concave trough, and opposing fold readable.",
+  "expected_visual_signal": "The beauty views must show bounded circular or elliptical deposits rather than a broad tint. Coverage, interior, and rim views must directly visualize the native PSG-24 feature channels and remain spatially aligned with the beauty deposits.",
+  "rejection_condition": "Reject if ambient fill is absent, the object shape is unreadable, feature channels are confused with the older PSG-19 carrier, repeat pixels differ, or the deposits collapse into a broad color wash.",
+  "render": {
+    "width": 1280,
+    "height": 960,
+    "temporal_frames": 1,
+    "integrator_3d": "disney_v2",
+    "camera_zoom": 1.30
+  },
+  "lighting": {
+    "environment_light_mode": "ambient",
+    "environment_preset": "warm_sky",
+    "ambient_strength": 0.62,
+    "background_brightness": 0.08,
+    "light_intensity": 1.25,
+    "light_direction": {"x": -0.62, "y": -0.71, "z": -0.42},
+    "light_color": {"r": 1.0, "g": 0.93, "b": 0.84},
+    "background_color": {"r": 0.075, "g": 0.083, "b": 0.096}
+  },
+  "assertions": {
+    "minimum_primary_hit_pixels": 180000,
+    "minimum_beauty_changed_pixels": 25000,
+    "minimum_mask_luma_standard_deviation": 3.0,
+    "maximum_repeat_changed_pixels": 0,
+    "minimum_transition_vertices": 16
+  }
+}

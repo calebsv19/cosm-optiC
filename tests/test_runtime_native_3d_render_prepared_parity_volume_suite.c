@@ -10,10 +10,13 @@
 #include "render/integrators/integrator_common.h"
 #include "render/ray_tracing2_preview.h"
 #include "render/runtime_camera_3d_rays.h"
+#include "render/runtime_curve_blas_3d.h"
+#include "render/runtime_curve_primitive_3d.h"
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_native_3d_tile_occupancy.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
+#include "render/runtime_scene_curve_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "render/runtime_volume_3d_integrate.h"
@@ -377,6 +380,83 @@ static int test_runtime_native_3d_tile_occupancy_contract(void) {
                                                                        16));
 
     RuntimeNative3DTileOccupancy_Free(&occupancy);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_native_3d_curve_tile_occupancy_contract(void) {
+    RuntimeScene3D scene = {0};
+    RuntimeCurveAsset3D asset = {0};
+    RuntimeCurveSceneInstance3DDescriptor descriptor = {0};
+    RuntimeCamera3D camera = {0};
+    RuntimeCameraProjector3D projector = {0};
+    RuntimeNative3DTileOccupancy occupancy = {0};
+    const Vec3 points[2] = {
+        {-1.4, -5.0, 2.2},
+        {1.4, -5.0, 2.2},
+    };
+    const double radii[2] = {0.12, 0.08};
+    double screen_x = 0.0;
+    double screen_y = 0.0;
+    double depth = 0.0;
+    bool inside = false;
+    bool ok = false;
+    int tile_x = 0;
+    int tile_y = 0;
+
+    RuntimeScene3D_Init(&scene);
+    RuntimeCurveAsset3D_Init(&asset);
+    RuntimeNative3DTileOccupancy_Init(&occupancy);
+    ok = RuntimeCurveAsset3D_BuildFromPolylineStrands(
+        &asset, points, radii, 1u, 2u);
+    assert_true("runtime_native_3d_curve_occupancy_asset_ok", ok);
+    ok = ok && RuntimeCurveAsset3D_BuildBLAS(&asset);
+    assert_true("runtime_native_3d_curve_occupancy_blas_ok", ok);
+
+    descriptor.assetId = "curve_occupancy_asset";
+    descriptor.objectId = "curve_occupancy_object";
+    descriptor.sceneObjectIndex = 0;
+    descriptor.position = vec3(0.0, 0.0, 0.0);
+    descriptor.rotation = vec3(0.0, 0.0, 0.0);
+    descriptor.uniformScale = 1.0;
+    ok = ok && RuntimeScene3D_AddCurveInstance(&scene, &asset, &descriptor);
+    assert_true("runtime_native_3d_curve_occupancy_instance_ok", ok);
+
+    camera.position = vec3(0.0, 0.0, 0.0);
+    camera.rotation = 0.0;
+    camera.lookPitch = 0.0;
+    camera.zoom = 1.0;
+    camera.nearPlane = 0.1;
+    ok = ok && RuntimeCameraProjector3D_Build(&camera, 64, 64, &projector);
+    assert_true("runtime_native_3d_curve_occupancy_projector_ok", ok);
+    ok = ok && RuntimeNative3DTileOccupancy_Build(
+        &occupancy, &scene, &projector, 16);
+    assert_true("runtime_native_3d_curve_occupancy_build_ok", ok);
+    ok = ok && RuntimeCameraProjector3D_ProjectPoint(
+        &projector,
+        vec3(0.0, -5.0, 2.2),
+        &screen_x,
+        &screen_y,
+        &depth,
+        &inside);
+    assert_true("runtime_native_3d_curve_occupancy_midpoint_projected", ok);
+    tile_x = (int)screen_x / 16;
+    tile_y = (int)screen_y / 16;
+    if (tile_x < 0) tile_x = 0;
+    if (tile_x > 3) tile_x = 3;
+    if (tile_y < 0) tile_y = 0;
+    if (tile_y > 3) tile_y = 3;
+    assert_true(
+        "runtime_native_3d_curve_occupancy_projected_tile_marked",
+        RuntimeNative3DTileOccupancy_RegionMayContainGeometry(
+            &occupancy,
+            tile_x * 16,
+            tile_y * 16,
+            (tile_x + 1) * 16,
+            (tile_y + 1) * 16));
+
+    RuntimeNative3DTileOccupancy_Free(&occupancy);
+    RuntimeCurveAsset3D_Free(&asset);
     RuntimeScene3D_Free(&scene);
     return 0;
 }
@@ -896,6 +976,7 @@ int run_test_runtime_native_3d_render_prepared_parity_volume_suite(void) {
     test_runtime_native_3d_render_prepared_region_parity();
     test_runtime_native_3d_render_visible_emitter_tile_parity();
     test_runtime_native_3d_tile_occupancy_contract();
+    test_runtime_native_3d_curve_tile_occupancy_contract();
     test_runtime_native_3d_prepare_frame_attaches_configured_volume();
     test_runtime_native_3d_primary_volume_transmittance_darks_surface();
     test_runtime_native_3d_primary_volume_transmittance_dims_visible_emitter();

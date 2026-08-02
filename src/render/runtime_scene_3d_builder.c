@@ -260,6 +260,7 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeeds(RuntimeScene3D* scene) {
 bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double normalized_t) {
     RuntimeSceneBridge3DPrimitiveSeedState seed_state = {0};
     const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    const RayTracingRuntimeCurveAssetSet* curve_assets = NULL;
     int mesh_instance_count = 0;
     int mesh_asset_count = 0;
     struct timespec total_start = {0};
@@ -304,11 +305,18 @@ bool RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(RuntimeScene3D* scene, double
         runtime_scene_3d_builder_set_diag(diag);
         return false;
     }
+    curve_assets = ray_tracing_runtime_curve_assets_last();
+    if (!RuntimeScene3DBuilder_AppendCurveAssetSet(scene, curve_assets)) {
+        runtime_scene_3d_builder_set_diag("bridge curve asset append failed");
+        return false;
+    }
     if (!scene) {
         runtime_scene_3d_builder_set_diag("bridge scene build failed: null scene");
         return false;
     }
-    if (scene->primitiveCount <= 0 || scene->triangleMesh.triangleCount <= 0) {
+    if ((scene->primitiveCount <= 0 ||
+         scene->triangleMesh.triangleCount <= 0) &&
+        scene->curveInstanceCount <= 0) {
         if (scene->hasLight || scene->hasCamera || scene->lightSet.lightCount > 0) {
             runtime_scene_3d_builder_set_diag("ok");
             runtime_scene_3d_builder_timing_mutable()->total_ms +=
@@ -378,8 +386,14 @@ bool RuntimeScene3DBuilder_BuildRouteProbeFromBridgeSeedsAtT(RuntimeScene3D* sce
                                                              double normalized_t) {
     RuntimeSceneBridge3DPrimitiveSeedState seed_state = {0};
     const RayTracingRuntimeMeshAssetSet* mesh_assets = NULL;
+    const RayTracingRuntimeCurveAssetSet* curve_assets = NULL;
     runtime_scene_3d_builder_set_diag("ok");
     mesh_assets = ray_tracing_runtime_mesh_assets_last();
+    curve_assets = ray_tracing_runtime_curve_assets_last();
+    if (curve_assets && curve_assets->instance_count > 0) {
+        return RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(
+            scene, normalized_t);
+    }
     if (!mesh_assets || mesh_assets->instance_count <= 0) {
         runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
         if (!seed_state.valid || seed_state.primitive_count <= 0) {

@@ -1,8 +1,11 @@
 #include "render/runtime_native_3d_tile_occupancy.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "render/runtime_scene_curve_3d.h"
 
 static int runtime_native_3d_tile_occupancy_clamp_int(int value, int min_value, int max_value) {
     if (value < min_value) return min_value;
@@ -181,6 +184,107 @@ static bool runtime_native_3d_tile_occupancy_mark_emitter(RuntimeNative3DTileOcc
     return true;
 }
 
+static bool runtime_native_3d_tile_occupancy_mark_world_bounds(
+    RuntimeNative3DTileOccupancy* occupancy,
+    const RuntimeCameraProjector3D* projector,
+    Vec3 world_min,
+    Vec3 world_max) {
+    double min_x = DBL_MAX;
+    double max_x = -DBL_MAX;
+    double min_y = DBL_MAX;
+    double max_y = -DBL_MAX;
+    int pixel_min_x = 0;
+    int pixel_max_x = 0;
+    int pixel_min_y = 0;
+    int pixel_max_y = 0;
+    int tile_min_x = 0;
+    int tile_max_x = 0;
+    int tile_min_y = 0;
+    int tile_max_y = 0;
+
+    if (!occupancy || !projector) return false;
+    for (int corner = 0; corner < 8; ++corner) {
+        const Vec3 world = vec3(
+            (corner & 1) ? world_max.x : world_min.x,
+            (corner & 2) ? world_max.y : world_min.y,
+            (corner & 4) ? world_max.z : world_min.z);
+        double screen_x = 0.0;
+        double screen_y = 0.0;
+        double depth = 0.0;
+        bool inside = false;
+
+        /*
+         * A curve bound that crosses or approaches the near plane cannot be
+         * projected conservatively from its corners. Fail the occupancy build
+         * so the scheduler renders every tile instead of clipping curves.
+         */
+        if (!RuntimeCameraProjector3D_ProjectPoint(
+                projector, world, &screen_x, &screen_y, &depth, &inside) ||
+            !isfinite(screen_x) || !isfinite(screen_y)) {
+            return false;
+        }
+        min_x = fmin(min_x, screen_x);
+        max_x = fmax(max_x, screen_x);
+        min_y = fmin(min_y, screen_y);
+        max_y = fmax(max_y, screen_y);
+    }
+
+    pixel_min_x = (int)floor(min_x) - 1;
+    pixel_max_x = (int)ceil(max_x) + 1;
+    pixel_min_y = (int)floor(min_y) - 1;
+    pixel_max_y = (int)ceil(max_y) + 1;
+    if (pixel_max_x <= 0 || pixel_max_y <= 0 ||
+        pixel_min_x >= occupancy->viewportWidth ||
+        pixel_min_y >= occupancy->viewportHeight) {
+        return true;
+    }
+
+    pixel_min_x = runtime_native_3d_tile_occupancy_clamp_int(
+        pixel_min_x, 0, occupancy->viewportWidth - 1);
+    pixel_max_x = runtime_native_3d_tile_occupancy_clamp_int(
+        pixel_max_x, pixel_min_x + 1, occupancy->viewportWidth);
+    pixel_min_y = runtime_native_3d_tile_occupancy_clamp_int(
+        pixel_min_y, 0, occupancy->viewportHeight - 1);
+    pixel_max_y = runtime_native_3d_tile_occupancy_clamp_int(
+        pixel_max_y, pixel_min_y + 1, occupancy->viewportHeight);
+
+    tile_min_x = pixel_min_x / occupancy->tileSize;
+    tile_max_x = (pixel_max_x - 1) / occupancy->tileSize;
+    tile_min_y = pixel_min_y / occupancy->tileSize;
+    tile_max_y = (pixel_max_y - 1) / occupancy->tileSize;
+    tile_min_x = runtime_native_3d_tile_occupancy_clamp_int(
+        tile_min_x, 0, occupancy->tilesX - 1);
+    tile_max_x = runtime_native_3d_tile_occupancy_clamp_int(
+        tile_max_x, tile_min_x, occupancy->tilesX - 1);
+    tile_min_y = runtime_native_3d_tile_occupancy_clamp_int(
+        tile_min_y, 0, occupancy->tilesY - 1);
+    tile_max_y = runtime_native_3d_tile_occupancy_clamp_int(
+        tile_max_y, tile_min_y, occupancy->tilesY - 1);
+
+    for (int ty = tile_min_y; ty <= tile_max_y; ++ty) {
+        for (int tx = tile_min_x; tx <= tile_max_x; ++tx) {
+            occupancy->tiles[(size_t)ty * (size_t)occupancy->tilesX +
+                             (size_t)tx] = 1u;
+        }
+    }
+    return true;
+}
+
+static bool runtime_native_3d_tile_occupancy_mark_curve_instance(
+    RuntimeNative3DTileOccupancy* occupancy,
+    const RuntimeCameraProjector3D* projector,
+    const RuntimeCurveSceneInstance3D* instance) {
+    Vec3 world_min = vec3(0.0, 0.0, 0.0);
+    Vec3 world_max = vec3(0.0, 0.0, 0.0);
+
+    if (!RuntimeSceneCurve3D_InstanceWorldBounds(
+            instance, &world_min, &world_max)) {
+        return false;
+    }
+    return runtime_native_3d_tile_occupancy_mark_world_bounds(
+        occupancy, projector, world_min, world_max);
+}
+
 bool RuntimeNative3DTileOccupancy_Build(RuntimeNative3DTileOccupancy* occupancy,
                                         const RuntimeScene3D* scene,
                                         const RuntimeCameraProjector3D* projector,
@@ -219,6 +323,13 @@ bool RuntimeNative3DTileOccupancy_Build(RuntimeNative3DTileOccupancy* occupancy,
         if (!runtime_native_3d_tile_occupancy_mark_triangle(occupancy,
                                                             projector,
                                                             &scene->triangleMesh.triangles[i])) {
+            runtime_native_3d_tile_occupancy_disable(occupancy);
+            return false;
+        }
+    }
+    for (int i = 0; i < scene->curveInstanceCount; ++i) {
+        if (!runtime_native_3d_tile_occupancy_mark_curve_instance(
+                occupancy, projector, &scene->curveInstances[i])) {
             runtime_native_3d_tile_occupancy_disable(occupancy);
             return false;
         }

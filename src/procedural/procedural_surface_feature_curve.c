@@ -1,0 +1,29 @@
+#include "procedural/procedural_surface_feature_curve.h"
+#include <math.h>
+#include <string.h>
+
+static double dot(ProceduralSurfaceFeatureVec3 a, ProceduralSurfaceFeatureVec3 b) { return a.x*b.x+a.y*b.y+a.z*b.z; }
+static double len(ProceduralSurfaceFeatureVec3 a) { return sqrt(dot(a,a)); }
+static double clamp01(double x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
+static bool unit(ProceduralSurfaceFeatureVec3 v) { return isfinite(v.x) && isfinite(v.y) && isfinite(v.z) && fabs(len(v)-1) < 1e-6; }
+static size_t cell(const ProceduralSurfaceFeatureCurveFieldV1 *f, double x, double y) {
+    int ix=(int)floor((x-f->grid_min_x)/(f->grid_max_x-f->grid_min_x)*PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION), iy=(int)floor((y-f->grid_min_y)/(f->grid_max_y-f->grid_min_y)*PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION);
+    if(ix<0)ix=0;if(iy<0)iy=0;if(ix>=(int)PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION)ix=PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION-1;if(iy>=(int)PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION)iy=PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION-1;
+    return (size_t)iy*PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION+(size_t)ix;
+}
+bool ProceduralSurfaceFeatureCurveFieldV1_Validate(const ProceduralSurfaceFeatureCurveFieldV1 *f){
+ if(!f||!f->segment_count||f->segment_count>PROCEDURAL_SURFACE_FEATURE_CURVE_MAX_SEGMENTS||!isfinite(f->normal_compatibility_cosine)||f->normal_compatibility_cosine < -1.0||f->normal_compatibility_cosine > 1.0)return false;
+ for(size_t i=0;i<f->segment_count;i++){const ProceduralSurfaceFeatureCurveSegmentV1*s=&f->segments[i];if(!s->curve_id||!s->segment_id||!unit(s->normal)||!unit(s->tangent)||fabs(dot(s->normal,s->tangent))>1e-6||!isfinite(s->width)||s->width<=0||!isfinite(s->depth)||s->depth<=0||!isfinite(s->edge_softness)||s->edge_softness<0||s->edge_softness>1||len((ProceduralSurfaceFeatureVec3){s->end.x-s->start.x,s->end.y-s->start.y,s->end.z-s->start.z})<=1e-9)return false;}return true;
+}
+bool ProceduralSurfaceFeatureCurveFieldV1_BuildIndex(ProceduralSurfaceFeatureCurveFieldV1 *f){
+ if(!ProceduralSurfaceFeatureCurveFieldV1_Validate(f))return false;f->grid_min_x=f->grid_min_y=INFINITY;f->grid_max_x=f->grid_max_y=-INFINITY;
+ for(size_t i=0;i<f->segment_count;i++){const ProceduralSurfaceFeatureCurveSegmentV1*s=&f->segments[i];double minx=fmin(s->start.x,s->end.x)-s->width,maxx=fmax(s->start.x,s->end.x)+s->width,miny=fmin(s->start.y,s->end.y)-s->width,maxy=fmax(s->start.y,s->end.y)+s->width;if(minx<f->grid_min_x)f->grid_min_x=minx;if(maxx>f->grid_max_x)f->grid_max_x=maxx;if(miny<f->grid_min_y)f->grid_min_y=miny;if(maxy>f->grid_max_y)f->grid_max_y=maxy;}
+ if(f->grid_max_x<=f->grid_min_x)f->grid_max_x=f->grid_min_x+1;if(f->grid_max_y<=f->grid_min_y)f->grid_max_y=f->grid_min_y+1;memset(f->grid_counts,0,sizeof(f->grid_counts));f->grid_index_count=0;
+ for(size_t i=0;i<f->segment_count;i++){const ProceduralSurfaceFeatureCurveSegmentV1*s=&f->segments[i];size_t lo=cell(f,fmin(s->start.x,s->end.x)-s->width,fmin(s->start.y,s->end.y)-s->width),hi=cell(f,fmax(s->start.x,s->end.x)+s->width,fmax(s->start.y,s->end.y)+s->width);for(size_t y=lo/PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION;y<=hi/PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION;y++)for(size_t x=lo%PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION;x<=hi%PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION;x++){size_t c=y*PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_DIMENSION+x;if(f->grid_counts[c]>=PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_CELL_CAPACITY)return false;f->grid_indices[c*PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_CELL_CAPACITY+f->grid_counts[c]++]=(uint16_t)i;++f->grid_index_count;}}
+ return true;
+}
+bool ProceduralSurfaceFeatureCurveFieldV1_Sample(const ProceduralSurfaceFeatureCurveFieldV1*f,ProceduralSurfaceFeatureVec3 p,ProceduralSurfaceFeatureVec3 n,ProceduralSurfaceFeatureCurveSampleV1*out){
+ if(!out||!unit(n)||!ProceduralSurfaceFeatureCurveFieldV1_Validate(f)||!f->grid_index_count)return false;memset(out,0,sizeof(*out));double best=0;size_t c=cell(f,p.x,p.y),count=f->grid_counts[c];for(size_t k=0;k<count;k++){const ProceduralSurfaceFeatureCurveSegmentV1*s=&f->segments[f->grid_indices[c*PROCEDURAL_SURFACE_FEATURE_CURVE_GRID_CELL_CAPACITY+k]];if(dot(n,s->normal)<f->normal_compatibility_cosine)continue;ProceduralSurfaceFeatureVec3 d={s->end.x-s->start.x,s->end.y-s->start.y,s->end.z-s->start.z},q={p.x-s->start.x,p.y-s->start.y,p.z-s->start.z};double l2=dot(d,d),t=clamp01(dot(q,d)/l2);ProceduralSurfaceFeatureVec3 center={s->start.x+t*d.x,s->start.y+t*d.y,s->start.z+t*d.z},e={p.x-center.x,p.y-center.y,p.z-center.z};double r=len(e)/s->width;if(r>1)continue;++out->candidates_considered;double v=clamp01((1-r)/fmax(s->edge_softness,1e-9));v=v*v*(3-2*v);if(v>best){best=v;out->coverage=v;out->interior=clamp01((1-r-s->edge_softness)/fmax(1-s->edge_softness,1e-9));out->rim=clamp01(v-out->interior);out->signed_depth=-s->depth*v;out->curve_id=s->curve_id;out->segment_id=s->segment_id;out->direction=s->tangent;}}
+ return true;
+}
+bool ProceduralSurfaceFeatureCurveSampleV1_ApplyShadingNormal(const ProceduralSurfaceFeatureCurveSampleV1 *s,ProceduralSurfaceFeatureVec3 geometric,double strength,ProceduralSurfaceFeatureVec3*out){ProceduralSurfaceFeatureVec3 binormal;double length;if(!s||!out||!unit(geometric)||!unit(s->direction)||!isfinite(strength)||strength<0||strength>1)return false;binormal=(ProceduralSurfaceFeatureVec3){geometric.y*s->direction.z-geometric.z*s->direction.y,geometric.z*s->direction.x-geometric.x*s->direction.z,geometric.x*s->direction.y-geometric.y*s->direction.x};out->x=geometric.x+binormal.x*s->signed_depth*strength;out->y=geometric.y+binormal.y*s->signed_depth*strength;out->z=geometric.z+binormal.z*s->signed_depth*strength;length=len(*out);if(length<=1e-12)return false;out->x/=length;out->y/=length;out->z/=length;return true;}

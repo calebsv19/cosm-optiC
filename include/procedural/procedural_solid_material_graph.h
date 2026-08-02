@@ -31,7 +31,14 @@ typedef enum ProceduralSolidMaterialNodeKind {
     PROCEDURAL_SOLID_MATERIAL_NODE_MULTIPLY,
     PROCEDURAL_SOLID_MATERIAL_NODE_INVERT,
     PROCEDURAL_SOLID_MATERIAL_NODE_SMOOTHSTEP,
-    PROCEDURAL_SOLID_MATERIAL_NODE_BANDS
+    PROCEDURAL_SOLID_MATERIAL_NODE_BANDS,
+    PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_COVERAGE,
+    PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_INTERIOR,
+    PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_RIM,
+    PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_ID,
+    PROCEDURAL_SOLID_MATERIAL_NODE_CLAMP,
+    PROCEDURAL_SOLID_MATERIAL_NODE_SUBTRACT,
+    PROCEDURAL_SOLID_MATERIAL_NODE_REMAP
 } ProceduralSolidMaterialNodeKind;
 
 typedef struct ProceduralSolidMaterialNodeV1 {
@@ -83,6 +90,14 @@ typedef struct ProceduralSolidMaterialGeometryInputs {
     double object_x;
     double object_y;
     double object_z;
+    double normal_x;
+    double normal_y;
+    double normal_z;
+    /* PSG-24A feature-field channels are sampled by the runtime adapter. */
+    double feature_coverage;
+    double feature_interior;
+    double feature_rim;
+    double feature_id;
 } ProceduralSolidMaterialGeometryInputs;
 
 typedef enum ProceduralSolidMaterialGraphStatus {

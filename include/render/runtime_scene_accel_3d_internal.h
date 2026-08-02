@@ -2,14 +2,22 @@
 #define RENDER_RUNTIME_SCENE_ACCEL_3D_INTERNAL_H
 
 #include "render/runtime_scene_accel_3d.h"
+#include "render/runtime_scene_curve_3d.h"
+
+typedef enum RuntimeSceneAcceleration3DInstanceKind {
+    RUNTIME_SCENE_ACCEL_3D_INSTANCE_TRIANGLE = 0,
+    RUNTIME_SCENE_ACCEL_3D_INSTANCE_CURVE = 1
+} RuntimeSceneAcceleration3DInstanceKind;
 
 typedef struct RuntimeSceneAcceleration3DInstanceBounds {
     Vec3 min;
     Vec3 max;
     int primitiveIndex;
+    int curveSceneInstanceIndex;
     int sceneObjectIndex;
     char objectId[RUNTIME_SCENE_3D_MAX_OBJECT_ID];
     bool meshAccelerated;
+    RuntimeSceneAcceleration3DInstanceKind kind;
     int assetIndex;
     char assetId[64];
     char assetPath[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
@@ -18,6 +26,7 @@ typedef struct RuntimeSceneAcceleration3DInstanceBounds {
     Vec3 scale;
     Vec3 pivotScaled;
     const RuntimeTriangleMesh3D* localMesh;
+    const RuntimeCurveSceneInstance3D* curveInstance;
     int* sceneTriangleIndexByLocalTriangle;
     int sceneTriangleIndexByLocalTriangleCount;
 } RuntimeSceneAcceleration3DInstanceBounds;

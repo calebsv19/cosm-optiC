@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "render/material_bsdf.h"
+#include "render/runtime_hair_scattering_3d.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
 
@@ -37,6 +38,7 @@ typedef struct {
     double microdetailSlopeU;
     double microdetailSlopeV;
     Vec3 microdetailShadingNormal;
+    RuntimeHairOptics3D hairOptics;
 } RuntimeMaterialPayload3D;
 
 void RuntimeMaterialPayload3D_Reset(RuntimeMaterialPayload3D* payload);

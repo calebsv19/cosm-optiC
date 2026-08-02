@@ -69,6 +69,8 @@ void ProceduralImportedSurfaceRegionV1_Init(
     ProceduralImportedSurfaceRegionV1 *region);
 void ProceduralImportedSurfaceRegionV1_Free(
     ProceduralImportedSurfaceRegionV1 *region);
+bool ProceduralImportedSurfaceRegionV1_RefreshValues(
+    ProceduralImportedSurfaceRegionV1 *region);
 bool ProceduralImportedSurfaceRegionRecipeV1_LoadJsonFile(
     const char *path,
     ProceduralImportedSurfaceRegionRecipeV1 *out_recipe,

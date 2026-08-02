@@ -332,6 +332,22 @@ void SaveSceneConfig(void) {
                                    "mirrorTint",
                                    json_object_new_int(obj->mirrorTint & 0xFFFFFF));
         }
+        if (obj->hasHairOpticsOverride) {
+            json_object_object_add(jsonObj, "hairOpticsEnabled", json_object_new_boolean(true));
+            json_object_object_add(jsonObj, "hairAbsorptionR", json_object_new_double(obj->hairAbsorptionR));
+            json_object_object_add(jsonObj, "hairAbsorptionG", json_object_new_double(obj->hairAbsorptionG));
+            json_object_object_add(jsonObj, "hairAbsorptionB", json_object_new_double(obj->hairAbsorptionB));
+            json_object_object_add(jsonObj,
+                                   "hairLongitudinalRoughness",
+                                   json_object_new_double(obj->hairLongitudinalRoughness));
+            json_object_object_add(jsonObj,
+                                   "hairAzimuthalRoughness",
+                                   json_object_new_double(obj->hairAzimuthalRoughness));
+            json_object_object_add(jsonObj, "hairIor", json_object_new_double(obj->hairIor));
+            json_object_object_add(jsonObj,
+                                   "hairCuticleTiltDegrees",
+                                   json_object_new_double(obj->hairCuticleTiltDegrees));
+        }
         {
             struct json_object* materialTextureStack = ConfigSaveMaterialTextureStackForObject(i);
             struct json_object* materialGraph = ConfigSaveMaterialGraphForObject(i);
@@ -474,7 +490,10 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         *materialId, *glassTransportOverride, *glassTransmission, *glassIor,
         *glassAbsorptionDistance, *glassThinWalled, *glassInterfaceTint,
         *glassAbsorptionColor, *mirrorResponseOverride,
-        *mirrorReflectivity, *mirrorRoughness, *mirrorSpecular, *mirrorTint;
+        *mirrorReflectivity, *mirrorRoughness, *mirrorSpecular, *mirrorTint,
+        *hairOpticsEnabled, *hairAbsorptionR, *hairAbsorptionG, *hairAbsorptionB,
+        *hairLongitudinalRoughness, *hairAzimuthalRoughness, *hairIor,
+        *hairCuticleTiltDegrees;
 
     // Load texture path
     if (json_object_object_get_ex(obj, "texture", &texture)) {
@@ -671,6 +690,41 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         }
         if (json_object_object_get_ex(obj, "mirrorTint", &mirrorTint)) {
             sceneObject->mirrorTint = json_object_get_int(mirrorTint) & 0xFFFFFF;
+        }
+    }
+    sceneObject->hasHairOpticsOverride = false;
+    if (json_object_object_get_ex(obj, "hairOpticsEnabled", &hairOpticsEnabled) &&
+        json_object_get_boolean(hairOpticsEnabled)) {
+        sceneObject->hasHairOpticsOverride = true;
+        if (json_object_object_get_ex(obj, "hairAbsorptionR", &hairAbsorptionR)) {
+            sceneObject->hairAbsorptionR = json_object_get_double(hairAbsorptionR);
+        }
+        if (json_object_object_get_ex(obj, "hairAbsorptionG", &hairAbsorptionG)) {
+            sceneObject->hairAbsorptionG = json_object_get_double(hairAbsorptionG);
+        }
+        if (json_object_object_get_ex(obj, "hairAbsorptionB", &hairAbsorptionB)) {
+            sceneObject->hairAbsorptionB = json_object_get_double(hairAbsorptionB);
+        }
+        if (json_object_object_get_ex(obj,
+                                      "hairLongitudinalRoughness",
+                                      &hairLongitudinalRoughness)) {
+            sceneObject->hairLongitudinalRoughness =
+                json_object_get_double(hairLongitudinalRoughness);
+        }
+        if (json_object_object_get_ex(obj,
+                                      "hairAzimuthalRoughness",
+                                      &hairAzimuthalRoughness)) {
+            sceneObject->hairAzimuthalRoughness =
+                json_object_get_double(hairAzimuthalRoughness);
+        }
+        if (json_object_object_get_ex(obj, "hairIor", &hairIor)) {
+            sceneObject->hairIor = json_object_get_double(hairIor);
+        }
+        if (json_object_object_get_ex(obj,
+                                      "hairCuticleTiltDegrees",
+                                      &hairCuticleTiltDegrees)) {
+            sceneObject->hairCuticleTiltDegrees =
+                json_object_get_double(hairCuticleTiltDegrees);
         }
     }
 }

@@ -1,4 +1,5 @@
 #include "render/runtime_scene_3d.h"
+#include "render/runtime_scene_curve_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 
 #include <stdlib.h>
@@ -12,6 +13,8 @@ const char* RuntimePrimitive3DKindLabel(RuntimePrimitive3DKind kind) {
             return "rect_prism";
         case RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH:
             return "triangle_mesh";
+        case RUNTIME_PRIMITIVE_3D_KIND_CURVE:
+            return "curve";
         case RUNTIME_PRIMITIVE_3D_KIND_INVALID:
         default:
             return "invalid";
@@ -76,6 +79,7 @@ void RuntimeScene3D_Init(RuntimeScene3D* scene) {
     scene->scope.planeEnabled = true;
     scene->scope.rectPrismEnabled = true;
     scene->scope.triangleMeshEnabled = false;
+    scene->scope.curveEnabled = false;
 
     scene->ownership.rendererOwnsGeometryTruth = true;
     scene->ownership.rendererOwnsVolumeAttachmentTruth = true;
@@ -117,6 +121,7 @@ void RuntimeScene3D_Free(RuntimeScene3D* scene) {
     scene->primitiveCount = 0;
     scene->primitiveCapacity = 0;
     RuntimeTriangleMesh3D_Free(&scene->triangleMesh);
+    RuntimeScene3D_ClearCurveInstances(scene);
     RuntimeEmissiveLightSet3D_Free(&scene->emissiveLightSet);
     RuntimeLightSet3D_Free(&scene->lightSet);
     RuntimeVolumeAttachment3D_Free(&scene->volume);
@@ -164,6 +169,11 @@ bool RuntimeScene3D_CopyGeometryFrom(RuntimeScene3D* dst, const RuntimeScene3D* 
     }
 
     if (!RuntimeTriangleMesh3D_CopyFrom(&dst->triangleMesh, &src->triangleMesh)) {
+        RuntimeScene3D_Free(dst);
+        RuntimeScene3D_Init(dst);
+        return false;
+    }
+    if (!RuntimeScene3D_CopyCurveInstances(dst, src)) {
         RuntimeScene3D_Free(dst);
         RuntimeScene3D_Init(dst);
         return false;

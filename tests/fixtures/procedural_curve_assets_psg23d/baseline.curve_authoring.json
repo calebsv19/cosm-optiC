@@ -1,0 +1,23 @@
+{
+  "asset_id": "psg23d_baseline_fiber_field",
+  "layout": {
+    "columns": 9,
+    "rows": 9,
+    "seed": 23004,
+    "spacing_x": 0.16,
+    "spacing_y": 0.16
+  },
+  "schema": "ray_tracing.procedural_curve_field_authoring_v1",
+  "schema_version": 1,
+  "strand": {
+    "bend": 0.08,
+    "curl": 0.015,
+    "direction_x": 0.05,
+    "direction_y": 0.0,
+    "length": 0.72,
+    "length_variation": 0.08,
+    "points": 7,
+    "root_radius": 0.025,
+    "tip_radius": 0.008
+  }
+}

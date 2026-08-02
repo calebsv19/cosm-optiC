@@ -22,6 +22,14 @@ typedef struct {
     int localTriangleIndex;
     int primitiveIndex;
     int sceneObjectIndex;
+    bool hasCurveTangent;
+    Vec3 curveTangent;
+    double curveU;
+    double curveRadius;
+    int curvePrimitiveIndex;
+    int curveStrandIndex;
+    int curveSegmentIndex;
+    int curveSceneInstanceIndex;
     RuntimePrimitive3DSourceRef source;
     double baryU;
     double baryV;

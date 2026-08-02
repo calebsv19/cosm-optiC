@@ -2,6 +2,7 @@
 
 #include "core_io.h"
 #include "core_scene.h"
+#include "procedural/procedural_solid_mesh.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -138,6 +139,8 @@ static bool load_material_graph(
     const char *graph_reference = string_field(reference, "graph_path");
     const char *surface_region_reference =
         string_field(reference, "surface_region_path");
+    const char *feature_field_reference =
+        string_field(reference, "surface_feature_field_path");
     ProceduralSolidMaterialGraphV1 graph;
     ProceduralSolidMaterialGraphReport graph_report = {0};
     ProceduralSolidAuthoredMaterialV1
@@ -152,6 +155,8 @@ static bool load_material_graph(
     char surface_region_path[
         RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     const ProceduralImportedSurfaceRegionV1 *surface_region = NULL;
+    char feature_field_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char mesh_digest[PROCEDURAL_SURFACE_FEATURE_FIELD_DIGEST_CAPACITY] = {0};
     memset(materials, 0, sizeof(materials));
     memset(dependencies, 0, sizeof(dependencies));
     if (!graph_reference) {
@@ -212,6 +217,22 @@ static bool load_material_graph(
                      "imported surface region instance mismatch");
             return false;
         }
+        if ((feature_field_reference != NULL) !=
+            asset->procedural_surface_feature_field_valid) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature field references must be consistent "
+                     "across instances of one mesh asset");
+            return false;
+        }
+        if (feature_field_reference &&
+            (!resolve_relative(runtime_scene_path, feature_field_reference,
+                               feature_field_path, sizeof(feature_field_path)) ||
+             strcmp(feature_field_path,
+                    asset->procedural_surface_feature_field_path) != 0)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature field instance mismatch");
+            return false;
+        }
         return true;
     }
     if (surface_region_reference) {
@@ -246,6 +267,35 @@ static bool load_material_graph(
             return false;
         }
         asset->procedural_imported_surface_region_absent = true;
+    }
+    if (feature_field_reference) {
+        if (asset->procedural_surface_feature_field_absent ||
+            !resolve_relative(runtime_scene_path, feature_field_reference,
+                              feature_field_path, sizeof(feature_field_path)) ||
+            !ProceduralSolidMesh_Digest(&asset->document, mesh_digest) ||
+            !ProceduralSurfaceFeatureFieldV1_LoadJsonFile(
+                feature_field_path, &asset->procedural_surface_feature_field) ||
+            strcmp(mesh_digest, asset->procedural_surface_feature_field.
+                source_mesh_digest_sha256) != 0 ||
+            !capture_dependency(feature_field_path,
+                &asset->procedural_surface_feature_field_dependency)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature field identity is stale");
+            goto fail;
+        }
+        asset->procedural_surface_feature_field_observed = true;
+        asset->procedural_surface_feature_field_valid = true;
+        snprintf(asset->procedural_surface_feature_field_path,
+                 sizeof(asset->procedural_surface_feature_field_path), "%s",
+                 feature_field_path);
+    } else {
+        if (asset->procedural_surface_feature_field_observed) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature field references must be consistent "
+                     "across instances of one mesh asset");
+            goto fail;
+        }
+        asset->procedural_surface_feature_field_absent = true;
     }
     for (size_t i = 0u; i < graph.layer_count; ++i) {
         char material_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
@@ -291,6 +341,10 @@ static bool load_material_graph(
             &graph_report)) {
         goto fail;
     }
+    if (asset->procedural_surface_feature_field_valid &&
+        !ProceduralSolidMaterialRuntimeProgramV1_AttachFeatureField(
+            &asset->procedural_solid_material_runtime_program,
+            &asset->procedural_surface_feature_field)) goto fail;
     if (!capture_dependency(
             graph_path, &asset->procedural_solid_material_graph_dependency))
         goto fail;

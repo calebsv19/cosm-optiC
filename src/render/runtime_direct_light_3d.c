@@ -259,7 +259,7 @@ static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
 
     if (!scene || !hit || !out_result) return false;
     if (!light_set) return false;
-    if (hit->triangleIndex < 0) return false;
+    if (hit->triangleIndex < 0 && !hit->hasCurveTangent) return false;
 
     result.hit = true;
     result.hitInfo = *hit;

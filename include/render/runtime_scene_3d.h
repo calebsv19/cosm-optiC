@@ -12,6 +12,7 @@
 #define RUNTIME_SCENE_3D_MAX_OBJECT_ID 64
 
 typedef struct RuntimeTriangleBVH3D RuntimeTriangleBVH3D;
+typedef struct RuntimeCurveSceneInstance3D RuntimeCurveSceneInstance3D;
 typedef struct ProceduralSolidMaterialRuntimeProgramV1
     ProceduralSolidMaterialRuntimeProgramV1;
 
@@ -19,13 +20,15 @@ typedef enum {
     RUNTIME_PRIMITIVE_3D_KIND_INVALID = 0,
     RUNTIME_PRIMITIVE_3D_KIND_PLANE = 1,
     RUNTIME_PRIMITIVE_3D_KIND_RECT_PRISM = 2,
-    RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH = 3
+    RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH = 3,
+    RUNTIME_PRIMITIVE_3D_KIND_CURVE = 4
 } RuntimePrimitive3DKind;
 
 typedef struct {
     bool planeEnabled;
     bool rectPrismEnabled;
     bool triangleMeshEnabled;
+    bool curveEnabled;
 } RuntimeScene3DPrimitiveScope;
 
 typedef struct {
@@ -191,6 +194,9 @@ typedef struct RuntimeScene3D {
     int primitiveCount;
     int primitiveCapacity;
     RuntimeTriangleMesh3D triangleMesh;
+    RuntimeCurveSceneInstance3D* curveInstances;
+    int curveInstanceCount;
+    int curveInstanceCapacity;
     RuntimeEmissiveLightSet3D emissiveLightSet;
     RuntimeVolumeAttachment3D volume;
     RuntimeEnvironment3D environment;

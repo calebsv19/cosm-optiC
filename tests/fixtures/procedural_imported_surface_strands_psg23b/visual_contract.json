@@ -1,0 +1,25 @@
+{
+  "schema": "ray_tracing.procedural_imported_surface_strands_psg23b_visual_contract",
+  "schema_version": 1,
+  "proof_id": "psg23b_native_curve_triangle_tube_parity",
+  "output_width": 1528,
+  "output_height": 836,
+  "grid_width": 360,
+  "grid_height": 220,
+  "maximum_hit_state_mismatch_ratio": 0.002,
+  "maximum_common_hit_t_delta": 0.006,
+  "required_views": [
+    "native_curve_hit_mask",
+    "triangle_tube_hit_mask",
+    "parity_error",
+    "tangent_parameter_payload"
+  ],
+  "authority": {
+    "native_curve_intersection": true,
+    "curve_blas": true,
+    "tangent_hit_payload": true,
+    "triangle_tube_parity": true,
+    "scene_tlas_integration": false,
+    "hair_bsdf": false
+  }
+}

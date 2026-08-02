@@ -30,6 +30,9 @@ void ray_tracing_headless_write_render_stats_summary(
     fprintf(file, "  \"render_stats\": {\n");
     fprintf(file, "    \"hit_pixels\": %d,\n", preflight->stats.hitPixelCount);
     fprintf(file, "    \"visible_pixels\": %d,\n", preflight->stats.visiblePixelCount);
+    fprintf(file,
+            "    \"hair_scattering_pixels\": %d,\n",
+            preflight->stats.hairScatteringPixelCount);
     fprintf(file, "    \"secondary_rays\": %d,\n", preflight->stats.secondaryRayCount);
     fprintf(file, "    \"secondary_hits\": %d,\n", preflight->stats.secondaryHitCount);
     fprintf(file, "    \"emissive_area_candidate_count\": %d,\n",

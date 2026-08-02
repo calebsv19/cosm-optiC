@@ -52,6 +52,7 @@
 #include "test_runtime_object_motion_tracks.h"
 #include "test_runtime_lighting_materials.h"
 #include "test_runtime_lighting_materials_internal.h"
+#include "test_runtime_curve_scene_material_dispatch.h"
 #include "test_runtime_mesh_asset_loader.h"
 #include "test_runtime_scene_3d_geometry.h"
 #include "test_runtime_volume_3d.h"
@@ -190,6 +191,8 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_disney_v2_topology_stability",
          run_test_runtime_disney_v2_topology_stability_suite},
         {"runtime_lighting_materials", run_test_runtime_lighting_materials_tests},
+        {"runtime_curve_scene_material_dispatch",
+         run_test_runtime_curve_scene_material_dispatch_tests},
         {"runtime_mesh_asset_loader", run_test_runtime_mesh_asset_loader_tests},
         {"runtime_diffuse_temporal", run_test_runtime_diffuse_temporal_tests},
         {"runtime_emission_transparency", run_test_runtime_emission_transparency_tests},

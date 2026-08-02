@@ -1,0 +1,10 @@
+{
+  "schema": "ray_tracing.procedural_imported_surface_region_recipe",
+  "schema_version": 1,
+  "region_id": "plaster_feature_receiver",
+  "source_asset_id": "psg24_closed_curved_plaster",
+  "patches": [
+    {"center": [0.50, 0.25, 0.62], "radius": [0.42, 0.28, 0.28], "feather": 0.22, "noise_scale": 19.0, "noise_strength": 0.12, "strength": 1.0, "seed": 2401},
+    {"center": [0.57, 0.68, 0.46], "radius": [0.28, 0.24, 0.24], "feather": 0.28, "noise_scale": 27.0, "noise_strength": 0.16, "strength": 0.86, "seed": 2402}
+  ]
+}

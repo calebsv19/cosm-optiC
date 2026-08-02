@@ -121,6 +121,9 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                caustic_cache);
             runtime_native_3d_render_record_scatter_stats(&stats, &scatter, x, y);
             stats.hitPixelCount += 1;
+            if (result.hairScatteringApplied) {
+                stats.hairScatteringPixelCount += 1;
+            }
             runtime_native_3d_render_apply_scatter_rgb(&result.radianceR,
                                                        &result.radianceG,
                                                        &result.radianceB,

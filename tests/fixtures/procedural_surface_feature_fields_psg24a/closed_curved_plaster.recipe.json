@@ -1,0 +1,18 @@
+{
+  "schema": "procedural_object_recipe_v1",
+  "asset_id": "psg24_closed_curved_plaster",
+  "display_name": "PSG-24 Closed Curved Plaster",
+  "recipe_family": "grooved_sphere",
+  "tags": ["psg24", "closed", "plaster", "convex_ridge", "concave_trough", "opposing_groove_faces"],
+  "recommended_first_material": "matte_plaster",
+  "notes": "Purpose-fit closed proof source: curved ridge crests, concave longitudinal and latitudinal troughs, and nearby opposing groove walls. It is independent of Venus and not a generic block.",
+  "geometry": {
+    "radius": 1.0,
+    "lat_segments": 32,
+    "lon_segments": 64,
+    "longitude_grooves": 8,
+    "latitude_grooves": 4,
+    "groove_depth": 0.11,
+    "groove_width": 0.18
+  }
+}

@@ -2,6 +2,7 @@
 
 #include "config/config_manager.h"
 #include "core_io.h"
+#include "import/runtime_curve_asset_loader.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "import/runtime_scene_volume_defaults.h"
@@ -42,6 +43,28 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
     ok = runtime_scene_bridge_preflight_json(json_text, out_preflight);
     free(json_text);
     if (ok) {
+        RayTracingRuntimeCurveAssetSet *curve_assets =
+            calloc(1u, sizeof(*curve_assets));
+        if (!curve_assets) {
+            runtime_scene_bridge_preflight_diag(
+                out_preflight, "out of memory");
+            return false;
+        }
+        ray_tracing_runtime_curve_asset_set_init(curve_assets);
+        /*
+         * Curve sidecars are digest-bound but intentionally do not yet have the
+         * mesh loader's file-stamp cache. Always reload during preflight so a
+         * changed sidecar cannot be hidden by a previous scene-path match.
+         */
+        ok = ray_tracing_runtime_curve_assets_load_scene_file(
+            runtime_scene_path,
+            curve_assets,
+            out_preflight->diagnostics,
+            sizeof(out_preflight->diagnostics));
+        ray_tracing_runtime_curve_asset_set_free(curve_assets);
+        free(curve_assets);
+    }
+    if (ok) {
         RayTracingRuntimeMeshAssetSet *mesh_assets =
             calloc(1u, sizeof(*mesh_assets));
         if (!mesh_assets) {
@@ -72,16 +95,21 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     char previous_runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
     char *json_text = NULL;
     RayTracingRuntimeMeshAssetSet *mesh_assets = NULL;
+    RayTracingRuntimeCurveAssetSet *curve_assets = NULL;
     bool ok;
 
     if (!runtime_scene_path || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
     mesh_assets = calloc(1u, sizeof(*mesh_assets));
-    if (!mesh_assets) {
+    curve_assets = calloc(1u, sizeof(*curve_assets));
+    if (!mesh_assets || !curve_assets) {
         runtime_scene_bridge_preflight_diag(out_summary, "out of memory");
+        free(mesh_assets);
+        free(curve_assets);
         return false;
     }
     ray_tracing_runtime_mesh_asset_set_init(mesh_assets);
+    ray_tracing_runtime_curve_asset_set_init(curve_assets);
     snprintf(previous_runtime_scene_path,
              sizeof(previous_runtime_scene_path),
              "%s",
@@ -95,7 +123,10 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     if (io_result.code != CORE_OK || !file_data.data || file_data.size == 0) {
         runtime_scene_bridge_preflight_diag(out_summary, "failed to read runtime scene file");
         core_io_buffer_free(&file_data);
+        ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
+        ray_tracing_runtime_curve_asset_set_free(curve_assets);
         free(mesh_assets);
+        free(curve_assets);
         return false;
     }
 
@@ -103,12 +134,27 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     if (!json_text) {
         runtime_scene_bridge_preflight_diag(out_summary, "out of memory");
         core_io_buffer_free(&file_data);
+        ray_tracing_runtime_curve_asset_set_free(curve_assets);
         free(mesh_assets);
+        free(curve_assets);
         return false;
     }
     memcpy(json_text, file_data.data, file_data.size);
     json_text[file_data.size] = '\0';
     core_io_buffer_free(&file_data);
+
+    if (!ray_tracing_runtime_curve_assets_load_scene_file(
+            runtime_scene_path_copy,
+            curve_assets,
+            out_summary->diagnostics,
+            sizeof(out_summary->diagnostics))) {
+        free(json_text);
+        ray_tracing_runtime_curve_asset_set_free(curve_assets);
+        free(curve_assets);
+        ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
+        free(mesh_assets);
+        return false;
+    }
 
     if (load_mesh_assets) {
         if (!ray_tracing_runtime_mesh_assets_load_scene_file(
@@ -117,6 +163,8 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
                 out_summary->diagnostics,
                 sizeof(out_summary->diagnostics))) {
             free(json_text);
+            ray_tracing_runtime_curve_asset_set_free(curve_assets);
+            free(curve_assets);
             ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
             free(mesh_assets);
             return false;
@@ -141,6 +189,8 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     if (ok) {
         ray_tracing_runtime_mesh_assets_take_last_for_scene(
             runtime_scene_path_copy, mesh_assets);
+        ray_tracing_runtime_curve_assets_take_last_for_scene(
+            runtime_scene_path_copy, curve_assets);
     }
     if (ok) {
         runtime_scene_volume_defaults_apply_transition(&animSettings,
@@ -156,9 +206,11 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
                  "%s",
                  previous_runtime_scene_path);
         ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
+        ray_tracing_runtime_curve_asset_set_free(curve_assets);
     }
     free(json_text);
     free(mesh_assets);
+    free(curve_assets);
     return ok;
 }
 
