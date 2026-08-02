@@ -20,6 +20,7 @@ STABLE_TEST_TARGETS := \
 	test-scene-editor-viewport3d-bridge-contract \
 	test-ray-tracing-render-headless-preflight \
 	test-ray-tracing-render-headless-image-export \
+	test-ray-tracing-artifact-comparison \
 	test-ray-tracing-render-headless-mesh-asset-spheres \
 	test-ray-tracing-render-headless-mesh-asset-sphere-pressure \
 	test-ray-tracing-render-headless-mesh-asset-sphere-pressure-mrt8 \
@@ -50,6 +51,10 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-workspace-authoring-host
 
 LEGACY_TEST_TARGETS :=
+
+test-ray-tracing-artifact-comparison:
+	PYTHONPYCACHEPREFIX="$(CURDIR)/build/pycache" \
+		python3 -m unittest tests/test_compare_render_artifacts.py
 
 STARTER_SCENE_PROFILE_TEST_BIN := $(BUILD_DIR)/tests/starter_scene_profile_test
 STARTER_SCENE_PROFILE_TEST_SRCS := \
