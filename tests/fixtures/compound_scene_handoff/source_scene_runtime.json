@@ -1,0 +1,44 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "compound_scene_s9e_source_mesh_fixture",
+  "source_scene_id": "compound_scene_s9e_source_mesh_fixture",
+  "compile_meta": {
+    "compiler_version": "core_mesh_compile_0.7.0",
+    "compiled_at_ns": 0,
+    "normalization": "exact_c2_u_channel_source_mesh_fixture"
+  },
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "sim_body_c2",
+      "object_type": "mesh_asset_instance",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
+        "scale": {"x": 1.0, "y": 1.0, "z": 1.0}
+      },
+      "geometry_ref": {"kind": "mesh_asset", "id": "mesh_c2_u_channel"},
+      "material_ref": {"id": "mat_c2_authored"},
+      "flags": {"visible": true, "locked": false, "selectable": true}
+    }
+  ],
+  "hierarchy": [],
+  "materials": [
+    {"material_id": "mat_c2_authored", "kind": "lambert", "albedo": [0.88, 0.42, 0.16]}
+  ],
+  "lights": [],
+  "cameras": [],
+  "constraints": [],
+  "extensions": {
+    "compound_scene_s9e": {
+      "source_asset_id": "c2_u_channel_v1",
+      "source_sha256": "0da0eacd10e7197c77923c29bcb6fcb0325616e9c21f7f18e2523a7440057aac",
+      "collision_geometry_included": false
+    }
+  }
+}

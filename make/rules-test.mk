@@ -778,6 +778,432 @@ test-ray-tracing-wtr66-preview-matrix-local-job-runner: $(RAY_TRACING_RENDER_HEA
 test-ray-tracing-evaluated-scene-preview-parity:
 	TEST_RUNNER_GROUP=runtime_evaluated_scene_preview $(MAKE) test
 
+RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_handoff_import_contract_test
+RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_handoff_import_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_binding_manifest.c
+RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE := \
+	$(TEST_DIR)/fixtures/compound_scene_handoff/compound_scene_renderer_handoff_v1.txt
+
+$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+		-o $@ $(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-handoff-import: \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN)
+	@$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+
+test-ray-tracing-compound-scene-handoff-import-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-o $(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+
+RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE := \
+	$(TEST_DIR)/fixtures/compound_scene_handoff/compound_scene_static_room_v1.txt
+RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_static_room_import_contract_test
+RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_static_room_import_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_static_room_import.c \
+	$(SRC_DIR)/import/compound_scene_room_basis.c
+
+$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) \
+		-o $@ $(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-static-room-import: \
+	$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN)
+	@$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
+
+test-ray-tracing-compound-scene-static-room-import-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-o $(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
+
+RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_room_geometry_contract_test
+RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_room_geometry_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_static_room_import.c \
+	$(SRC_DIR)/import/compound_scene_room_basis.c \
+	$(SRC_DIR)/render/compound_scene_room_geometry.c
+
+$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) \
+		-o $@ $(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-room-geometry: \
+	$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN)
+	@$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
+
+test-ray-tracing-compound-scene-room-geometry-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-o $(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
+
+RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_evaluated_scene_contract_test
+RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_evaluated_scene_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
+	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
+	$(SRC_DIR)/animation/evaluated_scene_snapshot.c \
+	$(SRC_DIR)/animation/timeline_clock.c
+
+$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+		-o $@ $(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-evaluated-scene: \
+	$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN)
+	@$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+
+test-ray-tracing-compound-scene-evaluated-scene-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-o $(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+
+RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_detached_geometry_contract_test
+RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_detached_geometry_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
+	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
+	$(SRC_DIR)/render/compound_scene_detached_geometry.c \
+	$(SRC_DIR)/animation/evaluated_scene_snapshot.c \
+	$(SRC_DIR)/animation/timeline_clock.c
+
+$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+		-o $@ $(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-detached-geometry: \
+	$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN)
+	@$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+
+test-ray-tracing-compound-scene-detached-geometry-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-o $(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
+
+RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_assembly_contract_test
+RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH := \
+	$(TEST_DIR)/fixtures/compound_scene_handoff/assets/mesh_assets/mesh_c2_u_channel.runtime.json
+RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH := \
+	$(TEST_DIR)/fixtures/compound_scene_handoff/assets/mesh_assets/mesh_c1_l_bracket.runtime.json
+RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_assembly_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
+	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
+	$(SRC_DIR)/render/compound_scene_detached_geometry.c \
+	$(SRC_DIR)/render/compound_scene_assembly.c \
+	$(SRC_DIR)/animation/evaluated_scene_snapshot.c \
+	$(SRC_DIR)/animation/timeline_clock.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS := \
+	-I$(INC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	-I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+	-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
+	-I$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson
+
+$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
+		-o $@ $(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-assembly: \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN)
+	@$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH)
+
+test-ray-tracing-compound-scene-assembly-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-Wno-deprecated-declarations \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
+		-o $(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH)
+
+RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_assembly_codec_contract_test
+RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_RECORD := \
+	$(BUILD_DIR)/tests/compound_scene_assembly_archive_v1.txt
+RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_assembly_codec_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_assembly_codec.c \
+	$(filter-out $(TEST_DIR)/compound_scene_assembly_contract_test.c,$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS))
+
+$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
+		-o $@ $(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-assembly-codec: \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_BIN)
+	@$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_RECORD)
+
+test-ray-tracing-compound-scene-assembly-codec-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-Wno-deprecated-declarations \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
+		-o $(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_CODEC_RECORD).sanitize
+
+RAY_TRACING_COMPOUND_S9F_EMITTER_BIN := \
+	$(BUILD_DIR)/tools/compound_scene_assembly_visual_proof_emit
+RAY_TRACING_COMPOUND_S9F_EMITTER_SRCS := \
+	tools/compound_scene_assembly_visual_proof_emit.c \
+	$(filter-out $(TEST_DIR)/compound_scene_assembly_contract_test.c,$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS))
+
+$(RAY_TRACING_COMPOUND_S9F_EMITTER_BIN): \
+	$(RAY_TRACING_COMPOUND_S9F_EMITTER_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
+		-o $@ $(RAY_TRACING_COMPOUND_S9F_EMITTER_SRCS) -lm
+
+compound-scene-s9f-visual-proof-emitter: \
+	$(RAY_TRACING_COMPOUND_S9F_EMITTER_BIN)
+
+test-ray-tracing-compound-scene-s9f-emitter: \
+	$(RAY_TRACING_COMPOUND_S9F_EMITTER_BIN)
+	@$(RAY_TRACING_COMPOUND_S9F_EMITTER_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH) > $(BUILD_DIR)/tests/s9f_assembly_a.json
+	@$(RAY_TRACING_COMPOUND_S9F_EMITTER_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH) > $(BUILD_DIR)/tests/s9f_assembly_b.json
+	@cmp $(BUILD_DIR)/tests/s9f_assembly_a.json $(BUILD_DIR)/tests/s9f_assembly_b.json
+	@python3 -c 'import json; p=json.load(open("$(BUILD_DIR)/tests/s9f_assembly_a.json")); assert p["assembly_schema"] == "ray_tracing_compound_scene_assembly_v1" and p["tick"] == 480; assert [o["membership"] for o in p["objects"]] == ["simulated", "simulated", "static", "static", "static"]; assert [b["triangle_count"] for b in p["bodies"]] == [28, 20]; assert not p["ownership"]["collision_proxy_rendered"] and not p["ownership"]["default_request_or_worker_integration"]'
+
+test-ray-tracing-compound-scene-s9f-visual-proof: \
+	$(RAY_TRACING_COMPOUND_S9F_EMITTER_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@python3 tools/run_compound_scene_s9f_visual_proof.py \
+		--emitter $(RAY_TRACING_COMPOUND_S9F_EMITTER_BIN) \
+		--renderer $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN := \
+	$(BUILD_DIR)/tools/compound_scene_room_visual_proof_emit
+RAY_TRACING_COMPOUND_S9H3_EMITTER_SRCS := \
+	tools/compound_scene_room_visual_proof_emit.c \
+	$(SRC_DIR)/import/compound_scene_static_room_import.c \
+	$(SRC_DIR)/import/compound_scene_room_basis.c \
+	$(SRC_DIR)/render/compound_scene_room_geometry.c \
+	$(filter-out $(TEST_DIR)/compound_scene_assembly_contract_test.c,$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS))
+
+$(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN): \
+	$(RAY_TRACING_COMPOUND_S9H3_EMITTER_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+	$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
+		-o $@ $(RAY_TRACING_COMPOUND_S9H3_EMITTER_SRCS) -lm
+
+compound-scene-s9h3-visual-proof-emitter: \
+	$(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN)
+
+test-ray-tracing-compound-scene-s9h3-emitter: \
+	$(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN)
+	@$(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH) 480 \
+		> $(BUILD_DIR)/tests/s9h3_room_a.json
+	@$(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH) 480 \
+		> $(BUILD_DIR)/tests/s9h3_room_b.json
+	@cmp $(BUILD_DIR)/tests/s9h3_room_a.json \
+		$(BUILD_DIR)/tests/s9h3_room_b.json
+	@python3 -c 'import json; p=json.load(open("$(BUILD_DIR)/tests/s9h3_room_a.json")); assert p["schema"] == "ray_compound_scene_s9h3_visual_payload_v1" and p["tick"] == 480; assert len(p["planes"]) == 6 and sum(x["visible"] for x in p["planes"]) == 5; assert p["planes"][5]["visible"] is False and p["ownership"]["camera_opening_role"] == "z_max"; assert [b["triangle_count"] for b in p["bodies"]] == [28, 20] and not p["ownership"]["collision_proxy_rendered"]'
+
+test-ray-tracing-compound-scene-s9h3-emitter-sanitize:
+	@mkdir -p $(BUILD_DIR)/tools $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-Wno-deprecated-declarations \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
+		-o $(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_S9H3_EMITTER_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH) 480 \
+		> $(BUILD_DIR)/tests/s9h3_room_sanitize.json
+
+test-ray-tracing-compound-scene-s9h3-visual-proof: \
+	$(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@python3 tools/run_compound_scene_s9h3_visual_proof.py \
+		--emitter $(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN) \
+		--renderer $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+RAY_TRACING_COMPOUND_S9E_EMITTER_BIN := \
+	$(BUILD_DIR)/tools/compound_scene_visual_proof_emit
+RAY_TRACING_COMPOUND_S9E_SOURCE_MESH := \
+	$(TEST_DIR)/fixtures/compound_scene_handoff/assets/mesh_assets/mesh_c2_u_channel.runtime.json
+RAY_TRACING_COMPOUND_S9E_EMITTER_SRCS := \
+	tools/compound_scene_visual_proof_emit.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
+	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
+	$(SRC_DIR)/render/compound_scene_detached_geometry.c \
+	$(SRC_DIR)/animation/evaluated_scene_snapshot.c \
+	$(SRC_DIR)/animation/timeline_clock.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+RAY_TRACING_COMPOUND_S9E_EMITTER_FLAGS := \
+	-I$(INC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	-I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+	-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
+	-I$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson
+
+$(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN): \
+	$(RAY_TRACING_COMPOUND_S9E_EMITTER_SRCS) \
+	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+	$(RAY_TRACING_COMPOUND_S9E_SOURCE_MESH)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		$(RAY_TRACING_COMPOUND_S9E_EMITTER_FLAGS) \
+		-o $@ $(RAY_TRACING_COMPOUND_S9E_EMITTER_SRCS) -lm
+
+compound-scene-s9e-visual-proof-emitter: \
+	$(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN)
+
+test-ray-tracing-compound-scene-s9e-emitter: \
+	$(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN)
+	@mkdir -p $(BUILD_DIR)/tests
+	@$(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_S9E_SOURCE_MESH) > $(BUILD_DIR)/tests/s9e_frames_a.json
+	@$(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN) \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_S9E_SOURCE_MESH) > $(BUILD_DIR)/tests/s9e_frames_b.json
+	@cmp $(BUILD_DIR)/tests/s9e_frames_a.json $(BUILD_DIR)/tests/s9e_frames_b.json
+	@python3 -c 'import json; p=json.load(open("$(BUILD_DIR)/tests/s9e_frames_a.json")); assert p["schema"] == "ray_compound_scene_s9e_visual_proof_frames_v1"; assert [f["tick"] for f in p["frames"]] == [0, 240, 480, 720]; assert p["vertex_count"] == 48 and p["triangle_count"] == 28; assert not p["ownership"]["collision_proxy_rendered"]'
+
+test-ray-tracing-compound-scene-s9e-emitter-sanitize:
+	@mkdir -p $(BUILD_DIR)/tools $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer \
+		$(RAY_TRACING_COMPOUND_S9E_EMITTER_FLAGS) \
+		-o $(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_S9E_EMITTER_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
+		$(RAY_TRACING_COMPOUND_S9E_SOURCE_MESH) > $(BUILD_DIR)/tests/s9e_frames_sanitize.json
+
+test-ray-tracing-compound-scene-s9e-visual-proof: \
+	$(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@python3 tools/run_compound_scene_s9e_visual_proof.py \
+		--emitter $(RAY_TRACING_COMPOUND_S9E_EMITTER_BIN) \
+		--renderer $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
 test-ray-tracing-material-preview-headless: $(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_material_preview_headless.sh
 

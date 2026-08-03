@@ -39,6 +39,13 @@ static bool ray_evaluated_vec3_finite(TimelineVec3 value) {
     return isfinite(value.x) && isfinite(value.y) && isfinite(value.z);
 }
 
+static bool ray_evaluated_quaternion_valid(RayEvaluatedQuaternion value) {
+    const double norm_squared = value.w * value.w + value.x * value.x +
+                                value.y * value.y + value.z * value.z;
+    return isfinite(value.w) && isfinite(value.x) && isfinite(value.y) &&
+           isfinite(value.z) && fabs(norm_squared - 1.0) <= 1e-9;
+}
+
 static bool ray_evaluated_id_valid(const char* value, size_t capacity) {
     return value && value[0] && strnlen(value, capacity) < capacity;
 }
@@ -162,12 +169,24 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
             &snapshot->object_transforms[i];
         size_t prior = 0u;
         if (!transform->valid ||
-            transform->source == RAY_EVALUATED_OBJECT_TRANSFORM_NONE ||
+            (transform->source !=
+                 RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION &&
+             transform->source !=
+                 RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT) ||
             !ray_evaluated_id_valid(transform->target_id,
                                     sizeof(transform->target_id)) ||
             (!transform->has_position && !transform->has_rotation) ||
             !ray_evaluated_vec3_finite(transform->position) ||
             !ray_evaluated_vec3_finite(transform->rotation_radians) ||
+            (transform->has_orientation_quaternion &&
+             !ray_evaluated_quaternion_valid(
+                 transform->orientation_quaternion)) ||
+            (transform->source ==
+                 RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT &&
+             (!transform->has_position || !transform->has_rotation ||
+              !transform->has_orientation_quaternion ||
+              !transform->source_handoff_digest ||
+              !transform->source_binding_digest)) ||
             !TimelineEvaluationContextsReferToSameSample(
                 &snapshot->frame, &transform->frame)) {
             return TIMELINE_STATUS_INVALID_SNAPSHOT;

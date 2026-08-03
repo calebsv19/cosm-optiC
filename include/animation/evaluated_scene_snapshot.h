@@ -8,7 +8,7 @@
 #include "animation/timeline_document.h"
 #include "animation/timeline_light_motion.h"
 
-#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 2u
+#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 3u
 #define RAY_EVALUATED_SCENE_DIAGNOSTICS_CAPACITY 256u
 #define RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY 64u
 
@@ -31,7 +31,8 @@ typedef enum RayEvaluatedSimulationSource {
 
 typedef enum RayEvaluatedObjectTransformSource {
     RAY_EVALUATED_OBJECT_TRANSFORM_NONE = 0,
-    RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION
+    RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION,
+    RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT
 } RayEvaluatedObjectTransformSource;
 
 typedef enum RayEvaluatedSimulationInterpolation {
@@ -86,6 +87,13 @@ typedef struct RayEvaluatedCamera {
     double zoom;
 } RayEvaluatedCamera;
 
+typedef struct RayEvaluatedQuaternion {
+    double w;
+    double x;
+    double y;
+    double z;
+} RayEvaluatedQuaternion;
+
 typedef struct RayEvaluatedObjectTransform {
     bool valid;
     char target_id[TIMELINE_ID_CAPACITY];
@@ -94,6 +102,11 @@ typedef struct RayEvaluatedObjectTransform {
     bool has_rotation;
     TimelineVec3 position;
     TimelineVec3 rotation_radians;
+    bool has_orientation_quaternion;
+    RayEvaluatedQuaternion orientation_quaternion;
+    uint64_t source_handoff_digest;
+    uint64_t source_binding_digest;
+    uint64_t source_tick;
     TimelineEvaluationContext frame;
 } RayEvaluatedObjectTransform;
 
