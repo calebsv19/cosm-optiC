@@ -46,6 +46,14 @@ bool RuntimeDynamicGeometryAcceleration3D_TraceWaterSurfaceFirstHit(
     return false;
 }
 
+bool RuntimeDynamicGeometryAcceleration3D_OwnsScenePrimitive(
+    const RuntimeScene3D* scene,
+    int primitive_index) {
+    (void)scene;
+    (void)primitive_index;
+    return false;
+}
+
 bool RuntimeMeshBLASCache3D_FindAsset(
     const RayTracingRuntimeMeshAsset* asset,
     RuntimeMeshBLASCache3DView* out_view) {
