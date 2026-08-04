@@ -208,6 +208,20 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                           request_path);
         return false;
     }
+    if (json_object_object_get_ex(scene, "compound_scene_ingestion_path", &volume)) {
+        if (!json_object_is_type(volume, json_type_string) ||
+            !RayTracingResolveRequestInputPath(request_dir,
+                                                json_object_get_string(volume),
+                                                request.compound_scene_ingestion_path,
+                                                sizeof(request.compound_scene_ingestion_path))) {
+            json_object_put(root);
+            agent_render_request_set_diagf(out_diagnostics, out_diagnostics_size,
+                "request=%s field=scene.compound_scene_ingestion_path invalid or path too long",
+                request_path);
+            return false;
+        }
+        request.has_compound_scene_ingestion_path = true;
+    }
 
     if (RayTracingJsonGetObject(root, "volume", &volume)) {
         const char *kind_label = "auto";

@@ -18,6 +18,8 @@ typedef struct RayTracingAgentRenderRequest {
     char schema_version[64];
     char run_id[128];
     char runtime_scene_path[PATH_MAX];
+    bool has_compound_scene_ingestion_path;
+    char compound_scene_ingestion_path[PATH_MAX];
     bool volume_enabled;
     int volume_source_kind;
     char volume_source_path[PATH_MAX];

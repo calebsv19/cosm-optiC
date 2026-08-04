@@ -1,5 +1,6 @@
 #include "core_mesh_asset.h"
 #include "import/compound_scene_evaluated_scene.h"
+#include "import/compound_scene_ingestion.h"
 #include "render/compound_scene_assembly.h"
 
 #include <stdio.h>
@@ -148,6 +149,46 @@ static int run_contract(const char* handoff_path, const char* c2_path,
     request.static_object_count = 3u;
     CHECK(ray_compound_scene_assembly_build_exact(
         &request, &assembly, &failure));
+    {
+        RayCompoundSceneStaticRoom room = {0};
+        RayCompoundSceneIngestionDescriptor descriptor = {0};
+        RayCompoundSceneIngestionResult ingestion = {0};
+        RayCompoundSceneIngestionFailure ingestion_failure;
+        RayCompoundSceneVec3 mapped_outputs[2][64] = {{{0}}};
+        char room_path[512];
+        snprintf(room_path, sizeof(room_path), "%s", handoff_path);
+        char* slash = strrchr(room_path, '/');
+        CHECK(slash != NULL);
+        snprintf(slash + 1, (size_t)(room_path + sizeof(room_path) - (slash + 1)),
+                 "%s", "compound_scene_static_room_v1.txt");
+        CHECK(ray_compound_scene_static_room_read(room_path, &room, NULL));
+        ray_compound_scene_ingestion_descriptor_init(&descriptor, &handoff, &room);
+        descriptor.tick = 480u;
+        populate_manifest(&descriptor.bindings);
+        request.simulated_targets[0] = (RayCompoundSceneGeometryTarget){mapped_outputs[0], 64u};
+        request.simulated_targets[1] = (RayCompoundSceneGeometryTarget){mapped_outputs[1], 64u};
+        request.static_objects = NULL;
+        request.static_object_count = 0u;
+        CHECK(ray_compound_scene_ingestion_resolve_exact(
+            &descriptor, &handoff, &room, &base, &request, &ingestion,
+            &ingestion_failure));
+        CHECK(ingestion_failure == RAY_COMPOUND_SCENE_INGESTION_FAILURE_NONE);
+        CHECK(ingestion.valid && ingestion.result_digest != 0u);
+        CHECK(ingestion.room.plane_count == 6u && ingestion.room.visible_plane_count == 5u);
+        CHECK(mapped_outputs[0][0].y != outputs[0][0].y ||
+              mapped_outputs[0][0].z != outputs[0][0].z);
+        descriptor.tick = RAY_COMPOUND_SCENE_HANDOFF_MAX_FRAMES;
+        CHECK(!ray_compound_scene_ingestion_resolve_exact(
+            &descriptor, &handoff, &room, &base, &request, &ingestion,
+            &ingestion_failure));
+        CHECK(ingestion_failure == RAY_COMPOUND_SCENE_INGESTION_FAILURE_DESCRIPTOR);
+    }
+    request.manifest = &manifest;
+    request.snapshot = &evaluated;
+    request.simulated_targets[0] = (RayCompoundSceneGeometryTarget){outputs[0], 64u};
+    request.simulated_targets[1] = (RayCompoundSceneGeometryTarget){outputs[1], 64u};
+    request.static_objects = statics;
+    request.static_object_count = 3u;
     CHECK(failure == RAY_COMPOUND_SCENE_ASSEMBLY_FAILURE_NONE);
     CHECK(ray_compound_scene_assembly_validate(&assembly));
     CHECK(assembly.tick == 480u && assembly.simulated_count == 2u &&

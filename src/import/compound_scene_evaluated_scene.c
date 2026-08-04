@@ -43,6 +43,21 @@ static RayEvaluatedObjectTransform* find_target(
     return NULL;
 }
 
+static RayEvaluatedObjectTransform* find_or_append_target(
+    RayEvaluatedSceneSnapshot* snapshot, const char* object_id) {
+    RayEvaluatedObjectTransform* target = find_target(snapshot, object_id);
+    if (target || !snapshot || !object_id || !object_id[0] ||
+        snapshot->object_transform_count >= RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY) {
+        return target;
+    }
+    target = &snapshot->object_transforms[snapshot->object_transform_count++];
+    memset(target, 0, sizeof(*target));
+    target->valid = true;
+    snprintf(target->target_id, sizeof(target->target_id), "%s", object_id);
+    target->frame = snapshot->frame;
+    return target;
+}
+
 static const RayCompoundSceneSourceBinding* find_source_binding(
     const RayCompoundSceneHandoff* handoff,
     int body_id) {
@@ -103,7 +118,7 @@ bool ray_compound_scene_evaluated_scene_apply_exact(
             find_source_binding(handoff, renderer_binding->body_id);
         const RayCompoundSceneBodyTransform* body = NULL;
         RayEvaluatedObjectTransform* target =
-            find_target(&candidate, renderer_binding->object_id);
+            find_or_append_target(&candidate, renderer_binding->object_id);
         for (size_t body_index = 0u;
              body_index < RAY_COMPOUND_SCENE_HANDOFF_BODY_COUNT;
              ++body_index) {

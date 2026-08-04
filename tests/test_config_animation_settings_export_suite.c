@@ -2088,11 +2088,38 @@ static int test_native_3d_preview_history_bmp_roundtrip_preserves_rgb_channels(v
     return 0;
 }
 
+static int test_agent_render_request_compound_ingestion_path(void) {
+    const char* path = "/tmp/ray_tracing_agent_render_compound_request.json";
+    const char* default_path = "/tmp/ray_tracing_agent_render_compound_default_request.json";
+    RayTracingAgentRenderRequest request;
+    char diagnostics[256];
+    assert_true("compound_ingestion_request_write", write_text_file(path,
+        "{\"schema_version\":\"ray_tracing_agent_render_request_v1\","
+        "\"scene\":{\"runtime_scene_path\":\"scene_runtime.json\","
+        "\"compound_scene_ingestion_path\":\"compound_scene.txt\"}}"));
+    assert_true("compound_ingestion_request_load", ray_tracing_agent_render_request_load_file(path, &request, diagnostics, sizeof(diagnostics)));
+    assert_true("compound_ingestion_request_present", request.has_compound_scene_ingestion_path && strstr(request.compound_scene_ingestion_path, "compound_scene.txt"));
+    assert_true("compound_ingestion_default_request_write", write_text_file(default_path,
+        "{\"schema_version\":\"ray_tracing_agent_render_request_v1\","
+        "\"scene\":{\"runtime_scene_path\":\"scene_runtime.json\"}}"));
+    assert_true("compound_ingestion_default_absent",
+                ray_tracing_agent_render_request_load_file(default_path,
+                                                           &request,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)) &&
+                    !request.has_compound_scene_ingestion_path &&
+                    request.compound_scene_ingestion_path[0] == '\0');
+    unlink(path);
+    unlink(default_path);
+    return 0;
+}
+
 int run_test_config_animation_settings_export_suite(void) {
     int before = test_support_failures();
 
     test_animation_integrator_split_roundtrip_and_default_3d();
     test_agent_render_request_disney_v2_integrator_label_roundtrip();
+    test_agent_render_request_compound_ingestion_path();
     test_agent_render_request_denoise_override_roundtrip();
     test_agent_render_request_disney_v2_caustic_sidecar_roundtrip();
     test_agent_render_request_disney_v2_caustic_mode_off_roundtrip();

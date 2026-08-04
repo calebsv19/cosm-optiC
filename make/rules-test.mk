@@ -685,6 +685,9 @@ test-menu-pane-host-contract: $(MENU_PANE_HOST_TEST_BIN)
 test-ray-tracing-render-headless-preflight: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_preflight.sh
 
+test-ray-tracing-render-headless-compound-scene-ingestion: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	bash tests/integration/run_ray_tracing_render_headless_compound_scene_ingestion.sh
+
 test-ray-tracing-render-headless-image-export: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_image_export.sh
 
@@ -951,6 +954,7 @@ RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS := \
 	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
 	$(SRC_DIR)/render/compound_scene_detached_geometry.c \
 	$(SRC_DIR)/render/compound_scene_assembly.c \
+	$(SRC_DIR)/import/compound_scene_ingestion.c \
 	$(SRC_DIR)/animation/evaluated_scene_snapshot.c \
 	$(SRC_DIR)/animation/timeline_clock.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
@@ -974,7 +978,10 @@ $(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
-		-o $@ $(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS) -lm
+		-o $@ $(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS) \
+		$(SRC_DIR)/import/compound_scene_static_room_import.c \
+		$(SRC_DIR)/import/compound_scene_room_basis.c \
+		$(SRC_DIR)/render/compound_scene_room_geometry.c -lm
 
 test-ray-tracing-compound-scene-assembly: \
 	$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN)
@@ -990,7 +997,10 @@ test-ray-tracing-compound-scene-assembly-sanitize:
 		-fsanitize=address,undefined -fno-omit-frame-pointer \
 		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS) \
 		-o $(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN).sanitize \
-		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS) -lm
+		$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS) \
+		$(SRC_DIR)/import/compound_scene_static_room_import.c \
+		$(SRC_DIR)/import/compound_scene_room_basis.c \
+		$(SRC_DIR)/render/compound_scene_room_geometry.c -lm
 	@$(RAY_TRACING_COMPOUND_ASSEMBLY_TEST_BIN).sanitize \
 		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
 		$(RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH) \

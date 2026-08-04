@@ -493,6 +493,8 @@ static bool runtime_native_3d_render_to_pixel_buffer_internal(
     const RuntimeNative3DResourceBudget* resource_budget,
     const RuntimeNative3DTileSchedulerControl* scheduler_control,
     const RayEvaluatedSceneSnapshot* evaluated_scene,
+    RuntimeNative3DSceneMutationFn mutation,
+    void* mutation_user_data,
     RuntimeNative3DRenderStats* out_stats) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DTileProgressAdapter tile_progress_adapter = {0};
@@ -505,8 +507,9 @@ static bool runtime_native_3d_render_to_pixel_buffer_internal(
     }
 
     if (evaluated_scene) {
-        ok = RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
-            &frame, width, height, evaluated_scene, sampling);
+        ok = RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
+            &frame, width, height, evaluated_scene, sampling, mutation,
+            mutation_user_data);
     } else {
         ok = RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(&frame,
                                                                  width,
@@ -596,7 +599,7 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
         pixel_buffer, integrator_id, width, height, normalized_t, frame_index,
         live_light_x, live_light_y, sampling, temporal_frames, progress_callback,
         progress_user_data, tile_progress_callback, tile_progress_user_data,
-        resource_budget, scheduler_control, NULL, out_stats);
+        resource_budget, scheduler_control, NULL, NULL, NULL, out_stats);
 }
 
 bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedScene(
@@ -623,7 +626,31 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
         evaluated_scene->light.position.y,
         sampling, temporal_frames, progress_callback, progress_user_data,
         tile_progress_callback, tile_progress_user_data, resource_budget,
-        scheduler_control, evaluated_scene, out_stats);
+        scheduler_control, evaluated_scene, NULL, NULL, out_stats);
+}
+
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedSceneAndMutation(
+    uint8_t* pixel_buffer, RayTracing3DIntegratorId integrator_id, int width,
+    int height, const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling, int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    const RuntimeNative3DTileSchedulerControl* scheduler_control,
+    RuntimeNative3DSceneMutationFn mutation, void* mutation_user_data,
+    RuntimeNative3DRenderStats* out_stats) {
+    if (!evaluated_scene) return false;
+    return runtime_native_3d_render_to_pixel_buffer_internal(
+        pixel_buffer, integrator_id, width, height,
+        evaluated_scene->frame.normalized_t,
+        (int)evaluated_scene->frame.sample.absolute_frame,
+        evaluated_scene->light.position.x, evaluated_scene->light.position.y,
+        sampling, temporal_frames, progress_callback, progress_user_data,
+        tile_progress_callback, tile_progress_user_data, resource_budget,
+        scheduler_control, evaluated_scene, mutation, mutation_user_data,
+        out_stats);
 }
 
 bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalProgressForEvaluatedScene(

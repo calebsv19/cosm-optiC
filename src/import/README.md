@@ -44,6 +44,12 @@ not own native `3D` shading policy or worker orchestration policy.
   used for every packet body and collision-surface frame. These modules expose
   mapped metadata only; H3 remains responsible for renderer-owned plane
   assembly and visual plane-match proof.
+- `compound_scene_ingestion.c`: I-1's typed, app-local descriptor and atomic
+  resolver. It binds the frozen handoff and room to existing renderer object/
+  mesh identities, applies the registered basis to final owned geometry, and
+  returns a separately digested derived result without mutating its base scene.
+  It intentionally has no request-file codec or normal render hook; those are
+  I-2 decisions.
 
 ## Boundaries
 
