@@ -125,10 +125,10 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@mkdir -p "$(RELEASE_DIR)"
 	@COPYFILE_DISABLE=1 tar -czf "$(LINUX_WORKER_ARCHIVE)" -C "$(RELEASE_DIR)" "$(LINUX_WORKER_BASENAME)"
 	@sha256sum "$(LINUX_WORKER_ARCHIVE)" > "$(LINUX_WORKER_ARCHIVE_SHA256)"
-	@printf 'product=%s\nprogram=%s\nversion=%s\nplatform=%s\narch=%s\nsigned=0\nnotarized=0\narchive=%s\nsha256=%s\nsource_commit=%s\n' \
-		"$(LINUX_WORKER_SLUG)" "ray_tracing" "$(WORKER_VERSION)" "linux" "x86_64" \
-		"$(LINUX_WORKER_ARCHIVE)" "$$(cut -d' ' -f1 "$(LINUX_WORKER_ARCHIVE_SHA256)")" \
-		"$(SOURCE_COMMIT)" > "$(LINUX_WORKER_RELEASE_MANIFEST)"
+	@printf 'product=%s\nprogram=%s\nversion=%s\nplatform=%s\narch=%s\nformat=tar.gz\nchannel=stable\nartifact=%s\nsha256=%s\nsigned=false\nnotarized=false\n' \
+		"$(RELEASE_PRODUCT_NAME)" "$(RELEASE_PROGRAM_KEY)" "$(WORKER_VERSION)" "linux" "x86_64" \
+		"$(notdir $(LINUX_WORKER_ARCHIVE))" "$$(cut -d' ' -f1 "$(LINUX_WORKER_ARCHIVE_SHA256)")" \
+		> "$(LINUX_WORKER_RELEASE_MANIFEST)"
 	@echo "Linux worker package ready: $(LINUX_WORKER_ARCHIVE)"
 
 package-linux-worker-self-test: package-linux-worker

@@ -67,7 +67,7 @@ release-local-artifact: release-bundle-audit
 	@rm -f "$(RELEASE_APP_ZIP)" "$(RELEASE_APP_ZIP).sha256" "$(RELEASE_MANIFEST)"
 	@/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(PACKAGE_APP_DIR)" "$(RELEASE_APP_ZIP)"
 	@/usr/bin/shasum -a 256 "$(RELEASE_APP_ZIP)" > "$(RELEASE_APP_ZIP).sha256"
-	@printf 'product=%s\nprogram=%s\nversion=%s\nplatform=%s\narch=%s\nsigned=0\nnotarized=0\nzip=%s\nsha256=%s\n' \
+	@printf 'product=%s\nprogram=%s\nversion=%s\nplatform=%s\narch=%s\nformat=zip\nchannel=stable\nartifact=%s\nsha256=%s\nsigned=false\nnotarized=false\n' \
 		"$(RELEASE_PRODUCT_NAME)" "$(RELEASE_PROGRAM_KEY)" "$(RELEASE_VERSION)" \
 		"$(RELEASE_PLATFORM)" "$(RELEASE_ARCH)" "$$(/usr/bin/basename "$(RELEASE_APP_ZIP)")" \
 		"$$(/usr/bin/awk '{print $$1}' "$(RELEASE_APP_ZIP).sha256")" > "$(RELEASE_MANIFEST)"
