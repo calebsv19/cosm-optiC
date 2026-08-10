@@ -60,6 +60,33 @@ release-bundle-audit: package-desktop-self-test
 	done
 	@echo "release-bundle-audit passed."
 
+# Unsigned, local package evidence for Decision 1. Developer ID signing and
+# notarization remain isolated in the later authentication stage.
+release-local-artifact: release-bundle-audit
+	@mkdir -p "$(RELEASE_DIR)"
+	@rm -f "$(RELEASE_APP_ZIP)" "$(RELEASE_APP_ZIP).sha256" "$(RELEASE_MANIFEST)"
+	@/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(PACKAGE_APP_DIR)" "$(RELEASE_APP_ZIP)"
+	@/usr/bin/shasum -a 256 "$(RELEASE_APP_ZIP)" > "$(RELEASE_APP_ZIP).sha256"
+	@printf 'product=%s\nprogram=%s\nversion=%s\nplatform=%s\narch=%s\nsigned=0\nnotarized=0\nzip=%s\nsha256=%s\n' \
+		"$(RELEASE_PRODUCT_NAME)" "$(RELEASE_PROGRAM_KEY)" "$(RELEASE_VERSION)" \
+		"$(RELEASE_PLATFORM)" "$(RELEASE_ARCH)" "$$(/usr/bin/basename "$(RELEASE_APP_ZIP)")" \
+		"$$(/usr/bin/awk '{print $$1}' "$(RELEASE_APP_ZIP).sha256")" > "$(RELEASE_MANIFEST)"
+	@echo "release-local-artifact complete: $(RELEASE_APP_ZIP)"
+
+release-output-root-contract:
+	@case "$(RELEASE_ROOT)" in build/release-authenticated/*) ;; *) echo "RELEASE_ROOT must be a job-scoped build/release-authenticated path"; exit 1;; esac
+	@case "$(RELEASE_ROOT)" in */../*|../*|*/..|build/release-authenticated/|*/./*|./*) echo "RELEASE_ROOT must not contain traversal or dot segments"; exit 1;; esac
+	@case "$(RELEASE_ROOT)" in *'//'*) echo "RELEASE_ROOT must not contain empty path segments"; exit 1;; esac
+
+release-output-root-conformance: release-output-root-contract
+	@test ! -e "$(RELEASE_ROOT)" || (echo "RELEASE_ROOT must be absent before package"; exit 1)
+	@$(MAKE) RELEASE_ROOT="$(RELEASE_ROOT)" release-local-artifact
+	@test -f "$(RELEASE_APP_ZIP)" || (echo "Missing release artifact at selected root"; exit 1)
+	@test -f "$(RELEASE_APP_ZIP).sha256" || (echo "Missing release checksum at selected root"; exit 1)
+	@test -f "$(RELEASE_MANIFEST)" || (echo "Missing release manifest at selected root"; exit 1)
+	@test "$(dir $(RELEASE_APP_ZIP))" = "$(RELEASE_ROOT)/" || (echo "Release artifact escaped selected root"; exit 1)
+	@echo "release-output-root-conformance passed: $(RELEASE_ROOT)"
+
 release-sign: release-bundle-audit
 	@echo "Signing with configured identity: $$( [ "$(RELEASE_CODESIGN_IDENTITY)" != "-" ] && echo yes || echo ad_hoc )"
 	@if [ "$(RELEASE_CODESIGN_IDENTITY)" = "-" ]; then \

@@ -31,6 +31,8 @@ LINUX_WORKER_DOCS_DIR := $(LINUX_WORKER_DIR)/docs
 LINUX_WORKER_MANIFEST_JSON := $(LINUX_WORKER_DIR)/manifest.json
 LINUX_WORKER_MANIFEST := $(LINUX_WORKER_DIR)/package_manifest.json
 LINUX_WORKER_ARCHIVE := $(RELEASE_DIR)/$(LINUX_WORKER_BASENAME).tar.gz
+LINUX_WORKER_ARCHIVE_SHA256 := $(LINUX_WORKER_ARCHIVE).sha256
+LINUX_WORKER_RELEASE_MANIFEST := $(LINUX_WORKER_ARCHIVE).manifest.txt
 LINUX_WORKER_MAX_GLIBC ?= 2.39.0
 SOURCE_COMMIT ?=
 
@@ -122,6 +124,11 @@ package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '}\n' >> "$(LINUX_WORKER_MANIFEST)"
 	@mkdir -p "$(RELEASE_DIR)"
 	@COPYFILE_DISABLE=1 tar -czf "$(LINUX_WORKER_ARCHIVE)" -C "$(RELEASE_DIR)" "$(LINUX_WORKER_BASENAME)"
+	@sha256sum "$(LINUX_WORKER_ARCHIVE)" > "$(LINUX_WORKER_ARCHIVE_SHA256)"
+	@printf 'product=%s\nprogram=%s\nversion=%s\nplatform=%s\narch=%s\nsigned=0\nnotarized=0\narchive=%s\nsha256=%s\nsource_commit=%s\n' \
+		"$(LINUX_WORKER_SLUG)" "ray_tracing" "$(WORKER_VERSION)" "linux" "x86_64" \
+		"$(LINUX_WORKER_ARCHIVE)" "$$(cut -d' ' -f1 "$(LINUX_WORKER_ARCHIVE_SHA256)")" \
+		"$(SOURCE_COMMIT)" > "$(LINUX_WORKER_RELEASE_MANIFEST)"
 	@echo "Linux worker package ready: $(LINUX_WORKER_ARCHIVE)"
 
 package-linux-worker-self-test: package-linux-worker
@@ -134,5 +141,7 @@ package-linux-worker-self-test: package-linux-worker
 	@test -f "$(LINUX_WORKER_DOCS_DIR)/headless_agent_render_cli.md" || (echo "Missing docs/headless_agent_render_cli.md"; exit 1)
 	@test -f "$(LINUX_WORKER_CONFIG_DIR)/scene_config.json" || (echo "Missing config/scene_config.json"; exit 1)
 	@test -f "$(LINUX_WORKER_ARCHIVE)" || (echo "Missing worker archive"; exit 1)
+	@test -f "$(LINUX_WORKER_ARCHIVE_SHA256)" || (echo "Missing worker archive checksum"; exit 1)
+	@test -f "$(LINUX_WORKER_RELEASE_MANIFEST)" || (echo "Missing worker release manifest"; exit 1)
 	@python3 tools/validate_linux_worker_package.py --archive "$(LINUX_WORKER_ARCHIVE)" --package-root "$(LINUX_WORKER_BASENAME)" --platform "$(LINUX_WORKER_PLATFORM)" --max-glibc "$(LINUX_WORKER_MAX_GLIBC)" --worker-version "$(WORKER_VERSION)" --source-program-version "$(RELEASE_VERSION)" --source-commit "$(SOURCE_COMMIT)"
 	@echo "package-linux-worker-self-test passed."
