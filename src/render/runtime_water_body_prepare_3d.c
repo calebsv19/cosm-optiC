@@ -22,6 +22,15 @@ static bool water_body_prepare_has_object(const RuntimeScene3D* scene, const cha
     return false;
 }
 
+static bool water_body_prepare_has_scene_object_geometry(const RuntimeScene3D* scene,
+                                                         int scene_object_index) {
+    if (!scene || scene_object_index < 0) return false;
+    for (int i = 0; i < scene->primitiveCount; ++i) {
+        if (scene->primitives[i].source.sceneObjectIndex == scene_object_index) return true;
+    }
+    return false;
+}
+
 static bool water_body_prepare_remove_object(RuntimeScene3D* scene, const char* object_id) {
     int* primitive_map = NULL;
     int write_primitive = 0;
@@ -108,9 +117,21 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
                                 "water body container object unresolved");
         return false;
     }
-    if (!water_body_prepare_has_object(scene, boundary->legacy_shell_object_id)) {
+    if (water_body_prepare_has_object(scene, boundary->object_id)) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body unified object already present");
+        return false;
+    }
+    if (boundary->legacy_shell_object_id[0] &&
+        !water_body_prepare_has_object(scene, boundary->legacy_shell_object_id)) {
         water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
                                 "water body legacy shell object unresolved");
+        return false;
+    }
+    if (!boundary->legacy_shell_object_id[0] &&
+        water_body_prepare_has_scene_object_geometry(scene, scene_object_index)) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body undeclared legacy geometry present");
         return false;
     }
     sample_count = (uint64_t)water->grid_w * (uint64_t)water->grid_d;
@@ -190,7 +211,8 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
                                 "water body closed mesh append failed");
         return false;
     }
-    if (!water_body_prepare_remove_object(scene, boundary->legacy_shell_object_id) ||
+    if ((boundary->legacy_shell_object_id[0] &&
+         !water_body_prepare_remove_object(scene, boundary->legacy_shell_object_id)) ||
         (RuntimeRay3D_CurrentTraceRoute() != RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS &&
          !RuntimeTriangleMesh3D_BuildBVH(&scene->triangleMesh))) {
         (void)RuntimeScene3D_CopyGeometryFrom(scene, &backup);
@@ -207,7 +229,7 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
     snprintf(report.material_id, sizeof(report.material_id), "%s", boundary->material_id);
     snprintf(report.medium_id, sizeof(report.medium_id), "%s", boundary->medium_id);
     report.selected_frame_index = water->frame_index;
-    report.legacy_shell_suppressed = true;
+    report.legacy_shell_suppressed = boundary->legacy_shell_object_id[0] != '\0';
     report.material_parity_valid = true;
     report.min_x = boundary->min_x;
     report.max_x = boundary->max_x;

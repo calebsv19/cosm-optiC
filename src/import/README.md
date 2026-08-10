@@ -19,7 +19,10 @@ not own native `3D` shading policy or worker orchestration policy.
   should consume loaded mesh documents or prepared asset handles instead of
   duplicating this path-resolution policy.
 - `fluid_*` and `water_surface_import.c`: PhysicsSim pack/manifest, VF3D, and
-  water-surface sidecar import boundaries.
+  water-surface sidecar import boundaries. `water_body_boundary_contract.*`
+  owns canonical `water_body_boundary_v1` parsing and normalizes both the
+  established static-shell form and the already-unified dynamic form into one
+  runtime contract; callers must not reintroduce a stricter duplicate parser.
 - pack/manifest helpers: local parsing and preflight for scene bundles that
   feed headless or runtime render paths.
 

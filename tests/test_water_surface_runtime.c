@@ -566,6 +566,28 @@ static int test_water_body_boundary_import_contract(void) {
     RuntimeWaterSurfaceFrame_Reset(&frame);
 
     ok = RuntimeWaterSurfaceImport_LoadSourceAtFrame(
+        "tests/fixtures/water_body_boundary/manifest_dynamic_unified.json",
+        0,
+        &frame,
+        &found,
+        diagnostics,
+        sizeof(diagnostics));
+    assert_true("water_body_boundary_dynamic_unified_loads",
+                ok && found && frame.valid);
+    assert_true("water_body_boundary_dynamic_unified_present",
+                frame.water_body_boundary.present);
+    assert_true("water_body_boundary_dynamic_unified_mode",
+                frame.dynamic_volume_boundary &&
+                strcmp(frame.water_body_boundary.closure_mode,
+                       "dynamic_heightfield_volume") == 0);
+    assert_true("water_body_boundary_dynamic_unified_has_no_legacy_shell",
+                frame.water_body_boundary.legacy_shell_object_id[0] == '\0');
+    assert_true("water_body_boundary_dynamic_unified_policy",
+                strcmp(frame.water_body_boundary.dry_sample_policy,
+                       "extend_interior_to_boundary") == 0);
+    RuntimeWaterSurfaceFrame_Reset(&frame);
+
+    ok = RuntimeWaterSurfaceImport_LoadSourceAtFrame(
         "tests/fixtures/water_body_boundary/manifest_invalid_bounds.json",
         0,
         &frame,
@@ -611,6 +633,118 @@ static void water_body_boundary_seed_scene(RuntimeScene3D* scene) {
              sizeof(scene->primitives[1].source.objectId),
              "%s",
              "fixture_legacy_water_shell");
+}
+
+static void water_body_boundary_seed_dynamic_scene(RuntimeScene3D* scene,
+                                                   bool include_undeclared_legacy_geometry) {
+    const int primitive_count = include_undeclared_legacy_geometry ? 2 : 1;
+    RuntimeScene3D_Init(scene);
+    scene->primitives = (RuntimePrimitive3D*)calloc((size_t)primitive_count,
+                                                    sizeof(*scene->primitives));
+    assert_true("water_body_boundary_dynamic_seed_alloc", scene->primitives != NULL);
+    if (!scene->primitives) return;
+    scene->primitiveCount = primitive_count;
+    scene->primitiveCapacity = primitive_count;
+    scene->primitives[0].kind = RUNTIME_PRIMITIVE_3D_KIND_RECT_PRISM;
+    scene->primitives[0].source.kind = RUNTIME_PRIMITIVE_3D_KIND_RECT_PRISM;
+    scene->primitives[0].source.sceneObjectIndex = -1;
+    snprintf(scene->primitives[0].source.objectId,
+             sizeof(scene->primitives[0].source.objectId),
+             "%s",
+             "fixture_glass_container");
+    if (include_undeclared_legacy_geometry) {
+        scene->primitives[1].kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+        scene->primitives[1].source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
+        scene->primitives[1].source.sceneObjectIndex = 17;
+        snprintf(scene->primitives[1].source.objectId,
+                 sizeof(scene->primitives[1].source.objectId),
+                 "%s",
+                 "fixture_undeclared_water_shell");
+    }
+}
+
+static int test_water_body_boundary_dynamic_unified_compatibility(void) {
+    RuntimeWaterSurfaceFrame frame;
+    RuntimeScene3D scene;
+    RuntimeWaterBodyPrepare3DReport report = {0};
+    char diagnostics[256] = {0};
+    bool found = false;
+    bool ok = false;
+
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    ok = RuntimeWaterSurfaceImport_LoadSourceAtFrame(
+        "tests/fixtures/water_body_boundary/manifest_dynamic_unified.json",
+        0,
+        &frame,
+        &found,
+        diagnostics,
+        sizeof(diagnostics));
+    assert_true("water_body_boundary_dynamic_prepare_fixture_load",
+                ok && found && frame.valid);
+
+    water_body_boundary_seed_dynamic_scene(&scene, false);
+    if (ok && scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene,
+                                             &frame,
+                                             17,
+                                             &report,
+                                             diagnostics,
+                                             sizeof(diagnostics));
+        assert_true("water_body_boundary_dynamic_prepare_ok", ok);
+        assert_true("water_body_boundary_dynamic_closed_topology",
+                    report.geometry.topology_valid &&
+                    report.geometry.connected_component_count == 1 &&
+                    report.geometry.boundary_edge_count == 0 &&
+                    report.geometry.nonmanifold_edge_count == 0);
+        assert_true("water_body_boundary_dynamic_does_not_suppress_absent_shell",
+                    !report.legacy_shell_suppressed);
+        assert_true("water_body_boundary_dynamic_material_parity",
+                    report.material_parity_valid);
+    }
+    RuntimeScene3D_Free(&scene);
+
+    water_body_boundary_seed_dynamic_scene(&scene, true);
+    if (scene.primitives) {
+        snprintf(scene.primitives[1].source.objectId,
+                 sizeof(scene.primitives[1].source.objectId),
+                 "%s",
+                 "fixture_unified_water_body");
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene,
+                                             &frame,
+                                             17,
+                                             &report,
+                                             diagnostics,
+                                             sizeof(diagnostics));
+        assert_true("water_body_boundary_dynamic_duplicate_body_rejected", !ok);
+        assert_true("water_body_boundary_dynamic_duplicate_body_diag_exact",
+                    strcmp(diagnostics,
+                           "water body unified object already present") == 0);
+        assert_true("water_body_boundary_dynamic_duplicate_body_no_mutation",
+                    scene.primitiveCount == 2 &&
+                    scene.triangleMesh.triangleCount == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+
+    water_body_boundary_seed_dynamic_scene(&scene, true);
+    if (scene.primitives) {
+        const int primitive_count = scene.primitiveCount;
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene,
+                                             &frame,
+                                             17,
+                                             &report,
+                                             diagnostics,
+                                             sizeof(diagnostics));
+        assert_true("water_body_boundary_dynamic_undeclared_shell_rejected", !ok);
+        assert_true("water_body_boundary_dynamic_undeclared_shell_diag_exact",
+                    strcmp(diagnostics,
+                           "water body undeclared legacy geometry present") == 0);
+        assert_true("water_body_boundary_dynamic_undeclared_shell_no_mutation",
+                    scene.primitiveCount == primitive_count &&
+                    scene.triangleMesh.triangleCount == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    return 0;
 }
 
 static void water_body_boundary_write_report(const RuntimeWaterBodyPrepare3DReport* report) {
@@ -739,6 +873,7 @@ int run_test_water_surface_runtime_tests(void) {
     test_water_surface_runtime_cache_preserves_scene_triangle_index();
     test_water_body_runtime_flat_raised_depressed_topology();
     test_water_body_boundary_import_contract();
+    test_water_body_boundary_dynamic_unified_compatibility();
     test_water_body_boundary_closed_route_and_fail_closed();
     return test_support_failures() - before;
 }

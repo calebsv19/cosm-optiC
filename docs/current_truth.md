@@ -1,6 +1,25 @@
 # optiC Current Truth
 
-Last updated: 2026-08-01
+Last updated: 2026-08-02
+
+## 2026-08-02 Water-Body Compatibility Repair
+
+- The water-surface importer now has one canonical
+  `water_body_boundary_v1` parser. It accepts both the established static
+  `heightfield_volume` contract, which retains its declared legacy-shell
+  requirement, and the already-unified `dynamic_heightfield_volume` contract,
+  which may intentionally omit a legacy shell.
+- Dynamic unified water still fails closed if an undeclared primitive occupies
+  its reserved scene-object slot, and duplicate unified water objects are
+  rejected transactionally. The compatibility repair changes loader
+  acceptance only; it does not rewrite saved scenes or alter their camera,
+  light, material, medium, water, sampling, or photon semantics.
+- The immutable accepted aquarium request at SHA-256
+  `1d96b3d1021a2e2aee4e70cb0730542422f64dedd48a3d78583080c952e80563`
+  now passes native-3D preflight with a closed dynamic water body: one
+  connected component, zero boundary/nonmanifold edges, material parity, and
+  no legacy-shell suppression. Packaging and worker activation remain a
+  separate release boundary.
 
 ## 2026-08-01 Consolidated Release Identities
 

@@ -177,6 +177,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
+	$(BUILD_DIR)/import/water_body_boundary_contract.o \
 	$(BUILD_DIR)/import/water_surface_import.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
@@ -632,6 +633,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
+	$(BUILD_DIR)/import/water_body_boundary_contract.o \
 	$(BUILD_DIR)/import/water_surface_import.o \
 	$(BUILD_DIR)/import/fluid_pack_import.o \
 	$(BUILD_DIR)/import/scene_bundle_import.o \
