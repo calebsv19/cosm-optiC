@@ -9,16 +9,27 @@
 #include "animation/timeline_document.h"
 #include "animation/timeline_light_motion.h"
 
-#define RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION 1
+#define RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION 2
+#define RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION_LEGACY 1
 
 typedef struct RuntimeSceneLightTimelineDocument {
     bool valid;
     bool migrated_legacy_spatial_path;
+    uint32_t loaded_schema_version;
     TimelineDocument timeline;
     size_t progress_track_index;
+    bool has_intensity_track;
+    size_t intensity_track_index;
     Path spatial_path;
     CameraPath3D spatial_path_3d;
 } RuntimeSceneLightTimelineDocument;
+
+TimelineStatus RuntimeSceneLightTimelineValidateDocument(
+    const RuntimeSceneLightTimelineDocument* document);
+TimelineStatus RuntimeSceneLightTimelineFindTrack(
+    const RuntimeSceneLightTimelineDocument* document,
+    const char* property_id,
+    size_t* out_track_index);
 
 TimelineStatus RuntimeSceneLightTimelineParseAuthoring(
     json_object* authoring,

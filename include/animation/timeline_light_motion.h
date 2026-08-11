@@ -31,4 +31,12 @@ TimelineStatus TimelineLightMotionEvaluate(
     const TimelineEvaluationContext* context,
     TimelineLightMotionSample* out_sample);
 
+TimelineStatus TimelineLightMotionEvaluateResult(
+    const TimelineTrack* progress_track,
+    const TimelineEvaluationResult* progress_result,
+    const Path* path,
+    const CameraPath3D* path3d,
+    const TimelineEvaluationContext* context,
+    TimelineLightMotionSample* out_sample);
+
 #endif

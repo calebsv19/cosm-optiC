@@ -9,7 +9,9 @@
 #include "scene_editor_light_timeline_edit.h"
 #include "scene_editor_light_timeline_curve_edit.h"
 #include "scene_editor_light_timeline_evaluation.h"
+#include "scene_editor_light_timeline_history.h"
 #include "scene_editor_light_timeline_selection.h"
+#include "scene_editor_light_timeline_tracks.h"
 #include "scene_editor_light_timeline_view.h"
 
 #include <math.h>
@@ -40,10 +42,8 @@ typedef struct SceneEditorLightTimelineState {
     bool pointer_over_panel;
     SceneEditorLightTimelineView view;
     SceneEditorLightTimelineEvaluation evaluation;
-    TimelineTrack undo_tracks[24];
-    size_t undo_count;
-    TimelineTrack redo_tracks[24];
-    size_t redo_count;
+    SceneEditorLightTimelineLane lane;
+    SceneEditorLightTimelineHistory history;
 } SceneEditorLightTimelineState;
 
 static SceneEditorLightTimelineState g_light_timeline = {.hovered_light_index = -1,
@@ -136,24 +136,33 @@ static bool current_document(RuntimeSceneLightTimelineDocument* out_document,
     return true;
 }
 
-static void history_push(TimelineTrack* stack, size_t* count,
-                         const TimelineTrack* track) {
-    if (!stack || !count || !track) return;
-    if (*count >= 24u) {
-        memmove(&stack[0], &stack[1], 23u * sizeof(stack[0]));
-        *count = 23u;
+static bool current_lane_document(
+    RuntimeSceneLightTimelineDocument* out_document,
+    TimelineTrack** out_track) {
+    TimelineTrack* track = NULL;
+    if (!out_document || !RuntimeSceneLightTimelineGetLast(out_document) ||
+        scene_editor_light_timeline_lane_track(
+            out_document, g_light_timeline.lane, &track, NULL) !=
+            TIMELINE_STATUS_OK) {
+        return false;
     }
-    stack[(*count)++] = *track;
+    if (out_track) *out_track = track;
+    return true;
 }
 
 static TimelineStatus commit_track(RuntimeSceneLightTimelineDocument* document,
                                    const TimelineTrack* track) {
-    if (!document || !track || document->progress_track_index >= document->timeline.track_count) {
+    size_t track_index = SIZE_MAX;
+    if (!document || !track ||
+        RuntimeSceneLightTimelineFindTrack(
+            document, track->property_id, &track_index) !=
+            TIMELINE_STATUS_OK) {
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
     RuntimeSceneLightTimelineDocument candidate = *document;
-    candidate.timeline.tracks[candidate.progress_track_index] = *track;
-    TimelineStatus status = TimelineDocumentValidate(&candidate.timeline);
+    candidate.timeline.tracks[track_index] = *track;
+    TimelineStatus status =
+        RuntimeSceneLightTimelineValidateDocument(&candidate);
     if (status != TIMELINE_STATUS_OK) return status;
     status = RuntimeSceneLightTimelineSetLast(&candidate);
     if (status == TIMELINE_STATUS_OK) {
@@ -162,33 +171,117 @@ static TimelineStatus commit_track(RuntimeSceneLightTimelineDocument* document,
     return status;
 }
 
-TimelineStatus SceneEditorLightTimelineInsertKey(int64_t frame, double progress) {
+static TimelineStatus insert_lane_key(
+    SceneEditorLightTimelineLane lane,
+    int64_t frame,
+    double value,
+    bool allow_lazy_intensity) {
     RuntimeSceneLightTimelineDocument document;
     TimelineTrack* current = NULL;
     TimelineTrack candidate;
+    TimelineTrack original;
     TimelineKeyframe key;
     size_t index = 0u;
-    if (!isfinite(progress) || progress < 0.0 || progress > 1.0 ||
-        !current_document(&document, &current)) return TIMELINE_STATUS_INVALID_ARGUMENT;
+    bool created = false;
+    TimelineStatus status;
+    if (!isfinite(value) || value < 0.0 ||
+        (lane == SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION && value > 1.0) ||
+        !RuntimeSceneLightTimelineGetLast(&document)) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    status = scene_editor_light_timeline_lane_track(
+        &document, lane, &current, NULL);
+    if (status == TIMELINE_STATUS_TARGET_NOT_FOUND &&
+        lane == SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY &&
+        allow_lazy_intensity) {
+        RuntimeSceneBridge3DLightSeedState lights;
+        RuntimeSceneLightTimelineTarget target;
+        size_t track_index = 0u;
+        runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
+        status = RuntimeSceneLightTimelineResolveTarget(
+            lights.lights, (size_t)lights.light_count,
+            document.timeline.tracks[document.progress_track_index].target_id,
+            &target);
+        if (status != TIMELINE_STATUS_OK) return status;
+        status = scene_editor_light_timeline_ensure_intensity_track(
+            &document, lights.lights[target.light_index].intensity,
+            &track_index);
+        if (status != TIMELINE_STATUS_OK) return status;
+        current = &document.timeline.tracks[track_index];
+        created = true;
+    } else if (status != TIMELINE_STATUS_OK) {
+        return status;
+    }
     if (frame < document.timeline.range.start_frame ||
         (uint64_t)(frame - document.timeline.range.start_frame) >=
             document.timeline.range.frame_count) return TIMELINE_STATUS_FRAME_OUT_OF_RANGE;
+    original = *current;
     candidate = *current;
-    memset(&key, 0, sizeof(key));
-    key.frame = frame;
-    key.value = TimelineValueScalar(progress);
-    key.interpolation_to_next = TIMELINE_INTERPOLATION_LINEAR;
-    TimelineStatus status = TimelineTrackInsertKey(&candidate, key, &index);
+    if (created &&
+        (frame == candidate.keys[0].frame ||
+         frame == candidate.keys[candidate.key_count - 1u].frame)) {
+        index = frame == candidate.keys[0].frame
+            ? 0u : candidate.key_count - 1u;
+        status = TimelineTrackMoveScalarKey(
+            &candidate, index, frame, value);
+    } else {
+        memset(&key, 0, sizeof(key));
+        key.frame = frame;
+        key.value = TimelineValueScalar(value);
+        key.interpolation_to_next = TIMELINE_INTERPOLATION_LINEAR;
+        status = TimelineTrackInsertKey(&candidate, key, &index);
+    }
     if (status != TIMELINE_STATUS_OK) return status;
     status = scene_editor_light_timeline_constrain_adjacent_handles(
         &document, &candidate, index);
     if (status != TIMELINE_STATUS_OK) return status;
-    status = commit_track(&document, &candidate);
+    if (created) {
+        document.timeline.tracks[document.intensity_track_index] = candidate;
+        status = RuntimeSceneLightTimelineSetLast(&document);
+        if (status == TIMELINE_STATUS_OK) (void)capture_current_sample();
+    } else {
+        status = commit_track(&document, &candidate);
+    }
     if (status != TIMELINE_STATUS_OK) return status;
-    history_push(g_light_timeline.undo_tracks, &g_light_timeline.undo_count, current);
-    g_light_timeline.redo_count = 0u;
+    status = scene_editor_light_timeline_history_record(
+        &g_light_timeline.history, created ? NULL : &original, &candidate);
+    if (status != TIMELINE_STATUS_OK) return status;
     g_light_timeline.selected_key_index = (int)index;
     return TIMELINE_STATUS_OK;
+}
+
+TimelineStatus SceneEditorLightTimelineInsertKey(int64_t frame, double progress) {
+    return insert_lane_key(
+        SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION, frame, progress, false);
+}
+
+TimelineStatus SceneEditorLightTimelineInsertIntensityKey(
+    int64_t frame, double intensity) {
+    return insert_lane_key(
+        SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY,
+        frame, intensity, true);
+}
+
+TimelineStatus SceneEditorLightTimelineSelectLane(
+    SceneEditorLightTimelineLane lane) {
+    RuntimeSceneLightTimelineDocument document;
+    if ((lane != SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION &&
+         lane != SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY) ||
+        !RuntimeSceneLightTimelineGetLast(&document)) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    g_light_timeline.lane = lane;
+    g_light_timeline.selected_key_index = -1;
+    g_light_timeline.selected_path_point_index = -1;
+    g_light_timeline.dragging_key = false;
+    g_light_timeline.dragging_path_point = false;
+    g_light_timeline.dragging_handle =
+        SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_NONE;
+    return TIMELINE_STATUS_OK;
+}
+
+SceneEditorLightTimelineLane SceneEditorLightTimelineSelectedLane(void) {
+    return g_light_timeline.lane;
 }
 
 TimelineStatus SceneEditorLightTimelineDeleteSelectedKey(void) {
@@ -196,7 +289,7 @@ TimelineStatus SceneEditorLightTimelineDeleteSelectedKey(void) {
     TimelineTrack* current = NULL;
     TimelineTrack candidate;
     int index = g_light_timeline.selected_key_index;
-    if (!current_document(&document, &current) || index < 0 ||
+    if (!current_lane_document(&document, &current) || index < 0 ||
         (size_t)index >= current->key_count) return TIMELINE_STATUS_INVALID_ARGUMENT;
     if (current->key_count <= 2u) return TIMELINE_STATUS_INVALID_TRACK;
     candidate = *current;
@@ -212,8 +305,8 @@ TimelineStatus SceneEditorLightTimelineDeleteSelectedKey(void) {
     }
     status = commit_track(&document, &candidate);
     if (status != TIMELINE_STATUS_OK) return status;
-    history_push(g_light_timeline.undo_tracks, &g_light_timeline.undo_count, current);
-    g_light_timeline.redo_count = 0u;
+    (void)scene_editor_light_timeline_history_record(
+        &g_light_timeline.history, current, &candidate);
     if ((size_t)index >= candidate.key_count) index = (int)candidate.key_count - 1;
     g_light_timeline.selected_key_index = index;
     return TIMELINE_STATUS_OK;
@@ -226,7 +319,7 @@ TimelineStatus SceneEditorLightTimelineSetSelectedInterpolation(
     TimelineTrack candidate;
     int index = g_light_timeline.selected_key_index;
     TimelineStatus status;
-    if (!current_document(&document, &current) || index < 0 ||
+    if (!current_lane_document(&document, &current) || index < 0 ||
         (size_t)index + 1u >= current->key_count) {
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
@@ -238,27 +331,38 @@ TimelineStatus SceneEditorLightTimelineSetSelectedInterpolation(
     }
     status = commit_track(&document, &candidate);
     if (status != TIMELINE_STATUS_OK) return status;
-    history_push(g_light_timeline.undo_tracks,
-                 &g_light_timeline.undo_count, current);
-    g_light_timeline.redo_count = 0u;
+    (void)scene_editor_light_timeline_history_record(
+        &g_light_timeline.history, current, &candidate);
     return TIMELINE_STATUS_OK;
 }
 
 static bool history_restore(bool undo) {
     RuntimeSceneLightTimelineDocument document;
-    TimelineTrack* current = NULL;
-    TimelineTrack* source = undo ? g_light_timeline.undo_tracks : g_light_timeline.redo_tracks;
-    size_t* source_count = undo ? &g_light_timeline.undo_count : &g_light_timeline.redo_count;
-    TimelineTrack* destination = undo ? g_light_timeline.redo_tracks : g_light_timeline.undo_tracks;
-    size_t* destination_count = undo ? &g_light_timeline.redo_count : &g_light_timeline.undo_count;
-    if (*source_count == 0u || !current_document(&document, &current)) return false;
-    TimelineTrack restored = source[*source_count - 1u];
-    if (commit_track(&document, &restored) != TIMELINE_STATUS_OK) return false;
-    history_push(destination, destination_count, current);
-    *source_count -= 1u;
-    if (g_light_timeline.selected_key_index >= (int)restored.key_count) {
-        g_light_timeline.selected_key_index = (int)restored.key_count - 1;
+    TimelineStatus status;
+    if (!RuntimeSceneLightTimelineGetLast(&document)) return false;
+    status = undo
+        ? scene_editor_light_timeline_history_undo(
+              &g_light_timeline.history, &document)
+        : scene_editor_light_timeline_history_redo(
+              &g_light_timeline.history, &document);
+    if (status != TIMELINE_STATUS_OK ||
+        RuntimeSceneLightTimelineSetLast(&document) != TIMELINE_STATUS_OK) {
+        return false;
     }
+    {
+        TimelineTrack* restored = NULL;
+        if (scene_editor_light_timeline_lane_track(
+                &document, g_light_timeline.lane, &restored, NULL) ==
+                TIMELINE_STATUS_OK &&
+            g_light_timeline.selected_key_index >=
+                (int)restored->key_count) {
+            g_light_timeline.selected_key_index =
+                (int)restored->key_count - 1;
+        } else if (!restored) {
+            g_light_timeline.selected_key_index = -1;
+        }
+    }
+    (void)capture_current_sample();
     return true;
 }
 
@@ -310,9 +414,8 @@ static bool apply_traversal_mode(
     if (commit_track(&document, &candidate) != TIMELINE_STATUS_OK) {
         return false;
     }
-    history_push(g_light_timeline.undo_tracks,
-                 &g_light_timeline.undo_count, current);
-    g_light_timeline.redo_count = 0u;
+    (void)scene_editor_light_timeline_history_record(
+        &g_light_timeline.history, current, &candidate);
     g_light_timeline.selected_key_index = -1;
     g_light_timeline.selected_path_point_index = -1;
     return true;
@@ -541,19 +644,46 @@ static bool scrub_to_x(int x, const SDL_Rect* rect) {
     return capture_current_sample();
 }
 
+static bool base_intensity_for_document(
+    const RuntimeSceneLightTimelineDocument* document,
+    double* out_intensity) {
+    RuntimeSceneBridge3DLightSeedState lights;
+    RuntimeSceneLightTimelineTarget target;
+    TimelineStatus status;
+    if (!document || !out_intensity ||
+        document->progress_track_index >= document->timeline.track_count) {
+        return false;
+    }
+    runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
+    status = RuntimeSceneLightTimelineResolveTarget(
+        lights.lights, (size_t)lights.light_count,
+        document->timeline.tracks[document->progress_track_index].target_id,
+        &target);
+    if (status != TIMELINE_STATUS_OK) return false;
+    *out_intensity = lights.lights[target.light_index].intensity;
+    return isfinite(*out_intensity) && *out_intensity >= 0.0;
+}
+
 static void graph_to_key_values(const RuntimeSceneLightTimelineDocument* document,
+                                const TimelineTrack* track,
                                 const SDL_Rect* graph, int x, int y,
                                 int64_t* out_frame, double* out_value) {
     double nx = scene_editor_light_timeline_view_normalized_at_x(
         &g_light_timeline.view, graph, x);
-    double ny = graph->h > 0 ? (double)(y - graph->y) / (double)graph->h : 0.0;
-    if (ny < 0.0) ny = 0.0;
-    if (ny > 1.0) ny = 1.0;
+    double fallback = 1.0;
+    double minimum = 0.0;
+    double maximum = 1.0;
+    (void)base_intensity_for_document(document, &fallback);
+    scene_editor_light_timeline_lane_value_range(
+        g_light_timeline.lane, track, fallback, &minimum, &maximum);
     if (out_frame) {
         *out_frame = document->timeline.range.start_frame +
             (int64_t)llround(nx * (double)(document->timeline.range.frame_count - 1u));
     }
-    if (out_value) *out_value = 1.0 - ny;
+    if (out_value) {
+        *out_value = scene_editor_light_timeline_lane_value_at_y(
+            graph, y, minimum, maximum);
+    }
 }
 
 static bool move_selected_key(int x, int y, const SDL_Rect* graph) {
@@ -563,32 +693,41 @@ static bool move_selected_key(int x, int y, const SDL_Rect* graph) {
     int64_t frame = 0;
     double value = 0.0;
     int index = g_light_timeline.selected_key_index;
-    if (!current_document(&document, &current) || index < 0 ||
+    if (!current_lane_document(&document, &current) || index < 0 ||
         (size_t)index >= current->key_count) return false;
-    graph_to_key_values(&document, graph, x, y, &frame, &value);
+    graph_to_key_values(&document, current, graph, x, y, &frame, &value);
     if (index == 0) {
         frame = current->keys[0].frame;
-        value = current->keys[0].value.as.scalar;
+        if (g_light_timeline.lane ==
+            SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) {
+            value = current->keys[0].value.as.scalar;
+        }
     } else if ((size_t)index + 1u == current->key_count) {
         frame = current->keys[index].frame;
-        value = current->keys[index].value.as.scalar;
+        if (g_light_timeline.lane ==
+            SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) {
+            value = current->keys[index].value.as.scalar;
+        }
     } else {
         int64_t minimum_frame = current->keys[index - 1].frame + 1;
         int64_t maximum_frame = current->keys[index + 1].frame - 1;
-        double minimum_progress =
-            current->keys[index - 1].value.as.scalar;
-        double maximum_progress =
-            current->keys[index + 1].value.as.scalar;
         if (frame < minimum_frame) frame = minimum_frame;
         if (frame > maximum_frame) frame = maximum_frame;
-        if (value < minimum_progress) value = minimum_progress;
-        if (value > maximum_progress) value = maximum_progress;
-        value = scene_editor_light_timeline_snap_progress_to_anchor(
-            &document, value,
-            graph->h > 0 ? 8.0 / (double)graph->h : 0.0,
-            NULL);
-        if (value < minimum_progress) value = minimum_progress;
-        if (value > maximum_progress) value = maximum_progress;
+        if (g_light_timeline.lane ==
+            SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) {
+            double minimum_progress =
+                current->keys[index - 1].value.as.scalar;
+            double maximum_progress =
+                current->keys[index + 1].value.as.scalar;
+            if (value < minimum_progress) value = minimum_progress;
+            if (value > maximum_progress) value = maximum_progress;
+            value = scene_editor_light_timeline_snap_progress_to_anchor(
+                &document, value,
+                graph->h > 0 ? 8.0 / (double)graph->h : 0.0,
+                NULL);
+            if (value < minimum_progress) value = minimum_progress;
+            if (value > maximum_progress) value = maximum_progress;
+        }
     }
     candidate = *current;
     if (TimelineTrackMoveScalarKey(&candidate, (size_t)index, frame, value) !=
@@ -598,7 +737,12 @@ static bool move_selected_key(int x, int y, const SDL_Rect* graph) {
         TIMELINE_STATUS_OK) {
         return false;
     }
-    return commit_track(&document, &candidate) == TIMELINE_STATUS_OK;
+    if (commit_track(&document, &candidate) != TIMELINE_STATUS_OK) {
+        return false;
+    }
+    (void)scene_editor_light_timeline_history_update_after(
+        &g_light_timeline.history, &candidate);
+    return true;
 }
 
 static bool insert_key_at_graph_position(
@@ -609,45 +753,85 @@ static bool insert_key_at_graph_position(
     RuntimeSceneLightTimelineDocument document;
     TimelineTrack* track = NULL;
     double normalized;
-    double progress = 0.0;
+    double value = 0.0;
+    double fallback = 1.0;
+    double minimum = 0.0;
+    double maximum = 1.0;
     int64_t requested;
     int64_t frame;
-    if (!graph || !current_document(&document, &track)) return false;
+    TimelineStatus status;
+    if (!graph || !RuntimeSceneLightTimelineGetLast(&document)) return false;
     normalized = scene_editor_light_timeline_view_normalized_at_x(
         &g_light_timeline.view, graph, x);
     requested = document.timeline.range.start_frame +
         (int64_t)llround(normalized *
             (double)(document.timeline.range.frame_count - 1u));
+    status = scene_editor_light_timeline_lane_track(
+        &document, g_light_timeline.lane, &track, NULL);
+    if (status == TIMELINE_STATUS_TARGET_NOT_FOUND &&
+        g_light_timeline.lane ==
+            SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY) {
+        int64_t first = document.timeline.range.start_frame;
+        int64_t last = first +
+            (int64_t)document.timeline.range.frame_count - 1;
+        if (!base_intensity_for_document(&document, &fallback)) return false;
+        frame = requested < first ? first
+                                  : requested > last ? last : requested;
+        value = preserve_shape
+            ? fallback
+            : scene_editor_light_timeline_lane_value_at_y(
+                  graph, y, 0.0, fallback > 0.0 ? fallback * 1.25 : 1.0);
+        return SceneEditorLightTimelineInsertIntensityKey(frame, value) ==
+            TIMELINE_STATUS_OK;
+    }
+    if (status != TIMELINE_STATUS_OK) return false;
     if (!scene_editor_light_timeline_nearest_open_frame(
             &document, track, requested, &frame)) {
         return false;
     }
     if (preserve_shape) {
-        if (!scene_editor_light_timeline_evaluate_progress_at_frame(
-                &document, track, frame, &progress)) {
+        TimelineEvaluationContext context;
+        TimelineEvaluationResult result;
+        if (TimelineEvaluationContextBuild(
+                document.timeline.rate, document.timeline.range,
+                (TimelineSample){frame, 0u, 1u}, &context) !=
+                TIMELINE_STATUS_OK ||
+            TimelineTrackEvaluate(track, &context, &result) !=
+                TIMELINE_STATUS_OK) {
             return false;
         }
+        value = result.value.as.scalar;
     } else {
-        size_t right = 0u;
-        progress = scene_editor_light_timeline_progress_at_y(graph, y);
-        progress = scene_editor_light_timeline_snap_progress_to_anchor(
-            &document, progress,
-            graph->h > 0 ? 8.0 / (double)graph->h : 0.0,
-            NULL);
-        while (right < track->key_count &&
-               track->keys[right].frame < frame) {
-            right += 1u;
-        }
-        if (right == 0u || right >= track->key_count) return false;
-        if (progress < track->keys[right - 1u].value.as.scalar) {
-            progress = track->keys[right - 1u].value.as.scalar;
-        }
-        if (progress > track->keys[right].value.as.scalar) {
-            progress = track->keys[right].value.as.scalar;
+        (void)base_intensity_for_document(&document, &fallback);
+        scene_editor_light_timeline_lane_value_range(
+            g_light_timeline.lane, track, fallback, &minimum, &maximum);
+        value = scene_editor_light_timeline_lane_value_at_y(
+            graph, y, minimum, maximum);
+        if (g_light_timeline.lane ==
+            SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) {
+            size_t right = 0u;
+            value = scene_editor_light_timeline_snap_progress_to_anchor(
+                &document, value,
+                graph->h > 0 ? 8.0 / (double)graph->h : 0.0,
+                NULL);
+            while (right < track->key_count &&
+                   track->keys[right].frame < frame) {
+                right += 1u;
+            }
+            if (right == 0u || right >= track->key_count) return false;
+            if (value < track->keys[right - 1u].value.as.scalar) {
+                value = track->keys[right - 1u].value.as.scalar;
+            }
+            if (value > track->keys[right].value.as.scalar) {
+                value = track->keys[right].value.as.scalar;
+            }
         }
     }
-    return SceneEditorLightTimelineInsertKey(frame, progress) ==
-           TIMELINE_STATUS_OK;
+    return (g_light_timeline.lane ==
+                SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY
+            ? SceneEditorLightTimelineInsertIntensityKey(frame, value)
+            : SceneEditorLightTimelineInsertKey(frame, value)) ==
+        TIMELINE_STATUS_OK;
 }
 
 static int pick_path_point(
@@ -714,6 +898,8 @@ static bool move_selected_path_point(int x, const SDL_Rect* strip) {
         commit_track(&document, &candidate) != TIMELINE_STATUS_OK) {
         return false;
     }
+    (void)scene_editor_light_timeline_history_update_after(
+        &g_light_timeline.history, &candidate);
     g_light_timeline.selected_key_index = (int)key_index;
     return true;
 }
@@ -735,7 +921,10 @@ bool SceneEditorLightTimelineHandleEvent(
         graph = geometry.timing_graph;
         path_point_strip = geometry.path_point_strip;
         speed_strip = geometry.speed_strip;
-        if (event->type == SDL_KEYDOWN && current_document(&document, &track)) {
+        if (event->type == SDL_KEYDOWN &&
+            RuntimeSceneLightTimelineGetLast(&document)) {
+            (void)scene_editor_light_timeline_lane_track(
+                &document, g_light_timeline.lane, &track, NULL);
             SDL_Keymod mod = event->key.keysym.mod;
             bool command = (mod & (KMOD_CTRL | KMOD_GUI)) != 0;
             if (command && event->key.keysym.sym == SDLK_z) {
@@ -765,7 +954,7 @@ bool SceneEditorLightTimelineHandleEvent(
             }
         }
         if (event->type == SDL_MOUSEWHEEL &&
-            current_document(&document, &track)) {
+            RuntimeSceneLightTimelineGetLast(&document)) {
             int mouse_x = g_light_timeline.mouse_x;
             int mouse_y = g_light_timeline.mouse_y;
             double minimum_span = document.timeline.range.frame_count > 2u
@@ -799,17 +988,62 @@ bool SceneEditorLightTimelineHandleEvent(
         }
         if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT &&
             point_in_rect(event->button.x, event->button.y, &layout->timeline_rect)) {
-            if (current_document(&document, &track)) {
+            if (point_in_rect(event->button.x, event->button.y,
+                              &geometry.motion_lane_button)) {
+                (void)SceneEditorLightTimelineSelectLane(
+                    SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION);
+                return true;
+            }
+            if (point_in_rect(event->button.x, event->button.y,
+                              &geometry.intensity_lane_button)) {
+                (void)SceneEditorLightTimelineSelectLane(
+                    SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY);
+                return true;
+            }
+            if (RuntimeSceneLightTimelineGetLast(&document)) {
+                (void)scene_editor_light_timeline_lane_track(
+                    &document, g_light_timeline.lane, &track, NULL);
+                if (point_in_rect(event->button.x, event->button.y,
+                                  &geometry.add_key_button)) {
+                    stop_playback();
+                    double normalized =
+                        (double)(g_light_timeline.current_frame -
+                                 document.timeline.range.start_frame) /
+                        (double)(document.timeline.range.frame_count - 1u);
+                    int x = scene_editor_light_timeline_view_x_at_normalized(
+                        &g_light_timeline.view, &graph, normalized);
+                    (void)insert_key_at_graph_position(
+                        &graph, x, graph.y + graph.h / 2, true);
+                    return true;
+                }
+                if (point_in_rect(event->button.x, event->button.y,
+                                  &geometry.play_button)) {
+                    (void)SceneEditorLightTimelineTogglePlayback();
+                    return true;
+                }
+                if (!track && event->button.clicks >= 2 &&
+                    point_in_rect(event->button.x, event->button.y,
+                                  &graph)) {
+                    (void)insert_key_at_graph_position(
+                        &graph, event->button.x, event->button.y, false);
+                    return true;
+                }
+            }
+            if (track) {
                 if (point_in_rect(
                         event->button.x, event->button.y,
-                        &geometry.constant_speed_button)) {
+                        &geometry.constant_speed_button) &&
+                    g_light_timeline.lane ==
+                        SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) {
                     (void)apply_traversal_mode(
                         SCENE_EDITOR_LIGHT_TIMELINE_TRAVERSAL_CONSTANT_SPEED);
                     return true;
                 }
                 if (point_in_rect(
                         event->button.x, event->button.y,
-                        &geometry.equal_segments_button)) {
+                        &geometry.equal_segments_button) &&
+                    g_light_timeline.lane ==
+                        SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) {
                     (void)apply_traversal_mode(
                         SCENE_EDITOR_LIGHT_TIMELINE_TRAVERSAL_EQUAL_SEGMENTS);
                     return true;
@@ -832,25 +1066,8 @@ bool SceneEditorLightTimelineHandleEvent(
                         TIMELINE_INTERPOLATION_CUBIC_BEZIER);
                     return true;
                 }
-                if (point_in_rect(event->button.x, event->button.y,
-                                  &geometry.add_key_button)) {
-                    stop_playback();
-                    double normalized =
-                        (double)(g_light_timeline.current_frame -
-                                 document.timeline.range.start_frame) /
-                        (double)(document.timeline.range.frame_count - 1u);
-                    int x = scene_editor_light_timeline_view_x_at_normalized(
-                        &g_light_timeline.view, &graph, normalized);
-                    (void)insert_key_at_graph_position(
-                        &graph, x, graph.y + graph.h / 2, true);
-                    return true;
-                }
-                if (point_in_rect(event->button.x, event->button.y,
-                                  &geometry.play_button)) {
-                    (void)SceneEditorLightTimelineTogglePlayback();
-                    return true;
-                }
-                {
+                if (g_light_timeline.lane ==
+                    SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) {
                     int path_point = pick_path_point(
                         &document, track, &path_point_strip,
                         event->button.x, event->button.y);
@@ -862,10 +1079,8 @@ bool SceneEditorLightTimelineHandleEvent(
                         if (path_point > 0 &&
                             path_point + 1 <
                                 document.spatial_path.numPoints) {
-                            history_push(
-                                g_light_timeline.undo_tracks,
-                                &g_light_timeline.undo_count, track);
-                            g_light_timeline.redo_count = 0u;
+                            (void)scene_editor_light_timeline_history_record(
+                                &g_light_timeline.history, track, track);
                             g_light_timeline.dragging_path_point = true;
                             (void)move_selected_path_point(
                                 event->button.x, &path_point_strip);
@@ -881,36 +1096,53 @@ bool SceneEditorLightTimelineHandleEvent(
                     return true;
                 }
                 if (g_light_timeline.selected_key_index >= 0) {
+                    double fallback = 1.0;
+                    double minimum = 0.0;
+                    double maximum = 1.0;
+                    (void)base_intensity_for_document(
+                        &document, &fallback);
+                    scene_editor_light_timeline_lane_value_range(
+                        g_light_timeline.lane, track, fallback,
+                        &minimum, &maximum);
                     SceneEditorLightTimelineHandle handle =
-                        scene_editor_light_timeline_pick_handle(
+                        scene_editor_light_timeline_pick_scalar_handle(
                             &g_light_timeline.view, &document, track,
                             (size_t)g_light_timeline.selected_key_index,
-                            &graph, event->button.x, event->button.y);
+                            &graph, minimum, maximum,
+                            event->button.x, event->button.y);
                     if (handle !=
                         SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_NONE) {
                         stop_playback();
-                        history_push(g_light_timeline.undo_tracks,
-                                     &g_light_timeline.undo_count, track);
-                        g_light_timeline.redo_count = 0u;
+                        (void)scene_editor_light_timeline_history_record(
+                            &g_light_timeline.history, track, track);
                         g_light_timeline.dragging_handle = handle;
                         return true;
                     }
                 }
-                int key_index = scene_editor_light_timeline_pick_key(
+                double fallback = 1.0;
+                double minimum = 0.0;
+                double maximum = 1.0;
+                (void)base_intensity_for_document(&document, &fallback);
+                scene_editor_light_timeline_lane_value_range(
+                    g_light_timeline.lane, track, fallback,
+                    &minimum, &maximum);
+                int key_index = scene_editor_light_timeline_pick_scalar_key(
                     &g_light_timeline.view, &document, track, &graph,
+                    minimum, maximum,
                     event->button.x, event->button.y);
                 if (key_index >= 0) {
                     stop_playback();
                     g_light_timeline.selected_key_index = key_index;
                     g_light_timeline.selected_path_point_index = -1;
-                    history_push(g_light_timeline.undo_tracks,
-                                 &g_light_timeline.undo_count, track);
-                    g_light_timeline.redo_count = 0u;
+                    (void)scene_editor_light_timeline_history_record(
+                        &g_light_timeline.history, track, track);
                     g_light_timeline.dragging_key = true;
                     return true;
                 }
             }
-            if (current_document(&document, &track) &&
+            if (g_light_timeline.lane ==
+                    SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION &&
+                current_document(&document, &track) &&
                 point_in_rect(event->button.x, event->button.y,
                               &speed_strip)) {
                 double normalized =
@@ -945,18 +1177,31 @@ bool SceneEditorLightTimelineHandleEvent(
             RuntimeSceneLightTimelineDocument document;
             TimelineTrack* current = NULL;
             TimelineTrack candidate;
-            if (!current_document(&document, &current) ||
-                g_light_timeline.selected_key_index < 0 ||
-                scene_editor_light_timeline_move_handle(
+            double fallback = 1.0;
+            double minimum = 0.0;
+            double maximum = 1.0;
+            if (!current_lane_document(&document, &current) ||
+                g_light_timeline.selected_key_index < 0) {
+                return false;
+            }
+            (void)base_intensity_for_document(&document, &fallback);
+            scene_editor_light_timeline_lane_value_range(
+                g_light_timeline.lane, current, fallback,
+                &minimum, &maximum);
+            if (scene_editor_light_timeline_move_scalar_handle(
                     &g_light_timeline.view, &document, current,
                     (size_t)g_light_timeline.selected_key_index,
                     g_light_timeline.dragging_handle, &graph,
+                    minimum, maximum,
                     event->motion.x, event->motion.y,
-                    &candidate) != TIMELINE_STATUS_OK) {
+                    &candidate) != TIMELINE_STATUS_OK ||
+                commit_track(&document, &candidate) !=
+                    TIMELINE_STATUS_OK) {
                 return false;
             }
-            return commit_track(&document, &candidate) ==
-                TIMELINE_STATUS_OK;
+            (void)scene_editor_light_timeline_history_update_after(
+                &g_light_timeline.history, &candidate);
+            return true;
         }
         if (event->type == SDL_MOUSEMOTION &&
             g_light_timeline.dragging_path_point) {
@@ -1091,6 +1336,10 @@ void SceneEditorLightTimelineRenderPanel(SDL_Renderer* renderer,
     state.mouse_y = g_light_timeline.mouse_y;
     state.playing = g_light_timeline.playing;
     state.pointer_over_panel = g_light_timeline.pointer_over_panel;
+    state.lane = g_light_timeline.lane;
+    state.base_intensity = 1.0;
+    (void)base_intensity_for_document(
+        &document, &state.base_intensity);
     state.traversal_mode =
         scene_editor_light_timeline_classify_traversal(
             &document,

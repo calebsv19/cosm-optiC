@@ -1,20 +1,25 @@
 #include "test_runtime_timeline_light_persistence.h"
 
 #include "config/config_manager.h"
+#include "animation/timeline_property_registry.h"
 #include "app/evaluated_scene_service.h"
+#include "app/preview_retained_scene_quality.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_bridge.h"
+#include "render/runtime_evaluated_scene_3d.h"
 #include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_light_timeline_edit.h"
 #include "editor/scene_editor_light_timeline_view.h"
 #include "editor/scene_editor_light_timeline_curve_edit.h"
 #include "editor/scene_editor_light_timeline_selection.h"
+#include "editor/scene_editor_light_timeline_tracks.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "test_support.h"
 
 #include <json-c/json.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -70,6 +75,8 @@ static bool light_timeline_geometry_fits(const SDL_Rect* panel) {
         light_timeline_rect_inside(panel, &geometry.footer_hint) &&
         light_timeline_rect_inside(panel, &geometry.play_button) &&
         light_timeline_rect_inside(panel, &geometry.add_key_button) &&
+        light_timeline_rect_inside(panel, &geometry.motion_lane_button) &&
+        light_timeline_rect_inside(panel, &geometry.intensity_lane_button) &&
         light_timeline_rect_inside(
             panel, &geometry.constant_speed_button) &&
         light_timeline_rect_inside(
@@ -255,6 +262,7 @@ static json_object* runtime_scene_with_light_timeline(const char* target_id) {
     json_object_object_add(root, "materials", json_object_new_array());
     json_object_object_add(root, "cameras", json_object_new_array());
     json_object_object_add(light, "id", json_object_new_string("key"));
+    json_object_object_add(light, "intensity", json_object_new_double(2.0));
     json_object_object_add(position, "x", json_object_new_double(0.0));
     json_object_object_add(position, "y", json_object_new_double(0.0));
     json_object_object_add(position, "z", json_object_new_double(0.0));
@@ -271,6 +279,347 @@ static json_object* runtime_scene_with_light_timeline(const char* target_id) {
     json_object_object_add(root, "extensions", extensions);
     json_object_put(source_authoring);
     return root;
+}
+
+static bool light_timeline_add_intensity_track(
+    RuntimeSceneLightTimelineDocument* document,
+    double start_intensity,
+    double end_intensity) {
+    TimelineTrack track;
+    int64_t first;
+    int64_t last;
+    const TimelineTrack* progress;
+    if (!document ||
+        document->progress_track_index >= document->timeline.track_count) {
+        return false;
+    }
+    progress = &document->timeline.tracks[document->progress_track_index];
+    first = document->timeline.range.start_frame;
+    last = first + (int64_t)document->timeline.range.frame_count - 1;
+    memset(&track, 0, sizeof(track));
+    if (TimelineTrackInit(
+            &track, "key_intensity", progress->target_id,
+            "light/intensity", TIMELINE_VALUE_SCALAR) !=
+            TIMELINE_STATUS_OK ||
+        TimelineTrackSetUnit(
+            &track, TIMELINE_UNIT_RELATIVE_INTENSITY) !=
+            TIMELINE_STATUS_OK ||
+        TimelineTrackAddKey(
+            &track, first, TimelineValueScalar(start_intensity),
+            TIMELINE_INTERPOLATION_LINEAR) != TIMELINE_STATUS_OK ||
+        TimelineTrackAddKey(
+            &track, last, TimelineValueScalar(end_intensity),
+            TIMELINE_INTERPOLATION_STEP) != TIMELINE_STATUS_OK ||
+        TimelineDocumentAddTrack(&document->timeline, &track) !=
+            TIMELINE_STATUS_OK) {
+        return false;
+    }
+    document->loaded_schema_version =
+        RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION;
+    document->has_intensity_track = true;
+    document->intensity_track_index =
+        document->timeline.track_count - 1u;
+    return RuntimeSceneLightTimelineValidateDocument(document) ==
+        TIMELINE_STATUS_OK;
+}
+
+static int test_light_timeline_schema_v2_multitrack_contract(void) {
+    RuntimeSceneLightTimelineDocument legacy;
+    RuntimeSceneLightTimelineDocument reopened;
+    RuntimeSceneLightTimelineDocument invalid;
+    RuntimeSceneLightTimelineDocument sentinel;
+    RuntimeSceneLightTimelineDocument original;
+    char diagnostics[96];
+    json_object* v1 = json_tokener_parse(light_timeline_json(true));
+    json_object* encoded = NULL;
+    json_object* wrapper = NULL;
+    json_object* version = NULL;
+    json_object* tracks = NULL;
+    memset(&legacy, 0, sizeof(legacy));
+    assert_true("light_v2_legacy_parse",
+                RuntimeSceneLightTimelineParseAuthoring(
+                    v1, 1.0, &legacy, diagnostics,
+                    sizeof(diagnostics)) == TIMELINE_STATUS_OK);
+    assert_true("light_v2_legacy_schema_recorded",
+                legacy.loaded_schema_version ==
+                    RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION_LEGACY &&
+                !legacy.has_intensity_track);
+    assert_true("light_v2_add_intensity",
+                light_timeline_add_intensity_track(&legacy, 2.0, 6.0));
+    encoded = RuntimeSceneLightTimelineToJsonObject(&legacy, 1.0);
+    assert_true("light_v2_encode", encoded != NULL);
+    assert_true("light_v2_writer_schema",
+                json_object_object_get_ex(encoded, "version", &version) &&
+                json_object_get_int(version) ==
+                    RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION);
+    assert_true("light_v2_writer_typed_tracks",
+                json_object_object_get_ex(encoded, "tracks", &tracks) &&
+                json_object_array_length(tracks) == 2u);
+    wrapper = json_object_new_object();
+    json_object_object_add(wrapper, "light_timeline", encoded);
+    assert_true("light_v2_reopen",
+                RuntimeSceneLightTimelineParseAuthoring(
+                    wrapper, 1.0, &reopened, diagnostics,
+                    sizeof(diagnostics)) == TIMELINE_STATUS_OK);
+    assert_true("light_v2_reopen_exact",
+                reopened.has_intensity_track &&
+                reopened.timeline.track_count == 2u &&
+                memcmp(&legacy.timeline.tracks[
+                           legacy.progress_track_index],
+                       &reopened.timeline.tracks[
+                           reopened.progress_track_index],
+                       sizeof(TimelineTrack)) == 0 &&
+                memcmp(&legacy.timeline.tracks[
+                           legacy.intensity_track_index],
+                       &reopened.timeline.tracks[
+                           reopened.intensity_track_index],
+                       sizeof(TimelineTrack)) == 0);
+
+    invalid = legacy;
+    invalid.timeline.tracks[invalid.intensity_track_index]
+        .keys[0].value.as.scalar = -1.0;
+    assert_true("light_v2_negative_intensity_refused",
+                RuntimeSceneLightTimelineValidateDocument(&invalid) ==
+                    TIMELINE_STATUS_VALUE_OUT_OF_RANGE);
+    invalid = legacy;
+    invalid.timeline.tracks[invalid.intensity_track_index].unit =
+        TIMELINE_UNIT_UNITLESS;
+    assert_true("light_v2_wrong_intensity_unit_refused",
+                RuntimeSceneLightTimelineValidateDocument(&invalid) ==
+                    TIMELINE_STATUS_UNIT_MISMATCH);
+    invalid = legacy;
+    snprintf(
+        invalid.timeline.tracks[invalid.intensity_track_index].target_id,
+        TIMELINE_ID_CAPACITY, "light/other");
+    assert_true("light_v2_target_mismatch_refused",
+                RuntimeSceneLightTimelineValidateDocument(&invalid) ==
+                    TIMELINE_STATUS_OWNERSHIP_MISMATCH);
+    invalid = legacy;
+    snprintf(
+        invalid.timeline.tracks[invalid.intensity_track_index].property_id,
+        TIMELINE_ID_CAPACITY, "light/path_progress");
+    assert_true("light_v2_duplicate_property_refused",
+                RuntimeSceneLightTimelineValidateDocument(&invalid) ==
+                    TIMELINE_STATUS_DUPLICATE_OWNERSHIP);
+    invalid = legacy;
+    invalid.timeline.tracks[invalid.intensity_track_index]
+        .keys[0].value.as.scalar = NAN;
+    assert_true("light_v2_nonfinite_intensity_refused",
+                RuntimeSceneLightTimelineValidateDocument(&invalid) !=
+                    TIMELINE_STATUS_OK);
+    {
+        TimelineEvaluationContext context;
+        TimelineEvaluationResult result;
+        TimelineTrack descending =
+            legacy.timeline.tracks[legacy.intensity_track_index];
+        descending.keys[0].value.as.scalar = 6.0;
+        descending.keys[1].value.as.scalar = 2.0;
+        descending.keys[0].interpolation_to_next =
+            TIMELINE_INTERPOLATION_CUBIC_BEZIER;
+        descending.keys[0].outgoing_frame_offset = 6.0;
+        descending.keys[0].outgoing_value_offset = -1.0;
+        descending.keys[1].incoming_frame_offset = -6.0;
+        descending.keys[1].incoming_value_offset = 1.0;
+        assert_true("light_v2_descending_cubic_valid",
+                    scene_editor_light_timeline_validate_lane_track(
+                        &legacy,
+                        SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY,
+                        &descending) == TIMELINE_STATUS_OK);
+        assert_true("light_v2_descending_cubic_context",
+                    TimelineEvaluationContextBuild(
+                        legacy.timeline.rate, legacy.timeline.range,
+                        (TimelineSample){10, 0u, 1u}, &context) ==
+                        TIMELINE_STATUS_OK);
+        assert_true("light_v2_descending_cubic_evaluate",
+                    TimelineTrackEvaluate(
+                        &descending, &context, &result) ==
+                        TIMELINE_STATUS_OK);
+        assert_true("light_v2_descending_cubic_nonnegative",
+                    isfinite(result.value.as.scalar) &&
+                    result.value.as.scalar >= 0.0 &&
+                    result.value.as.scalar < 6.0 &&
+                    result.value.as.scalar > 2.0);
+    }
+    sentinel = legacy;
+    original = sentinel;
+    assert_true("light_v2_set_last_valid",
+                RuntimeSceneLightTimelineSetLast(&legacy) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_v2_set_last_invalid_transactional",
+                RuntimeSceneLightTimelineSetLast(&invalid) !=
+                    TIMELINE_STATUS_OK);
+    assert_true("light_v2_set_last_preserves_prior",
+                RuntimeSceneLightTimelineGetLast(&sentinel) &&
+                memcmp(&sentinel, &original, sizeof(sentinel)) == 0);
+    json_object_put(wrapper);
+    json_object_put(v1);
+    return 0;
+}
+
+static int test_light_timeline_intensity_evaluated_scene_parity(void) {
+    RuntimeSceneBridgePreflight summary;
+    RuntimeSceneLightTimelineDocument document;
+    RayEvaluatedSceneServiceResult base;
+    RayEvaluatedSceneServiceResult first;
+    RayEvaluatedSceneServiceResult middle;
+    RayEvaluatedSceneServiceResult last;
+    char diagnostics[64];
+    json_object* scene =
+        runtime_scene_with_light_timeline("light/key");
+    json_object* v1 = json_tokener_parse(light_timeline_json(true));
+    assert_true("light_intensity_parity_apply",
+                runtime_scene_bridge_apply_json(
+                    json_object_to_json_string_ext(
+                        scene, JSON_C_TO_STRING_PLAIN),
+                    &summary));
+    assert_true("light_intensity_parity_parse",
+                RuntimeSceneLightTimelineParseAuthoring(
+                    v1, 1.0, &document, diagnostics,
+                    sizeof(diagnostics)) == TIMELINE_STATUS_OK);
+    assert_true("light_intensity_parity_base_set",
+                RuntimeSceneLightTimelineSetLast(&document) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_intensity_parity_base_capture",
+                RayEvaluatedSceneCaptureAuthoredSample(
+                    (TimelineSample){10, 0u, 1u}, &base));
+    assert_close("light_intensity_parity_missing_uses_base",
+                 base.snapshot.light.intensity, 2.0, 1e-12);
+    assert_true("light_intensity_parity_missing_provenance",
+                !base.snapshot.light.intensity_authored &&
+                !base.snapshot.light.intensity_provenance.valid);
+    assert_true("light_intensity_parity_add_track",
+                light_timeline_add_intensity_track(
+                    &document, 2.0, 6.0));
+    assert_true("light_intensity_parity_set_v2",
+                RuntimeSceneLightTimelineSetLast(&document) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_intensity_parity_first",
+                RayEvaluatedSceneCaptureAuthoredSample(
+                    (TimelineSample){0, 0u, 1u}, &first));
+    assert_true("light_intensity_parity_middle",
+                RayEvaluatedSceneCaptureAuthoredSample(
+                    (TimelineSample){10, 0u, 1u}, &middle));
+    assert_true("light_intensity_parity_last",
+                RayEvaluatedSceneCaptureAuthoredSample(
+                    (TimelineSample){20, 0u, 1u}, &last));
+    assert_close("light_intensity_parity_first_value",
+                 first.snapshot.light.intensity, 2.0, 1e-12);
+    assert_close("light_intensity_parity_middle_value",
+                 middle.snapshot.light.intensity, 4.0, 1e-12);
+    assert_close("light_intensity_parity_last_value",
+                 last.snapshot.light.intensity, 6.0, 1e-12);
+    assert_true("light_intensity_parity_provenance",
+                middle.snapshot.light.intensity_authored &&
+                middle.snapshot.light.intensity_provenance.valid &&
+                strcmp(
+                    middle.snapshot.light.intensity_provenance.property_id,
+                    "light/intensity") == 0);
+    assert_close("light_intensity_parity_motion_identity",
+                 middle.snapshot.light.progress,
+                 base.snapshot.light.progress, 1e-12);
+    assert_close("light_intensity_parity_position_identity",
+                 middle.snapshot.light.position.x,
+                 base.snapshot.light.position.x, 1e-12);
+    assert_true("light_intensity_parity_one_snapshot_contract",
+                middle.snapshot.schema_version ==
+                    RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION &&
+                (middle.snapshot.invalidation_domains &
+                 TIMELINE_INVALIDATION_LIGHTING) != 0u);
+    {
+        RuntimeScene3D* final_scene =
+            (RuntimeScene3D*)calloc(1u, sizeof(RuntimeScene3D));
+        RuntimeScene3D* headless_scene =
+            (RuntimeScene3D*)calloc(1u, sizeof(RuntimeScene3D));
+        RuntimeLightSource3D consumer_light;
+        PreviewRetainedSceneFrame preview_first;
+        PreviewRetainedSceneFrame preview_middle;
+        PreviewRetainedSceneFrame preview_last;
+        SDL_Color albedo = {160, 160, 160, 255};
+        SDL_Color pixel_first;
+        SDL_Color pixel_middle;
+        SDL_Color pixel_last;
+        double luminance_first;
+        double luminance_middle;
+        double luminance_last;
+        assert_true("light_intensity_parity_consumer_alloc",
+                    final_scene != NULL && headless_scene != NULL);
+        if (!final_scene || !headless_scene) {
+            free(final_scene);
+            free(headless_scene);
+            json_object_put(v1);
+            json_object_put(scene);
+            return 0;
+        }
+        RuntimeScene3D_Init(final_scene);
+        RuntimeScene3D_Init(headless_scene);
+        RuntimeLightSource3D_Init(&consumer_light);
+        consumer_light.enabled = true;
+        snprintf(consumer_light.id, sizeof(consumer_light.id), "key");
+        assert_true("light_intensity_parity_final_light_append",
+                    RuntimeLightSet3D_Append(
+                        &final_scene->lightSet, &consumer_light, NULL));
+        assert_true("light_intensity_parity_headless_light_append",
+                    RuntimeLightSet3D_Append(
+                        &headless_scene->lightSet, &consumer_light, NULL));
+        assert_true("light_intensity_parity_final_consumer",
+                    RuntimeEvaluatedScene3DApply(
+                        final_scene, &middle.snapshot));
+        assert_true("light_intensity_parity_headless_consumer",
+                    RuntimeEvaluatedScene3DApply(
+                        headless_scene, &middle.snapshot));
+        assert_close("light_intensity_parity_final_value",
+                     final_scene->lightSet.lights[0].intensity,
+                     middle.snapshot.light.intensity, 1e-12);
+        assert_close("light_intensity_parity_headless_value",
+                     headless_scene->lightSet.lights[0].intensity,
+                     middle.snapshot.light.intensity, 1e-12);
+        assert_true("light_intensity_fixed_exposure_first",
+                    PreviewRetainedSceneFrameBuild(
+                        PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED,
+                        &first.snapshot, &preview_first));
+        assert_true("light_intensity_fixed_exposure_middle",
+                    PreviewRetainedSceneFrameBuild(
+                        PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED,
+                        &middle.snapshot, &preview_middle));
+        assert_true("light_intensity_fixed_exposure_last",
+                    PreviewRetainedSceneFrameBuild(
+                        PREVIEW_RETAINED_SCENE_QUALITY_INTERACTIVE_SHADED,
+                        &last.snapshot, &preview_last));
+        pixel_first = PreviewRetainedSceneShadeColor(
+            albedo, 0.0, 0.0, 1.0,
+            first.snapshot.light.position.x,
+            first.snapshot.light.position.y,
+            first.snapshot.light.position.z - 5.0,
+            &preview_first);
+        pixel_middle = PreviewRetainedSceneShadeColor(
+            albedo, 0.0, 0.0, 1.0,
+            middle.snapshot.light.position.x,
+            middle.snapshot.light.position.y,
+            middle.snapshot.light.position.z - 5.0,
+            &preview_middle);
+        pixel_last = PreviewRetainedSceneShadeColor(
+            albedo, 0.0, 0.0, 1.0,
+            last.snapshot.light.position.x,
+            last.snapshot.light.position.y,
+            last.snapshot.light.position.z - 5.0,
+            &preview_last);
+        luminance_first =
+            (double)pixel_first.r + pixel_first.g + pixel_first.b;
+        luminance_middle =
+            (double)pixel_middle.r + pixel_middle.g + pixel_middle.b;
+        luminance_last =
+            (double)pixel_last.r + pixel_last.g + pixel_last.b;
+        assert_true("light_intensity_fixed_exposure_response_direction",
+                    luminance_first < luminance_middle &&
+                    luminance_middle < luminance_last);
+        RuntimeScene3D_Free(final_scene);
+        RuntimeScene3D_Free(headless_scene);
+        free(final_scene);
+        free(headless_scene);
+    }
+    json_object_put(v1);
+    json_object_put(scene);
+    return 0;
 }
 
 static int test_light_timeline_runtime_bridge_headless_inspection(void) {
@@ -351,18 +700,21 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_animation = animSettings;
     RuntimeSceneBridgePreflight summary;
-    RuntimeSceneLightTimelineDocument before_endpoint_drag;
-    RuntimeSceneLightTimelineDocument after_endpoint_drag;
-    RuntimeSceneLightTimelineDocument after_add;
-    RuntimeSceneLightTimelineDocument before_key_drag;
-    RuntimeSceneLightTimelineDocument after_key_drag;
-    RuntimeSceneLightTimelineDocument reopened;
+    static RuntimeSceneLightTimelineDocument before_endpoint_drag;
+    static RuntimeSceneLightTimelineDocument after_endpoint_drag;
+    static RuntimeSceneLightTimelineDocument after_add;
+    static RuntimeSceneLightTimelineDocument before_key_drag;
+    static RuntimeSceneLightTimelineDocument after_key_drag;
+    static RuntimeSceneLightTimelineDocument motion_before_intensity;
+    static RuntimeSceneLightTimelineDocument intensity_authored;
+    static RuntimeSceneLightTimelineDocument current_before_save;
+    static RuntimeSceneLightTimelineDocument reopened;
     TimelineLightMotionSample before_save;
     TimelineLightMotionSample after_reopen;
     RuntimeSceneBridge3DLightSeedState lights_before_play;
     RuntimeSceneBridge3DLightSeedState lights_after_play;
-    RuntimeSceneLightTimelineDocument timeline_before_play;
-    RuntimeSceneLightTimelineDocument timeline_after_play;
+    static RuntimeSceneLightTimelineDocument timeline_before_play;
+    static RuntimeSceneLightTimelineDocument timeline_after_play;
     RayEvaluatedSceneSnapshot evaluated_before_play;
     RayEvaluatedSceneSnapshot evaluated_after_play;
     RayEvaluatedSceneServiceResult direct_after_play;
@@ -696,8 +1048,150 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
                            sizeof(TimelineTrack)) == 0);
     }
 
+    assert_true("light_acceptance_motion_before_intensity",
+                RuntimeSceneLightTimelineGetLast(
+                    &motion_before_intensity));
+    assert_true("light_acceptance_select_intensity_lane",
+                SceneEditorLightTimelineSelectLane(
+                    SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_acceptance_lane_keeps_target",
+                strcmp(SceneEditorLightTimelineSelectedTargetId(),
+                       "light/key") == 0);
+    assert_true("light_acceptance_lazy_endpoint_insert",
+                SceneEditorLightTimelineInsertIntensityKey(0, 3.5) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_acceptance_lazy_endpoint_updates_endpoint",
+                RuntimeSceneLightTimelineGetLast(&reopened) &&
+                reopened.has_intensity_track &&
+                reopened.timeline.tracks[
+                    reopened.intensity_track_index].key_count == 2u &&
+                reopened.timeline.tracks[
+                    reopened.intensity_track_index]
+                    .keys[0].value.as.scalar == 3.5);
+    assert_true("light_acceptance_lazy_endpoint_single_undo",
+                SceneEditorLightTimelineUndo());
+    assert_true("light_acceptance_lazy_endpoint_undo_removes_track",
+                RuntimeSceneLightTimelineGetLast(&reopened) &&
+                !reopened.has_intensity_track);
+    assert_true("light_acceptance_lazy_intensity_insert",
+                SceneEditorLightTimelineInsertIntensityKey(8, 3.5) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_acceptance_intensity_created",
+                RuntimeSceneLightTimelineGetLast(&intensity_authored) &&
+                intensity_authored.has_intensity_track &&
+                intensity_authored.timeline.tracks[
+                    intensity_authored.intensity_track_index].key_count ==
+                    3u);
+    assert_true("light_acceptance_intensity_motion_untouched",
+                memcmp(&motion_before_intensity.timeline.tracks[
+                           motion_before_intensity.progress_track_index],
+                       &intensity_authored.timeline.tracks[
+                           intensity_authored.progress_track_index],
+                       sizeof(TimelineTrack)) == 0);
+    assert_close("light_acceptance_intensity_authored_value",
+                 intensity_authored.timeline.tracks[
+                     intensity_authored.intensity_track_index]
+                     .keys[1].value.as.scalar,
+                 3.5, 1e-12);
+    assert_true("light_acceptance_intensity_lazy_undo",
+                SceneEditorLightTimelineUndo());
+    assert_true("light_acceptance_intensity_undo_removes_track",
+                RuntimeSceneLightTimelineGetLast(&reopened) &&
+                !reopened.has_intensity_track &&
+                memcmp(&motion_before_intensity.timeline.tracks[
+                           motion_before_intensity.progress_track_index],
+                       &reopened.timeline.tracks[
+                           reopened.progress_track_index],
+                       sizeof(TimelineTrack)) == 0);
+    assert_true("light_acceptance_intensity_lazy_redo",
+                SceneEditorLightTimelineRedo());
+    assert_true("light_acceptance_intensity_redo_exact",
+                RuntimeSceneLightTimelineGetLast(&reopened) &&
+                reopened.has_intensity_track &&
+                memcmp(&intensity_authored.timeline.tracks[
+                           intensity_authored.intensity_track_index],
+                       &reopened.timeline.tracks[
+                           reopened.intensity_track_index],
+                       sizeof(TimelineTrack)) == 0);
+    {
+        double minimum = 0.0;
+        double maximum = 1.0;
+        TimelineTrack* intensity = &reopened.timeline.tracks[
+            reopened.intensity_track_index];
+        scene_editor_light_timeline_lane_value_range(
+            SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY,
+            intensity, 2.0, &minimum, &maximum);
+        memset(&event, 0, sizeof(event));
+        event.type = SDL_MOUSEBUTTONDOWN;
+        event.button.button = SDL_BUTTON_LEFT;
+        event.button.clicks = 1;
+        event.button.x = timing_graph.x + (int)llround(
+            8.0 / 20.0 * (double)timing_graph.w);
+        event.button.y = scene_editor_light_timeline_lane_y_at_value(
+            &timing_graph, 3.5, minimum, maximum);
+        assert_true("light_acceptance_intensity_select_key",
+                    SceneEditorLightTimelineHandleEvent(
+                        &event, &pane_host, layout, NULL));
+        event.type = SDL_MOUSEBUTTONUP;
+        event.button.button = SDL_BUTTON_LEFT;
+        assert_true("light_acceptance_intensity_select_key_up",
+                    SceneEditorLightTimelineHandleEvent(
+                        &event, &pane_host, layout, NULL));
+    }
+    assert_true("light_acceptance_intensity_bezier",
+                SceneEditorLightTimelineSetSelectedInterpolation(
+                    TIMELINE_INTERPOLATION_CUBIC_BEZIER) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_acceptance_intensity_bezier_persisted",
+                RuntimeSceneLightTimelineGetLast(&intensity_authored) &&
+                intensity_authored.timeline.tracks[
+                    intensity_authored.intensity_track_index]
+                        .keys[1].interpolation_to_next ==
+                    TIMELINE_INTERPOLATION_CUBIC_BEZIER);
+    {
+        TimelineTrack before_handle =
+            intensity_authored.timeline.tracks[
+                intensity_authored.intensity_track_index];
+        TimelineTrack moved_handle;
+        double minimum = 0.0;
+        double maximum = 1.0;
+        int handle_x = 0;
+        int handle_y = 0;
+        scene_editor_light_timeline_lane_value_range(
+            SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY,
+            &before_handle, 2.0, &minimum, &maximum);
+        assert_true("light_acceptance_intensity_handle_visible",
+                    scene_editor_light_timeline_scalar_handle_point(
+                        &(SceneEditorLightTimelineView){0.0, 1.0},
+                        &intensity_authored, &before_handle, 1u,
+                        SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING,
+                        &timing_graph, minimum, maximum,
+                        &handle_x, &handle_y));
+        assert_true("light_acceptance_intensity_handle_move",
+                    scene_editor_light_timeline_move_scalar_handle(
+                        &(SceneEditorLightTimelineView){0.0, 1.0},
+                        &intensity_authored, &before_handle, 1u,
+                        SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING,
+                        &timing_graph, minimum, maximum,
+                        handle_x + 8, handle_y - 6,
+                        &moved_handle) == TIMELINE_STATUS_OK);
+        assert_true("light_acceptance_intensity_handle_operable",
+                    memcmp(&before_handle, &moved_handle,
+                           sizeof(TimelineTrack)) != 0);
+    }
+    assert_true("light_acceptance_intensity_bezier_undo",
+                SceneEditorLightTimelineUndo());
+    assert_true("light_acceptance_intensity_bezier_redo",
+                SceneEditorLightTimelineRedo());
+    assert_true("light_acceptance_select_motion_lane",
+                SceneEditorLightTimelineSelectLane(
+                    SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_acceptance_current_before_save",
+                RuntimeSceneLightTimelineGetLast(&current_before_save));
     assert_true("light_acceptance_before_save_sample",
-                RuntimeSceneLightTimelineEvaluate(&after_key_drag,
+                RuntimeSceneLightTimelineEvaluate(&current_before_save,
                                                   (TimelineSample){5, 0u, 1u},
                                                   &before_save) == TIMELINE_STATUS_OK);
     assert_true("light_acceptance_persist",
@@ -719,6 +1213,13 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
     assert_close("light_acceptance_roundtrip_speed",
                  after_reopen.world_speed_per_second,
                  before_save.world_speed_per_second, 1e-9);
+    assert_true("light_acceptance_roundtrip_intensity_track",
+                reopened.has_intensity_track &&
+                memcmp(&current_before_save.timeline.tracks[
+                           current_before_save.intensity_track_index],
+                       &reopened.timeline.tracks[
+                           reopened.intensity_track_index],
+                       sizeof(TimelineTrack)) == 0);
 
     unlink(runtime_path);
     json_object_put(scene);
@@ -1202,12 +1703,14 @@ static int test_light_timeline_cubic_operability_and_validity(void) {
         assert_true("light_cubic_valid_reencode",
                     invalid_encoded != NULL);
         if (invalid_encoded) {
+            json_object* tracks = NULL;
             json_object* track_object = NULL;
             json_object* keys = NULL;
             json_object* key = NULL;
             json_object* outgoing = NULL;
             json_object_object_get_ex(
-                invalid_encoded, "progress_track", &track_object);
+                invalid_encoded, "tracks", &tracks);
+            track_object = json_object_array_get_idx(tracks, 0u);
             json_object_object_get_ex(track_object, "keys", &keys);
             key = json_object_array_get_idx(keys, 0u);
             json_object_object_get_ex(key, "outgoing_handle", &outgoing);
@@ -1235,6 +1738,8 @@ int run_test_runtime_timeline_light_persistence_tests(void) {
     test_light_timeline_responsive_geometry();
     test_light_timeline_roundtrip_and_evaluation();
     test_light_timeline_legacy_path_and_transactional_refusal();
+    test_light_timeline_schema_v2_multitrack_contract();
+    test_light_timeline_intensity_evaluated_scene_parity();
     test_light_timeline_runtime_bridge_headless_inspection();
     test_short_default_timeline_expands_for_authoring();
     test_new_timeline_keys_are_independent_of_path_points();

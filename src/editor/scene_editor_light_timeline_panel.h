@@ -9,6 +9,7 @@
 #include "animation/evaluated_scene_snapshot.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "scene_editor_light_timeline_edit.h"
+#include "scene_editor_light_timeline_tracks.h"
 #include "scene_editor_light_timeline_view.h"
 
 typedef struct SceneEditorLightTimelinePanelState {
@@ -19,6 +20,8 @@ typedef struct SceneEditorLightTimelinePanelState {
     int mouse_y;
     bool playing;
     bool pointer_over_panel;
+    SceneEditorLightTimelineLane lane;
+    double base_intensity;
     SceneEditorLightTimelineTraversalMode traversal_mode;
     const SceneEditorLightTimelineView* view;
     const RayEvaluatedSceneSnapshot* evaluated_scene;

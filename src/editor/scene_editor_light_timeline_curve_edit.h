@@ -26,12 +26,35 @@ bool scene_editor_light_timeline_handle_point(
     int* out_x,
     int* out_y);
 
+bool scene_editor_light_timeline_scalar_handle_point(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    size_t key_index,
+    SceneEditorLightTimelineHandle handle,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
+    int* out_x,
+    int* out_y);
+
 SceneEditorLightTimelineHandle scene_editor_light_timeline_pick_handle(
     const SceneEditorLightTimelineView* view,
     const RuntimeSceneLightTimelineDocument* document,
     const TimelineTrack* track,
     size_t key_index,
     const SDL_Rect* graph,
+    int x,
+    int y);
+
+SceneEditorLightTimelineHandle scene_editor_light_timeline_pick_scalar_handle(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    size_t key_index,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
     int x,
     int y);
 
@@ -42,6 +65,19 @@ TimelineStatus scene_editor_light_timeline_move_handle(
     size_t key_index,
     SceneEditorLightTimelineHandle handle,
     const SDL_Rect* graph,
+    int x,
+    int y,
+    TimelineTrack* out_track);
+
+TimelineStatus scene_editor_light_timeline_move_scalar_handle(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    size_t key_index,
+    SceneEditorLightTimelineHandle handle,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
     int x,
     int y,
     TimelineTrack* out_track);

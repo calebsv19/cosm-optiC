@@ -8,7 +8,7 @@
 #include "animation/timeline_document.h"
 #include "animation/timeline_light_motion.h"
 
-#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 2u
+#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 3u
 #define RAY_EVALUATED_SCENE_DIAGNOSTICS_CAPACITY 256u
 #define RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY 64u
 
@@ -72,6 +72,10 @@ typedef struct RayEvaluatedLight {
     double world_speed_per_second;
     double global_path_t;
     bool speed_valid;
+    bool intensity_authored;
+    TimelineEvaluationResult path_progress_provenance;
+    TimelineEvaluationResult intensity_provenance;
+    /* Compatibility alias for path_progress_provenance. */
     TimelineEvaluationResult property_provenance;
 } RayEvaluatedLight;
 

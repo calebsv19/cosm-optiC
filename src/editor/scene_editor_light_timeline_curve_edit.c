@@ -1,6 +1,7 @@
 #include "scene_editor_light_timeline_curve_edit.h"
 
 #include "animation/timeline_light_motion.h"
+#include "scene_editor_light_timeline_tracks.h"
 
 #include <math.h>
 
@@ -60,8 +61,12 @@ TimelineStatus scene_editor_light_timeline_set_interpolation(
         right->incoming_frame_offset = -frame_span / 3.0;
         right->incoming_value_offset = -value_span / 3.0;
     }
-    if (TimelineLightMotionValidateProgressTrack(
-            &candidate, &document->timeline.range) != TIMELINE_STATUS_OK) {
+    SceneEditorLightTimelineLane lane =
+        strcmp(track->property_id, "light/intensity") == 0
+            ? SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY
+            : SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION;
+    if (scene_editor_light_timeline_validate_lane_track(
+            document, lane, &candidate) != TIMELINE_STATUS_OK) {
         return TIMELINE_STATUS_INVALID_TRACK;
     }
     *out_track = candidate;
@@ -75,6 +80,22 @@ bool scene_editor_light_timeline_handle_point(
     size_t key_index,
     SceneEditorLightTimelineHandle handle,
     const SDL_Rect* graph,
+    int* out_x,
+    int* out_y) {
+    return scene_editor_light_timeline_scalar_handle_point(
+        view, document, track, key_index, handle, graph,
+        0.0, 1.0, out_x, out_y);
+}
+
+bool scene_editor_light_timeline_scalar_handle_point(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    size_t key_index,
+    SceneEditorLightTimelineHandle handle,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
     int* out_x,
     int* out_y) {
     const TimelineKeyframe* key;
@@ -103,8 +124,8 @@ bool scene_editor_light_timeline_handle_point(
             view, graph, normalized);
     }
     if (out_y) {
-        *out_y = graph->y + graph->h -
-            (int)llround(value * (double)graph->h);
+        *out_y = scene_editor_light_timeline_y_at_value(
+            graph, value, minimum, maximum);
     }
     return true;
 }
@@ -115,6 +136,20 @@ SceneEditorLightTimelineHandle scene_editor_light_timeline_pick_handle(
     const TimelineTrack* track,
     size_t key_index,
     const SDL_Rect* graph,
+    int x,
+    int y) {
+    return scene_editor_light_timeline_pick_scalar_handle(
+        view, document, track, key_index, graph, 0.0, 1.0, x, y);
+}
+
+SceneEditorLightTimelineHandle scene_editor_light_timeline_pick_scalar_handle(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    size_t key_index,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
     int x,
     int y) {
     const SceneEditorLightTimelineHandle handles[] = {
@@ -130,8 +165,9 @@ SceneEditorLightTimelineHandle scene_editor_light_timeline_pick_handle(
         double dx;
         double dy;
         double distance;
-        if (!scene_editor_light_timeline_handle_point(
+        if (!scene_editor_light_timeline_scalar_handle_point(
                 view, document, track, key_index, handles[i], graph,
+                minimum, maximum,
                 &hx, &hy)) continue;
         dx = (double)(hx - x);
         dy = (double)(hy - y);
@@ -151,6 +187,23 @@ TimelineStatus scene_editor_light_timeline_move_handle(
     size_t key_index,
     SceneEditorLightTimelineHandle handle,
     const SDL_Rect* graph,
+    int x,
+    int y,
+    TimelineTrack* out_track) {
+    return scene_editor_light_timeline_move_scalar_handle(
+        view, document, track, key_index, handle, graph,
+        0.0, 1.0, x, y, out_track);
+}
+
+TimelineStatus scene_editor_light_timeline_move_scalar_handle(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    size_t key_index,
+    SceneEditorLightTimelineHandle handle,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
     int x,
     int y,
     TimelineTrack* out_track) {
@@ -174,7 +227,8 @@ TimelineStatus scene_editor_light_timeline_move_handle(
     frame = (double)document->timeline.range.start_frame +
         normalized *
             (double)(document->timeline.range.frame_count - 1u);
-    value = scene_editor_light_timeline_progress_at_y(graph, y);
+    value = scene_editor_light_timeline_value_at_y(
+        graph, y, minimum, maximum);
     candidate = *track;
     key = &candidate.keys[key_index];
     if (handle == SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING) {
@@ -186,8 +240,12 @@ TimelineStatus scene_editor_light_timeline_move_handle(
             right->value.as.scalar + right->incoming_value_offset;
         frame = clamp_double(frame, (double)left->frame,
                              right_control_frame);
-        value = clamp_double(value, left->value.as.scalar,
-                             right_control_value);
+        if (strcmp(track->property_id, "light/intensity") == 0) {
+            value = clamp_double(value, minimum, maximum);
+        } else {
+            value = clamp_double(value, left->value.as.scalar,
+                                 right_control_value);
+        }
         left->outgoing_frame_offset = frame - (double)left->frame;
         left->outgoing_value_offset = value - left->value.as.scalar;
     } else {
@@ -199,21 +257,31 @@ TimelineStatus scene_editor_light_timeline_move_handle(
             left->value.as.scalar + left->outgoing_value_offset;
         frame = clamp_double(frame, left_control_frame,
                              (double)right->frame);
-        value = clamp_double(value, left_control_value,
-                             right->value.as.scalar);
+        if (strcmp(track->property_id, "light/intensity") == 0) {
+            value = clamp_double(value, minimum, maximum);
+        } else {
+            value = clamp_double(value, left_control_value,
+                                 right->value.as.scalar);
+        }
         right->incoming_frame_offset = frame - (double)right->frame;
         right->incoming_value_offset = value - right->value.as.scalar;
     }
-    if (TimelineLightMotionValidateProgressTrack(
-            &candidate, &document->timeline.range) != TIMELINE_STATUS_OK) {
+    SceneEditorLightTimelineLane lane =
+        strcmp(track->property_id, "light/intensity") == 0
+            ? SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY
+            : SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION;
+    if (scene_editor_light_timeline_validate_lane_track(
+            document, lane, &candidate) != TIMELINE_STATUS_OK) {
         return TIMELINE_STATUS_INVALID_TRACK;
     }
     *out_track = candidate;
     return TIMELINE_STATUS_OK;
 }
 
-static void constrain_cubic_segment(TimelineTrack* track,
-                                    size_t left_index) {
+static void constrain_cubic_segment(
+    TimelineTrack* track,
+    size_t left_index,
+    SceneEditorLightTimelineLane lane) {
     TimelineKeyframe* left;
     TimelineKeyframe* right;
     double x0;
@@ -237,8 +305,13 @@ static void constrain_cubic_segment(TimelineTrack* track,
     x2 = clamp_double(x3 + right->incoming_frame_offset, x1, x3);
     y0 = left->value.as.scalar;
     y3 = right->value.as.scalar;
-    y1 = clamp_double(y0 + left->outgoing_value_offset, y0, y3);
-    y2 = clamp_double(y3 + right->incoming_value_offset, y1, y3);
+    if (lane == SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY) {
+        y1 = fmax(0.0, y0 + left->outgoing_value_offset);
+        y2 = fmax(0.0, y3 + right->incoming_value_offset);
+    } else {
+        y1 = clamp_double(y0 + left->outgoing_value_offset, y0, y3);
+        y2 = clamp_double(y3 + right->incoming_value_offset, y1, y3);
+    }
     left->outgoing_frame_offset = x1 - x0;
     left->outgoing_value_offset = y1 - y0;
     right->incoming_frame_offset = x2 - x3;
@@ -252,10 +325,14 @@ TimelineStatus scene_editor_light_timeline_constrain_adjacent_handles(
     if (!document || !track || key_index >= track->key_count) {
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
+    SceneEditorLightTimelineLane lane =
+        strcmp(track->property_id, "light/intensity") == 0
+            ? SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY
+            : SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION;
     if (key_index > 0u) {
-        constrain_cubic_segment(track, key_index - 1u);
+        constrain_cubic_segment(track, key_index - 1u, lane);
     }
-    constrain_cubic_segment(track, key_index);
-    return TimelineLightMotionValidateProgressTrack(
-        track, &document->timeline.range);
+    constrain_cubic_segment(track, key_index, lane);
+    return scene_editor_light_timeline_validate_lane_track(
+        document, lane, track);
 }

@@ -776,6 +776,7 @@ bool menu_state_reload_font(TTF_Font** font) {
 void menu_state_init(MenuRuntimeState* state) {
     if (!state) return;
     memset(state, 0, sizeof(*state));
+    RayTracing_FolderPicker_RequestInit(&state->folderPickerRequest);
     state->activeView = MENU_VIEW_MAIN;
     state->statusColor = (SDL_Color){255, 255, 255, 255};
     state->rouletteSliderValue = 10;

@@ -80,6 +80,30 @@ Last updated: 2026-08-02
   - `src/app/animation.c` (`main()` delegates through `ray_tracing_app_main(...)`)
   - wrapper shell: `include/ray_tracing/ray_tracing_app_main.h`, `src/app/ray_tracing_app_main.c`
 
+## Desktop Folder And File Picker Contract
+
+- Desktop picker requests use an explicit begin/poll/cancel lifecycle. Menu and
+  editor render loops continue polling SDL events and drawing their heartbeat
+  frames while the host chooser is open; no UI caller waits synchronously for
+  the chooser subprocess.
+- Picker defaults are always normalized before the macOS AppleScript request.
+  Relative configuration paths resolve against an absolute
+  `RAY_TRACING_RUNTIME_DIR` when available, otherwise the process working
+  directory. File paths and missing leaf components fall back to the nearest
+  existing absolute directory. If no safe directory can be resolved, the
+  chooser opens without a `default location` clause.
+- Selection is transactional: active settings or material bindings change only
+  after a terminal selected result. Pending, cancellation, host-tool
+  unavailability, subprocess failure, and output overflow preserve the existing
+  value. A second request is rejected while the owning UI surface already has
+  a chooser open, app input is held modal while repaint/window events continue,
+  and shutdown explicitly cancels its owned request. Authored-texture file
+  selection also revalidates the focused runtime object identity before apply;
+  stale or changed targets reject the completed selection without mutation.
+- The synchronous `RayTracing_FolderPicker_Select` and
+  `RayTracing_FilePicker_Select` compatibility functions remain for non-UI
+  tooling and tests. Desktop UI code must use the asynchronous lifecycle.
+
 ## Desktop HiDPI Default And Readback
 
 - Native `3D` render scale `0` means automatic HiDPI: use drawable pixels when

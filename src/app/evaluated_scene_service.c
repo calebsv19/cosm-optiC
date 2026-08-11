@@ -1,6 +1,7 @@
 #include "app/evaluated_scene_service.h"
 
 #include "animation/timeline_property_registry.h"
+#include "animation/timeline_frame_snapshot.h"
 #include "app/preview_camera_sample.h"
 #include "config/config_manager.h"
 #include "import/runtime_scene_bridge.h"
@@ -227,7 +228,11 @@ static bool ray_evaluated_light_travel_context(
     double frame_scale;
     double mapped_frame;
     double raw_progress;
-    double fps;
+    double whole_frame;
+    double subframe;
+    uint64_t subframe_numerator;
+    int64_t end_frame;
+    TimelineSample mapped_sample = {0, 0u, 1u};
     if (!document || !scene_context || !animation_context || !out_context ||
         !out_frame_scale || !TimelineRateIsValid(document->timeline.rate) ||
         !TimelineRangeIsValid(document->timeline.range)) {
@@ -254,23 +259,35 @@ static bool ray_evaluated_light_travel_context(
     mapped_frame =
         (double)document->timeline.range.start_frame +
         animation_context->normalized_t * timeline_span;
-    fps = (double)document->timeline.rate.frames_per_second_numerator /
-          (double)document->timeline.rate.frames_per_second_denominator;
-
-    *out_context = *scene_context;
-    out_context->rate = document->timeline.rate;
-    out_context->range = document->timeline.range;
-    out_context->absolute_frame_position = mapped_frame;
-    out_context->local_frame_position =
-        mapped_frame - (double)document->timeline.range.start_frame;
-    out_context->absolute_time_seconds = mapped_frame / fps;
-    out_context->local_time_seconds =
-        out_context->local_frame_position / fps;
-    out_context->duration_seconds =
-        (double)document->timeline.range.frame_count / fps;
-    out_context->normalized_t = animation_context->normalized_t;
+    if (!isfinite(mapped_frame) ||
+        TimelineRangeEndFrame(document->timeline.range, &end_frame) !=
+            TIMELINE_STATUS_OK ||
+        mapped_frame < (double)document->timeline.range.start_frame ||
+        mapped_frame > (double)end_frame) {
+        return false;
+    }
+    whole_frame = floor(mapped_frame);
+    subframe = mapped_frame - whole_frame;
+    mapped_sample.absolute_frame = (int64_t)whole_frame;
+    if (subframe > 0.0) {
+        subframe_numerator =
+            (uint64_t)llround(subframe * (double)UINT32_MAX);
+        if (subframe_numerator >= (uint64_t)UINT32_MAX) {
+            if (mapped_sample.absolute_frame >= end_frame) return false;
+            mapped_sample.absolute_frame += 1;
+        } else if (subframe_numerator > 0u) {
+            mapped_sample.subframe_numerator =
+                (uint32_t)subframe_numerator;
+            mapped_sample.subframe_denominator = UINT32_MAX;
+        }
+    }
+    if (TimelineEvaluationContextBuild(
+            document->timeline.rate, document->timeline.range,
+            mapped_sample, out_context) != TIMELINE_STATUS_OK) {
+        return false;
+    }
     *out_frame_scale = frame_scale;
-    return isfinite(mapped_frame) && isfinite(frame_scale);
+    return isfinite(frame_scale);
 }
 
 static bool ray_evaluated_build_authored(
@@ -287,7 +304,12 @@ static bool ray_evaluated_build_authored(
     TimelineEvaluationContext animation_context = {0};
     TimelineEvaluationContext light_context = {0};
     TimelineLightMotionSample motion = {0};
-    TimelineEvaluationResult provenance = {0};
+    TimelineFrameSnapshot frame_snapshot = {0};
+    TimelinePropertyRegistry property_registry = {0};
+    const TimelinePropertyEvaluationResult* progress_property = NULL;
+    const TimelinePropertyEvaluationResult* intensity_property = NULL;
+    TimelineEvaluationResult progress_provenance = {0};
+    TimelineEvaluationResult intensity_provenance = {0};
     RayEvaluatedSceneSnapshotInputs inputs = {0};
     RayEvaluatedObjectTransform object_transforms[
         RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY] = {{0}};
@@ -317,19 +339,45 @@ static bool ray_evaluated_build_authored(
                            "light travel context is invalid");
         return false;
     }
-    status = TimelineLightMotionEvaluate(progress_track,
-                                         &document->spatial_path,
-                                         &document->spatial_path_3d,
-                                         &light_context,
-                                         &motion);
+    status = TimelinePropertyRegistryInitFoundationDefaults(
+        &property_registry);
+    if (status == TIMELINE_STATUS_OK) {
+        status = TimelineFrameSnapshotBuild(
+            &property_registry, &document->timeline, &light_context,
+            &frame_snapshot);
+    }
     if (status != TIMELINE_STATUS_OK) {
-        ray_evaluated_fail(out_result, status, "light motion evaluation failed");
+        ray_evaluated_fail(
+            out_result, status, "authored property snapshot evaluation failed");
         return false;
     }
-    status = TimelineTrackEvaluate(
-        progress_track, &light_context, &provenance);
+    for (size_t i = 0u; i < frame_snapshot.property_count; ++i) {
+        const TimelinePropertyEvaluationResult* property =
+            &frame_snapshot.properties[i];
+        if (strcmp(property->track.property_id,
+                   "light/path_progress") == 0) {
+            progress_property = property;
+        } else if (strcmp(property->track.property_id,
+                          "light/intensity") == 0) {
+            intensity_property = property;
+        }
+    }
+    if (!progress_property) {
+        ray_evaluated_fail(
+            out_result, TIMELINE_STATUS_INVALID_TRACK,
+            "enabled path-progress property is missing");
+        return false;
+    }
+    progress_provenance = progress_property->track;
+    if (intensity_property) {
+        intensity_provenance = intensity_property->track;
+    }
+    status = TimelineLightMotionEvaluateResult(
+        progress_track, &progress_property->track,
+        &document->spatial_path, &document->spatial_path_3d,
+        &light_context, &motion);
     if (status != TIMELINE_STATUS_OK) {
-        ray_evaluated_fail(out_result, status, "property provenance evaluation failed");
+        ray_evaluated_fail(out_result, status, "light motion evaluation failed");
         return false;
     }
     if (use_animation_travel_for_light) {
@@ -337,8 +385,11 @@ static bool ray_evaluated_build_authored(
         if (motion.speed_valid) {
             motion.world_speed_per_second *= fabs(light_frame_scale);
         }
-        if (provenance.derivative_valid) {
-            provenance.derivative_per_frame *= light_frame_scale;
+        if (progress_provenance.derivative_valid) {
+            progress_provenance.derivative_per_frame *= light_frame_scale;
+        }
+        if (intensity_provenance.derivative_valid) {
+            intensity_provenance.derivative_per_frame *= light_frame_scale;
         }
     }
     runtime_scene_bridge_get_last_3d_light_seed_state(&light_state);
@@ -371,7 +422,14 @@ static bool ray_evaluated_build_authored(
     inputs.light.world_speed_per_second = motion.world_speed_per_second;
     inputs.light.global_path_t = motion.global_path_t;
     inputs.light.speed_valid = motion.speed_valid;
-    inputs.light.property_provenance = provenance;
+    inputs.light.path_progress_provenance = progress_provenance;
+    inputs.light.property_provenance = progress_provenance;
+    if (intensity_property) {
+        inputs.light.intensity =
+            intensity_property->track.value.as.scalar;
+        inputs.light.intensity_authored = true;
+        inputs.light.intensity_provenance = intensity_provenance;
+    }
     if (!ray_evaluated_capture_camera(
             animation_context.normalized_t, &inputs.camera)) {
         ray_evaluated_fail(out_result, TIMELINE_STATUS_INVALID_SNAPSHOT,
@@ -391,7 +449,7 @@ static bool ray_evaluated_build_authored(
     inputs.object_transform_count = object_transform_count;
     inputs.simulation.source = RAY_EVALUATED_SIMULATION_NONE;
     inputs.simulation.valid = false;
-    inputs.invalidation_domains = motion.invalidation_domains;
+    inputs.invalidation_domains = frame_snapshot.invalidation_domains;
     inputs.diagnostics = "immutable authored evaluated-scene snapshot";
     status = RayEvaluatedSceneSnapshotBuild(&inputs, &out_result->snapshot);
     if (status != TIMELINE_STATUS_OK) {

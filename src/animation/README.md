@@ -102,30 +102,42 @@ The arc-length table is intentionally rebuilt by this initial pure evaluator.
 Interactive playback should cache it by spatial-path revision rather than add
 cache ownership to the authored timeline layer.
 
-## LTA1-LTA5 light authoring slice
+## LTA1-LTA5 light authoring and P1 intensity slice
 
-Runtime-scene authoring now persists one versioned `light_timeline` document:
-rate/range, stable `light/<id>` target, embedded spatial path/depth, scalar
-progress keys, interpolation modes, and temporal handles. Legacy `light_path`
-data can seed the new document, while stale or duplicate target identities are
-refused. Save/reopen, editor preview, renderer preparation, and headless
-inspection all use the same parser and evaluator.
+Runtime-scene authoring persists one versioned `light_timeline` document.
+Schema v1 remains readable with its exact single `progress_track` meaning.
+Schema v2 writes a bounded typed `tracks` array with unique
+target/property ownership. The required `light/path_progress` track retains
+the spatial-motion contract; the optional `light/intensity` scalar track uses
+relative-intensity units and finite nonnegative values. A missing intensity
+track means the authored base-light intensity, recorded in the evaluated
+snapshot as `intensity_authored == false`; it never invents a zero animation.
+Legacy `light_path` data can still seed the document, while stale, duplicate,
+unknown, mismatched, or invalid track ownership is refused transactionally.
+Save/reopen, editor preview, renderer preparation, and headless inspection all
+use the same parser and evaluator.
 
 The scene editor keeps the timeline collapsed until a light proxy is selected
 and **Animate Light Position** is requested. The bottom center pane then exposes
-frame scrubbing, progress and normalized speed graphs, key insertion/deletion,
-key and cubic-handle dragging, explicit Step/Linear/Bezier selection, and
-bounded undo/redo. The viewport remains visible above the resizable pane.
+frame scrubbing, Motion and Intensity lanes, progress/intensity curves,
+normalized speed for Motion, key insertion/deletion, key and cubic-handle
+dragging, explicit Step/Linear/Bezier selection, and bounded undo/redo. The
+first Intensity key gesture lazily creates constant start/end keys at the
+selected light's base intensity as one property-scoped undo transaction; it
+does not alter Motion keys, the playhead, or target. The viewport remains
+visible above the resizable pane.
 Selection owns the stable `light/<id>` target and resolves its current array
 index only at use sites: reorder preserves the target, disappearance or
 duplicate IDs fail closed without retargeting, and selecting another light
 while the pane is open is refused until the pane closes.
 
-Frame preparation applies the evaluated sample to the per-frame light set after
-the prepared static scene is copied. This makes frame identity authoritative
-over legacy normalized-time sampling and preserves geometry/TLAS cache reuse for
-light-only motion. Headless summaries publish the sampled frame, target,
-progress, position, speed, and derivative validity for agent inspection.
+Frame preparation builds one property snapshot and applies its progress and
+optional intensity results to the per-frame light set after the prepared static
+scene is copied. Preview, final, and headless consumers therefore receive the
+same immutable evaluated snapshot, with separate progress and intensity
+provenance and one lighting invalidation domain. This keeps frame identity
+authoritative over legacy normalized-time sampling and preserves geometry/TLAS
+cache reuse for light-only animation.
 
 ## ESP5 evaluated object and simulation channels
 
@@ -148,8 +160,8 @@ snapshot.
 
 ## Next boundary
 
-Complete direct operator visual/usability review of stable-target behavior and
-the persisted cubic handles in the bottom authoring pane. Keep Preview
-transport and markers read-only and retain the one evaluated-scene service.
-After the P0 candidate is accepted and integrated, add multi-track persistence
-and `light/intensity` as the first additional authored light property.
+Complete direct operator review of the P1 Motion/Intensity lane switch,
+lazy-create undo/redo, intensity key and handle editing, save/reopen, and
+exact-frame Preview response. Keep Preview transport and markers read-only and
+retain the one evaluated-scene service. Color, radius, direction, integration,
+packaging, and release remain later separately authorized boundaries.

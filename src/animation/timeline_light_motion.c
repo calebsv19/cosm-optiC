@@ -183,12 +183,39 @@ TimelineStatus TimelineLightMotionEvaluate(
     const CameraPath3D* path3d,
     const TimelineEvaluationContext* context,
     TimelineLightMotionSample* out_sample) {
-    TimelineLightMotionSample sample;
-    TimelineLightPathArcTable arc_table;
     TimelineEvaluationResult progress_result;
     TimelineStatus status;
-    double frames_per_second = 0.0;
     if (!progress_track || !path || !context || !out_sample) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    status = TimelineLightMotionValidateProgressTrack(progress_track,
+                                                      &context->range);
+    if (status != TIMELINE_STATUS_OK) return status;
+    memset(&progress_result, 0, sizeof(progress_result));
+    status = TimelineTrackEvaluate(progress_track, context, &progress_result);
+    if (status != TIMELINE_STATUS_OK) return status;
+    return TimelineLightMotionEvaluateResult(
+        progress_track, &progress_result, path, path3d, context, out_sample);
+}
+
+TimelineStatus TimelineLightMotionEvaluateResult(
+    const TimelineTrack* progress_track,
+    const TimelineEvaluationResult* progress_result,
+    const Path* path,
+    const CameraPath3D* path3d,
+    const TimelineEvaluationContext* context,
+    TimelineLightMotionSample* out_sample) {
+    TimelineLightMotionSample sample;
+    TimelineLightPathArcTable arc_table;
+    TimelineStatus status;
+    double frames_per_second = 0.0;
+    if (!progress_track || !progress_result || !path || !context ||
+        !out_sample || !progress_result->valid ||
+        progress_result->status != TIMELINE_STATUS_OK ||
+        progress_result->value.type != TIMELINE_VALUE_SCALAR ||
+        strcmp(progress_result->track_id, progress_track->track_id) != 0 ||
+        strcmp(progress_result->target_id, progress_track->target_id) != 0 ||
+        strcmp(progress_result->property_id, progress_track->property_id) != 0) {
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
     status = TimelineLightMotionValidateProgressTrack(progress_track,
@@ -196,10 +223,7 @@ TimelineStatus TimelineLightMotionEvaluate(
     if (status != TIMELINE_STATUS_OK) return status;
     memset(&sample, 0, sizeof(sample));
     memset(&arc_table, 0, sizeof(arc_table));
-    memset(&progress_result, 0, sizeof(progress_result));
-    status = TimelineTrackEvaluate(progress_track, context, &progress_result);
-    if (status != TIMELINE_STATUS_OK) return status;
-    sample.progress = progress_result.value.as.scalar;
+    sample.progress = progress_result->value.as.scalar;
     if (!isfinite(sample.progress) || sample.progress < 0.0 ||
         sample.progress > 1.0) {
         return TIMELINE_STATUS_VALUE_OUT_OF_RANGE;
@@ -215,8 +239,8 @@ TimelineStatus TimelineLightMotionEvaluate(
         (double)context->rate.frames_per_second_denominator;
     sample.valid = true;
     sample.path_length_world = arc_table.total_length;
-    sample.progress_per_frame = progress_result.derivative_per_frame;
-    sample.speed_valid = progress_result.derivative_valid;
+    sample.progress_per_frame = progress_result->derivative_per_frame;
+    sample.speed_valid = progress_result->derivative_valid;
     if (sample.speed_valid) {
         sample.world_speed_per_second =
             fabs(sample.path_length_world * sample.progress_per_frame *

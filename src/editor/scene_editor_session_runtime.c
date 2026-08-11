@@ -4,6 +4,7 @@
 
 #include "app/scene_loop_diag.h"
 #include "app/scene_loop_policy.h"
+#include "editor/material_editor_authored_texture_binding.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_internal.h"
 #include "editor/scene_editor_light_timeline.h"
@@ -41,6 +42,16 @@ static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
 void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event) {
     SceneEditorInputRouterCallbacks callbacks = {0};
     if (!editor || !event) {
+        return;
+    }
+    if (MaterialEditorAuthoredTextureBindingPickerActive() &&
+        (event->type == SDL_KEYDOWN ||
+         event->type == SDL_KEYUP ||
+         event->type == SDL_TEXTINPUT ||
+         event->type == SDL_MOUSEBUTTONDOWN ||
+         event->type == SDL_MOUSEBUTTONUP ||
+         event->type == SDL_MOUSEMOTION ||
+         event->type == SDL_MOUSEWHEEL)) {
         return;
     }
     {
@@ -176,6 +187,9 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 break;
             }
             if (SceneEditorLightTimelineAdvancePlayback()) {
+                frame_dirty = true;
+            }
+            if (MaterialEditorAuthoredTextureBindingPoll()) {
                 frame_dirty = true;
             }
 

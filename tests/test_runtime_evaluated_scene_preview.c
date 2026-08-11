@@ -496,6 +496,7 @@ static int test_authored_light_timeline_does_not_retime_camera(void) {
     RayEvaluatedSceneServiceResult result = {0};
     RayEvaluatedSceneServiceResult held_result = {0};
     PreviewCameraSample expected_camera = {0};
+    TimelineTrack intensity_track = {0};
     TimelineTrack* progress_track = NULL;
     bool had_previous_document =
         RuntimeSceneLightTimelineGetLast(&previous_document);
@@ -518,6 +519,32 @@ static int test_authored_light_timeline_does_not_retime_camera(void) {
     progress_track->keys[1].value = TimelineValueScalar(1.0);
     progress_track->keys[1].interpolation_to_next =
         TIMELINE_INTERPOLATION_STEP;
+    assert_true("evaluated_clock_split_intensity_track_init",
+                TimelineTrackInit(
+                    &intensity_track, "key_intensity",
+                    progress_track->target_id, "light/intensity",
+                    TIMELINE_VALUE_SCALAR) == TIMELINE_STATUS_OK);
+    assert_true("evaluated_clock_split_intensity_track_unit",
+                TimelineTrackSetUnit(
+                    &intensity_track, TIMELINE_UNIT_RELATIVE_INTENSITY) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("evaluated_clock_split_intensity_start",
+                TimelineTrackAddKey(
+                    &intensity_track, 0, TimelineValueScalar(2.0),
+                    TIMELINE_INTERPOLATION_LINEAR) == TIMELINE_STATUS_OK);
+    assert_true("evaluated_clock_split_intensity_end",
+                TimelineTrackAddKey(
+                    &intensity_track, 603, TimelineValueScalar(6.0),
+                    TIMELINE_INTERPOLATION_STEP) == TIMELINE_STATUS_OK);
+    assert_true("evaluated_clock_split_intensity_add",
+                TimelineDocumentAddTrack(
+                    &light_document.timeline, &intensity_track) ==
+                    TIMELINE_STATUS_OK);
+    light_document.loaded_schema_version =
+        RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION;
+    light_document.has_intensity_track = true;
+    light_document.intensity_track_index =
+        light_document.timeline.track_count - 1u;
     assert_true("evaluated_clock_split_install_light_timeline",
                 RuntimeSceneLightTimelineSetLast(&light_document) ==
                     TIMELINE_STATUS_OK);
@@ -565,6 +592,16 @@ static int test_authored_light_timeline_does_not_retime_camera(void) {
     assert_close("evaluated_clock_split_light_progress_rate_uses_travel",
                  result.snapshot.light.progress_per_frame,
                  1.0 / 218.0, 1e-12);
+    assert_true("evaluated_clock_split_intensity_authored",
+                result.snapshot.light.intensity_authored &&
+                result.snapshot.light.intensity_provenance.valid);
+    assert_close("evaluated_clock_split_intensity_uses_travel",
+                 result.snapshot.light.intensity,
+                 2.0 + 4.0 * (62.0 / 218.0), 1e-12);
+    assert_close("evaluated_clock_split_intensity_rate_uses_travel",
+                 result.snapshot.light.intensity_provenance
+                     .derivative_per_frame,
+                 4.0 / 218.0, 1e-12);
     assert_true("evaluated_clock_split_post_travel_capture",
                 RayEvaluatedSceneCaptureSample(
                     (TimelineSample){300, 0u, 1u}, &held_result));
@@ -572,6 +609,12 @@ static int test_authored_light_timeline_does_not_retime_camera(void) {
                  held_result.snapshot.light.progress, 1.0, 1e-12);
     assert_close("evaluated_clock_split_post_travel_light_rate_zero",
                  held_result.snapshot.light.progress_per_frame, 0.0, 1e-12);
+    assert_close("evaluated_clock_split_post_travel_intensity_holds",
+                 held_result.snapshot.light.intensity, 6.0, 1e-12);
+    assert_close("evaluated_clock_split_post_travel_intensity_rate_zero",
+                 held_result.snapshot.light.intensity_provenance
+                     .derivative_per_frame,
+                 0.0, 1e-12);
 
     sceneSettings = saved_scene;
     animSettings = saved_animation;
