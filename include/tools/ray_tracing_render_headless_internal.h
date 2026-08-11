@@ -10,6 +10,7 @@
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_mesh_asset_loader.h"
+#include "import/compound_scene_ingestion_codec.h"
 #include "render/ray_tracing_mode_backend.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_caustic_photon_integration_3d.h"
@@ -22,6 +23,16 @@
 #include "render/runtime_volume_3d_debug.h"
 
 typedef struct RayEvaluatedSceneServiceResult RayEvaluatedSceneServiceResult;
+
+typedef struct RayTracingHeadlessCompoundIngestion {
+    bool active;
+    const RayTracingRuntimeMeshAssetSet* mesh_assets;
+    RayCompoundSceneIngestionFile file;
+    RayCompoundSceneAssemblyRequest assembly_request;
+    RayCompoundSceneIngestionResult result;
+    RayCompoundSceneVec3* source_positions[RAY_COMPOUND_SCENE_HANDOFF_BODY_COUNT];
+    RayCompoundSceneVec3* world_positions[RAY_COMPOUND_SCENE_HANDOFF_BODY_COUNT];
+} RayTracingHeadlessCompoundIngestion;
 
 #define RAY_TRACING_HEADLESS_OBJECT_AUDIT_MAX 64
 
@@ -259,6 +270,21 @@ typedef struct RayTracingHeadlessPreflight {
         object_audit[RAY_TRACING_HEADLESS_OBJECT_AUDIT_MAX];
     char diagnostics[1024];
 } RayTracingHeadlessPreflight;
+
+void ray_tracing_headless_compound_ingestion_init(
+    RayTracingHeadlessCompoundIngestion* ingestion);
+void ray_tracing_headless_compound_ingestion_free(
+    RayTracingHeadlessCompoundIngestion* ingestion);
+bool ray_tracing_headless_compound_ingestion_prepare(
+    const RayTracingAgentRenderRequest* request,
+    const RayEvaluatedSceneSnapshot* snapshot,
+    RayTracingHeadlessCompoundIngestion* ingestion,
+    char* diagnostics,
+    size_t diagnostics_size);
+bool ray_tracing_headless_compound_ingestion_mutate(RuntimeScene3D* scene,
+                                                     void* user_data,
+                                                     char* diagnostics,
+                                                     size_t diagnostics_size);
 
 typedef struct RayTracingTemporalProgressContext {
     const RayTracingAgentRenderRequest *request;

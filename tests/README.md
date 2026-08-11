@@ -936,6 +936,87 @@ intensity parity. Its fixed-geometry retained-preview sequence holds exposure
 and surface/light distance constant while confirming that measured pixel
 response rises with evaluated intensity.
 
+`make test-ray-tracing-compound-scene-handoff-import` validates the app-local
+S9-B reader against the frozen Ball Bounce S8 packet. It freezes the packet and
+exact replay digests, source identities, 721-frame range, and RayTracing-owned
+object/mesh binding policy while rejecting tampering, trailing bytes,
+noncanonical hex, missing files, out-of-range ticks, provenance drift,
+duplicate object bindings, interpolation, and non-identity simulation-space
+placement. The `-sanitize` companion runs the same contract under ASan/UBSan.
+
+`make test-ray-tracing-compound-scene-static-room-import` proves S9-H2. It
+strictly imports Ball Bounce's separately digested six-surface H1 sidecar,
+joins its fixture/seed/timestep provenance to the S8 packet, and applies one
+frozen right-handed Y-up-to-Z-up basis to all 721 two-body frames and every
+surface frame. It pins basis, mapped-room, and full mapped-stream digests and
+rejects envelope tampering, provenance drift, and altered bases without
+mutating output. The `-sanitize` companion runs the same contract under
+ASan/UBSan; neither target constructs or renders walls.
+
+`make test-ray-tracing-compound-scene-room-geometry` proves S9-H3's exact
+six-plane renderer projection. It requires every plane origin, frame, extent,
+producer body/contact/surface digest, and the fixed five-visible policy to
+match H2; mapped `z_max` is the camera opening. The `-sanitize` companion runs
+under ASan/UBSan. `test-ray-tracing-compound-scene-s9h3-emitter` adds both
+mapped source meshes at an exact tick and freezes deterministic JSON, while
+`test-ray-tracing-compound-scene-s9h3-visual-proof` renders ticks
+`0/240/480/720`, verifies every source vertex remains inside all six planes,
+requires both bodies and five visible planes in the render audit, repeats each
+render byte-identically, and produces a local-only contact sheet.
+
+`make test-ray-tracing-compound-scene-evaluated-scene` proves S9-C against the
+same frozen packet. Exact tick 240 transactionally replaces two pre-existing
+mapped object records in a detached schema-v3 snapshot, preserves packet
+quaternions and provenance, verifies the Euler compatibility matrices, and
+keeps camera, light, scene identity, object membership, and an unrelated
+static transform byte-identical. Rejections leave output unchanged. The
+`-sanitize` companion runs the contract under ASan/UBSan; neither target loads
+mesh bytes, mutates runtime geometry, rebuilds acceleration, or renders.
+
+`make test-ray-tracing-compound-scene-detached-geometry` proves S9-D against
+the same packet and the S9-C evaluated snapshot. For both renderer bindings at
+tick 240 it transactionally composes source-center/principal-frame mapping and
+the exact quaternion into caller-owned detached world positions and bounds.
+The source positions and evaluated snapshot remain unchanged, provenance is
+retained, and rejection paths do not modify output storage. A renderer-state
+sentinel proves topology, material, camera, light, sampling, and final-image
+ownership remain outside the adapter; runtime scene mutation, acceleration
+rebuild, mesh loading, and image rendering are absent. The `-sanitize`
+companion runs the same contract under ASan/UBSan.
+
+`make test-ray-tracing-compound-scene-s9e-emitter` loads the exact frozen C2
+runtime source mesh (48 crease-aware render vertices and 28 source triangles),
+applies S9-C/S9-D at ticks `0/240/480/720`, and proves byte-identical repeat
+output plus source SHA provenance. Its `-sanitize` companion runs the emitter
+under ASan/UBSan. The separate
+`make test-ray-tracing-compound-scene-s9e-visual-proof` target renders the four
+derived scenes through the native headless path with fixed RayTracing-owned
+static set dressing, material, camera, light, sampling, and final-image policy.
+It writes a local-only contact sheet/report and never loads collision hulls,
+changes saved-scene pointers, submits remote work, packages, or promotes.
+
+`make test-ray-tracing-compound-scene-assembly` proves S9-F's typed in-memory
+assembly at exact tick 480. It loads both frozen source meshes through
+`core_mesh_asset`, requires two simulated records plus three explicit static
+records, preserves full dynamic provenance and static geometry/material
+identity, freezes deterministic assembly/geometry digests, and proves that a
+late second-body capacity error or invalid/duplicate membership changes neither
+result nor either caller buffer. The `-sanitize` companion runs the same
+contract under ASan/UBSan. `test-ray-tracing-compound-scene-s9f-emitter`
+proves byte-identical typed emission; the separate `-s9f-visual-proof` target
+renders one local tick-480 frame and requires 28 C2 plus 20 C1 source triangles
+with nonzero primary hits. These targets do not add default request or worker
+integration.
+
+`make test-ray-tracing-compound-scene-assembly-codec` proves S9-G's canonical
+file write/read, byte-identical repeat output, tamper rejection, and exact
+metadata replay for ticks `0/240/480/720`. The archive contains external
+runtime-mesh path/SHA references rather than mesh bytes. Three static planes
+are explicitly renderer set dressing, their collision-surface digests are
+zero, and their stored minimum clearances are recomputed from every body AABB;
+an intersecting floor rejects. The `-sanitize` companion runs under
+ASan/UBSan.
+
 `runtime_evaluated_scene_preview` proves immutable evaluated-scene capture,
 authored-frame Preview/final light parity, authoring-global non-mutation,
 explicit simulation identity, and the unequal-path equal-time versus

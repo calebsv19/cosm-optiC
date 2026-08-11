@@ -94,6 +94,30 @@ Rendering pipeline and ray-tracing engine.
 - `runtime_environment_3d.c` – Native runtime `3D` environment-light policy. It resolves legacy ambient/top-fill/background brightness settings plus authored `sky` / `warm_sky` / `neutral` presets into explicit ambient surface fill, background miss brightness/color, and summary-ready contribution flags without moving renderer policy into shared core.
 - `runtime_scene_3d_samples.c` – Samples canonical authored light and camera state into `RuntimeLight3D` / `RuntimeCamera3D` records at a normalized timeline parameter. This keeps the native render lane independent from preview-only sampling helpers.
 - `runtime_scene_3d_builder.c` – Compiles retained bridge primitive seeds into native runtime primitives and deterministic triangle output for the bounded `plane` + `rect_prism` slice, then attaches authored runtime light sets and camera samples for the same evaluation `t`. Generated plane triangles are marked `twoSided` for zero-thickness wall/floor authoring, while rect prisms and imported/runtime mesh triangles retain single-sided metadata. This is the render-owned geometry + view/light build path for runtime scenes.
+- `compound_scene_detached_geometry.c` – S9-D’s transactional, render-owned source-position adapter. It composes `transpose(principal_to_source) * (source - source_center)` with the exact evaluated quaternion/translation and frozen simulation-to-world mapping, retaining packet/binding/tick provenance in a detached result. It does not load mesh bytes, change topology/materials, mutate `RuntimeScene3D`, rebuild BLAS/TLAS, or render.
+- `compound_scene_assembly.c` – S9-F's bounded RayTracing-owned scene-membership layer. It requires both packet bodies exactly once, validates unique simulated/static object identity, retains source/binding/tick and per-body geometry digests, and commits both caller-owned transformed-position buffers only after every body and static member succeeds. Static records intentionally carry renderer geometry/material identity but no solver provenance. This remains an app-local in-memory result with no default request, saved-scene, worker, or render-policy authority.
+- `compound_scene_room_geometry.c` – S9-H3 renderer-owned plane records
+  derived exactly from the H2 mapped room. All six roles retain producer body,
+  contact, and surface provenance; five are visible and mapped `z_max` is the
+  explicit camera opening. It owns no simulation response or runtime mutation.
+- S9-G serializes only the assembly metadata through the adjacent import codec.
+  Static planes are tagged `renderer_set_dressing` or
+  `simulation_collision_surface`; the latter requires a nonzero producer
+  surface digest. The frozen S8 packet exports no wall planes, so its current
+  archive truthfully carries zero simulated collision surfaces.
+- S9-E local visual proof resolves the exact authored C2 source mesh through
+  `mesh_asset_runtime_v1`, applies ticks `0/240/480/720` through S9-C/S9-D,
+  and feeds four derived scenes to the existing native headless renderer.
+  Material, static set dressing, camera, light, sampling, acceleration route,
+  and final images remain RayTracing-owned. Collision hulls are never loaded
+  or rendered, and runtime defaults are unchanged.
+- S9-F local acceptance additionally loads the exact C1 L-bracket source mesh,
+  assembles C2 and C1 at packet tick 480 with three explicit static members,
+  and renders one opt-in native frame. Both source topologies receive nonzero
+  primary hits; collision proxies and default/worker integration remain absent.
+- The corrected diagnostic floor replays S9-G's canonical set-dressing plane,
+  placed 0.25 m below the minimum source-mesh bound across ticks
+  `0/240/480/720`; it no longer intersects the tick-480 C1 source mesh.
 - `surface_mesh.c` – Tessellates every scene object perimeter into short `SurfaceSegment`s with outward normals plus an index range per object, and now simultaneously emits a per-object `TriangleMesh` derived from the same `SegmentPath`. The triangle view is staged for triangle-accurate visibility while the segment list still powers the indirect heuristic.
 - `irradiance_cache.c` – Samples each object perimeter (arc-length parameterised for polygons, angle-based for circles), stores the world-space hit point + normal, then fills eight hemisphere bins. Each bin integrates direct-light energy along jittered rays in that direction (by sampling the prior frame’s energy buffer), but now stops at the first uniform-grid occluder and applies an exponential distance decay before recording the mean/variance plus a one-shot occlusion distance. The camera integrator queries the closest cache entry per hit when estimating indirect energy so specular-ish highlights stay stable even when few feeler rays make it to a surfel.
 - `uniform_grid.c` – Builds the reusable grid accelerator backed by per-cell object lists plus the new triangle buckets. Bounds expand around the current scene, every object splats its AABB into the object cells, and every triangle face splats into the triangle cells so ray traversal can test triangle hits first and fall back to analytic circles/polygons when needed. Every ray (camera feelers, light shadow checks, cache occlusion probes) shares the same `UniformGridTraceRay` so hit filtering and epsilon offsets stay identical between subsystems.

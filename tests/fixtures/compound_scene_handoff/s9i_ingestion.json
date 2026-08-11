@@ -1,0 +1,18 @@
+{
+  "schema":"ray_tracing_compound_scene_ingestion_v1",
+  "handoff_path":"compound_scene_renderer_handoff_v1.txt",
+  "room_path":"compound_scene_static_room_v1.txt",
+  "tick":480,
+  "bodies":[
+    {"body_id":4101,"object_id":"sim_body_c2","mesh_asset_id":"mesh_c2_u_channel"},
+    {"body_id":4102,"object_id":"sim_body_c1","mesh_asset_id":"mesh_c1_l_bracket"}
+  ],
+  "room":[
+    {"object_id":"sim_room_0","material_id":"mat_room_0"},
+    {"object_id":"sim_room_1","material_id":"mat_room_1"},
+    {"object_id":"sim_room_2","material_id":"mat_room_2"},
+    {"object_id":"sim_room_3","material_id":"mat_room_3"},
+    {"object_id":"sim_room_4","material_id":"mat_room_4"},
+    {"material_id":"mat_room_5"}
+  ]
+}

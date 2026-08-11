@@ -301,6 +301,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
 	$(BUILD_DIR)/tools/make_video.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_caustic_photon_probe.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_compound_ingestion.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_caustic_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_dynamic_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_frame_dataflow_summary.o \
@@ -324,6 +325,17 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_trace_cost_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_usage.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_volume_water_selection.o \
+	$(BUILD_DIR)/import/compound_scene_handoff_import.o \
+	$(BUILD_DIR)/import/compound_scene_binding_manifest.o \
+	$(BUILD_DIR)/import/compound_scene_evaluated_scene.o \
+	$(BUILD_DIR)/import/compound_scene_static_room_import.o \
+	$(BUILD_DIR)/import/compound_scene_room_basis.o \
+	$(BUILD_DIR)/import/compound_scene_ingestion.o \
+	$(BUILD_DIR)/import/compound_scene_ingestion_codec.o \
+	$(BUILD_DIR)/render/compound_scene_detached_geometry.o \
+	$(BUILD_DIR)/render/compound_scene_assembly.o \
+	$(BUILD_DIR)/render/compound_scene_room_geometry.o \
+	$(BUILD_DIR)/render/compound_scene_runtime_apply.o \
 	$(NATIVE3D_AUDIT_DEPS)
 
 RAY_TRACING_JOB_RUNNER_DEPS = \

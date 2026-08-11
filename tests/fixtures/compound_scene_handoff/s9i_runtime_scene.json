@@ -1,0 +1,20 @@
+{
+  "schema_family":"codework_scene", "schema_variant":"scene_runtime_v1", "schema_version":1,
+  "scene_id":"compound_scene_s9i_runtime_fixture", "unit_system":"meters", "world_scale":1.0,
+  "space_mode_default":"3d",
+  "objects":[
+    {"object_id":"sim_body_c2","object_type":"mesh_asset_instance","transform":{"position":{"x":0,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1}},"geometry_ref":{"kind":"mesh_asset","id":"mesh_c2_u_channel"},"material_ref":{"id":"mat_c2"}},
+    {"object_id":"sim_body_c1","object_type":"mesh_asset_instance","transform":{"position":{"x":0,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0},"scale":{"x":1,"y":1,"z":1}},"geometry_ref":{"kind":"mesh_asset","id":"mesh_c1_l_bracket"},"material_ref":{"id":"mat_c1"}},
+    {"object_id":"sim_room_0","object_type":"plane","primitive":{"kind":"plane","width":1,"height":1,"frame":{"origin":{"x":0,"y":0,"z":0},"axis_u":{"x":1,"y":0,"z":0},"axis_v":{"x":0,"y":1,"z":0},"normal":{"x":0,"y":0,"z":1}}},"material_ref":{"id":"mat_room_0"}},
+    {"object_id":"sim_room_1","object_type":"plane","primitive":{"kind":"plane","width":1,"height":1,"frame":{"origin":{"x":0,"y":0,"z":0},"axis_u":{"x":1,"y":0,"z":0},"axis_v":{"x":0,"y":1,"z":0},"normal":{"x":0,"y":0,"z":1}}},"material_ref":{"id":"mat_room_1"}},
+    {"object_id":"sim_room_2","object_type":"plane","primitive":{"kind":"plane","width":1,"height":1,"frame":{"origin":{"x":0,"y":0,"z":0},"axis_u":{"x":1,"y":0,"z":0},"axis_v":{"x":0,"y":1,"z":0},"normal":{"x":0,"y":0,"z":1}}},"material_ref":{"id":"mat_room_2"}},
+    {"object_id":"sim_room_3","object_type":"plane","primitive":{"kind":"plane","width":1,"height":1,"frame":{"origin":{"x":0,"y":0,"z":0},"axis_u":{"x":1,"y":0,"z":0},"axis_v":{"x":0,"y":1,"z":0},"normal":{"x":0,"y":0,"z":1}}},"material_ref":{"id":"mat_room_3"}},
+    {"object_id":"sim_room_4","object_type":"plane","primitive":{"kind":"plane","width":1,"height":1,"frame":{"origin":{"x":0,"y":0,"z":0},"axis_u":{"x":1,"y":0,"z":0},"axis_v":{"x":0,"y":1,"z":0},"normal":{"x":0,"y":0,"z":1}}},"material_ref":{"id":"mat_room_4"}}
+  ],
+  "assets":{"mesh_assets":[
+    {"asset_id":"mesh_c2_u_channel","path":"assets/mesh_assets/mesh_c2_u_channel.runtime.json"},
+    {"asset_id":"mesh_c1_l_bracket","path":"assets/mesh_assets/mesh_c1_l_bracket.runtime.json"}
+  ]},
+  "materials":[{"material_id":"mat_c2","kind":"lambert"},{"material_id":"mat_c1","kind":"lambert"},{"material_id":"mat_room_0","kind":"lambert"},{"material_id":"mat_room_1","kind":"lambert"},{"material_id":"mat_room_2","kind":"lambert"},{"material_id":"mat_room_3","kind":"lambert"},{"material_id":"mat_room_4","kind":"lambert"},{"material_id":"mat_room_5","kind":"lambert"}],
+  "lights":[], "cameras":[], "constraints":[], "extensions":{}
+}

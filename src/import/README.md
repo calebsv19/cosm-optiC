@@ -25,6 +25,34 @@ not own native `3D` shading policy or worker orchestration policy.
   runtime contract; callers must not reintroduce a stricter duplicate parser.
 - pack/manifest helpers: local parsing and preflight for scene bundles that
   feed headless or runtime render paths.
+- `compound_scene_handoff_import.c` and
+  `compound_scene_binding_manifest.c`: strict app-local ingestion of the
+  frozen Ball Bounce transform packet and validation of RayTracing-owned
+  object/mesh bindings.
+- `compound_scene_evaluated_scene.c`: transactional exact-tick replacement of
+  already-present mapped object transforms in a detached evaluated snapshot.
+  It preserves exact quaternion and packet provenance plus an Euler
+  compatibility view. It does not apply transforms to runtime geometry; the
+  render-owned detached application lives in
+  `src/render/compound_scene_detached_geometry.c`.
+- `compound_scene_assembly_codec.c`: canonical S9-G file-backed metadata for
+  up to 16 exact assembly ticks. It binds external source-mesh path/SHA
+  references, body bounds and geometry digests, static-plane authority, and
+  measured clearance. Exact replay returns metadata only; it never resolves
+  mesh bytes or acquires camera, light, material, sampling, worker, or image
+  ownership.
+- `compound_scene_static_room_import.c`: strict independent reader for the
+  Ball-owned six-surface room sidecar. `compound_scene_room_basis.c` owns the
+  single provenance join and frozen right-handed `(x,y,z) -> (x,-z,y)` map
+  used for every packet body and collision-surface frame. These modules expose
+  mapped metadata only; H3 remains responsible for renderer-owned plane
+  assembly and visual plane-match proof.
+- `compound_scene_ingestion.c`: I-1's typed, app-local descriptor and atomic
+  resolver. It binds the frozen handoff and room to existing renderer object/
+  mesh identities, applies the registered basis to final owned geometry, and
+  returns a separately digested derived result without mutating its base scene.
+  It intentionally has no request-file codec or normal render hook; those are
+  I-2 decisions.
 
 ## Boundaries
 

@@ -28,6 +28,10 @@
 #define RUNTIME_NATIVE_3D_TEMPORAL_BUDGET_BUCKET_COUNT 4
 
 typedef struct RuntimeNative3DFeatureBuffer RuntimeNative3DFeatureBuffer;
+typedef bool (*RuntimeNative3DSceneMutationFn)(RuntimeScene3D* scene,
+                                               void* user_data,
+                                               char* diagnostics,
+                                               size_t diagnostics_size);
 
 typedef struct {
     int hitPixelCount;
@@ -420,6 +424,14 @@ bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
     int height,
     const RayEvaluatedSceneSnapshot* evaluated_scene,
     const RuntimeNative3DSamplingContext* sampling);
+bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
+    RuntimeNative3DPreparedFrame* out_frame,
+    int width,
+    int height,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeNative3DSceneMutationFn mutation,
+    void* mutation_user_data);
 void RuntimeNative3DPreparedFrame_Free(RuntimeNative3DPreparedFrame* frame);
 bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
                                          RayTracing3DIntegratorId integrator_id,
@@ -592,6 +604,18 @@ bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudge
     void* tile_progress_user_data,
     const RuntimeNative3DResourceBudget* resource_budget,
     const struct RuntimeNative3DTileSchedulerControl* scheduler_control,
+    RuntimeNative3DRenderStats* out_stats);
+bool RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedSceneAndMutation(
+    uint8_t* pixel_buffer, RayTracing3DIntegratorId integrator_id, int width,
+    int height, const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling, int temporal_frames,
+    RuntimeNative3DTemporalProgressCallback progress_callback,
+    void* progress_user_data,
+    RuntimeNative3DTemporalTileProgressCallback tile_progress_callback,
+    void* tile_progress_user_data,
+    const RuntimeNative3DResourceBudget* resource_budget,
+    const struct RuntimeNative3DTileSchedulerControl* scheduler_control,
+    RuntimeNative3DSceneMutationFn mutation, void* mutation_user_data,
     RuntimeNative3DRenderStats* out_stats);
 uint8_t RuntimeNative3DResolveEnvironmentByte(void);
 void RuntimeNative3DFillPixelBufferEnvironment(uint8_t* pixel_buffer, size_t pixel_count);

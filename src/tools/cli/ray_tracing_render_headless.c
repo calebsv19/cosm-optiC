@@ -160,6 +160,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                          const char *job_id,
                          const char *request_path) {
     RuntimeNative3DPreparedFrame frame = {0};
+    RayTracingHeadlessCompoundIngestion compound_ingestion;
     RayEvaluatedSceneServiceResult evaluated_scene = {0};
     TimelineSample evaluated_sample = {
         .absolute_frame = request ? request->start_frame : 0,
@@ -172,6 +173,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     char progress_diag[256] = {0};
 
     if (!request || !out_preflight) return 2;
+    ray_tracing_headless_compound_ingestion_init(&compound_ingestion);
     (void)clock_gettime(CLOCK_MONOTONIC, &preflight_started_at);
     ray_tracing_runtime_mesh_assets_timing_reset();
     RuntimeScene3DBuilder_TimingReset();
@@ -500,13 +502,22 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                  request->start_frame);
         preflight.prepared_frame = false;
     } else {
+        if (!ray_tracing_headless_compound_ingestion_prepare(
+                request, &evaluated_scene.snapshot, &compound_ingestion,
+                preflight.diagnostics, sizeof(preflight.diagnostics))) {
+            preflight.prepared_frame = false;
+        } else {
         preflight.prepared_frame =
-            RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+            RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
                 &frame,
                 request->width,
                 request->height,
                 &evaluated_scene.snapshot,
-                NULL);
+                NULL,
+                compound_ingestion.active
+                    ? ray_tracing_headless_compound_ingestion_mutate : NULL,
+                compound_ingestion.active ? &compound_ingestion : NULL);
+        }
     }
     preflight.native_prepare_frame_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     RuntimeScene3DBuilder_TimingSnapshot(&preflight.scene_builder_timing_stats);
@@ -742,6 +753,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   request_path,
                                   -1);
     preflight.total_run_ms = ray_tracing_elapsed_ms_since(&preflight_started_at);
+    ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
     *out_preflight = preflight;
     return 0;
 }
@@ -794,6 +806,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             .subframe_denominator = 1
         };
         RuntimeNative3DRenderStats stats = {0};
+        RayTracingHeadlessCompoundIngestion compound_ingestion;
         RayTracingTemporalProgressContext temporal_progress = {0};
         RayTracingTemporalCheckpointSession checkpoint_session;
         RuntimeNative3DTileSchedulerCheckpointControl checkpoint_callbacks = {0};
@@ -809,6 +822,8 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         };
         const int frame_index = request->start_frame + i;
         int frame_status = 0;
+
+        ray_tracing_headless_compound_ingestion_init(&compound_ingestion);
 
         if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
             snprintf(preflight.diagnostics,
@@ -830,6 +845,14 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             *out_preflight = preflight;
             return 13;
         }
+        if (!ray_tracing_headless_compound_ingestion_prepare(
+                request, &evaluated_scene.snapshot, &compound_ingestion,
+                preflight.diagnostics, sizeof(preflight.diagnostics))) {
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
+            free(pixels);
+            *out_preflight = preflight;
+            return 6;
+        }
         ray_tracing_headless_note_evaluated_scene(
             &preflight, &evaluated_scene.snapshot, i == 0);
 
@@ -842,6 +865,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                                                  job_id,
                                                                  request_path);
         if (frame_status != 0) {
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
             free(pixels);
             *out_preflight = preflight;
             return frame_status;
@@ -880,6 +904,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                      sizeof(preflight.diagnostics),
                      "checkpoint setup failed: %.900s",
                      checkpoint_session.diagnostics);
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
             free(pixels);
             *out_preflight = preflight;
             return 13;
@@ -899,7 +924,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         }
 
         (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedScene(
+        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedSceneAndMutation(
                 pixels,
                 preflight.route.integratorMode3D,
                 request->width,
@@ -913,6 +938,9 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                 &temporal_progress,
                 active_resource_budget,
                 active_scheduler_control,
+                compound_ingestion.active
+                    ? ray_tracing_headless_compound_ingestion_mutate : NULL,
+                compound_ingestion.active ? &compound_ingestion : NULL,
                 &stats)) {
             frame_status = ray_tracing_headless_note_render_frame_failed(request,
                                                                         &preflight,
@@ -923,6 +951,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                                                         job_id,
                                                                         request_path);
             free(pixels);
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
             *out_preflight = preflight;
             return frame_status;
         }
@@ -968,6 +997,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                                                               job_status_path,
                                                                               job_id,
                                                                               request_path);
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
             free(pixels);
             *out_preflight = preflight;
             return frame_status;
@@ -985,6 +1015,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                                                                         job_id,
                                                                         request_path);
         if (frame_status != 0) {
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
             free(pixels);
             *out_preflight = preflight;
             return frame_status;
@@ -994,10 +1025,12 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             snprintf(preflight.diagnostics,
                      sizeof(preflight.diagnostics),
                      "failed to write photon surface diagnostics");
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
             free(pixels);
             *out_preflight = preflight;
             return 12;
         }
+        ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
     }
 
     free(pixels);

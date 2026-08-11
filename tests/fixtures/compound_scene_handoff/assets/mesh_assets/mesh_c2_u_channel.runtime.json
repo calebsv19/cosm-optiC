@@ -1,0 +1,32 @@
+{
+	"schema_family":"codework_geometry",
+	"schema_variant":"mesh_asset_runtime_v1",
+	"schema_version":1,
+	"asset_id":"mesh_c2_u_channel",
+	"source_asset_id":"c2_u_channel_v1",
+	"asset_type":"solid_mesh",
+	"local_bounds":{"min":{"x":-1.2,"y":-1,"z":-0.35},"max":{"x":1.2,"y":1.2,"z":0.35}},
+	"topology_flags":{"closed_volume":true,"manifold_expected":true},
+	"mesh":{"vertex_count":48,"triangle_count":28,"vertices":[
+		{"x":0.8,"y":1.2,"z":-0.35},{"x":1.2,"y":1.2,"z":-0.35},{"x":1.2,"y":-1,"z":-0.35},{"x":1.2,"y":-1,"z":0.35},{"x":1.2,"y":1.2,"z":0.35},{"x":0.8,"y":1.2,"z":0.35},{"x":0.8,"y":-0.6,"z":-0.35},{"x":0.8,"y":-0.6,"z":0.35},
+		{"x":-1.2,"y":-1,"z":-0.35},{"x":-1.2,"y":-1,"z":0.35},{"x":-0.8,"y":-0.6,"z":-0.35},{"x":-0.8,"y":-0.6,"z":0.35},{"x":-1.2,"y":1.2,"z":-0.35},{"x":-1.2,"y":1.2,"z":0.35},{"x":-0.8,"y":1.2,"z":-0.35},{"x":-0.8,"y":1.2,"z":0.35},
+		{"x":-1.2,"y":-1,"z":-0.35},{"x":1.2,"y":-1,"z":-0.35},{"x":1.2,"y":-1,"z":0.35},{"x":-1.2,"y":-1,"z":0.35},{"x":1.2,"y":-1,"z":-0.35},{"x":1.2,"y":1.2,"z":-0.35},{"x":1.2,"y":1.2,"z":0.35},{"x":1.2,"y":-1,"z":0.35},
+		{"x":1.2,"y":1.2,"z":-0.35},{"x":0.8,"y":1.2,"z":-0.35},{"x":0.8,"y":1.2,"z":0.35},{"x":1.2,"y":1.2,"z":0.35},{"x":0.8,"y":1.2,"z":-0.35},{"x":0.8,"y":-0.6,"z":-0.35},{"x":0.8,"y":-0.6,"z":0.35},{"x":0.8,"y":1.2,"z":0.35},
+		{"x":0.8,"y":-0.6,"z":-0.35},{"x":-0.8,"y":-0.6,"z":-0.35},{"x":-0.8,"y":-0.6,"z":0.35},{"x":0.8,"y":-0.6,"z":0.35},{"x":-0.8,"y":-0.6,"z":-0.35},{"x":-0.8,"y":1.2,"z":-0.35},{"x":-0.8,"y":1.2,"z":0.35},{"x":-0.8,"y":-0.6,"z":0.35},
+		{"x":-0.8,"y":1.2,"z":-0.35},{"x":-1.2,"y":1.2,"z":-0.35},{"x":-1.2,"y":1.2,"z":0.35},{"x":-0.8,"y":1.2,"z":0.35},{"x":-1.2,"y":1.2,"z":-0.35},{"x":-1.2,"y":-1,"z":-0.35},{"x":-1.2,"y":-1,"z":0.35},{"x":-1.2,"y":1.2,"z":0.35}
+	],"normal_count":48,"normal_provenance":"generated_crease_aware","normals":[
+		{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":1},{"x":0,"y":0,"z":1},{"x":0,"y":0,"z":1},{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":1},
+		{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":1},{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":1},{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":1},{"x":0,"y":0,"z":-1},{"x":0,"y":0,"z":1},
+		{"x":0,"y":-1,"z":0},{"x":0,"y":-1,"z":0},{"x":0,"y":-1,"z":0},{"x":0,"y":-1,"z":0},{"x":1,"y":0,"z":0},{"x":1,"y":0,"z":0},{"x":1,"y":0,"z":0},{"x":1,"y":0,"z":0},
+		{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":-1,"y":0,"z":0},{"x":-1,"y":0,"z":0},{"x":-1,"y":0,"z":0},{"x":-1,"y":0,"z":0},
+		{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":1,"y":0,"z":0},{"x":1,"y":0,"z":0},{"x":1,"y":0,"z":0},{"x":1,"y":0,"z":0},
+		{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":0,"y":1,"z":0},{"x":-1,"y":0,"z":0},{"x":-1,"y":0,"z":0},{"x":-1,"y":0,"z":0},{"x":-1,"y":0,"z":0}
+	],"triangles":[
+		{"a":0,"b":1,"c":2,"surface_group_id":"authored_surface"},{"a":3,"b":4,"c":5,"surface_group_id":"authored_surface"},{"a":6,"b":0,"c":2,"surface_group_id":"authored_surface"},{"a":3,"b":5,"c":7,"surface_group_id":"authored_surface"},{"a":6,"b":2,"c":8,"surface_group_id":"authored_surface"},{"a":9,"b":3,"c":7,"surface_group_id":"authored_surface"},{"a":10,"b":6,"c":8,"surface_group_id":"authored_surface"},{"a":9,"b":7,"c":11,"surface_group_id":"authored_surface"},
+		{"a":10,"b":8,"c":12,"surface_group_id":"authored_surface"},{"a":13,"b":9,"c":11,"surface_group_id":"authored_surface"},{"a":12,"b":14,"c":10,"surface_group_id":"authored_surface"},{"a":11,"b":15,"c":13,"surface_group_id":"authored_surface"},{"a":16,"b":17,"c":18,"surface_group_id":"authored_surface"},{"a":16,"b":18,"c":19,"surface_group_id":"authored_surface"},{"a":20,"b":21,"c":22,"surface_group_id":"authored_surface"},{"a":20,"b":22,"c":23,"surface_group_id":"authored_surface"},
+		{"a":24,"b":25,"c":26,"surface_group_id":"authored_surface"},{"a":24,"b":26,"c":27,"surface_group_id":"authored_surface"},{"a":28,"b":29,"c":30,"surface_group_id":"authored_surface"},{"a":28,"b":30,"c":31,"surface_group_id":"authored_surface"},{"a":32,"b":33,"c":34,"surface_group_id":"authored_surface"},{"a":32,"b":34,"c":35,"surface_group_id":"authored_surface"},{"a":36,"b":37,"c":38,"surface_group_id":"authored_surface"},{"a":36,"b":38,"c":39,"surface_group_id":"authored_surface"},
+		{"a":40,"b":41,"c":42,"surface_group_id":"authored_surface"},{"a":40,"b":42,"c":43,"surface_group_id":"authored_surface"},{"a":44,"b":45,"c":46,"surface_group_id":"authored_surface"},{"a":44,"b":46,"c":47,"surface_group_id":"authored_surface"}
+	]},
+	"surface_groups":[{"group_id":"authored_surface","semantic":"authored_surface","triangle_span":{"start":0,"count":28}}],
+	"extensions":{}
+}

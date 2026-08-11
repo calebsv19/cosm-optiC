@@ -1039,7 +1039,9 @@ static bool runtime_native_3d_prepare_frame_internal(
     double live_light_x,
     double live_light_y,
     const RuntimeNative3DSamplingContext* sampling,
-    const RayEvaluatedSceneSnapshot* evaluated_scene);
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    RuntimeNative3DSceneMutationFn mutation,
+    void* mutation_user_data);
 
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,
@@ -1102,7 +1104,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     const RuntimeNative3DSamplingContext* sampling) {
     return runtime_native_3d_prepare_frame_internal(
         out_frame, width, height, normalized_t, frame_index,
-        live_light_x, live_light_y, sampling, NULL);
+        live_light_x, live_light_y, sampling, NULL, NULL, NULL);
 }
 
 bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
@@ -1125,10 +1127,37 @@ bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
             "evaluated scene frame index is out of native range");
         return false;
     }
+    return RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
+        out_frame, width, height, evaluated_scene, sampling, NULL, NULL);
+}
+
+bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
+    RuntimeNative3DPreparedFrame* out_frame,
+    int width,
+    int height,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeNative3DSceneMutationFn mutation,
+    void* mutation_user_data) {
+    int64_t frame_index = 0;
+    if (!evaluated_scene ||
+        RayEvaluatedSceneSnapshotValidate(evaluated_scene) !=
+            TIMELINE_STATUS_OK) {
+        runtime_native_3d_prepare_frame_set_diag(
+            "evaluated scene snapshot is invalid");
+        return false;
+    }
+    frame_index = evaluated_scene->frame.sample.absolute_frame;
+    if (frame_index < 0 || frame_index > INT_MAX) {
+        runtime_native_3d_prepare_frame_set_diag(
+            "evaluated scene frame index is out of native range");
+        return false;
+    }
     return runtime_native_3d_prepare_frame_internal(
         out_frame, width, height, evaluated_scene->frame.normalized_t,
         (int)frame_index, evaluated_scene->light.position.x,
-        evaluated_scene->light.position.y, sampling, evaluated_scene);
+        evaluated_scene->light.position.y, sampling, evaluated_scene,
+        mutation, mutation_user_data);
 }
 
 static bool runtime_native_3d_prepare_frame_internal(
@@ -1140,7 +1169,9 @@ static bool runtime_native_3d_prepare_frame_internal(
     double live_light_x,
     double live_light_y,
     const RuntimeNative3DSamplingContext* sampling,
-    const RayEvaluatedSceneSnapshot* evaluated_scene) {
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    RuntimeNative3DSceneMutationFn mutation,
+    void* mutation_user_data) {
     RuntimeNative3DPreparedFrame frame = {0};
     struct timespec caustic_prep_started_at = {0};
 
@@ -1168,6 +1199,17 @@ static bool runtime_native_3d_prepare_frame_internal(
             RuntimeScene3DBuilder_LastDiagnostics());
         RuntimeScene3D_Free(&frame.scene);
         return false;
+    }
+    if (mutation) {
+        char mutation_diagnostics[1024] = {0};
+        if (!mutation(&frame.scene, mutation_user_data, mutation_diagnostics,
+                      sizeof(mutation_diagnostics))) {
+            runtime_native_3d_prepare_frame_set_diagf(
+                "request-local scene mutation failed: %s",
+                mutation_diagnostics[0] ? mutation_diagnostics : "unknown");
+            RuntimeScene3D_Free(&frame.scene);
+            return false;
+        }
     }
     if (evaluated_scene &&
         !RuntimeEvaluatedScene3DApply(&frame.scene, evaluated_scene)) {
@@ -1210,6 +1252,9 @@ static bool runtime_native_3d_prepare_frame_internal(
     }
     if (!runtime_native_3d_prepare_try_skip_frame_bvh_for_tlas(&frame.scene) &&
         !runtime_native_3d_prepare_ensure_frame_bvh(&frame.scene)) {
+        runtime_native_3d_prepare_frame_set_diagf(
+            "frame BVH preparation failed: %s",
+            RuntimeTriangleMesh3D_BVHLastDiagnostics());
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }

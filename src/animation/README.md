@@ -141,11 +141,12 @@ cache reuse for light-only animation.
 
 ## ESP5 evaluated object and simulation channels
 
-`evaluated_scene_snapshot.*` schema v2 adds a fixed-capacity immutable rigid
-transform channel array and an explicit simulation-cache frame binding. Current
-object records are sampled only from the existing compatibility motion summary;
-each carries its stable target, position/rotation presence, compatibility
-provenance, and exact evaluation context.
+`evaluated_scene_snapshot.*` schema v3 retains the fixed-capacity immutable
+rigid transform channel array and explicit simulation-cache frame binding.
+Compatibility-motion records still carry stable target, position/rotation
+presence, provenance, and exact evaluation context. Compound-scene exact-step
+records additionally preserve the source quaternion, handoff digest, binding
+digest, and packet tick while retaining an Euler compatibility view.
 
 A claimed simulation cache must identify its cache revision, selected and
 source frames, rational source rate, frame offset and stride, rational
@@ -153,10 +154,12 @@ subframe, interpolation policy, and content digest. `none` remains the explicit
 default. Validation rejects duplicate targets, non-finite values, wrong-frame
 records, incomplete cache identity, and capacity overflow.
 
-This is a consumer-contract framework, not new puppetry semantics. Primitive
-and mesh construction still applies the existing normalized-time compatibility
-motion path; solving, cache loading, and interpolation remain outside the
-snapshot.
+This is a consumer-contract framework, not new puppetry semantics. The S9-C
+compound adapter replaces only already-present mapped transform records in a
+detached snapshot. Primitive and mesh construction still applies the existing
+normalized-time compatibility motion path; source-mesh principal-frame
+composition, solving, cache loading, interpolation, and rendering remain
+outside the snapshot.
 
 ## Next boundary
 
