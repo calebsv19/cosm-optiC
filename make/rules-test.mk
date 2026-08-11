@@ -1745,7 +1745,7 @@ test-procedural-imported-surface-region-psg19: \
 	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
 	@python3 tests/integration/test_procedural_imported_surface_region_psg19.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-19 imported surface region lane passed"
 
@@ -1805,7 +1805,7 @@ test-procedural-imported-surface-inset-psg20: \
 	@python3 tests/integration/test_procedural_imported_surface_inset_psg20.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-21 adaptive imported surface inset lane passed"
 
@@ -1874,7 +1874,7 @@ test-procedural-imported-surface-growth-psg22: \
 	@python3 tests/integration/test_procedural_imported_surface_growth_psg22.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-22 imported surface attached growth lane passed"
 
@@ -1889,7 +1889,7 @@ test-procedural-surface-feature-selection-psg24: \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-24 field-selected carrier bridge passed"
 
@@ -1903,7 +1903,7 @@ test-procedural-surface-feature-inset-psg24c: \
 		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN) \
 		tools/procedural_surface_feature_inset_compiler.py
@@ -1926,11 +1926,11 @@ test-procedural-surface-feature-deposit-psg24d: \
 		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN) \
 		tools/procedural_surface_feature_deposit_compiler.py \
-		../../tools/procedural_object_authoring/procedural_object_bundle.py
+		../tools/procedural_object_authoring/procedural_object_bundle.py
 	@echo "PSG-24D positive feature attached-deposit lane passed"
 
 test-procedural-surface-feature-deposit-psg24d-visual-proof: \
@@ -1994,7 +1994,7 @@ test-procedural-imported-surface-strands-psg23a: \
 	@python3 tests/integration/test_procedural_imported_surface_strands_psg23a.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-23A imported surface rooted strand lane passed"
 
@@ -2104,7 +2104,7 @@ test-procedural-imported-surface-strands-psg23e: \
 	@python3 tests/integration/test_procedural_carrier_curve_groom_psg23e.py \
 		tools/procedural_carrier_curve_groom_authoring.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(BUILD_DIR)/tools/cli/ray_tracing_render_headless \
 		tests/fixtures/procedural_imported_surface_strands_psg23a
@@ -2158,7 +2158,7 @@ test-procedural-imported-surface-strands-psg23f: \
 		tools/procedural_curve_render_children_authoring.py \
 		tools/procedural_carrier_curve_groom_authoring.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(BUILD_DIR)/tools/cli/ray_tracing_render_headless \
 		tests/fixtures/procedural_imported_surface_strands_psg23a

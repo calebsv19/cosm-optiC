@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--stl-tool", type=pathlib.Path,
         default=(
-            ROOT.parents[1] / "tools/procedural_object_authoring"
+            ROOT.parent / "tools/procedural_object_authoring"
             / "procedural_stl_tool.py"))
     parser.add_argument(
         "--import-harness", type=pathlib.Path,

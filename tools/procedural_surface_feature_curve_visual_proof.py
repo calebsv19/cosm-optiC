@@ -215,9 +215,10 @@ def main() -> int:
             "--mesh", str(mesh_path),
             "--solid-receipt", str(solid_receipt),
         ])
-    bundle_tool = Path(
-        "/Users/calebsv/Desktop/CodeWork/tools/procedural_object_authoring/"
-        "procedural_object_bundle.py")
+    bundle_tool = (
+        ROOT.parent / "tools" / "procedural_object_authoring"
+        / "procedural_object_bundle.py"
+    )
     bundle = field_root / "bundle.json"
     if not args.reuse_field:
         run([sys.executable, str(bundle_tool), "compile", "--spec",
