@@ -322,7 +322,7 @@ PROCEDURAL_SURFACE_PRISM_TEST_SRCS := \
 $(PROCEDURAL_SURFACE_PRISM_TEST_BIN): \
 	$(PROCEDURAL_SURFACE_PRISM_TEST_SRCS) \
 	$(INC_DIR)/procedural/procedural_surface_prism_mesh.h \
-	$(INC_DIR)/procedural/procedural_surface_mesh_asset_adapter.h
+	$(INC_DIR)/procedural/procedural_surface_mesh_asset_adapter.h \
 	$(INC_DIR)/procedural/procedural_solid_mesh.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
