@@ -579,6 +579,12 @@ guarded Disney v2 `production_render_prep_populated` floor visual cell and a
 generated `production_render_prep_wall_populated` vertical-receiver visual
 cell, writes per-cell request JSON, summaries, PNG frames, a contact sheet, and
 `ppm10_product_ab_report.json`, and validates source-specific counts. The
+first three production cells exercise product selection and populated-callsite
+readback without image contribution; current photon image contribution is
+enabled only by the render-prep cells, which also select Disney v2 and native
+render-prep population. `--preflight-only` validates request parsing, canonical
+product/engine selection, contribution policy, and readback flags without
+requiring post-render population or image evidence. The
 proxy-populated cell must report `population_source=surface_proxy`; the
 trace-populated cell must report `population_source=trace_records` plus nonzero
 trace-path, trace-record, beam-segment, surface-contributor, and

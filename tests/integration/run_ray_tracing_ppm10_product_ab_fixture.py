@@ -39,24 +39,24 @@ VARIANTS = (
     {
         "id": "production",
         "product_mode": "production",
-        "render_contribution": True,
+        "render_contribution": False,
         "populated_callsite": False,
-        "description": "opt-in production photon-map route",
+        "description": "opt-in production photon-map route without image contribution",
     },
     {
         "id": "production_populated",
         "product_mode": "production",
-        "render_contribution": True,
+        "render_contribution": False,
         "populated_callsite": True,
-        "description": "opt-in production route with populated callsite count readback",
+        "description": "opt-in production route with populated callsite count readback only",
     },
     {
         "id": "production_trace_populated",
         "product_mode": "production",
-        "render_contribution": True,
+        "render_contribution": False,
         "populated_callsite": True,
         "trace_populated_callsite": True,
-        "description": "opt-in production route with trace-record populated callsite count readback",
+        "description": "opt-in production route with trace-record populated callsite readback only",
     },
     {
         "id": "production_render_prep_populated",
@@ -236,6 +236,8 @@ def request_for_variant(root: Path, review_root: Path, variant: dict) -> dict:
     request["render"]["temporal_frames"] = 1
     if variant.get("integrator_3d"):
         request["render"]["integrator_3d"] = variant["integrator_3d"]
+    elif variant["render_contribution"]:
+        request["render"]["integrator_3d"] = "disney_v2"
     if variant.get("volume_render_prep"):
         volume_path = review_root / "generated_volume" / "ppm18_uniform_volume.vf3d"
         write_uniform_vf3d(volume_path)
@@ -253,6 +255,11 @@ def request_for_variant(root: Path, review_root: Path, variant: dict) -> dict:
         })
     request.setdefault("inspection", {}).update({
         "caustic_product_mode": variant["product_mode"],
+        "caustic_transport_engine": (
+            "photon_map"
+            if variant["product_mode"] == "production"
+            else "exploratory_lens_transport"
+        ),
         "caustic_photon_render_contribution_enabled": variant["render_contribution"],
         "caustic_surface_query_enabled": True,
         "caustic_volume_query_enabled": bool(
@@ -648,7 +655,10 @@ def write_contact_sheet(review_root: Path, cells: list[dict]) -> Path | None:
 
 def validate_cell(cell: dict, summary: dict, preflight_only: bool) -> list[str]:
     failures: list[str] = []
-    expected_mode = cell["product_mode"]
+    expected_mode = {
+        "reference": "reference_transport",
+        "production": "photon_map",
+    }.get(cell["product_mode"], cell["product_mode"])
     inspection = summary.get("inspection", {})
     caustic_state = inspection.get("caustic_state", {})
     if inspection.get("caustic_product_mode") != expected_mode:
@@ -684,14 +694,13 @@ def validate_cell(cell: dict, summary: dict, preflight_only: bool) -> list[str]:
         failures.append(f"{cell['id']}: populated callsite readback flag mismatch")
     if bool(counts["trace_readback_enabled"]) != expected_trace_populated:
         failures.append(f"{cell['id']}: trace populated callsite readback flag mismatch")
+    if preflight_only:
+        return failures
     if expected_populated:
         required_true = (
             "readback_built",
             "query_attempted",
             "query_hit",
-            "contribution_eligible",
-            "cache_deposit_attempted",
-            "surface_deposited",
             "population_attempted",
             "surface_map_allocated",
             "emission_attempted",
@@ -699,6 +708,12 @@ def validate_cell(cell: dict, summary: dict, preflight_only: bool) -> list[str]:
             "surface_map_population_attempted",
             "surface_map_populated",
         )
+        if cell["render_contribution"]:
+            required_true += (
+                "contribution_eligible",
+                "cache_deposit_attempted",
+                "surface_deposited",
+            )
         required_positive = (
             "requested_sample_budget",
             "emitted_photon_count",
