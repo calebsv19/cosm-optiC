@@ -20,6 +20,10 @@ typedef struct TimelineLightMotionSample {
     uint32_t invalidation_domains;
 } TimelineLightMotionSample;
 
+TimelineStatus TimelineLightMotionValidateProgressTrack(
+    const TimelineTrack* progress_track,
+    const TimelineRange* range);
+
 TimelineStatus TimelineLightMotionEvaluate(
     const TimelineTrack* progress_track,
     const Path* path,

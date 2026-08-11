@@ -75,7 +75,7 @@ void scene_editor_light_timeline_panel_geometry(
         20
     };
     mode_gap = 4;
-    mode_width = panel->w >= 420 ? 94 : 84;
+    mode_width = panel->w >= 460 ? 94 : 66;
     out_geometry->constant_speed_button = (SDL_Rect){
         panel->x + 12,
         panel->y + 45,
@@ -91,7 +91,27 @@ void scene_editor_light_timeline_panel_geometry(
     out_geometry->custom_mode_indicator = (SDL_Rect){
         out_geometry->equal_segments_button.x + mode_width + mode_gap,
         panel->y + 45,
-        panel->w >= 420 ? 70 : 64,
+        panel->w >= 460 ? 70 : 50,
+        20
+    };
+    out_geometry->step_button = (SDL_Rect){
+        out_geometry->custom_mode_indicator.x +
+            out_geometry->custom_mode_indicator.w + mode_gap,
+        panel->y + 45,
+        panel->w >= 460 ? 44 : 36,
+        20
+    };
+    out_geometry->linear_button = (SDL_Rect){
+        out_geometry->step_button.x + out_geometry->step_button.w + mode_gap,
+        panel->y + 45,
+        panel->w >= 460 ? 50 : 40,
+        20
+    };
+    out_geometry->bezier_button = (SDL_Rect){
+        out_geometry->linear_button.x +
+            out_geometry->linear_button.w + mode_gap,
+        panel->y + 45,
+        panel->w >= 460 ? 54 : 44,
         20
     };
 }

@@ -134,6 +134,49 @@ static TimelineStatus timeline_light_sample_arc_table(
     return TIMELINE_STATUS_OK;
 }
 
+TimelineStatus TimelineLightMotionValidateProgressTrack(
+    const TimelineTrack* progress_track,
+    const TimelineRange* range) {
+    TimelineStatus status;
+    if (!progress_track || !range) return TIMELINE_STATUS_INVALID_ARGUMENT;
+    if (strncmp(progress_track->target_id, "light/", 6u) != 0 ||
+        progress_track->target_id[6] == '\0' ||
+        strcmp(progress_track->property_id, "light/path_progress") != 0 ||
+        progress_track->value_type != TIMELINE_VALUE_SCALAR ||
+        progress_track->unit != TIMELINE_UNIT_UNITLESS) {
+        return TIMELINE_STATUS_TARGET_KIND_MISMATCH;
+    }
+    status = TimelineTrackValidate(progress_track, range);
+    if (status != TIMELINE_STATUS_OK) return status;
+    for (size_t i = 0u; i < progress_track->key_count; ++i) {
+        const TimelineKeyframe* key = &progress_track->keys[i];
+        const double value = key->value.as.scalar;
+        if (!isfinite(value) || value < 0.0 || value > 1.0) {
+            return TIMELINE_STATUS_VALUE_OUT_OF_RANGE;
+        }
+        if (i > 0u &&
+            value < progress_track->keys[i - 1u].value.as.scalar) {
+            return TIMELINE_STATUS_INVALID_TRACK;
+        }
+        if (i + 1u < progress_track->key_count &&
+            key->interpolation_to_next ==
+                TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
+            const TimelineKeyframe* right =
+                &progress_track->keys[i + 1u];
+            const double y0 = value;
+            const double y1 = y0 + key->outgoing_value_offset;
+            const double y3 = right->value.as.scalar;
+            const double y2 = y3 + right->incoming_value_offset;
+            if (!isfinite(y1) || !isfinite(y2) ||
+                y1 < y0 || y2 < y1 || y3 < y2 ||
+                y1 < 0.0 || y2 > 1.0) {
+                return TIMELINE_STATUS_INVALID_TRACK;
+            }
+        }
+    }
+    return TIMELINE_STATUS_OK;
+}
+
 TimelineStatus TimelineLightMotionEvaluate(
     const TimelineTrack* progress_track,
     const Path* path,
@@ -148,12 +191,9 @@ TimelineStatus TimelineLightMotionEvaluate(
     if (!progress_track || !path || !context || !out_sample) {
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
-    if (strncmp(progress_track->target_id, "light/", 6u) != 0 ||
-        strcmp(progress_track->property_id, "light/path_progress") != 0 ||
-        progress_track->value_type != TIMELINE_VALUE_SCALAR ||
-        progress_track->unit != TIMELINE_UNIT_UNITLESS) {
-        return TIMELINE_STATUS_TARGET_KIND_MISMATCH;
-    }
+    status = TimelineLightMotionValidateProgressTrack(progress_track,
+                                                      &context->range);
+    if (status != TIMELINE_STATUS_OK) return status;
     memset(&sample, 0, sizeof(sample));
     memset(&arc_table, 0, sizeof(arc_table));
     memset(&progress_result, 0, sizeof(progress_result));

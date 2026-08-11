@@ -90,6 +90,14 @@ duplicate identities are refused without mutation. Renderer invalidation is
 reported as lighting-only metadata; the evaluator itself remains detached from
 live render state.
 
+The progress-track contract is stricter than the generic scalar-track
+contract. Authored values must remain finite, bounded to `[0,1]`, and
+nondecreasing. Cubic segments additionally require ordered control values
+`y0 <= y1 <= y2 <= y3`; the generic track validator supplies the matching
+ordered time controls. Parser, runtime-document mutation, serialization, and
+evaluation all apply this validation so an invalid handle cannot create
+temporal reversal or survive save/reopen.
+
 The arc-length table is intentionally rebuilt by this initial pure evaluator.
 Interactive playback should cache it by spatial-path revision rather than add
 cache ownership to the authored timeline layer.
@@ -106,9 +114,12 @@ inspection all use the same parser and evaluator.
 The scene editor keeps the timeline collapsed until a light proxy is selected
 and **Animate Light Position** is requested. The bottom center pane then exposes
 frame scrubbing, progress and normalized speed graphs, key insertion/deletion,
-key and cubic-handle dragging, interpolation shortcuts, and bounded undo/redo.
-The viewport remains visible above the resizable pane and light selection uses
-the runtime light's stable ID rather than an array-only authoring identity.
+key and cubic-handle dragging, explicit Step/Linear/Bezier selection, and
+bounded undo/redo. The viewport remains visible above the resizable pane.
+Selection owns the stable `light/<id>` target and resolves its current array
+index only at use sites: reorder preserves the target, disappearance or
+duplicate IDs fail closed without retargeting, and selecting another light
+while the pane is open is refused until the pane closes.
 
 Frame preparation applies the evaluated sample to the per-frame light set after
 the prepared static scene is copied. This makes frame identity authoritative
@@ -137,7 +148,8 @@ snapshot.
 
 ## Next boundary
 
-Add an app-local Preview transport controller and inspection shell: explicit
-play/pause, Loop by default, optional Bounce, exact-frame scrubbing, and
-read-only authored-key markers. Transport selects a canonical timeline sample
-before requesting an evaluated snapshot; it must not become a second evaluator.
+Complete direct operator visual/usability review of stable-target behavior and
+the persisted cubic handles in the bottom authoring pane. Keep Preview
+transport and markers read-only and retain the one evaluated-scene service.
+After the P0 candidate is accepted and integrated, add multi-track persistence
+and `light/intensity` as the first additional authored light property.

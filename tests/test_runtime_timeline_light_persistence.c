@@ -7,6 +7,8 @@
 #include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_light_timeline_edit.h"
 #include "editor/scene_editor_light_timeline_view.h"
+#include "editor/scene_editor_light_timeline_curve_edit.h"
+#include "editor/scene_editor_light_timeline_selection.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "test_support.h"
 
@@ -74,6 +76,9 @@ static bool light_timeline_geometry_fits(const SDL_Rect* panel) {
             panel, &geometry.equal_segments_button) &&
         light_timeline_rect_inside(
             panel, &geometry.custom_mode_indicator) &&
+        light_timeline_rect_inside(panel, &geometry.step_button) &&
+        light_timeline_rect_inside(panel, &geometry.linear_button) &&
+        light_timeline_rect_inside(panel, &geometry.bezier_button) &&
         geometry.metrics_line.y + geometry.metrics_line.h <=
             geometry.constant_speed_button.y &&
         geometry.constant_speed_button.x +
@@ -82,6 +87,13 @@ static bool light_timeline_geometry_fits(const SDL_Rect* panel) {
         geometry.equal_segments_button.x +
                 geometry.equal_segments_button.w <=
             geometry.custom_mode_indicator.x &&
+        geometry.custom_mode_indicator.x +
+                geometry.custom_mode_indicator.w <=
+            geometry.step_button.x &&
+        geometry.step_button.x + geometry.step_button.w <=
+            geometry.linear_button.x &&
+        geometry.linear_button.x + geometry.linear_button.w <=
+            geometry.bezier_button.x &&
         geometry.constant_speed_button.y +
                 geometry.constant_speed_button.h <=
             geometry.timing_graph.y &&
@@ -393,6 +405,12 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
                 scene_editor_pane_host_init(&pane_host, 1280, 760));
     assert_true("light_acceptance_open_pane",
                 SceneEditorLightTimelineToggle(&pane_host));
+    assert_true("light_acceptance_open_pane_reselection_refused",
+                SceneEditorLightTimelineSelectTargetId("light/other") ==
+                    TIMELINE_STATUS_OWNERSHIP_MISMATCH);
+    assert_true("light_acceptance_open_pane_target_retained",
+                strcmp(SceneEditorLightTimelineSelectedTargetId(),
+                       "light/key") == 0);
     layout = scene_editor_pane_host_layout(&pane_host);
     scene_editor_light_timeline_panel_geometry(
         &layout->timeline_rect, &geometry);
@@ -591,6 +609,93 @@ static int test_light_timeline_ui_acceptance_roundtrip(void) {
                        &reopened.timeline.tracks[reopened.progress_track_index],
                        sizeof(TimelineTrack)) == 0);
 
+    memset(&event, 0, sizeof(event));
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.clicks = 1;
+    event.button.x =
+        geometry.bezier_button.x + geometry.bezier_button.w / 2;
+    event.button.y =
+        geometry.bezier_button.y + geometry.bezier_button.h / 2;
+    assert_true("light_acceptance_bezier_selector",
+                SceneEditorLightTimelineHandleEvent(
+                    &event, &pane_host, layout, NULL));
+    assert_true("light_acceptance_bezier_selected",
+                RuntimeSceneLightTimelineGetLast(&reopened) &&
+                reopened.timeline.tracks[reopened.progress_track_index]
+                        .keys[1].interpolation_to_next ==
+                    TIMELINE_INTERPOLATION_CUBIC_BEZIER);
+    assert_true("light_acceptance_bezier_undo",
+                SceneEditorLightTimelineUndo());
+    assert_true("light_acceptance_bezier_undo_linear",
+                RuntimeSceneLightTimelineGetLast(&reopened) &&
+                reopened.timeline.tracks[reopened.progress_track_index]
+                        .keys[1].interpolation_to_next ==
+                    TIMELINE_INTERPOLATION_LINEAR);
+    assert_true("light_acceptance_bezier_redo",
+                SceneEditorLightTimelineRedo());
+    assert_true("light_acceptance_bezier_redo_exact",
+                RuntimeSceneLightTimelineGetLast(&reopened) &&
+                reopened.timeline.tracks[reopened.progress_track_index]
+                        .keys[1].outgoing_frame_offset > 0.0 &&
+                reopened.timeline.tracks[reopened.progress_track_index]
+                        .keys[2].incoming_frame_offset < 0.0);
+    {
+        int handle_x = 0;
+        int handle_y = 0;
+        TimelineTrack before_handle =
+            reopened.timeline.tracks[reopened.progress_track_index];
+        assert_true("light_acceptance_handle_visible",
+                    scene_editor_light_timeline_handle_point(
+                        &(SceneEditorLightTimelineView){0.0, 1.0},
+                        &reopened, &before_handle, 1u,
+                        SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING,
+                        &timing_graph, &handle_x, &handle_y));
+        memset(&event, 0, sizeof(event));
+        event.type = SDL_MOUSEBUTTONDOWN;
+        event.button.button = SDL_BUTTON_LEFT;
+        event.button.clicks = 1;
+        event.button.x = handle_x;
+        event.button.y = handle_y;
+        assert_true("light_acceptance_handle_down",
+                    SceneEditorLightTimelineHandleEvent(
+                        &event, &pane_host, layout, NULL));
+        event.type = SDL_MOUSEMOTION;
+        event.motion.x = handle_x + 10;
+        event.motion.y = handle_y - 8;
+        assert_true("light_acceptance_handle_drag",
+                    SceneEditorLightTimelineHandleEvent(
+                        &event, &pane_host, layout, NULL));
+        event.type = SDL_MOUSEBUTTONUP;
+        event.button.button = SDL_BUTTON_LEFT;
+        assert_true("light_acceptance_handle_up",
+                    SceneEditorLightTimelineHandleEvent(
+                        &event, &pane_host, layout, NULL));
+        assert_true("light_acceptance_handle_changed",
+                    RuntimeSceneLightTimelineGetLast(&after_key_drag) &&
+                    memcmp(&before_handle,
+                           &after_key_drag.timeline.tracks[
+                               after_key_drag.progress_track_index],
+                           sizeof(TimelineTrack)) != 0);
+        assert_true("light_acceptance_handle_undo",
+                    SceneEditorLightTimelineUndo());
+        assert_true("light_acceptance_handle_undo_exact",
+                    RuntimeSceneLightTimelineGetLast(&reopened) &&
+                    memcmp(&before_handle,
+                           &reopened.timeline.tracks[
+                               reopened.progress_track_index],
+                           sizeof(TimelineTrack)) == 0);
+        assert_true("light_acceptance_handle_redo",
+                    SceneEditorLightTimelineRedo());
+        assert_true("light_acceptance_handle_redo_exact",
+                    RuntimeSceneLightTimelineGetLast(&reopened) &&
+                    memcmp(&after_key_drag.timeline.tracks[
+                               after_key_drag.progress_track_index],
+                           &reopened.timeline.tracks[
+                               reopened.progress_track_index],
+                           sizeof(TimelineTrack)) == 0);
+    }
+
     assert_true("light_acceptance_before_save_sample",
                 RuntimeSceneLightTimelineEvaluate(&after_key_drag,
                                                   (TimelineSample){5, 0u, 1u},
@@ -647,6 +752,10 @@ static int test_short_default_timeline_expands_for_authoring(void) {
                     "light/key",
                     "light/path_progress",
                     TIMELINE_VALUE_SCALAR) == TIMELINE_STATUS_OK);
+    assert_true("light_short_default_track_unit",
+                TimelineTrackSetUnit(
+                    &track, TIMELINE_UNIT_UNITLESS) ==
+                    TIMELINE_STATUS_OK);
     assert_true("light_short_default_start_key",
                 TimelineTrackAddKey(
                     &track, 0, TimelineValueScalar(0.0),
@@ -721,6 +830,14 @@ static int test_short_default_timeline_expands_for_authoring(void) {
                 scene_editor_light_timeline_classify_traversal(
                     &document, &constant_track) ==
                 SCENE_EDITOR_LIGHT_TIMELINE_TRAVERSAL_CONSTANT_SPEED);
+    {
+        double progress = 0.0;
+        assert_true("light_traversal_constant_declared_frame",
+                    scene_editor_light_timeline_evaluate_progress_at_frame(
+                        &document, &constant_track, 40, &progress));
+        assert_close("light_traversal_constant_visible_evaluated_parity",
+                     progress, 0.5, 1e-9);
+    }
     assert_true("light_traversal_equal_build",
                 scene_editor_light_timeline_build_traversal_track(
                     &document, &constant_track,
@@ -736,6 +853,19 @@ static int test_short_default_timeline_expands_for_authoring(void) {
                 scene_editor_light_timeline_classify_traversal(
                     &document, &equal_track) ==
                 SCENE_EDITOR_LIGHT_TIMELINE_TRAVERSAL_EQUAL_SEGMENTS);
+    {
+        double progress = 0.0;
+        assert_true("light_traversal_equal_declared_frame",
+                    scene_editor_light_timeline_evaluate_progress_at_frame(
+                        &document, &equal_track, 40, &progress));
+        assert_close("light_traversal_equal_visible_evaluated_parity",
+                     progress, 0.25, 0.01);
+        assert_true("light_traversal_custom_declared_frame",
+                    scene_editor_light_timeline_evaluate_progress_at_frame(
+                        &document, &anchor_track, 50, &progress));
+        assert_close("light_traversal_custom_visible_evaluated_parity",
+                     progress, 0.25, 0.01);
+    }
     assert_true("light_traversal_custom_classify",
                 scene_editor_light_timeline_classify_traversal(
                     &document, &anchor_track) ==
@@ -850,6 +980,257 @@ static int test_new_timeline_keys_are_independent_of_path_points(void) {
     return 0;
 }
 
+static int test_light_timeline_stable_selection_identity(void) {
+    SceneEditorLightTimelineSelection selection;
+    RuntimeLightSource3D lights[2];
+    size_t index = SIZE_MAX;
+    memset(&selection, 0, sizeof(selection));
+    memset(lights, 0, sizeof(lights));
+    snprintf(lights[0].id, sizeof(lights[0].id), "a");
+    snprintf(lights[1].id, sizeof(lights[1].id), "b");
+    assert_true("light_selection_select_index",
+                scene_editor_light_timeline_selection_select_index(
+                    &selection, lights, 2u, 1u) == TIMELINE_STATUS_OK);
+    assert_true("light_selection_stores_stable_target",
+                strcmp(scene_editor_light_timeline_selection_target_id(
+                           &selection),
+                       "light/b") == 0);
+    {
+        RuntimeLightSource3D reordered[2] = {lights[1], lights[0]};
+        assert_true("light_selection_reorder_resolves_same_id",
+                    scene_editor_light_timeline_selection_resolve(
+                        &selection, reordered, 2u, &index) ==
+                        TIMELINE_STATUS_OK &&
+                    index == 0u);
+    }
+    assert_true("light_selection_disappearance_refused",
+                scene_editor_light_timeline_selection_resolve(
+                    &selection, lights, 1u, &index) ==
+                    TIMELINE_STATUS_TARGET_NOT_FOUND);
+    {
+        RuntimeLightSource3D duplicate[2] = {lights[1], lights[1]};
+        assert_true("light_selection_duplicate_refused",
+                    scene_editor_light_timeline_selection_resolve(
+                        &selection, duplicate, 2u, &index) ==
+                        TIMELINE_STATUS_DUPLICATE_ID);
+    }
+    assert_true("light_selection_stale_identity_retained",
+                strcmp(scene_editor_light_timeline_selection_target_id(
+                           &selection),
+                       "light/b") == 0);
+    return 0;
+}
+
+static int test_light_timeline_cubic_operability_and_validity(void) {
+    static RuntimeSceneLightTimelineDocument document;
+    static RuntimeSceneLightTimelineDocument reopened;
+    static TimelineTrack track;
+    static TimelineTrack cubic;
+    static TimelineTrack moved;
+    static TimelineTrack invalid;
+    SceneEditorLightTimelineView view = {0.0, 1.0};
+    SDL_Rect graph = {40, 20, 400, 200};
+    int handle_x = 0;
+    int handle_y = 0;
+    double previous = -1.0;
+    char diagnostics[64];
+    json_object* encoded = NULL;
+    json_object* wrapper = NULL;
+    memset(&document, 0, sizeof(document));
+    memset(&reopened, 0, sizeof(reopened));
+    memset(&track, 0, sizeof(track));
+    memset(&cubic, 0, sizeof(cubic));
+    memset(&moved, 0, sizeof(moved));
+    memset(&invalid, 0, sizeof(invalid));
+    assert_true("light_cubic_document_init",
+                TimelineDocumentInit(
+                    &document.timeline, (TimelineRate){20u, 1u},
+                    (TimelineRange){0, 21u}) == TIMELINE_STATUS_OK);
+    assert_true("light_cubic_track_init",
+                TimelineTrackInit(
+                    &track, "progress", "light/key",
+                    "light/path_progress", TIMELINE_VALUE_SCALAR) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_cubic_unit",
+                TimelineTrackSetUnit(&track, TIMELINE_UNIT_UNITLESS) ==
+                    TIMELINE_STATUS_OK);
+    assert_true("light_cubic_key_0",
+                TimelineTrackAddKey(
+                    &track, 0, TimelineValueScalar(0.0),
+                    TIMELINE_INTERPOLATION_LINEAR) == TIMELINE_STATUS_OK);
+    assert_true("light_cubic_key_1",
+                TimelineTrackAddKey(
+                    &track, 10, TimelineValueScalar(0.4),
+                    TIMELINE_INTERPOLATION_LINEAR) == TIMELINE_STATUS_OK);
+    assert_true("light_cubic_key_2",
+                TimelineTrackAddKey(
+                    &track, 20, TimelineValueScalar(1.0),
+                    TIMELINE_INTERPOLATION_STEP) == TIMELINE_STATUS_OK);
+    assert_true("light_cubic_add_track",
+                TimelineDocumentAddTrack(&document.timeline, &track) ==
+                    TIMELINE_STATUS_OK);
+    document.progress_track_index = 0u;
+    document.spatial_path.numPoints = 2;
+    document.spatial_path.points[0] = (Point){0.0, 0.0};
+    document.spatial_path.points[1] = (Point){4.0, 0.0};
+    CameraPath3D_Reset(&document.spatial_path_3d);
+    CameraPath3D_SyncDefaults(
+        &document.spatial_path_3d, &document.spatial_path, 0.0);
+    document.valid = true;
+    {
+        TimelineEvaluationContext context;
+        TimelineEvaluationResult result;
+        TimelineTrack step = track;
+        assert_true("light_linear_declared_frame_context",
+                    TimelineEvaluationContextBuild(
+                        document.timeline.rate, document.timeline.range,
+                        (TimelineSample){5, 0u, 1u}, &context) ==
+                        TIMELINE_STATUS_OK);
+        assert_true("light_linear_declared_frame_evaluate",
+                    TimelineTrackEvaluate(&track, &context, &result) ==
+                        TIMELINE_STATUS_OK);
+        assert_close("light_linear_visible_evaluated_parity",
+                     result.value.as.scalar, 0.2, 1e-9);
+        step.keys[0].interpolation_to_next =
+            TIMELINE_INTERPOLATION_STEP;
+        assert_true("light_step_declared_frame_evaluate",
+                    TimelineTrackEvaluate(&step, &context, &result) ==
+                        TIMELINE_STATUS_OK);
+        assert_close("light_step_visible_evaluated_parity",
+                     result.value.as.scalar, 0.0, 1e-9);
+    }
+    assert_true("light_cubic_selector_activates",
+                scene_editor_light_timeline_set_interpolation(
+                    &document, &track, 0u,
+                    TIMELINE_INTERPOLATION_CUBIC_BEZIER,
+                    &cubic) == TIMELINE_STATUS_OK);
+    assert_true("light_cubic_default_handles_nonzero",
+                cubic.keys[0].outgoing_frame_offset > 0.0 &&
+                cubic.keys[1].incoming_frame_offset < 0.0);
+    assert_true("light_cubic_handle_point",
+                scene_editor_light_timeline_handle_point(
+                    &view, &document, &cubic, 0u,
+                    SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING,
+                    &graph, &handle_x, &handle_y));
+    assert_true("light_cubic_handle_pick",
+                scene_editor_light_timeline_pick_handle(
+                    &view, &document, &cubic, 0u, &graph,
+                    handle_x, handle_y) ==
+                    SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING);
+    assert_true("light_cubic_handle_move",
+                scene_editor_light_timeline_move_handle(
+                    &view, &document, &cubic, 0u,
+                    SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_OUTGOING,
+                    &graph, graph.x + 80, graph.y + 120,
+                    &moved) == TIMELINE_STATUS_OK);
+    assert_true("light_cubic_track_valid",
+                TimelineLightMotionValidateProgressTrack(
+                    &moved, &document.timeline.range) ==
+                    TIMELINE_STATUS_OK);
+    {
+        TimelineTrack inserted = moved;
+        TimelineKeyframe key;
+        size_t index = 0u;
+        memset(&key, 0, sizeof(key));
+        key.frame = 5;
+        key.value = TimelineValueScalar(0.2);
+        key.interpolation_to_next = TIMELINE_INTERPOLATION_LINEAR;
+        assert_true("light_cubic_insert_key",
+                    TimelineTrackInsertKey(
+                        &inserted, key, &index) == TIMELINE_STATUS_OK);
+        assert_true("light_cubic_insert_constrained",
+                    scene_editor_light_timeline_constrain_adjacent_handles(
+                        &document, &inserted, index) ==
+                        TIMELINE_STATUS_OK);
+    }
+    document.timeline.tracks[0] = moved;
+    for (int64_t frame = 0; frame <= 20; ++frame) {
+        TimelineLightMotionSample sample;
+        assert_true("light_cubic_declared_frame_evaluates",
+                    RuntimeSceneLightTimelineEvaluate(
+                        &document, (TimelineSample){frame, 0u, 1u},
+                        &sample) == TIMELINE_STATUS_OK);
+        assert_true("light_cubic_declared_frame_monotonic",
+                    sample.progress >= previous &&
+                    sample.progress >= 0.0 && sample.progress <= 1.0);
+        previous = sample.progress;
+    }
+    invalid = moved;
+    invalid.keys[0].outgoing_value_offset = 0.8;
+    assert_true("light_cubic_overshoot_refused",
+                TimelineLightMotionValidateProgressTrack(
+                    &invalid, &document.timeline.range) ==
+                    TIMELINE_STATUS_INVALID_TRACK);
+    assert_true("light_cubic_set_last",
+                RuntimeSceneLightTimelineSetLast(&document) ==
+                    TIMELINE_STATUS_OK);
+    {
+        document.timeline.tracks[document.progress_track_index] = invalid;
+        assert_true("light_cubic_invalid_set_last_refused",
+                    RuntimeSceneLightTimelineSetLast(&document) ==
+                        TIMELINE_STATUS_INVALID_TRACK);
+        assert_true("light_cubic_invalid_set_last_transactional",
+                    RuntimeSceneLightTimelineGetLast(&reopened) &&
+                    memcmp(&reopened.timeline.tracks[
+                               reopened.progress_track_index],
+                           &moved,
+                           sizeof(TimelineTrack)) == 0);
+        document.timeline.tracks[document.progress_track_index] = moved;
+    }
+    encoded = RuntimeSceneLightTimelineToJsonObject(&document, 1.0);
+    assert_true("light_cubic_encode", encoded != NULL);
+    wrapper = json_object_new_object();
+    json_object_object_add(wrapper, "light_timeline", encoded);
+    assert_true("light_cubic_reopen",
+                RuntimeSceneLightTimelineParseAuthoring(
+                    wrapper, 1.0, &reopened, diagnostics,
+                    sizeof(diagnostics)) == TIMELINE_STATUS_OK);
+    assert_true("light_cubic_reopen_exact_track",
+                memcmp(&document.timeline.tracks[0],
+                       &reopened.timeline.tracks[0],
+                       sizeof(TimelineTrack)) == 0);
+    json_object_put(wrapper);
+    {
+        json_object* invalid_encoded = NULL;
+        document.timeline.tracks[document.progress_track_index] = invalid;
+        assert_true("light_cubic_invalid_encode_refused",
+                    RuntimeSceneLightTimelineToJsonObject(
+                        &document, 1.0) == NULL);
+        document.timeline.tracks[document.progress_track_index] = moved;
+        invalid_encoded = RuntimeSceneLightTimelineToJsonObject(
+            &document, 1.0);
+        assert_true("light_cubic_valid_reencode",
+                    invalid_encoded != NULL);
+        if (invalid_encoded) {
+            json_object* track_object = NULL;
+            json_object* keys = NULL;
+            json_object* key = NULL;
+            json_object* outgoing = NULL;
+            json_object_object_get_ex(
+                invalid_encoded, "progress_track", &track_object);
+            json_object_object_get_ex(track_object, "keys", &keys);
+            key = json_object_array_get_idx(keys, 0u);
+            json_object_object_get_ex(key, "outgoing_handle", &outgoing);
+            json_object_object_add(
+                outgoing, "value_offset", json_object_new_double(0.8));
+            wrapper = json_object_new_object();
+            json_object_object_add(
+                wrapper, "light_timeline", invalid_encoded);
+            memset(diagnostics, 0, sizeof(diagnostics));
+            assert_true("light_cubic_invalid_parse_refused",
+                        RuntimeSceneLightTimelineParseAuthoring(
+                            wrapper, 1.0, &reopened, diagnostics,
+                            sizeof(diagnostics)) ==
+                            TIMELINE_STATUS_INVALID_TRACK);
+            assert_true("light_cubic_invalid_parse_diagnostic",
+                        strcmp(diagnostics,
+                               "invalid_path_progress_track") == 0);
+            json_object_put(wrapper);
+        }
+    }
+    return 0;
+}
+
 int run_test_runtime_timeline_light_persistence_tests(void) {
     test_light_timeline_responsive_geometry();
     test_light_timeline_roundtrip_and_evaluation();
@@ -857,6 +1238,8 @@ int run_test_runtime_timeline_light_persistence_tests(void) {
     test_light_timeline_runtime_bridge_headless_inspection();
     test_short_default_timeline_expands_for_authoring();
     test_new_timeline_keys_are_independent_of_path_points();
+    test_light_timeline_stable_selection_identity();
+    test_light_timeline_cubic_operability_and_validity();
     test_light_timeline_ui_acceptance_roundtrip();
     return test_support_failures();
 }

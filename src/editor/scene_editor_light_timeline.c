@@ -7,7 +7,9 @@
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_light_timeline_bridge.h"
 #include "scene_editor_light_timeline_edit.h"
+#include "scene_editor_light_timeline_curve_edit.h"
 #include "scene_editor_light_timeline_evaluation.h"
+#include "scene_editor_light_timeline_selection.h"
 #include "scene_editor_light_timeline_view.h"
 
 #include <math.h>
@@ -17,13 +19,14 @@
 #include <string.h>
 
 typedef struct SceneEditorLightTimelineState {
-    int selected_light_index;
+    SceneEditorLightTimelineSelection selection;
+    bool target_locked;
     int hovered_light_index;
     int64_t current_frame;
     bool scrubbing;
     bool dragging_key;
     bool dragging_path_point;
-    int dragging_handle;
+    SceneEditorLightTimelineHandle dragging_handle;
     bool panning_graph;
     bool playing;
     uint64_t playback_last_ms;
@@ -43,8 +46,7 @@ typedef struct SceneEditorLightTimelineState {
     size_t redo_count;
 } SceneEditorLightTimelineState;
 
-static SceneEditorLightTimelineState g_light_timeline = {.selected_light_index = -1,
-                                                         .hovered_light_index = -1,
+static SceneEditorLightTimelineState g_light_timeline = {.hovered_light_index = -1,
                                                          .selected_key_index = -1,
                                                          .selected_path_point_index = -1};
 
@@ -119,7 +121,7 @@ static int pick_light(const SceneEditorDigestOverlayProjector* projector,
 
 void SceneEditorLightTimelineReset(void) {
     memset(&g_light_timeline, 0, sizeof(g_light_timeline));
-    g_light_timeline.selected_light_index = -1;
+    scene_editor_light_timeline_selection_reset(&g_light_timeline.selection);
     g_light_timeline.hovered_light_index = -1;
     g_light_timeline.selected_key_index = -1;
     g_light_timeline.selected_path_point_index = -1;
@@ -178,6 +180,9 @@ TimelineStatus SceneEditorLightTimelineInsertKey(int64_t frame, double progress)
     key.interpolation_to_next = TIMELINE_INTERPOLATION_LINEAR;
     TimelineStatus status = TimelineTrackInsertKey(&candidate, key, &index);
     if (status != TIMELINE_STATUS_OK) return status;
+    status = scene_editor_light_timeline_constrain_adjacent_handles(
+        &document, &candidate, index);
+    if (status != TIMELINE_STATUS_OK) return status;
     status = commit_track(&document, &candidate);
     if (status != TIMELINE_STATUS_OK) return status;
     history_push(g_light_timeline.undo_tracks, &g_light_timeline.undo_count, current);
@@ -197,12 +202,45 @@ TimelineStatus SceneEditorLightTimelineDeleteSelectedKey(void) {
     candidate = *current;
     TimelineStatus status = TimelineTrackRemoveKey(&candidate, (size_t)index);
     if (status != TIMELINE_STATUS_OK) return status;
+    if (candidate.key_count > 0u) {
+        size_t adjacent = (size_t)index < candidate.key_count
+            ? (size_t)index
+            : candidate.key_count - 1u;
+        status = scene_editor_light_timeline_constrain_adjacent_handles(
+            &document, &candidate, adjacent);
+        if (status != TIMELINE_STATUS_OK) return status;
+    }
     status = commit_track(&document, &candidate);
     if (status != TIMELINE_STATUS_OK) return status;
     history_push(g_light_timeline.undo_tracks, &g_light_timeline.undo_count, current);
     g_light_timeline.redo_count = 0u;
     if ((size_t)index >= candidate.key_count) index = (int)candidate.key_count - 1;
     g_light_timeline.selected_key_index = index;
+    return TIMELINE_STATUS_OK;
+}
+
+TimelineStatus SceneEditorLightTimelineSetSelectedInterpolation(
+    TimelineInterpolation interpolation) {
+    RuntimeSceneLightTimelineDocument document;
+    TimelineTrack* current = NULL;
+    TimelineTrack candidate;
+    int index = g_light_timeline.selected_key_index;
+    TimelineStatus status;
+    if (!current_document(&document, &current) || index < 0 ||
+        (size_t)index + 1u >= current->key_count) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    status = scene_editor_light_timeline_set_interpolation(
+        &document, current, (size_t)index, interpolation, &candidate);
+    if (status != TIMELINE_STATUS_OK) return status;
+    if (memcmp(&candidate, current, sizeof(candidate)) == 0) {
+        return TIMELINE_STATUS_OK;
+    }
+    status = commit_track(&document, &candidate);
+    if (status != TIMELINE_STATUS_OK) return status;
+    history_push(g_light_timeline.undo_tracks,
+                 &g_light_timeline.undo_count, current);
+    g_light_timeline.redo_count = 0u;
     return TIMELINE_STATUS_OK;
 }
 
@@ -371,52 +409,49 @@ static void sync_spatial_path_from_editor(void) {
 }
 
 void SceneEditorLightTimelineSyncRuntime(void) {
-    RuntimeSceneBridge3DLightSeedState lights;
     RuntimeSceneLightTimelineDocument document;
     SceneEditorLightTimelineReset();
-    runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
     if (!RuntimeSceneLightTimelineGetLast(&document) ||
         document.progress_track_index >= document.timeline.track_count) return;
     const char* target = document.timeline.tracks[document.progress_track_index].target_id;
-    const char* id = strncmp(target, "light/", 6u) == 0 ? target + 6 : NULL;
-    if (!id || !id[0]) return;
-    for (int i = 0; i < lights.light_count; ++i) {
-        if (strcmp(lights.lights[i].id, id) == 0) {
-            g_light_timeline.selected_light_index = i;
-            g_light_timeline.current_frame = document.timeline.range.start_frame;
-            g_light_timeline.playback_frame_fraction = 0.0;
-            (void)capture_current_sample();
-            return;
-        }
-    }
+    if (scene_editor_light_timeline_selection_bind(
+            &g_light_timeline.selection, target) != TIMELINE_STATUS_OK) return;
+    g_light_timeline.current_frame = document.timeline.range.start_frame;
+    g_light_timeline.playback_frame_fraction = 0.0;
+    (void)capture_current_sample();
 }
 
 bool SceneEditorLightTimelineHasSelectedLight(void) {
-    return g_light_timeline.selected_light_index >= 0;
+    RuntimeSceneBridge3DLightSeedState lights;
+    size_t light_index = 0u;
+    runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
+    return lights.valid &&
+        scene_editor_light_timeline_selection_resolve(
+            &g_light_timeline.selection, lights.lights,
+            (size_t)lights.light_count, &light_index) == TIMELINE_STATUS_OK;
 }
 
 TimelineStatus SceneEditorLightTimelineSelectTargetId(const char* target_id) {
     RuntimeSceneBridge3DLightSeedState lights;
-    RuntimeSceneLightTimelineTarget target;
+    RuntimeSceneLightTimelineTarget resolved;
+    const char* selected =
+        scene_editor_light_timeline_selection_target_id(
+            &g_light_timeline.selection);
+    if (g_light_timeline.target_locked && selected[0] &&
+        strcmp(selected, target_id ? target_id : "") != 0) {
+        return TIMELINE_STATUS_OWNERSHIP_MISMATCH;
+    }
     runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
     TimelineStatus status = RuntimeSceneLightTimelineResolveTarget(
-        lights.lights, (size_t)lights.light_count, target_id, &target);
+        lights.lights, (size_t)lights.light_count, target_id, &resolved);
     if (status != TIMELINE_STATUS_OK) return status;
-    g_light_timeline.selected_light_index = (int)target.light_index;
-    return TIMELINE_STATUS_OK;
+    return scene_editor_light_timeline_selection_bind(
+        &g_light_timeline.selection, target_id);
 }
 
 const char* SceneEditorLightTimelineSelectedTargetId(void) {
-    static char target[TIMELINE_ID_CAPACITY];
-    RuntimeSceneBridge3DLightSeedState lights;
-    target[0] = '\0';
-    runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
-    if (g_light_timeline.selected_light_index < 0 ||
-        g_light_timeline.selected_light_index >= lights.light_count ||
-        !lights.lights[g_light_timeline.selected_light_index].id[0]) return target;
-    snprintf(target, sizeof(target), "light/%s",
-             lights.lights[g_light_timeline.selected_light_index].id);
-    return target;
+    return scene_editor_light_timeline_selection_target_id(
+        &g_light_timeline.selection);
 }
 
 static bool create_default_document_for_selected(void) {
@@ -464,7 +499,11 @@ bool SceneEditorLightTimelineToggle(SceneEditorPaneHost* pane_host) {
         g_light_timeline.scrubbing = false;
         g_light_timeline.dragging_path_point = false;
         g_light_timeline.panning_graph = false;
-        return scene_editor_pane_host_set_timeline_visible(pane_host, false);
+        if (!scene_editor_pane_host_set_timeline_visible(pane_host, false)) {
+            return false;
+        }
+        g_light_timeline.target_locked = false;
+        return true;
     }
     if (!RuntimeSceneLightTimelineGetLast(&document)) {
         if (!create_default_document_for_selected()) return false;
@@ -480,7 +519,11 @@ bool SceneEditorLightTimelineToggle(SceneEditorPaneHost* pane_host) {
     g_light_timeline.playback_frame_fraction = 0.0;
     scene_editor_light_timeline_view_reset(&g_light_timeline.view);
     (void)capture_current_sample();
-    return scene_editor_pane_host_set_timeline_visible(pane_host, true);
+    if (!scene_editor_pane_host_set_timeline_visible(pane_host, true)) {
+        return false;
+    }
+    g_light_timeline.target_locked = true;
+    return true;
 }
 
 static bool scrub_to_x(int x, const SDL_Rect* rect) {
@@ -550,6 +593,11 @@ static bool move_selected_key(int x, int y, const SDL_Rect* graph) {
     candidate = *current;
     if (TimelineTrackMoveScalarKey(&candidate, (size_t)index, frame, value) !=
         TIMELINE_STATUS_OK) return false;
+    if (scene_editor_light_timeline_constrain_adjacent_handles(
+            &document, &candidate, (size_t)index) !=
+        TIMELINE_STATUS_OK) {
+        return false;
+    }
     return commit_track(&document, &candidate) == TIMELINE_STATUS_OK;
 }
 
@@ -767,6 +815,24 @@ bool SceneEditorLightTimelineHandleEvent(
                     return true;
                 }
                 if (point_in_rect(event->button.x, event->button.y,
+                                  &geometry.step_button)) {
+                    (void)SceneEditorLightTimelineSetSelectedInterpolation(
+                        TIMELINE_INTERPOLATION_STEP);
+                    return true;
+                }
+                if (point_in_rect(event->button.x, event->button.y,
+                                  &geometry.linear_button)) {
+                    (void)SceneEditorLightTimelineSetSelectedInterpolation(
+                        TIMELINE_INTERPOLATION_LINEAR);
+                    return true;
+                }
+                if (point_in_rect(event->button.x, event->button.y,
+                                  &geometry.bezier_button)) {
+                    (void)SceneEditorLightTimelineSetSelectedInterpolation(
+                        TIMELINE_INTERPOLATION_CUBIC_BEZIER);
+                    return true;
+                }
+                if (point_in_rect(event->button.x, event->button.y,
                                   &geometry.add_key_button)) {
                     stop_playback();
                     double normalized =
@@ -814,6 +880,22 @@ bool SceneEditorLightTimelineHandleEvent(
                         &graph, event->button.x, event->button.y, false);
                     return true;
                 }
+                if (g_light_timeline.selected_key_index >= 0) {
+                    SceneEditorLightTimelineHandle handle =
+                        scene_editor_light_timeline_pick_handle(
+                            &g_light_timeline.view, &document, track,
+                            (size_t)g_light_timeline.selected_key_index,
+                            &graph, event->button.x, event->button.y);
+                    if (handle !=
+                        SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_NONE) {
+                        stop_playback();
+                        history_push(g_light_timeline.undo_tracks,
+                                     &g_light_timeline.undo_count, track);
+                        g_light_timeline.redo_count = 0u;
+                        g_light_timeline.dragging_handle = handle;
+                        return true;
+                    }
+                }
                 int key_index = scene_editor_light_timeline_pick_key(
                     &g_light_timeline.view, &document, track, &graph,
                     event->button.x, event->button.y);
@@ -858,6 +940,25 @@ bool SceneEditorLightTimelineHandleEvent(
             return move_selected_key(event->motion.x, event->motion.y, &graph);
         }
         if (event->type == SDL_MOUSEMOTION &&
+            g_light_timeline.dragging_handle !=
+                SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_NONE) {
+            RuntimeSceneLightTimelineDocument document;
+            TimelineTrack* current = NULL;
+            TimelineTrack candidate;
+            if (!current_document(&document, &current) ||
+                g_light_timeline.selected_key_index < 0 ||
+                scene_editor_light_timeline_move_handle(
+                    &g_light_timeline.view, &document, current,
+                    (size_t)g_light_timeline.selected_key_index,
+                    g_light_timeline.dragging_handle, &graph,
+                    event->motion.x, event->motion.y,
+                    &candidate) != TIMELINE_STATUS_OK) {
+                return false;
+            }
+            return commit_track(&document, &candidate) ==
+                TIMELINE_STATUS_OK;
+        }
+        if (event->type == SDL_MOUSEMOTION &&
             g_light_timeline.dragging_path_point) {
             return move_selected_path_point(
                 event->motion.x, &path_point_strip);
@@ -887,7 +988,8 @@ bool SceneEditorLightTimelineHandleEvent(
             g_light_timeline.scrubbing = false;
             g_light_timeline.dragging_key = false;
             g_light_timeline.dragging_path_point = false;
-            g_light_timeline.dragging_handle = 0;
+            g_light_timeline.dragging_handle =
+                SCENE_EDITOR_LIGHT_TIMELINE_HANDLE_NONE;
             g_light_timeline.panning_graph = false;
             return true;
         }
@@ -903,13 +1005,26 @@ bool SceneEditorLightTimelineHandleEvent(
     if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT &&
         point_in_rect(event->button.x, event->button.y, &layout->viewport_rect)) {
         RuntimeSceneBridge3DDigestState digest;
+        RuntimeSceneBridge3DLightSeedState lights;
         SceneEditorDigestOverlayProjector projector;
         runtime_scene_bridge_get_last_3d_digest_state(&digest);
+        runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
         if (digest.valid && SceneEditorDigestOverlayBuildProjector(
                                 &digest, &layout->viewport_rect, nav_state, &projector)) {
             int picked = pick_light(&projector, event->button.x, event->button.y);
             if (picked >= 0) {
-                g_light_timeline.selected_light_index = picked;
+                const char* active_target =
+                    SceneEditorLightTimelineSelectedTargetId();
+                char picked_target[TIMELINE_ID_CAPACITY];
+                snprintf(picked_target, sizeof(picked_target), "light/%s",
+                         lights.lights[picked].id);
+                if (layout->timeline_visible && active_target[0] &&
+                    strcmp(active_target, picked_target) != 0) {
+                    return true;
+                }
+                (void)scene_editor_light_timeline_selection_select_index(
+                    &g_light_timeline.selection, lights.lights,
+                    (size_t)lights.light_count, (size_t)picked);
                 return true;
             }
         }
@@ -921,7 +1036,13 @@ void SceneEditorLightTimelineRenderViewportProxies(
     SDL_Renderer* renderer, const SceneEditorDigestOverlayProjector* projector,
     int mouse_x, int mouse_y) {
     RuntimeSceneBridge3DLightSeedState lights;
+    size_t selected_light_index = SIZE_MAX;
     runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
+    if (lights.valid) {
+        (void)scene_editor_light_timeline_selection_resolve(
+            &g_light_timeline.selection, lights.lights,
+            (size_t)lights.light_count, &selected_light_index);
+    }
     g_light_timeline.hovered_light_index = pick_light(projector, mouse_x, mouse_y);
     if (!renderer || !projector || !lights.valid) return;
     for (int i = 0; i < lights.light_count; ++i) {
@@ -938,9 +1059,9 @@ void SceneEditorLightTimelineRenderViewportProxies(
                                                   position_y,
                                                   position_z,
                                                   &x, &y)) continue;
-        int radius = (i == g_light_timeline.selected_light_index) ? 8 : 6;
+        int radius = ((size_t)i == selected_light_index) ? 8 : 6;
         SDL_Rect marker = {x - radius, y - radius, radius * 2, radius * 2};
-        SDL_Color color = (i == g_light_timeline.selected_light_index)
+        SDL_Color color = ((size_t)i == selected_light_index)
                               ? (SDL_Color){255, 210, 76, 255}
                               : (i == g_light_timeline.hovered_light_index)
                                     ? (SDL_Color){255, 235, 150, 255}

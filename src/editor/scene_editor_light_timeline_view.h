@@ -21,6 +21,9 @@ typedef struct SceneEditorLightTimelinePanelGeometry {
     SDL_Rect constant_speed_button;
     SDL_Rect equal_segments_button;
     SDL_Rect custom_mode_indicator;
+    SDL_Rect step_button;
+    SDL_Rect linear_button;
+    SDL_Rect bezier_button;
 } SceneEditorLightTimelinePanelGeometry;
 
 void scene_editor_light_timeline_panel_geometry(
