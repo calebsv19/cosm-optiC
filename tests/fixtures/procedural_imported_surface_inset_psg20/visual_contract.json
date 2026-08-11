@@ -53,6 +53,6 @@
     "source_mesh_digest_sha256": "17989fc318c1dff86d156d7ad630593f2df7f37212507413d13e2db09ba55f7d",
     "derived_mesh_digest_sha256": "76a40fe32953725454e89b8e530ab6452847a7e1f84a051acacb80b9c43b160d",
     "provenance_digest_sha256": "3cd2eb02f910b3af1be1b05492c655499eabef6c54d393fffd5f02a10d842343",
-    "config_digest_sha256": "95b3ed051ea60a7440d99abd33d1e7d0df6a01c1dc4f4ac58941299ee9d10bc1"
+    "config_digest_sha256": "dcf19a32b91b308ea45ad2ee37cb629f50a728dcc1385cd4e89e9fd7dcb99c98"
   }
 }

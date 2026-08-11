@@ -320,8 +320,8 @@ void ProceduralImportedSurfaceInsetConfig_Init(
         .depth_variation = 0.15,
         .maximum_depth_to_bounds_diagonal_ratio = 0.04,
         .minimum_triangle_area2 = 1.0e-12,
-        .max_vertices = 1000000u,
-        .max_triangles = 2000000u,
+        .max_vertices = PROCEDURAL_IMPORTED_SURFACE_INSET_DEFAULT_MAX_VERTICES,
+        .max_triangles = PROCEDURAL_IMPORTED_SURFACE_INSET_DEFAULT_MAX_TRIANGLES,
         .max_adaptive_refinement_passes = 4u,
         .minimum_selected_component_triangles = 8u,
         .target_boundary_edge_length_units = 0.0,
@@ -383,13 +383,16 @@ bool ProceduralImportedSurfaceInset_Compile(
     ProceduralImportedSurfaceRegionReport region_report = {0};
     ProceduralSolidMeshConfig mesh_config;
     ProceduralSolidMeshSummary mesh_summary = {0};
+    ProceduralSolidMeshSummary source_mesh_summary = {0};
     ProceduralSolidMeshReport mesh_report = {0};
+    CoreMeshAssetRuntimeDocument source_analysis;
     CoreObjectVec3 bounds_extent;
     double bounds_diagonal;
     const size_t derived_id_length =
         derived_asset_id ? strlen(derived_asset_id) : 0u;
     core_mesh_asset_runtime_document_init(&document);
     ProceduralImportedSurfaceInsetProvenance_Init(&provenance);
+    memset(&source_analysis, 0, sizeof(source_analysis));
     report_set(report, false, "arguments", "PSG-20 inset inputs are required");
     if (!source || !source_runtime_path || !region || !region_path || !config ||
         !derived_asset_id || !out_document || !out_provenance || !out_receipt ||
@@ -433,6 +436,28 @@ bool ProceduralImportedSurfaceInset_Compile(
         report_set(report, false, "source_identity",
                    region_report.message[0] ? region_report.message :
                    "source must be a closed manifold exact carrier match");
+        return false;
+    }
+    /*
+     * Imported sculptures may contain handles or tunnels. Reanalyze a
+     * shallow, non-owning document copy so the derived shell must preserve
+     * the source Euler characteristic instead of assuming genus zero.
+     */
+    ProceduralSolidMeshConfig_Init(&mesh_config);
+    mesh_config.max_vertices = config->max_vertices;
+    mesh_config.max_triangles = config->max_triangles;
+    mesh_config.min_components = 1u;
+    mesh_config.max_components = 1u;
+    mesh_config.minimum_triangle_area2 = config->minimum_triangle_area2;
+    mesh_config.require_closed_manifold = true;
+    mesh_config.require_positive_volume = true;
+    source_analysis = *source;
+    if (!ProceduralSolidMesh_Reanalyze(
+            &mesh_config, &source_analysis, &source_mesh_summary,
+            &mesh_report)) {
+        report_set(report, false, "source_topology",
+                   mesh_report.message[0] ? mesh_report.message :
+                   "source topology reanalysis failed");
         return false;
     }
     if (!refine_transition_band(
@@ -500,6 +525,8 @@ bool ProceduralImportedSurfaceInset_Compile(
     receipt.initial_max_boundary_edge_length_units =
         refinement_summary.initial_max_boundary_edge_length_units;
     receipt.final_max_boundary_edge_length_units = maximum_boundary_edge;
+    receipt.source_euler_characteristic =
+        source_mesh_summary.euler_characteristic;
     if (!build_inset(
             source, &refined, selected, edges, edge_count, selected_count,
             boundary_count, config, derived_asset_id, &document, &provenance,
@@ -559,7 +586,8 @@ bool ProceduralImportedSurfaceInset_Compile(
         receipt.boundary_edge_count == 0u &&
         receipt.nonmanifold_edge_count == 0u &&
         receipt.connected_component_count == 1u &&
-        receipt.euler_characteristic == 2 &&
+        receipt.euler_characteristic ==
+            receipt.source_euler_characteristic &&
         receipt.signed_volume_units3 > 0.0;
     if (!receipt.transition_refinement_active ||
         !receipt.adaptive_refinement_active ||
@@ -574,8 +602,33 @@ bool ProceduralImportedSurfaceInset_Compile(
         receipt.maximum_inset_depth_units < receipt.minimum_inset_depth_units ||
         strcmp(receipt.source_mesh_digest_sha256,
                receipt.derived_mesh_digest_sha256) == 0) {
-        report_set(report, false, "acceptance",
-                   "PSG-20 physical inset acceptance gates failed");
+        char acceptance_message[256];
+        snprintf(
+            acceptance_message, sizeof(acceptance_message),
+            "acceptance gates: transition=%d adaptive=%d converged=%d "
+            "components=%zu loops=%zu edge_drop=%d roles=%d shell=%d "
+            "b=%zu nm=%zu cc=%zu e=%d v=%.6g depth=%.6g..%.6g "
+            "source_e=%d distinct=%d",
+            receipt.transition_refinement_active ? 1 : 0,
+            receipt.adaptive_refinement_active ? 1 : 0,
+            receipt.adaptive_refinement_converged ? 1 : 0,
+            receipt.selected_component_count,
+            receipt.boundary_loop_count,
+            receipt.final_max_boundary_edge_length_units <
+                    receipt.initial_max_boundary_edge_length_units ? 1 : 0,
+            receipt.explicit_region_transition_topology ? 1 : 0,
+            receipt.closed_valid_shell ? 1 : 0,
+            receipt.boundary_edge_count,
+            receipt.nonmanifold_edge_count,
+            receipt.connected_component_count,
+            receipt.euler_characteristic,
+            receipt.signed_volume_units3,
+            receipt.minimum_inset_depth_units,
+            receipt.maximum_inset_depth_units,
+            receipt.source_euler_characteristic,
+            strcmp(receipt.source_mesh_digest_sha256,
+                   receipt.derived_mesh_digest_sha256) != 0 ? 1 : 0);
+        report_set(report, false, "acceptance", acceptance_message);
         goto fail;
     }
     free(selected);
