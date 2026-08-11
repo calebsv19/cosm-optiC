@@ -10,8 +10,16 @@
 
 #define PROCEDURAL_IMPORTED_SURFACE_INSET_SCHEMA \
     "ray_tracing.procedural_imported_surface_inset_receipt"
-#define PROCEDURAL_IMPORTED_SURFACE_INSET_SCHEMA_VERSION 2u
+#define PROCEDURAL_IMPORTED_SURFACE_INSET_SCHEMA_VERSION 3u
 #define PROCEDURAL_IMPORTED_SURFACE_INSET_DIGEST_CAPACITY 65u
+
+/*
+ * Dense imported meshes need room for the conservative four-way temporary
+ * refinement allocation used by PSG-20/21. These remain finite defaults, not
+ * an unbounded allocation promise.
+ */
+#define PROCEDURAL_IMPORTED_SURFACE_INSET_DEFAULT_MAX_VERTICES 2000000u
+#define PROCEDURAL_IMPORTED_SURFACE_INSET_DEFAULT_MAX_TRIANGLES 8000000u
 
 typedef enum ProceduralImportedSurfaceInsetRole {
     PROCEDURAL_IMPORTED_SURFACE_INSET_ROLE_RETAINED_SURFACE = 0,
@@ -81,6 +89,7 @@ typedef struct ProceduralImportedSurfaceInsetReceipt {
     size_t nonmanifold_edge_count;
     size_t connected_component_count;
     int euler_characteristic;
+    int source_euler_characteristic;
     double signed_volume_units3;
     double minimum_inset_depth_units;
     double maximum_inset_depth_units;

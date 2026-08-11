@@ -379,7 +379,9 @@ PSG-20 adds the first topology-changing imported-surface inset compiler:
   per-derived-triangle provenance artifact, and material groups named
   `retained_surface`, `transition_wall`, and `inset_floor`;
 - the derived shell must reanalyze as one watertight, manifold, positive-volume
-  component with Euler characteristic two. The imported source mesh is never
+  component and preserve the source Euler characteristic. Genus-zero fixtures
+  therefore report Euler `2`, while imported sculptures with handles or
+  tunnels retain their source genus. The imported source mesh is never
   overwritten.
 
 The focused PSG-20 fixture generates a fresh sculptural urn STL on every run,
@@ -397,6 +399,18 @@ must update that baseline deliberately; an extraction alone must preserve it.
 
 PSG-20's original proof is deliberately bounded to one largest connected,
 disk-like region and one refinement pass.
+
+Dense-source budget note:
+
+- the default PSG-20/21 envelope is `2,000,000` vertices and `8,000,000`
+  triangles, exposed as named configuration constants;
+- the larger triangle cap is required because each localized refinement pass
+  reserves a conservative four-way temporary triangle capacity. Venus's
+  `916,966` source triangles therefore require `3,667,864` first-pass slots
+  before the selected patch is even evaluated;
+- the envelope is still finite and receipt-bound. This change removes the
+  dense-source false negative; it does not authorize arbitrary Boolean
+  clipping, unbounded refinement, or unsafe allocation growth.
 
 PSG-21 evolves that compiler behind the private topology seam:
 

@@ -198,6 +198,8 @@ static json_object *receipt_json(
              receipt->connected_component_count);
     json_object_object_add(root, "euler_characteristic",
         json_object_new_int(receipt->euler_characteristic));
+    json_object_object_add(root, "source_euler_characteristic",
+        json_object_new_int(receipt->source_euler_characteristic));
     json_object_object_add(root, "signed_volume_units3",
         json_object_new_double(receipt->signed_volume_units3));
     json_object_object_add(root, "minimum_inset_depth_units",
