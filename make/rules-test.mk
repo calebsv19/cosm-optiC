@@ -822,6 +822,9 @@ test-procedural-surface-feature-relief-shell-contract: \
 	$(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_BIN)
 	@$(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_BIN)
 
+PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_field_preset_asset_tool
+
 test-procedural-surface-feature-relief-compiler-contract: \
 	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)
 	python3 tests/integration/test_procedural_surface_feature_relief_compiler_psg24r.py \
@@ -1249,8 +1252,6 @@ procedural-surface-preview-asset-tool: \
 	$(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN)
 	@echo "procedural surface preview asset tool ready: $(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN)"
 
-PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN := \
-	$(BUILD_DIR)/tools/cli/procedural_surface_field_preset_asset_tool
 PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_SRCS := \
 	tools/cli/procedural_surface_field_preset_asset_tool.c \
 	$(SRC_DIR)/procedural/procedural_surface_derived_asset.c \
