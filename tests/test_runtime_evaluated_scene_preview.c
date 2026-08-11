@@ -7,6 +7,7 @@
 #include "animation/evaluated_scene_snapshot.h"
 #include "animation/timeline_property_registry.h"
 #include "app/evaluated_scene_service.h"
+#include "app/preview_camera_sample.h"
 #include "app/preview_retained_scene_quality.h"
 #include "config/config_manager.h"
 #include "import/runtime_scene_bridge.h"
@@ -425,6 +426,163 @@ static int test_evaluated_explicit_legacy_fallback(void) {
     return 0;
 }
 
+static int test_evaluated_resume_preserves_absolute_sample(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_animation = animSettings;
+    RuntimeSceneLightTimelineDocument previous_document = {0};
+    RayEvaluatedSceneServiceResult uninterrupted = {0};
+    RayEvaluatedSceneServiceResult resumed = {0};
+    bool had_previous_document =
+        RuntimeSceneLightTimelineGetLast(&previous_document);
+
+    RuntimeSceneLightTimelineResetLast();
+    evaluated_unequal_path(&sceneSettings.cameraPath,
+                           &sceneSettings.cameraPath3D);
+    animSettings.fps = 30;
+    animSettings.framesForTravel = 218;
+    animSettings.bounceMode = false;
+    snprintf(animSettings.loopMode, sizeof(animSettings.loopMode), "%s", "stop");
+    animSettings.startFrameIndex = 0;
+    animSettings.resumeFromExistingFrames = false;
+
+    assert_true("evaluated_resume_uninterrupted_capture",
+                RayEvaluatedSceneCaptureSample(
+                    (TimelineSample){62, 0u, 1u}, &uninterrupted));
+
+    animSettings.startFrameIndex = 62;
+    animSettings.resumeFromExistingFrames = true;
+    assert_true("evaluated_resume_capture",
+                RayEvaluatedSceneCaptureSample(
+                    (TimelineSample){62, 0u, 1u}, &resumed));
+    assert_true("evaluated_resume_keeps_canonical_range_origin",
+                resumed.snapshot.frame.range.start_frame ==
+                    uninterrupted.snapshot.frame.range.start_frame);
+    assert_close("evaluated_resume_normalized_time_parity",
+                 resumed.snapshot.frame.normalized_t,
+                 uninterrupted.snapshot.frame.normalized_t, 1e-12);
+    assert_close("evaluated_resume_light_progress_parity",
+                 resumed.snapshot.light.progress,
+                 uninterrupted.snapshot.light.progress, 1e-12);
+    assert_close("evaluated_resume_camera_x_parity",
+                 resumed.snapshot.camera.position.x,
+                 uninterrupted.snapshot.camera.position.x, 1e-12);
+    assert_close("evaluated_resume_camera_y_parity",
+                 resumed.snapshot.camera.position.y,
+                 uninterrupted.snapshot.camera.position.y, 1e-12);
+    assert_close("evaluated_resume_camera_z_parity",
+                 resumed.snapshot.camera.position.z,
+                 uninterrupted.snapshot.camera.position.z, 1e-12);
+    assert_true("evaluated_resume_keeps_absolute_frame",
+                resumed.snapshot.frame.sample.absolute_frame == 62);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_animation;
+    if (had_previous_document) {
+        (void)RuntimeSceneLightTimelineSetLast(&previous_document);
+    } else {
+        RuntimeSceneLightTimelineResetLast();
+    }
+    return 0;
+}
+
+static int test_authored_light_timeline_does_not_retime_camera(void) {
+    const char* runtime_path =
+        "config/samples/light_timeline_editor_demo_runtime.json";
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_animation = animSettings;
+    RuntimeSceneLightTimelineDocument previous_document = {0};
+    RuntimeSceneLightTimelineDocument light_document = {0};
+    RuntimeSceneBridgePreflight summary = {0};
+    RayEvaluatedSceneServiceResult result = {0};
+    RayEvaluatedSceneServiceResult held_result = {0};
+    PreviewCameraSample expected_camera = {0};
+    TimelineTrack* progress_track = NULL;
+    bool had_previous_document =
+        RuntimeSceneLightTimelineGetLast(&previous_document);
+
+    assert_true("evaluated_clock_split_apply_runtime",
+                runtime_scene_bridge_apply_file(runtime_path, &summary));
+    assert_true("evaluated_clock_split_read_light_timeline",
+                RuntimeSceneLightTimelineGetLast(&light_document));
+    progress_track = &light_document.timeline.tracks[
+        light_document.progress_track_index];
+    light_document.timeline.range.frame_count = 604u;
+    progress_track->key_count = 2u;
+    memset(&progress_track->keys[0], 0, sizeof(progress_track->keys[0]));
+    memset(&progress_track->keys[1], 0, sizeof(progress_track->keys[1]));
+    progress_track->keys[0].frame = 0;
+    progress_track->keys[0].value = TimelineValueScalar(0.0);
+    progress_track->keys[0].interpolation_to_next =
+        TIMELINE_INTERPOLATION_LINEAR;
+    progress_track->keys[1].frame = 603;
+    progress_track->keys[1].value = TimelineValueScalar(1.0);
+    progress_track->keys[1].interpolation_to_next =
+        TIMELINE_INTERPOLATION_STEP;
+    assert_true("evaluated_clock_split_install_light_timeline",
+                RuntimeSceneLightTimelineSetLast(&light_document) ==
+                    TIMELINE_STATUS_OK);
+
+    evaluated_unequal_path(&sceneSettings.cameraPath,
+                           &sceneSettings.cameraPath3D);
+    animSettings.fps = 16;
+    animSettings.framesForTravel = 218;
+    animSettings.frameLimit = 604;
+    animSettings.bounceMode = false;
+    snprintf(animSettings.loopMode, sizeof(animSettings.loopMode), "%s", "Normal");
+
+    assert_true("evaluated_clock_split_expected_camera",
+                PreviewCameraSampleEvaluate(
+                    &sceneSettings.camera,
+                    sceneSettings.cameraZ,
+                    &sceneSettings.cameraPath,
+                    &sceneSettings.cameraPath3D,
+                    62.0 / 218.0,
+                    sceneSettings.windowWidth,
+                    sceneSettings.windowHeight,
+                    &expected_camera));
+    assert_true("evaluated_clock_split_capture",
+                RayEvaluatedSceneCaptureSample(
+                    (TimelineSample){62, 0u, 1u}, &result));
+    assert_true("evaluated_clock_split_authored_source",
+                result.snapshot.source ==
+                    RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE);
+    assert_true("evaluated_clock_split_light_range_preserved",
+                result.snapshot.frame.range.frame_count == 604u);
+    assert_close("evaluated_clock_split_scene_progress_uses_travel",
+                 result.snapshot.frame.normalized_t, 62.0 / 218.0, 1e-12);
+    assert_close("evaluated_clock_split_camera_x",
+                 result.snapshot.camera.position.x,
+                 expected_camera.position_x, 1e-12);
+    assert_close("evaluated_clock_split_camera_y",
+                 result.snapshot.camera.position.y,
+                 expected_camera.position_y, 1e-12);
+    assert_close("evaluated_clock_split_camera_z",
+                 result.snapshot.camera.position.z,
+                 expected_camera.position_z, 1e-12);
+    assert_close("evaluated_clock_split_light_progress_uses_travel",
+                 result.snapshot.light.progress,
+                 62.0 / 218.0, 1e-12);
+    assert_close("evaluated_clock_split_light_progress_rate_uses_travel",
+                 result.snapshot.light.progress_per_frame,
+                 1.0 / 218.0, 1e-12);
+    assert_true("evaluated_clock_split_post_travel_capture",
+                RayEvaluatedSceneCaptureSample(
+                    (TimelineSample){300, 0u, 1u}, &held_result));
+    assert_close("evaluated_clock_split_post_travel_light_holds",
+                 held_result.snapshot.light.progress, 1.0, 1e-12);
+    assert_close("evaluated_clock_split_post_travel_light_rate_zero",
+                 held_result.snapshot.light.progress_per_frame, 0.0, 1e-12);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_animation;
+    if (had_previous_document) {
+        (void)RuntimeSceneLightTimelineSetLast(&previous_document);
+    } else {
+        RuntimeSceneLightTimelineResetLast();
+    }
+    return 0;
+}
+
 static int test_evaluated_service_parity_and_nonmutation(void) {
     const char* runtime_path =
         "config/samples/light_timeline_editor_demo_runtime.json";
@@ -439,6 +597,7 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
     TimelineLightMotionSample final_sample = {0};
     RayEvaluatedSceneServiceResult preview_sample = {0};
     RayEvaluatedSceneServiceResult retained_preview_sample = {0};
+    RayEvaluatedSceneServiceResult runtime_sample = {0};
     RayEvaluatedSceneServiceResult loop_preview_sample = {0};
     RayEvaluatedSceneServiceResult bounce_preview_sample = {0};
     RayEvaluatedSceneSnapshot normalized_loop_snapshot = {0};
@@ -470,6 +629,9 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
     assert_true("evaluated_retained_preview_capture",
                 RayEvaluatedSceneCaptureAuthoredSample(
                     (TimelineSample){35, 0u, 1u}, &retained_preview_sample));
+    assert_true("evaluated_runtime_capture",
+                RayEvaluatedSceneCaptureSample(
+                    (TimelineSample){35, 0u, 1u}, &runtime_sample));
     assert_true("evaluated_loop_preview_capture",
                 RayEvaluatedSceneCaptureSampleWithPlayback(
                     (TimelineSample){35, 0u, 1u},
@@ -525,7 +687,7 @@ static int test_evaluated_service_parity_and_nonmutation(void) {
                        &normalized_bounce_snapshot,
                        sizeof(normalized_loop_snapshot)) == 0 &&
                 memcmp(&normalized_loop_snapshot,
-                       &preview_sample.snapshot,
+                       &runtime_sample.snapshot,
                        sizeof(normalized_loop_snapshot)) == 0);
 
     assert_true("evaluated_native_prepare",
@@ -652,6 +814,8 @@ int run_test_runtime_evaluated_scene_preview_tests(void) {
     test_preview_quality_light_first_shading();
     test_evaluated_equal_time_vs_constant_speed();
     test_evaluated_explicit_legacy_fallback();
+    test_evaluated_resume_preserves_absolute_sample();
+    test_authored_light_timeline_does_not_retime_camera();
     test_evaluated_service_parity_and_nonmutation();
     return test_support_failures();
 }

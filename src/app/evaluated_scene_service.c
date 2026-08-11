@@ -168,16 +168,124 @@ static TimelineStatus ray_evaluated_authored_context(
                                           out_context);
 }
 
+static TimelineStatus ray_evaluated_runtime_context(
+    const RuntimeSceneLightTimelineDocument* document,
+    TimelineSample sample,
+    TimelineEvaluationContext* out_context) {
+    TimelineRate rate = {
+        (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30), 1u};
+    uint64_t runtime_frames =
+        animSettings.frameLimit > 0 ? (uint64_t)animSettings.frameLimit : 1u;
+    if (animSettings.framesForTravel > 0 &&
+        runtime_frames < (uint64_t)animSettings.framesForTravel) {
+        runtime_frames = (uint64_t)animSettings.framesForTravel;
+    }
+    if (document && document->valid &&
+        document->timeline.range.frame_count > runtime_frames) {
+        runtime_frames = document->timeline.range.frame_count;
+    }
+    return TimelineEvaluationContextBuild(
+        rate, (TimelineRange){0, runtime_frames},
+        sample, out_context);
+}
+
+static bool ray_evaluated_animation_context(
+    const TimelineEvaluationContext* timeline_context,
+    TimelineEvaluationContext* out_context) {
+    double travel_frames =
+        (double)(animSettings.framesForTravel > 0
+                     ? animSettings.framesForTravel
+                     : 1);
+    double progress;
+    if (!timeline_context || !out_context) return false;
+
+    progress = timeline_context->absolute_frame_position / travel_frames;
+    if (animSettings.bounceMode) {
+        double phase = fmod(progress, 2.0);
+        if (phase < 0.0) phase += 2.0;
+        progress = phase <= 1.0 ? phase : 2.0 - phase;
+    } else if (strcmp(animSettings.loopMode, "loop") == 0) {
+        progress = fmod(progress, 1.0);
+        if (progress < 0.0) progress += 1.0;
+    } else {
+        if (progress < 0.0) progress = 0.0;
+        if (progress > 1.0) progress = 1.0;
+    }
+    *out_context = *timeline_context;
+    out_context->normalized_t = progress;
+    return true;
+}
+
+static bool ray_evaluated_light_travel_context(
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineEvaluationContext* scene_context,
+    const TimelineEvaluationContext* animation_context,
+    TimelineEvaluationContext* out_context,
+    double* out_frame_scale) {
+    double timeline_span;
+    double travel_frames;
+    double frame_scale;
+    double mapped_frame;
+    double raw_progress;
+    double fps;
+    if (!document || !scene_context || !animation_context || !out_context ||
+        !out_frame_scale || !TimelineRateIsValid(document->timeline.rate) ||
+        !TimelineRangeIsValid(document->timeline.range)) {
+        return false;
+    }
+    timeline_span =
+        document->timeline.range.frame_count > 1u
+            ? (double)(document->timeline.range.frame_count - 1u)
+            : 0.0;
+    travel_frames =
+        (double)(animSettings.framesForTravel > 0
+                     ? animSettings.framesForTravel
+                     : 1);
+    frame_scale = timeline_span / travel_frames;
+    raw_progress = scene_context->absolute_frame_position / travel_frames;
+    if (animSettings.bounceMode) {
+        double phase = fmod(raw_progress, 2.0);
+        if (phase < 0.0) phase += 2.0;
+        if (phase > 1.0) frame_scale = -frame_scale;
+    } else if (strcmp(animSettings.loopMode, "loop") != 0 &&
+               raw_progress >= 1.0) {
+        frame_scale = 0.0;
+    }
+    mapped_frame =
+        (double)document->timeline.range.start_frame +
+        animation_context->normalized_t * timeline_span;
+    fps = (double)document->timeline.rate.frames_per_second_numerator /
+          (double)document->timeline.rate.frames_per_second_denominator;
+
+    *out_context = *scene_context;
+    out_context->rate = document->timeline.rate;
+    out_context->range = document->timeline.range;
+    out_context->absolute_frame_position = mapped_frame;
+    out_context->local_frame_position =
+        mapped_frame - (double)document->timeline.range.start_frame;
+    out_context->absolute_time_seconds = mapped_frame / fps;
+    out_context->local_time_seconds =
+        out_context->local_frame_position / fps;
+    out_context->duration_seconds =
+        (double)document->timeline.range.frame_count / fps;
+    out_context->normalized_t = animation_context->normalized_t;
+    *out_frame_scale = frame_scale;
+    return isfinite(mapped_frame) && isfinite(frame_scale);
+}
+
 static bool ray_evaluated_build_authored(
     const RuntimeSceneLightTimelineDocument* document,
     const TimelineEvaluationContext* context,
     RayEvaluatedPlaybackMode playback_mode,
     bool reverse_direction,
     bool clamped,
+    bool use_animation_travel_for_light,
     RayEvaluatedSceneServiceResult* out_result) {
     RuntimeSceneBridge3DLightSeedState light_state = {0};
     RuntimeSceneLightTimelineTarget target = {0};
     RuntimeNative3DPreparedSceneCacheStats cache_stats = {0};
+    TimelineEvaluationContext animation_context = {0};
+    TimelineEvaluationContext light_context = {0};
     TimelineLightMotionSample motion = {0};
     TimelineEvaluationResult provenance = {0};
     RayEvaluatedSceneSnapshotInputs inputs = {0};
@@ -186,27 +294,52 @@ static bool ray_evaluated_build_authored(
     RuntimeMotionTrack3DSummary motion_summary = {0};
     size_t object_transform_count = 0u;
     const TimelineTrack* progress_track = NULL;
+    double light_frame_scale = 1.0;
     TimelineStatus status;
 
     if (!document || !context || !out_result ||
         document->progress_track_index >= document->timeline.track_count) {
         return false;
     }
+    if (!ray_evaluated_animation_context(context, &animation_context)) {
+        ray_evaluated_fail(out_result, TIMELINE_STATUS_INVALID_SNAPSHOT,
+                           "animation travel context is invalid");
+        return false;
+    }
     progress_track = &document->timeline.tracks[
         document->progress_track_index];
+    light_context = *context;
+    if (use_animation_travel_for_light &&
+        !ray_evaluated_light_travel_context(
+            document, context, &animation_context,
+            &light_context, &light_frame_scale)) {
+        ray_evaluated_fail(out_result, TIMELINE_STATUS_INVALID_SNAPSHOT,
+                           "light travel context is invalid");
+        return false;
+    }
     status = TimelineLightMotionEvaluate(progress_track,
                                          &document->spatial_path,
                                          &document->spatial_path_3d,
-                                         context,
+                                         &light_context,
                                          &motion);
     if (status != TIMELINE_STATUS_OK) {
         ray_evaluated_fail(out_result, status, "light motion evaluation failed");
         return false;
     }
-    status = TimelineTrackEvaluate(progress_track, context, &provenance);
+    status = TimelineTrackEvaluate(
+        progress_track, &light_context, &provenance);
     if (status != TIMELINE_STATUS_OK) {
         ray_evaluated_fail(out_result, status, "property provenance evaluation failed");
         return false;
+    }
+    if (use_animation_travel_for_light) {
+        motion.progress_per_frame *= light_frame_scale;
+        if (motion.speed_valid) {
+            motion.world_speed_per_second *= fabs(light_frame_scale);
+        }
+        if (provenance.derivative_valid) {
+            provenance.derivative_per_frame *= light_frame_scale;
+        }
     }
     runtime_scene_bridge_get_last_3d_light_seed_state(&light_state);
     if (!light_state.valid || light_state.light_count <= 0) {
@@ -225,7 +358,7 @@ static bool ray_evaluated_build_authored(
     inputs.playback_mode = playback_mode;
     inputs.reverse_direction = reverse_direction;
     inputs.clamped = clamped;
-    inputs.frame = *context;
+    inputs.frame = animation_context;
     inputs.identity.scene_revision = cache_stats.generation;
     inputs.identity.timeline_revision = RayEvaluatedTimelineFingerprint(
         &document->timeline, &document->spatial_path, &document->spatial_path_3d);
@@ -239,14 +372,15 @@ static bool ray_evaluated_build_authored(
     inputs.light.global_path_t = motion.global_path_t;
     inputs.light.speed_valid = motion.speed_valid;
     inputs.light.property_provenance = provenance;
-    if (!ray_evaluated_capture_camera(context->normalized_t, &inputs.camera)) {
+    if (!ray_evaluated_capture_camera(
+            animation_context.normalized_t, &inputs.camera)) {
         ray_evaluated_fail(out_result, TIMELINE_STATUS_INVALID_SNAPSHOT,
                            "camera evaluation failed");
         return false;
     }
     runtime_scene_motion_bridge_get_last_summary(&motion_summary);
     status = RayEvaluatedSceneCaptureCompatibilityTransforms(
-        &motion_summary, context, object_transforms,
+        &motion_summary, &animation_context, object_transforms,
         RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY, &object_transform_count);
     if (status != TIMELINE_STATUS_OK) {
         ray_evaluated_fail(out_result, status,
@@ -395,7 +529,7 @@ bool RayEvaluatedSceneCaptureAuthoredSample(
     }
     return ray_evaluated_build_authored(&document, &context,
                                         RAY_EVALUATED_PLAYBACK_STOP,
-                                        false, false, out_result);
+                                        false, false, false, out_result);
 }
 
 bool RayEvaluatedSceneCaptureSample(
@@ -422,7 +556,7 @@ TimelineStatus RayEvaluatedSceneResolveTimelineClock(
         rate.frames_per_second_numerator =
             (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30);
         rate.frames_per_second_denominator = 1u;
-        range.start_frame = animSettings.startFrameIndex;
+        range.start_frame = 0;
         range.frame_count =
             (uint64_t)(animSettings.framesForTravel > 0
                            ? animSettings.framesForTravel
@@ -450,15 +584,15 @@ bool RayEvaluatedSceneCaptureSampleWithPlayback(
     if (!out_result) return false;
     memset(out_result, 0, sizeof(*out_result));
     if (RuntimeSceneLightTimelineGetLast(&document)) {
-        status = ray_evaluated_authored_context(&document, sample, &context);
+        status = ray_evaluated_runtime_context(&document, sample, &context);
         if (status != TIMELINE_STATUS_OK) {
             ray_evaluated_fail(out_result, status,
-                               "authored frame context is invalid");
+                               "runtime frame context is invalid");
             return false;
         }
         return ray_evaluated_build_authored(
             &document, &context, playback_mode,
-            reverse_direction, clamped, out_result);
+            reverse_direction, clamped, true, out_result);
     }
     status = RayEvaluatedSceneResolveTimelineClock(&rate, &range);
     if (status != TIMELINE_STATUS_OK) {
@@ -492,8 +626,15 @@ bool RayEvaluatedSceneCaptureForElapsed(
     if (!out_result) return false;
     memset(out_result, 0, sizeof(*out_result));
     if (RuntimeSceneLightTimelineGetLast(&document)) {
-        rate = document.timeline.rate;
-        range = document.timeline.range;
+        rate.frames_per_second_numerator =
+            (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30);
+        rate.frames_per_second_denominator = 1u;
+        range.start_frame = 0;
+        range.frame_count =
+            (uint64_t)(animSettings.frameLimit > animSettings.framesForTravel
+                           ? animSettings.frameLimit
+                           : animSettings.framesForTravel);
+        if (range.frame_count == 0u) range.frame_count = 1u;
     } else {
         status = RayEvaluatedSceneResolveTimelineClock(&rate, &range);
         if (status != TIMELINE_STATUS_OK) {
@@ -516,7 +657,8 @@ bool RayEvaluatedSceneCaptureForElapsed(
     }
     if (document.valid) {
         return ray_evaluated_build_authored(&document, &context, mode,
-                                            reverse_direction, clamped, out_result);
+                                            reverse_direction, clamped, true,
+                                            out_result);
     }
     return ray_evaluated_build_legacy(&context, mode, reverse_direction,
                                       clamped, out_result);

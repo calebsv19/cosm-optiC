@@ -768,6 +768,7 @@ static int test_new_timeline_keys_are_independent_of_path_points(void) {
     }
     animSettings.fps = 20;
     animSettings.frameLimit = 101;
+    animSettings.framesForTravel = 218;
     RuntimeSceneLightTimelineResetLast();
     SceneEditorLightTimelineReset();
     assert_true("light_independent_keys_select",
@@ -781,6 +782,7 @@ static int test_new_timeline_keys_are_independent_of_path_points(void) {
                 RuntimeSceneLightTimelineGetLast(&document));
     assert_true("light_independent_keys_only_endpoints",
                 document.spatial_path.numPoints == 5 &&
+                document.timeline.range.frame_count == 218u &&
                 document.timeline.tracks[
                     document.progress_track_index].key_count == 2u);
     layout = scene_editor_pane_host_layout(&pane_host);
