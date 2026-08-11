@@ -8,6 +8,8 @@
 #include "ui/shared_theme_font_adapter.h"
 
 void MaterialEditorAuthoredTextureBindingReset(void);
+bool MaterialEditorAuthoredTextureBindingPoll(void);
+bool MaterialEditorAuthoredTextureBindingPickerActive(void);
 int MaterialEditorAuthoredTextureBindingRenderPaneControls(SDL_Renderer* renderer,
                                                            SDL_Rect content_bounds,
                                                            int cursor_y,

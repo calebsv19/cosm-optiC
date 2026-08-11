@@ -627,6 +627,41 @@ slice promotes one into the stable lane.
 The authoritative stable target list is `STABLE_TEST_TARGETS` in
 `ray_tracing/make/rules-test.mk`.
 
+`test-ray-tracing-folder-picker` proves synchronous compatibility plus the
+desktop request lifecycle without launching a real host dialog. It covers
+selected, cancelled, failed, and unavailable subprocess results; zenity to
+kdialog fallback; folder/file mode separation; observable nonblocking pending
+state; no caller-buffer mutation before selection or after cancellation/failure;
+and absolute, relative, file, and missing-leaf initial-directory resolution.
+
+macOS operator acceptance remains a hands-on desktop gate because an automated
+test must not open or control the system chooser:
+
+1. Configure the frames root as the relative
+   `data/runtime/frames/default`, open Output, and click its folder button.
+   Confirm the chooser opens at the isolated runtime directory (or its nearest
+   existing parent) without an AppleScript alias error.
+2. Leave the chooser open for at least five seconds. Resize or expose the optiC
+   window and confirm it continues repainting and macOS does not label it
+   unresponsive.
+3. Cancel and confirm the displayed/configured frames root is byte-identical.
+4. Reopen, choose a different existing directory, and confirm the new root is
+   applied only after selection completes.
+5. Repeat with a deliberately nonexistent configured leaf and with the authored
+   texture manifest file chooser. Confirm both start at an existing parent,
+   cancellation is non-mutating, and only successful selection changes state.
+6. Quit with a chooser open and confirm the owned subprocess/dialog closes
+   without delaying normal shutdown.
+
+`runtime_timeline_light_persistence` proves the light-timeline schema-v1 read
+compatibility and schema-v2 typed multi-track writer, transactional validation,
+unique target/property ownership, missing-intensity base provenance, intensity
+lane lazy creation as one undoable transaction, Motion isolation, cubic-handle
+operability, save/reopen exactness, and exact-frame Preview/final/headless
+intensity parity. Its fixed-geometry retained-preview sequence holds exposure
+and surface/light distance constant while confirming that measured pixel
+response rises with evaluated intensity.
+
 `runtime_evaluated_scene_preview` proves immutable evaluated-scene capture,
 authored-frame Preview/final light parity, authoring-global non-mutation,
 explicit simulation identity, and the unequal-path equal-time versus

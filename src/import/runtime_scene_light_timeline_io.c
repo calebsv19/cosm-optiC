@@ -1,6 +1,7 @@
 #include "import/runtime_scene_light_timeline_io.h"
 
 #include "camera/camera_path_3d.h"
+#include "animation/timeline_property_registry.h"
 #include "config/config_scene_path_io.h"
 
 #include <math.h>
@@ -73,13 +74,37 @@ static bool parse_handle(json_object* key, const char* name,
            json_number(handle, "value_offset", value_offset);
 }
 
-static TimelineStatus parse_progress_track(json_object* track_obj,
-                                           const char* target_id,
-                                           TimelineTrack* out_track) {
+static TimelineUnit unit_from_label(const char* label) {
+    if (label && strcmp(label, "unitless") == 0) {
+        return TIMELINE_UNIT_UNITLESS;
+    }
+    if (label && strcmp(label, "relative_intensity") == 0) {
+        return TIMELINE_UNIT_RELATIVE_INTENSITY;
+    }
+    return TIMELINE_UNIT_UNSPECIFIED;
+}
+
+static TimelineStatus parse_scalar_track(json_object* track_obj,
+                                         const char* target_id,
+                                         const char* legacy_property_id,
+                                         TimelineTrack* out_track) {
     json_object* keys = NULL;
     TimelineTrack track;
     const char* track_id = json_string(track_obj, "id");
+    const char* property_id = legacy_property_id
+        ? legacy_property_id
+        : json_string(track_obj, "property_id");
+    const char* value_type = legacy_property_id
+        ? "scalar"
+        : json_string(track_obj, "value_type");
+    const char* unit_label = legacy_property_id
+        ? "unitless"
+        : json_string(track_obj, "unit");
+    TimelineUnit unit = unit_from_label(unit_label);
     if (!track_obj || !target_id || !track_id || !track_id[0] ||
+        !property_id || !property_id[0] ||
+        !value_type || strcmp(value_type, "scalar") != 0 ||
+        unit == TIMELINE_UNIT_UNSPECIFIED ||
         !json_object_object_get_ex(track_obj, "keys", &keys) ||
         !json_object_is_type(keys, json_type_array) ||
         json_object_array_length(keys) == 0u) {
@@ -87,10 +112,10 @@ static TimelineStatus parse_progress_track(json_object* track_obj,
     }
     memset(&track, 0, sizeof(track));
     TimelineStatus status = TimelineTrackInit(&track, track_id, target_id,
-                                              "light/path_progress",
+                                              property_id,
                                               TIMELINE_VALUE_SCALAR);
     if (status != TIMELINE_STATUS_OK) return status;
-    status = TimelineTrackSetUnit(&track, TIMELINE_UNIT_UNITLESS);
+    status = TimelineTrackSetUnit(&track, unit);
     if (status != TIMELINE_STATUS_OK) return status;
     json_object* enabled = NULL;
     if (json_object_object_get_ex(track_obj, "enabled", &enabled)) {
@@ -129,6 +154,81 @@ static TimelineStatus parse_progress_track(json_object* track_obj,
     return TIMELINE_STATUS_OK;
 }
 
+TimelineStatus RuntimeSceneLightTimelineFindTrack(
+    const RuntimeSceneLightTimelineDocument* document,
+    const char* property_id,
+    size_t* out_track_index) {
+    size_t found = SIZE_MAX;
+    if (!document || !property_id || !property_id[0] || !out_track_index ||
+        document->timeline.track_count > TIMELINE_DOCUMENT_TRACK_CAPACITY) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    for (size_t i = 0u; i < document->timeline.track_count; ++i) {
+        if (strcmp(document->timeline.tracks[i].property_id, property_id) == 0) {
+            if (found != SIZE_MAX) return TIMELINE_STATUS_DUPLICATE_OWNERSHIP;
+            found = i;
+        }
+    }
+    if (found == SIZE_MAX) return TIMELINE_STATUS_TARGET_NOT_FOUND;
+    *out_track_index = found;
+    return TIMELINE_STATUS_OK;
+}
+
+TimelineStatus RuntimeSceneLightTimelineValidateDocument(
+    const RuntimeSceneLightTimelineDocument* document) {
+    TimelinePropertyRegistry registry;
+    size_t progress_index = SIZE_MAX;
+    size_t intensity_index = SIZE_MAX;
+    TimelineStatus status;
+    if (!document || !document->valid ||
+        document->timeline.track_count == 0u ||
+        document->timeline.track_count > 2u ||
+        document->spatial_path.numPoints < 2) {
+        return TIMELINE_STATUS_INVALID_ARGUMENT;
+    }
+    status = TimelinePropertyRegistryInitFoundationDefaults(&registry);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = TimelinePropertyRegistryValidateDocument(
+        &registry, &document->timeline);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = RuntimeSceneLightTimelineFindTrack(
+        document, "light/path_progress", &progress_index);
+    if (status != TIMELINE_STATUS_OK ||
+        progress_index != document->progress_track_index) {
+        return status == TIMELINE_STATUS_OK
+            ? TIMELINE_STATUS_INVALID_TRACK
+            : status;
+    }
+    status = TimelineLightMotionValidateProgressTrack(
+        &document->timeline.tracks[progress_index],
+        &document->timeline.range);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = RuntimeSceneLightTimelineFindTrack(
+        document, "light/intensity", &intensity_index);
+    if (document->has_intensity_track) {
+        if (status != TIMELINE_STATUS_OK ||
+            intensity_index != document->intensity_track_index) {
+            return status == TIMELINE_STATUS_OK
+                ? TIMELINE_STATUS_INVALID_TRACK
+                : status;
+        }
+    } else if (status != TIMELINE_STATUS_TARGET_NOT_FOUND) {
+        return status == TIMELINE_STATUS_OK
+            ? TIMELINE_STATUS_INVALID_TRACK
+            : status;
+    }
+    for (size_t i = 0u; i < document->timeline.track_count; ++i) {
+        const TimelineTrack* track = &document->timeline.tracks[i];
+        if (strcmp(track->target_id,
+                   document->timeline.tracks[progress_index].target_id) != 0 ||
+            (strcmp(track->property_id, "light/path_progress") != 0 &&
+             strcmp(track->property_id, "light/intensity") != 0)) {
+            return TIMELINE_STATUS_OWNERSHIP_MISMATCH;
+        }
+    }
+    return TIMELINE_STATUS_OK;
+}
+
 TimelineStatus RuntimeSceneLightTimelineParseAuthoring(
     json_object* authoring, double world_scale,
     RuntimeSceneLightTimelineDocument* out_document,
@@ -136,9 +236,9 @@ TimelineStatus RuntimeSceneLightTimelineParseAuthoring(
     RuntimeSceneLightTimelineDocument candidate;
     json_object *root = NULL, *rate = NULL, *range = NULL, *spatial = NULL;
     json_object *path_obj = NULL, *depth_obj = NULL, *track_obj = NULL;
+    json_object* tracks = NULL;
     int64_t version = 0, fps_n = 0, fps_d = 0, start = 0, count = 0;
     const char* target_id = NULL;
-    TimelineTrack progress;
     TimelineStatus status;
     if (!authoring || !out_document || !isfinite(world_scale) || world_scale <= 0.0) {
         light_timeline_diag(out_diagnostics, diagnostics_size, "invalid_input");
@@ -151,7 +251,8 @@ TimelineStatus RuntimeSceneLightTimelineParseAuthoring(
     }
     if (!json_object_is_type(root, json_type_object) ||
         !json_integer(root, "version", &version) ||
-        version != RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION ||
+        (version != RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION_LEGACY &&
+         version != RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION) ||
         !json_object_object_get_ex(root, "rate", &rate) ||
         !json_object_is_type(rate, json_type_object) ||
         !json_integer(rate, "numerator", &fps_n) ||
@@ -174,22 +275,56 @@ TimelineStatus RuntimeSceneLightTimelineParseAuthoring(
                                   (TimelineRate){(uint32_t)fps_n, (uint32_t)fps_d},
                                   (TimelineRange){start, (uint64_t)count});
     if (status != TIMELINE_STATUS_OK) return status;
-    if (!json_object_object_get_ex(root, "progress_track", &track_obj) ||
-        !json_object_is_type(track_obj, json_type_object)) {
-        light_timeline_diag(out_diagnostics, diagnostics_size, "progress_track_missing");
-        return TIMELINE_STATUS_INVALID_TRACK;
+    candidate.loaded_schema_version = (uint32_t)version;
+    if (version == RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION_LEGACY) {
+        TimelineTrack progress;
+        if (!json_object_object_get_ex(root, "progress_track", &track_obj) ||
+            !json_object_is_type(track_obj, json_type_object)) {
+            light_timeline_diag(out_diagnostics, diagnostics_size,
+                                "progress_track_missing");
+            return TIMELINE_STATUS_INVALID_TRACK;
+        }
+        status = parse_scalar_track(
+            track_obj, target_id, "light/path_progress", &progress);
+        if (status != TIMELINE_STATUS_OK) return status;
+        status = TimelineDocumentAddTrack(&candidate.timeline, &progress);
+        if (status != TIMELINE_STATUS_OK) return status;
+    } else {
+        const size_t track_count =
+            json_object_object_get_ex(root, "tracks", &tracks) &&
+            json_object_is_type(tracks, json_type_array)
+                ? json_object_array_length(tracks)
+                : 0u;
+        if (track_count == 0u || track_count > 2u) {
+            light_timeline_diag(out_diagnostics, diagnostics_size,
+                                "invalid_tracks_array");
+            return track_count > 2u ? TIMELINE_STATUS_CAPACITY_EXCEEDED
+                                    : TIMELINE_STATUS_INVALID_TRACK;
+        }
+        for (size_t i = 0u; i < track_count; ++i) {
+            TimelineTrack parsed;
+            track_obj = json_object_array_get_idx(tracks, i);
+            if (!track_obj || !json_object_is_type(track_obj, json_type_object)) {
+                return TIMELINE_STATUS_INVALID_TRACK;
+            }
+            status = parse_scalar_track(track_obj, target_id, NULL, &parsed);
+            if (status != TIMELINE_STATUS_OK) return status;
+            status = TimelineDocumentAddTrack(&candidate.timeline, &parsed);
+            if (status != TIMELINE_STATUS_OK) return status;
+        }
     }
-    status = parse_progress_track(track_obj, target_id, &progress);
-    if (status != TIMELINE_STATUS_OK) return status;
-    status = TimelineDocumentAddTrack(&candidate.timeline, &progress);
-    if (status != TIMELINE_STATUS_OK) return status;
-    candidate.progress_track_index = 0u;
-    status = TimelineLightMotionValidateProgressTrack(
-        &candidate.timeline.tracks[candidate.progress_track_index],
-        &candidate.timeline.range);
+    status = RuntimeSceneLightTimelineFindTrack(
+        &candidate, "light/path_progress", &candidate.progress_track_index);
     if (status != TIMELINE_STATUS_OK) {
         light_timeline_diag(out_diagnostics, diagnostics_size,
                             "invalid_path_progress_track");
+        return status;
+    }
+    status = RuntimeSceneLightTimelineFindTrack(
+        &candidate, "light/intensity", &candidate.intensity_track_index);
+    candidate.has_intensity_track = status == TIMELINE_STATUS_OK;
+    if (status != TIMELINE_STATUS_OK &&
+        status != TIMELINE_STATUS_TARGET_NOT_FOUND) {
         return status;
     }
 
@@ -221,6 +356,18 @@ TimelineStatus RuntimeSceneLightTimelineParseAuthoring(
     CameraPath3D_ScaleWorldUnits(&candidate.spatial_path_3d,
                                  &candidate.spatial_path, world_scale);
     candidate.valid = true;
+    status = RuntimeSceneLightTimelineValidateDocument(&candidate);
+    if (status != TIMELINE_STATUS_OK) {
+        light_timeline_diag(out_diagnostics, diagnostics_size,
+                            TimelineLightMotionValidateProgressTrack(
+                                &candidate.timeline.tracks[
+                                    candidate.progress_track_index],
+                                &candidate.timeline.range) !=
+                                    TIMELINE_STATUS_OK
+                                ? "invalid_path_progress_track"
+                                : "invalid_multitrack_contract");
+        return status;
+    }
     *out_document = candidate;
     light_timeline_diag(out_diagnostics, diagnostics_size,
                         candidate.migrated_legacy_spatial_path ? "ok_legacy_path" : "ok");
@@ -235,29 +382,81 @@ static json_object* handle_json(double frame_offset, double value_offset) {
     return handle;
 }
 
+static json_object* scalar_track_json(const TimelineTrack* source) {
+    json_object* track = NULL;
+    json_object* keys = NULL;
+    if (!source || source->value_type != TIMELINE_VALUE_SCALAR) return NULL;
+    track = json_object_new_object();
+    keys = json_object_new_array();
+    if (!track || !keys) goto fail;
+    json_object_object_add(
+        track, "id", json_object_new_string(source->track_id));
+    json_object_object_add(
+        track, "property_id", json_object_new_string(source->property_id));
+    json_object_object_add(
+        track, "value_type",
+        json_object_new_string(TimelineValueTypeLabel(source->value_type)));
+    json_object_object_add(
+        track, "unit", json_object_new_string(TimelineUnitLabel(source->unit)));
+    json_object_object_add(
+        track, "enabled", json_object_new_boolean(source->enabled));
+    for (size_t i = 0u; i < source->key_count; ++i) {
+        const TimelineKeyframe* key = &source->keys[i];
+        json_object* key_obj = json_object_new_object();
+        json_object* incoming = NULL;
+        json_object* outgoing = NULL;
+        if (!key_obj) goto fail;
+        incoming = handle_json(
+            key->incoming_frame_offset, key->incoming_value_offset);
+        outgoing = handle_json(
+            key->outgoing_frame_offset, key->outgoing_value_offset);
+        if (!incoming || !outgoing) {
+            if (incoming) json_object_put(incoming);
+            if (outgoing) json_object_put(outgoing);
+            json_object_put(key_obj);
+            goto fail;
+        }
+        json_object_object_add(
+            key_obj, "frame", json_object_new_int64(key->frame));
+        json_object_object_add(
+            key_obj, "value", json_object_new_double(key->value.as.scalar));
+        json_object_object_add(
+            key_obj, "interpolation",
+            json_object_new_string(
+                TimelineInterpolationLabel(key->interpolation_to_next)));
+        json_object_object_add(key_obj, "incoming_handle", incoming);
+        json_object_object_add(key_obj, "outgoing_handle", outgoing);
+        json_object_array_add(keys, key_obj);
+    }
+    json_object_object_add(track, "keys", keys);
+    return track;
+fail:
+    if (keys) json_object_put(keys);
+    if (track) json_object_put(track);
+    return NULL;
+}
+
 json_object* RuntimeSceneLightTimelineToJsonObject(
     const RuntimeSceneLightTimelineDocument* document, double world_scale) {
     json_object *root = NULL, *rate = NULL, *range = NULL, *spatial = NULL;
-    json_object *track = NULL, *keys = NULL;
+    json_object* tracks = NULL;
     Path authored_path;
     CameraPath3D authored_path3d;
     const TimelineTrack* progress = NULL;
     if (!document || !document->valid || !isfinite(world_scale) || world_scale <= 0.0 ||
-        TimelineDocumentValidate(&document->timeline) != TIMELINE_STATUS_OK ||
-        document->progress_track_index >= document->timeline.track_count) return NULL;
-    progress = &document->timeline.tracks[document->progress_track_index];
-    if (TimelineLightMotionValidateProgressTrack(
-            progress, &document->timeline.range) != TIMELINE_STATUS_OK) {
+        RuntimeSceneLightTimelineValidateDocument(document) !=
+            TIMELINE_STATUS_OK) {
         return NULL;
     }
+    progress = &document->timeline.tracks[document->progress_track_index];
     authored_path = document->spatial_path;
     authored_path3d = document->spatial_path_3d;
     scale_path(&authored_path, 1.0 / world_scale);
     CameraPath3D_ScaleWorldUnits(&authored_path3d, &authored_path, 1.0 / world_scale);
     root = json_object_new_object(); rate = json_object_new_object();
     range = json_object_new_object(); spatial = json_object_new_object();
-    track = json_object_new_object(); keys = json_object_new_array();
-    if (!root || !rate || !range || !spatial || !track || !keys) goto fail;
+    tracks = json_object_new_array();
+    if (!root || !rate || !range || !spatial || !tracks) goto fail;
     json_object_object_add(root, "version", json_object_new_int(RUNTIME_SCENE_LIGHT_TIMELINE_SCHEMA_VERSION));
     json_object_object_add(rate, "numerator", json_object_new_int64(document->timeline.rate.frames_per_second_numerator));
     json_object_object_add(rate, "denominator", json_object_new_int64(document->timeline.rate.frames_per_second_denominator));
@@ -269,26 +468,17 @@ json_object* RuntimeSceneLightTimelineToJsonObject(
     json_object_object_add(spatial, "path", config_scene_path_to_json_object(&authored_path));
     json_object_object_add(spatial, "depth", CameraPath3D_ToJsonObject(&authored_path3d, &authored_path));
     json_object_object_add(root, "spatial_path", spatial); spatial = NULL;
-    json_object_object_add(track, "id", json_object_new_string(progress->track_id));
-    json_object_object_add(track, "enabled", json_object_new_boolean(progress->enabled));
-    for (size_t i = 0u; i < progress->key_count; ++i) {
-        const TimelineKeyframe* key = &progress->keys[i];
-        json_object* key_obj = json_object_new_object();
-        if (!key_obj) goto fail;
-        json_object_object_add(key_obj, "frame", json_object_new_int64(key->frame));
-        json_object_object_add(key_obj, "value", json_object_new_double(key->value.as.scalar));
-        json_object_object_add(key_obj, "interpolation", json_object_new_string(TimelineInterpolationLabel(key->interpolation_to_next)));
-        json_object_object_add(key_obj, "incoming_handle", handle_json(key->incoming_frame_offset, key->incoming_value_offset));
-        json_object_object_add(key_obj, "outgoing_handle", handle_json(key->outgoing_frame_offset, key->outgoing_value_offset));
-        json_object_array_add(keys, key_obj);
+    for (size_t i = 0u; i < document->timeline.track_count; ++i) {
+        json_object* track = scalar_track_json(&document->timeline.tracks[i]);
+        if (!track) goto fail;
+        json_object_array_add(tracks, track);
     }
-    json_object_object_add(track, "keys", keys); keys = NULL;
-    json_object_object_add(root, "progress_track", track); track = NULL;
+    json_object_object_add(root, "tracks", tracks); tracks = NULL;
     return root;
 fail:
     if (rate) json_object_put(rate); if (range) json_object_put(range);
-    if (spatial) json_object_put(spatial); if (track) json_object_put(track);
-    if (keys) json_object_put(keys); if (root) json_object_put(root);
+    if (spatial) json_object_put(spatial); if (tracks) json_object_put(tracks);
+    if (root) json_object_put(root);
     return NULL;
 }
 
@@ -320,7 +510,6 @@ TimelineStatus RuntimeSceneLightTimelineApplyAuthoring(
     RuntimeSceneLightTimelineDocument candidate;
     TimelineStatus status;
     memset(&candidate, 0, sizeof(candidate));
-    RuntimeSceneLightTimelineResetLast();
     status = RuntimeSceneLightTimelineParseAuthoring(authoring, world_scale,
                                                      &candidate,
                                                      out_diagnostics,
@@ -339,17 +528,9 @@ bool RuntimeSceneLightTimelineGetLast(RuntimeSceneLightTimelineDocument* out_doc
 
 TimelineStatus RuntimeSceneLightTimelineSetLast(
     const RuntimeSceneLightTimelineDocument* document) {
-    if (!document || !document->valid ||
-        document->progress_track_index >= document->timeline.track_count) {
-        return TIMELINE_STATUS_INVALID_ARGUMENT;
-    }
-    TimelineStatus status = TimelineDocumentValidate(&document->timeline);
+    TimelineStatus status =
+        RuntimeSceneLightTimelineValidateDocument(document);
     if (status != TIMELINE_STATUS_OK) return status;
-    status = TimelineLightMotionValidateProgressTrack(
-        &document->timeline.tracks[document->progress_track_index],
-        &document->timeline.range);
-    if (status != TIMELINE_STATUS_OK) return status;
-    if (document->spatial_path.numPoints < 2) return TIMELINE_STATUS_INVALID_ARGUMENT;
     g_last_light_timeline = *document;
     return TIMELINE_STATUS_OK;
 }

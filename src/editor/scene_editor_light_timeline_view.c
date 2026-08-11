@@ -74,6 +74,12 @@ void scene_editor_light_timeline_panel_geometry(
         52,
         20
     };
+    out_geometry->motion_lane_button = (SDL_Rect){
+        panel->x + 116, panel->y + 7, 66, 20
+    };
+    out_geometry->intensity_lane_button = (SDL_Rect){
+        panel->x + 186, panel->y + 7, 72, 20
+    };
     mode_gap = 4;
     mode_width = panel->w >= 460 ? 94 : 66;
     out_geometry->constant_speed_button = (SDL_Rect){
@@ -195,11 +201,56 @@ double scene_editor_light_timeline_progress_at_y(
         0.0, 1.0);
 }
 
+double scene_editor_light_timeline_value_at_y(
+    const SDL_Rect* graph,
+    int y,
+    double minimum,
+    double maximum) {
+    double normalized;
+    if (!graph || graph->h <= 0 || !isfinite(minimum) ||
+        !isfinite(maximum) || maximum <= minimum) {
+        return minimum;
+    }
+    normalized = clamp_double(
+        1.0 - (double)(y - graph->y) / (double)graph->h,
+        0.0, 1.0);
+    return minimum + normalized * (maximum - minimum);
+}
+
+int scene_editor_light_timeline_y_at_value(
+    const SDL_Rect* graph,
+    double value,
+    double minimum,
+    double maximum) {
+    double normalized;
+    if (!graph || graph->h <= 0 || !isfinite(value) ||
+        !isfinite(minimum) || !isfinite(maximum) || maximum <= minimum) {
+        return graph ? graph->y + graph->h : 0;
+    }
+    normalized = clamp_double(
+        (value - minimum) / (maximum - minimum), 0.0, 1.0);
+    return graph->y + graph->h -
+        (int)llround(normalized * (double)graph->h);
+}
+
 void scene_editor_light_timeline_key_point(
     const SceneEditorLightTimelineView* view,
     const RuntimeSceneLightTimelineDocument* document,
     const SDL_Rect* graph,
     const TimelineKeyframe* key,
+    int* out_x,
+    int* out_y) {
+    scene_editor_light_timeline_scalar_key_point(
+        view, document, graph, key, 0.0, 1.0, out_x, out_y);
+}
+
+void scene_editor_light_timeline_scalar_key_point(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const SDL_Rect* graph,
+    const TimelineKeyframe* key,
+    double minimum,
+    double maximum,
     int* out_x,
     int* out_y) {
     double normalized;
@@ -213,8 +264,8 @@ void scene_editor_light_timeline_key_point(
             view, graph, normalized);
     }
     if (out_y) {
-        *out_y = graph->y + graph->h -
-            (int)llround(key->value.as.scalar * graph->h);
+        *out_y = scene_editor_light_timeline_y_at_value(
+            graph, key->value.as.scalar, minimum, maximum);
     }
 }
 
@@ -223,6 +274,19 @@ int scene_editor_light_timeline_pick_key(
     const RuntimeSceneLightTimelineDocument* document,
     const TimelineTrack* track,
     const SDL_Rect* graph,
+    int x,
+    int y) {
+    return scene_editor_light_timeline_pick_scalar_key(
+        view, document, track, graph, 0.0, 1.0, x, y);
+}
+
+int scene_editor_light_timeline_pick_scalar_key(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
     int x,
     int y) {
     int best = -1;
@@ -234,8 +298,9 @@ int scene_editor_light_timeline_pick_key(
         double dx;
         double dy;
         double distance;
-        scene_editor_light_timeline_key_point(
-            view, document, graph, &track->keys[i], &key_x, &key_y);
+        scene_editor_light_timeline_scalar_key_point(
+            view, document, graph, &track->keys[i],
+            minimum, maximum, &key_x, &key_y);
         dx = (double)key_x - x;
         dy = (double)key_y - y;
         distance = dx * dx + dy * dy;

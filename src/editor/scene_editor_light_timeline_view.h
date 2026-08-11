@@ -18,6 +18,8 @@ typedef struct SceneEditorLightTimelinePanelGeometry {
     SDL_Rect footer_hint;
     SDL_Rect add_key_button;
     SDL_Rect play_button;
+    SDL_Rect motion_lane_button;
+    SDL_Rect intensity_lane_button;
     SDL_Rect constant_speed_button;
     SDL_Rect equal_segments_button;
     SDL_Rect custom_mode_indicator;
@@ -57,6 +59,18 @@ double scene_editor_light_timeline_progress_at_y(
     const SDL_Rect* graph,
     int y);
 
+double scene_editor_light_timeline_value_at_y(
+    const SDL_Rect* graph,
+    int y,
+    double minimum,
+    double maximum);
+
+int scene_editor_light_timeline_y_at_value(
+    const SDL_Rect* graph,
+    double value,
+    double minimum,
+    double maximum);
+
 void scene_editor_light_timeline_key_point(
     const SceneEditorLightTimelineView* view,
     const RuntimeSceneLightTimelineDocument* document,
@@ -65,11 +79,31 @@ void scene_editor_light_timeline_key_point(
     int* out_x,
     int* out_y);
 
+void scene_editor_light_timeline_scalar_key_point(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const SDL_Rect* graph,
+    const TimelineKeyframe* key,
+    double minimum,
+    double maximum,
+    int* out_x,
+    int* out_y);
+
 int scene_editor_light_timeline_pick_key(
     const SceneEditorLightTimelineView* view,
     const RuntimeSceneLightTimelineDocument* document,
     const TimelineTrack* track,
     const SDL_Rect* graph,
+    int x,
+    int y);
+
+int scene_editor_light_timeline_pick_scalar_key(
+    const SceneEditorLightTimelineView* view,
+    const RuntimeSceneLightTimelineDocument* document,
+    const TimelineTrack* track,
+    const SDL_Rect* graph,
+    double minimum,
+    double maximum,
     int x,
     int y);
 

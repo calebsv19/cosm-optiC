@@ -22,6 +22,9 @@ static SDL_Rect s_authored_clear_rect = {0, 0, 0, 0};
 static char s_authored_status_text[160];
 static SDL_Color s_authored_status_color = {0, 0, 0, 0};
 static Uint32 s_authored_status_expire_ms = 0u;
+static RayTracingFolderPickerRequest s_authored_picker = {.output_fd = -1};
+static int s_authored_picker_focus_index = -1;
+static char s_authored_picker_object_id[64];
 
 static bool material_editor_authored_point_in_rect(int x, int y, const SDL_Rect* rect) {
     return rect && rect->w > 0 && rect->h > 0 &&
@@ -113,6 +116,10 @@ static void material_editor_authored_default_pick_dir(char* out_dir,
 }
 
 void MaterialEditorAuthoredTextureBindingReset(void) {
+    RayTracing_FolderPicker_Cancel(&s_authored_picker);
+    RayTracing_FolderPicker_RequestInit(&s_authored_picker);
+    s_authored_picker_focus_index = -1;
+    s_authored_picker_object_id[0] = '\0';
     material_editor_authored_reset_rects();
     s_authored_status_text[0] = '\0';
     s_authored_status_expire_ms = 0u;
@@ -211,6 +218,45 @@ bool MaterialEditorAuthoredTextureBindingGetChannelSummary(int focused_object_in
     return RuntimeMaterialAuthoredTextureGetChannelSummary(focused_object_index,
                                                            out_channel_summary,
                                                            out_channel_summary_size);
+}
+
+bool MaterialEditorAuthoredTextureBindingPoll(void) {
+    char picked_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
+    char current_object_id[64];
+    RayTracingFolderPickerResult picker_result;
+    if (!s_authored_picker.active) return false;
+    picker_result = RayTracing_FolderPicker_Poll(&s_authored_picker,
+                                                 picked_path,
+                                                 sizeof(picked_path));
+    if (picker_result == RAY_TRACING_FOLDER_PICKER_PENDING) return false;
+    if (picker_result == RAY_TRACING_FOLDER_PICKER_SELECTED) {
+        if (material_editor_authored_object_id_for_focus(s_authored_picker_focus_index,
+                                                         current_object_id,
+                                                         sizeof(current_object_id)) &&
+            strcmp(current_object_id, s_authored_picker_object_id) == 0) {
+            (void)MaterialEditorAuthoredTextureBindingBindForFocused(
+                s_authored_picker_focus_index,
+                picked_path);
+        } else {
+            material_editor_authored_set_status("Manifest target changed; selection ignored",
+                                                (SDL_Color){255, 190, 130, 255});
+        }
+    } else {
+        material_editor_authored_set_status(
+            picker_result == RAY_TRACING_FOLDER_PICKER_CANCELLED
+                ? "Manifest picker cancelled"
+                : "Manifest picker unavailable or failed",
+            picker_result == RAY_TRACING_FOLDER_PICKER_CANCELLED
+                ? (SDL_Color){210, 210, 215, 255}
+                : (SDL_Color){255, 170, 140, 255});
+    }
+    s_authored_picker_focus_index = -1;
+    s_authored_picker_object_id[0] = '\0';
+    return true;
+}
+
+bool MaterialEditorAuthoredTextureBindingPickerActive(void) {
+    return s_authored_picker.active;
 }
 
 int MaterialEditorAuthoredTextureBindingRenderPaneControls(SDL_Renderer* renderer,
@@ -322,7 +368,6 @@ int MaterialEditorAuthoredTextureBindingRenderPaneControls(SDL_Renderer* rendere
 
 bool MaterialEditorAuthoredTextureBindingHandleEvent(const SDL_Event* event,
                                                      int focused_object_index) {
-    char picked_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
     char manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
     char initial_dir[PATH_MAX];
     if (!event) return false;
@@ -333,7 +378,11 @@ bool MaterialEditorAuthoredTextureBindingHandleEvent(const SDL_Event* event,
                                                event->button.y,
                                                &s_authored_pick_rect)) {
         initial_dir[0] = '\0';
-        picked_path[0] = '\0';
+        if (s_authored_picker.active) {
+            material_editor_authored_set_status("Manifest picker already open",
+                                                (SDL_Color){210, 210, 215, 255});
+            return true;
+        }
         if (MaterialEditorAuthoredTextureBindingGetSummary(focused_object_index,
                                                            manifest_path,
                                                            sizeof(manifest_path),
@@ -344,15 +393,25 @@ bool MaterialEditorAuthoredTextureBindingHandleEvent(const SDL_Event* event,
         } else {
             material_editor_authored_default_pick_dir(initial_dir, sizeof(initial_dir));
         }
-        if (RayTracing_FilePicker_Select("Select authored texture manifest",
-                                         initial_dir[0] ? initial_dir : NULL,
-                                         picked_path,
-                                         sizeof(picked_path)) != RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            material_editor_authored_set_status("Manifest picker cancelled or unavailable",
-                                                (SDL_Color){210, 210, 215, 255});
+        if (!RayTracing_FilePicker_Begin(&s_authored_picker,
+                                         "Select authored texture manifest",
+                                         initial_dir[0] ? initial_dir : NULL)) {
+            material_editor_authored_set_status("Manifest picker unavailable",
+                                                (SDL_Color){255, 170, 140, 255});
             return true;
         }
-        (void)MaterialEditorAuthoredTextureBindingBindForFocused(focused_object_index, picked_path);
+        if (!material_editor_authored_object_id_for_focus(
+                focused_object_index,
+                s_authored_picker_object_id,
+                sizeof(s_authored_picker_object_id))) {
+            RayTracing_FolderPicker_Cancel(&s_authored_picker);
+            material_editor_authored_set_status("Manifest target unavailable",
+                                                (SDL_Color){255, 170, 140, 255});
+            return true;
+        }
+        s_authored_picker_focus_index = focused_object_index;
+        material_editor_authored_set_status("Manifest picker open",
+                                            (SDL_Color){210, 210, 215, 255});
         return true;
     }
     if (material_editor_authored_point_in_rect(event->button.x,

@@ -118,6 +118,72 @@ static void apply_output_root(MenuRuntimeState *state, const char *path) {
     state->statusExpireMs = SDL_GetTicks() + 1800;
 }
 
+bool menu_input_begin_folder_picker(MenuRuntimeState* state,
+                                    MenuFolderPickerTarget target,
+                                    const char* prompt,
+                                    const char* initial_path) {
+    if (!state || target == MENU_FOLDER_PICKER_NONE) return false;
+    if (state->folderPickerRequest.active) {
+        snprintf(state->statusLabel, sizeof(state->statusLabel), "Folder chooser already open");
+        state->statusColor = (SDL_Color){210, 210, 215, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1600;
+        return false;
+    }
+    if (!RayTracing_FolderPicker_Begin(&state->folderPickerRequest, prompt, initial_path)) {
+        snprintf(state->statusLabel, sizeof(state->statusLabel), "Folder chooser unavailable");
+        state->statusColor = (SDL_Color){255, 170, 140, 255};
+        state->statusExpireMs = SDL_GetTicks() + 2200;
+        return false;
+    }
+    state->folderPickerTarget = target;
+    snprintf(state->statusLabel, sizeof(state->statusLabel), "Folder chooser open");
+    state->statusColor = (SDL_Color){210, 210, 215, 255};
+    state->statusExpireMs = SDL_GetTicks() + 60000;
+    return true;
+}
+
+bool menu_input_poll_folder_picker(MenuRuntimeState* state) {
+    char selected[PATH_MAX];
+    RayTracingFolderPickerResult result;
+    MenuFolderPickerTarget target;
+    if (!state || !state->folderPickerRequest.active) return false;
+    result = RayTracing_FolderPicker_Poll(&state->folderPickerRequest,
+                                          selected,
+                                          sizeof(selected));
+    if (result == RAY_TRACING_FOLDER_PICKER_PENDING) return false;
+    target = state->folderPickerTarget;
+    state->folderPickerTarget = MENU_FOLDER_PICKER_NONE;
+    if (result == RAY_TRACING_FOLDER_PICKER_SELECTED) {
+        if (target == MENU_FOLDER_PICKER_INPUT_ROOT) {
+            apply_input_root(state, selected);
+        } else if (target == MENU_FOLDER_PICKER_MESH_ASSET_ROOT) {
+            apply_mesh_asset_root(state, selected);
+        } else if (target == MENU_FOLDER_PICKER_OUTPUT_ROOT) {
+            apply_output_root(state, selected);
+        } else {
+            menu_batch_panel_apply_picker_result(state, target, selected);
+        }
+    } else {
+        snprintf(state->statusLabel,
+                 sizeof(state->statusLabel),
+                 "%s",
+                 result == RAY_TRACING_FOLDER_PICKER_CANCELLED
+                     ? "Folder chooser cancelled"
+                     : "Folder chooser failed");
+        state->statusColor = result == RAY_TRACING_FOLDER_PICKER_CANCELLED
+                                 ? (SDL_Color){210, 210, 215, 255}
+                                 : (SDL_Color){255, 170, 140, 255};
+        state->statusExpireMs = SDL_GetTicks() + 1800;
+    }
+    return true;
+}
+
+void menu_input_cancel_folder_picker(MenuRuntimeState* state) {
+    if (!state) return;
+    RayTracing_FolderPicker_Cancel(&state->folderPickerRequest);
+    state->folderPickerTarget = MENU_FOLDER_PICKER_NONE;
+}
+
 static void finish_root_edit(MenuRuntimeState *state, bool apply) {
     if (!state) return;
     if (menu_batch_panel_edit_active(state)) {
@@ -199,6 +265,7 @@ void menu_input_handle_key(SDL_Event* event,
                            TTF_Font** font,
                            MenuRuntimeState* state) {
     if (!event || !running || !font || !state) return;
+    if (state->folderPickerRequest.active) return;
     SDL_Keymod mod = event->key.keysym.mod;
     bool ctrl_or_cmd = (mod & (KMOD_CTRL | KMOD_GUI)) != 0;
     bool shift = (mod & KMOD_SHIFT) != 0;
@@ -208,10 +275,10 @@ void menu_input_handle_key(SDL_Event* event,
 
     if (ctrl_or_cmd && shift) {
         if (event->key.keysym.sym == SDLK_b) {
-            char selected[PATH_MAX];
-            if (RayTracing_FolderPicker_Select("Choose optiC Output Root", animSettings.outputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-                apply_output_root(state, selected);
-            }
+            (void)menu_input_begin_folder_picker(state,
+                                                 MENU_FOLDER_PICKER_OUTPUT_ROOT,
+                                                 "Choose optiC Output Root",
+                                                 animSettings.outputRoot);
             return;
         }
         if (event->key.keysym.sym == SDLK_i) {
@@ -236,10 +303,10 @@ void menu_input_handle_key(SDL_Event* event,
         }
     }
     if (ctrl_or_cmd && event->key.keysym.sym == SDLK_b) {
-        char selected[PATH_MAX];
-        if (RayTracing_FolderPicker_Select("Choose optiC Input Root", animSettings.inputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            apply_input_root(state, selected);
-        }
+        (void)menu_input_begin_folder_picker(state,
+                                             MENU_FOLDER_PICKER_INPUT_ROOT,
+                                             "Choose optiC Input Root",
+                                             animSettings.inputRoot);
         return;
     }
     if (ray_tracing_text_zoom_apply_shortcut(event->key.keysym.sym,
@@ -336,6 +403,7 @@ void menu_input_handle_key(SDL_Event* event,
 
 void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
     if (!event || !state) return;
+    if (state->folderPickerRequest.active) return;
     if (ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost)) {
         if (ray_tracing_menu_pane_host_update_splitter_drag(&state->menuPaneHost,
                                                             (float)event->motion.x,
@@ -395,6 +463,7 @@ void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
 
 void menu_input_handle_mouse_wheel(SDL_Event *event, MenuRuntimeState* state) {
     if (!event || !state) return;
+    if (state->folderPickerRequest.active) return;
     int mx = 0;
     int my = 0;
     SDL_GetMouseState(&mx, &my);
@@ -422,6 +491,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                                    MenuRuntimeState* state) {
     (void)renderer;
     if (!event || !running || !menuExitedNormally || !font || !state || !*font) return;
+    if (state->folderPickerRequest.active) return;
 
     MenuButtonLayout buttons;
     MenuScreenLayout screenLayout;
@@ -635,10 +705,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.inputRootFolderRect, x, y)) {
-        char selected[PATH_MAX];
-        if (RayTracing_FolderPicker_Select("Choose optiC Input Root", animSettings.inputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            apply_input_root(state, selected);
-        }
+        (void)menu_input_begin_folder_picker(state,
+                                             MENU_FOLDER_PICKER_INPUT_ROOT,
+                                             "Choose optiC Input Root",
+                                             animSettings.inputRoot);
         return;
     }
     if (point_in_rect(&buttons.inputRootEditRect, x, y) || point_in_rect(&buttons.inputRootValueRect, x, y)) {
@@ -654,10 +724,10 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
     if (point_in_rect(&buttons.meshAssetRootFolderRect, x, y)) {
-        char selected[PATH_MAX];
-        if (RayTracing_FolderPicker_Select("Choose optiC Mesh Asset Root", animSettings.meshAssetRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            apply_mesh_asset_root(state, selected);
-        }
+        (void)menu_input_begin_folder_picker(state,
+                                             MENU_FOLDER_PICKER_MESH_ASSET_ROOT,
+                                             "Choose optiC Mesh Asset Root",
+                                             animSettings.meshAssetRoot);
         return;
     }
     if (point_in_rect(&buttons.meshAssetRootEditRect, x, y) ||

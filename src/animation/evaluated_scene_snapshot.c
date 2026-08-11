@@ -136,6 +136,8 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
         snapshot->source == RAY_EVALUATED_SCENE_SOURCE_NONE ||
         !snapshot->light.valid || !snapshot->camera.valid ||
         !ray_evaluated_vec3_finite(snapshot->light.position) ||
+        !isfinite(snapshot->light.intensity) ||
+        snapshot->light.intensity < 0.0 ||
         !ray_evaluated_vec3_finite(snapshot->camera.position) ||
         snapshot->object_transform_count >
             RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY) {
@@ -150,7 +152,16 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
         return TIMELINE_STATUS_INVALID_SNAPSHOT;
     }
     if (snapshot->source == RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE &&
-        !snapshot->light.property_provenance.valid) {
+        (!snapshot->light.path_progress_provenance.valid ||
+         !snapshot->light.property_provenance.valid ||
+         strcmp(snapshot->light.path_progress_provenance.property_id,
+                "light/path_progress") != 0 ||
+         strcmp(snapshot->light.property_provenance.property_id,
+                "light/path_progress") != 0 ||
+         (snapshot->light.intensity_authored &&
+          (!snapshot->light.intensity_provenance.valid ||
+           strcmp(snapshot->light.intensity_provenance.property_id,
+                  "light/intensity") != 0)))) {
         return TIMELINE_STATUS_INVALID_SNAPSHOT;
     }
     if (snapshot->simulation.source == RAY_EVALUATED_SIMULATION_NONE &&
@@ -211,6 +222,35 @@ TimelineStatus RayEvaluatedSceneSnapshotBuild(
     snapshot.frame = inputs->frame;
     snapshot.identity = inputs->identity;
     snapshot.light = inputs->light;
+    if (!snapshot.light.path_progress_provenance.valid &&
+        snapshot.light.property_provenance.valid) {
+        snapshot.light.path_progress_provenance =
+            snapshot.light.property_provenance;
+    }
+    if (!snapshot.light.property_provenance.valid &&
+        snapshot.light.path_progress_provenance.valid) {
+        snapshot.light.property_provenance =
+            snapshot.light.path_progress_provenance;
+    }
+    if (snapshot.light.path_progress_provenance.valid &&
+        !snapshot.light.path_progress_provenance.property_id[0]) {
+        snprintf(snapshot.light.path_progress_provenance.property_id,
+                 sizeof(snapshot.light.path_progress_provenance.property_id),
+                 "light/path_progress");
+    }
+    if (snapshot.light.property_provenance.valid &&
+        !snapshot.light.property_provenance.property_id[0]) {
+        snprintf(snapshot.light.property_provenance.property_id,
+                 sizeof(snapshot.light.property_provenance.property_id),
+                 "light/path_progress");
+    }
+    if (snapshot.light.intensity_authored &&
+        snapshot.light.intensity_provenance.valid &&
+        !snapshot.light.intensity_provenance.property_id[0]) {
+        snprintf(snapshot.light.intensity_provenance.property_id,
+                 sizeof(snapshot.light.intensity_provenance.property_id),
+                 "light/intensity");
+    }
     snapshot.camera = inputs->camera;
     if (inputs->object_transform_count >
             RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY ||

@@ -15,6 +15,7 @@
 #include "app/starter_scene_startup.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
+#include "editor/material_editor_authored_texture_binding.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/font_runtime.h"
@@ -534,6 +535,8 @@ bool RunMenu(void) {
                                               &menuExitedNormally,
                                               &event);
         }
+        frame_dirty |= menu_input_poll_folder_picker(&menuState);
+        frame_dirty |= MaterialEditorAuthoredTextureBindingPoll();
         if (!running) {
             menu_record_loop_diag(frame_begin_counter, perf_freq, wait_blocked_ms, wait_call_count);
             break;
@@ -598,6 +601,7 @@ bool RunMenu(void) {
     if (sceneEditorSessionActive) {
         SceneEditorSessionEnd(&sceneEditor);
     }
+    menu_input_cancel_folder_picker(&menuState);
     if (ray_tracing_workspace_authoring_host_active(&authoringHost)) {
         (void)ray_tracing_workspace_authoring_host_cancel_preview(&authoringHost);
     }

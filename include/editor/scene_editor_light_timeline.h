@@ -9,12 +9,22 @@
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_pane_host.h"
 
+typedef enum SceneEditorLightTimelineLane {
+    SCENE_EDITOR_LIGHT_TIMELINE_LANE_MOTION = 0,
+    SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY
+} SceneEditorLightTimelineLane;
+
 void SceneEditorLightTimelineReset(void);
 void SceneEditorLightTimelineSyncRuntime(void);
 bool SceneEditorLightTimelineHasSelectedLight(void);
 TimelineStatus SceneEditorLightTimelineSelectTargetId(const char* target_id);
 const char* SceneEditorLightTimelineSelectedTargetId(void);
 TimelineStatus SceneEditorLightTimelineInsertKey(int64_t frame, double progress);
+TimelineStatus SceneEditorLightTimelineInsertIntensityKey(
+    int64_t frame, double intensity);
+TimelineStatus SceneEditorLightTimelineSelectLane(
+    SceneEditorLightTimelineLane lane);
+SceneEditorLightTimelineLane SceneEditorLightTimelineSelectedLane(void);
 TimelineStatus SceneEditorLightTimelineDeleteSelectedKey(void);
 TimelineStatus SceneEditorLightTimelineSetSelectedInterpolation(
     TimelineInterpolation interpolation);

@@ -39,6 +39,9 @@ bool menu_batch_panel_edit_active(const MenuRuntimeState* state);
 void menu_batch_panel_finish_edit(MenuRuntimeState* state, bool apply);
 void menu_batch_panel_backspace_edit(MenuRuntimeState* state);
 bool menu_batch_panel_append_text(MenuRuntimeState* state, const char* text);
+void menu_batch_panel_apply_picker_result(MenuRuntimeState* state,
+                                          MenuFolderPickerTarget target,
+                                          const char* path);
 bool menu_batch_panel_handle_click(const SDL_Event* event,
                                    SDL_Renderer* renderer,
                                    TTF_Font* font,

@@ -5,6 +5,7 @@
 #include "render/text_draw.h"
 #include "scene_editor_light_timeline_curve_edit.h"
 #include "scene_editor_light_timeline_edit.h"
+#include "scene_editor_light_timeline_intensity_panel.h"
 #include "ui/shared_theme_font_adapter.h"
 
 #include <math.h>
@@ -221,6 +222,11 @@ void scene_editor_light_timeline_panel_render(
         document->timeline.range.frame_count < 2u) {
         return;
     }
+    if (state->lane == SCENE_EDITOR_LIGHT_TIMELINE_LANE_INTENSITY) {
+        scene_editor_light_timeline_intensity_panel_render(
+            renderer, panel, document, state);
+        return;
+    }
     track = &document->timeline.tracks[document->progress_track_index];
     palette = panel_palette();
     graph_fill = panel_color_offset(palette.panel_fill, -18, 255);
@@ -270,8 +276,14 @@ void scene_editor_light_timeline_panel_render(
     font = ray_tracing_font_runtime_get_ui_regular(renderer, 10, 8);
     small_font = ray_tracing_font_runtime_get_ui_regular(renderer, 9, 7);
 
-    panel_text(renderer, title_font, "LIGHT MOTION",
+    panel_text(renderer, title_font, "LIGHT TIMELINE",
                panel->x + 12, panel->y + 5, palette.text_primary);
+    panel_mode_control(
+        renderer, small_font, &geometry.motion_lane_button,
+        "MOTION", true, 9, &palette);
+    panel_mode_control(
+        renderer, small_font, &geometry.intensity_lane_button,
+        "INTENSITY", false, 7, &palette);
     if (panel->w >= 620) {
         snprintf(label, sizeof(label),
                  "F %lld/%lld | %.2fs | %.1f%% path | %.2f world/s | %llu frames @ %.2f fps",

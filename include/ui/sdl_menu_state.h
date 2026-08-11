@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include "app/render_export_batch.h"
+#include "platform/ray_tracing_folder_picker.h"
 #include "render/runtime_caustic_settings_3d.h"
 #include "ui/menu_pane_host.h"
 #include "ui/menu_workspace.h"
@@ -51,6 +52,15 @@ typedef enum {
     MENU_RENDERER_CONTROLS_CAUSTICS = 2
 } MenuRendererControlsTab;
 
+typedef enum {
+    MENU_FOLDER_PICKER_NONE = 0,
+    MENU_FOLDER_PICKER_INPUT_ROOT,
+    MENU_FOLDER_PICKER_MESH_ASSET_ROOT,
+    MENU_FOLDER_PICKER_OUTPUT_ROOT,
+    MENU_FOLDER_PICKER_FRAME_DIR,
+    MENU_FOLDER_PICKER_VIDEO_ROOT
+} MenuFolderPickerTarget;
+
 typedef struct {
     bool draggingSlider;
     int *selectedSlider;
@@ -69,6 +79,8 @@ typedef struct {
     bool editingFrameDir;
     bool editingVideoOutputRoot;
     char pathInputBuffer[PATH_MAX];
+    RayTracingFolderPickerRequest folderPickerRequest;
+    MenuFolderPickerTarget folderPickerTarget;
 
     int rouletteSliderValue;
     int envSliderValue;

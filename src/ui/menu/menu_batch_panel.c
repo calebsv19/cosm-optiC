@@ -11,6 +11,7 @@
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu_scene_project_summary.h"
 #include "ui/menu_worker_export.h"
+#include "ui/sdl_menu_input.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/shared_theme_font_adapter.h"
 
@@ -84,6 +85,16 @@ static void apply_video_root(MenuRuntimeState *state, const char *path) {
     (void)setenv("RAY_TRACING_VIDEO_OUTPUT_ROOT", animSettings.videoOutputRoot, 1);
     menu_batch_panel_refresh(state);
     set_status(state, "Video root set", (SDL_Color){120, 200, 240, 255}, 1800);
+}
+
+void menu_batch_panel_apply_picker_result(MenuRuntimeState* state,
+                                          MenuFolderPickerTarget target,
+                                          const char* path) {
+    if (target == MENU_FOLDER_PICKER_FRAME_DIR) {
+        apply_frame_dir(state, path);
+    } else if (target == MENU_FOLDER_PICKER_VIDEO_ROOT) {
+        apply_video_root(state, path);
+    }
 }
 
 static void set_export_action_status(MenuRuntimeState *state,
@@ -313,7 +324,6 @@ bool menu_batch_panel_handle_click(const SDL_Event* event,
                                    const MenuBatchPanelLayout* layout) {
     int x = 0;
     int y = 0;
-    char selected[PATH_MAX];
     RayTracingRenderExportStatus status = {0};
     MenuBatchVideoProgressContext progress_ctx = {0};
     bool ok = false;
@@ -326,18 +336,22 @@ bool menu_batch_panel_handle_click(const SDL_Event* event,
     progress_ctx.state = state;
 
     if (point_in_rect(&layout->frameDirValueRect, x, y)) {
-        if (event->button.clicks >= 2 &&
-            RayTracing_FolderPicker_Select("Choose render frames root", animSettings.frameDir, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            apply_frame_dir(state, selected);
+        if (event->button.clicks >= 2) {
+            (void)menu_input_begin_folder_picker(state,
+                                                 MENU_FOLDER_PICKER_FRAME_DIR,
+                                                 "Choose render frames root",
+                                                 animSettings.frameDir);
         } else {
             begin_frame_dir_edit(state);
         }
         return true;
     }
     if (point_in_rect(&layout->videoRootValueRect, x, y)) {
-        if (event->button.clicks >= 2 &&
-            RayTracing_FolderPicker_Select("Choose video output root", animSettings.videoOutputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            apply_video_root(state, selected);
+        if (event->button.clicks >= 2) {
+            (void)menu_input_begin_folder_picker(state,
+                                                 MENU_FOLDER_PICKER_VIDEO_ROOT,
+                                                 "Choose video output root",
+                                                 animSettings.videoOutputRoot);
         } else {
             begin_video_root_edit(state);
         }
@@ -352,15 +366,17 @@ bool menu_batch_panel_handle_click(const SDL_Event* event,
         return true;
     }
     if (point_in_rect(&layout->frameDirFolderRect, x, y)) {
-        if (RayTracing_FolderPicker_Select("Choose render frames root", animSettings.frameDir, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            apply_frame_dir(state, selected);
-        }
+        (void)menu_input_begin_folder_picker(state,
+                                             MENU_FOLDER_PICKER_FRAME_DIR,
+                                             "Choose render frames root",
+                                             animSettings.frameDir);
         return true;
     }
     if (point_in_rect(&layout->videoRootFolderRect, x, y)) {
-        if (RayTracing_FolderPicker_Select("Choose video output root", animSettings.videoOutputRoot, selected, sizeof(selected)) == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            apply_video_root(state, selected);
-        }
+        (void)menu_input_begin_folder_picker(state,
+                                             MENU_FOLDER_PICKER_VIDEO_ROOT,
+                                             "Choose video output root",
+                                             animSettings.videoOutputRoot);
         return true;
     }
     if (point_in_rect(&layout->frameDirApplyRect, x, y)) {

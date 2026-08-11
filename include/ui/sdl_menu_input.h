@@ -16,6 +16,13 @@ void menu_input_handle_key(SDL_Event* event,
 void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state);
 void menu_input_handle_mouse_wheel(SDL_Event* event, MenuRuntimeState* state);
 
+bool menu_input_begin_folder_picker(MenuRuntimeState* state,
+                                    MenuFolderPickerTarget target,
+                                    const char* prompt,
+                                    const char* initial_path);
+bool menu_input_poll_folder_picker(MenuRuntimeState* state);
+void menu_input_cancel_folder_picker(MenuRuntimeState* state);
+
 void menu_input_handle_mouse_click(SDL_Event* event,
                                    bool* running,
                                    bool* menuExitedNormally,
