@@ -5,10 +5,17 @@
 
 #include "core_mesh_asset.h"
 #include "core_mesh_preview.h"
+#include "procedural/procedural_surface_derived_asset.h"
+#include "procedural/procedural_solid_authored_material_binding.h"
+#include "procedural/procedural_solid_material_graph.h"
+#include "procedural/procedural_solid_material_runtime_program.h"
+#include "procedural/procedural_solid_material_binding.h"
 
 #define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS 32
 #define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES 64
 #define RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX 4096
+#define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS \
+    PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_SELECTORS
 
 typedef enum RayTracingRuntimeMeshRotationPivotPolicy {
     RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN = 0,
@@ -33,6 +40,14 @@ typedef struct RayTracingRuntimeMeshPreviewInfo {
     CoreMeshPreviewRuntimeMetadata metadata;
 } RayTracingRuntimeMeshPreviewInfo;
 
+typedef struct RayTracingRuntimeMeshAssetFileDependency {
+    char path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    bool stamp_valid;
+    long long mtime_sec;
+    long long mtime_nsec;
+    long long size_bytes;
+} RayTracingRuntimeMeshAssetFileDependency;
+
 typedef struct RayTracingRuntimeMeshAsset {
     char asset_id[64];
     char path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
@@ -42,6 +57,102 @@ typedef struct RayTracingRuntimeMeshAsset {
     long long file_size_bytes;
     CoreMeshAssetRuntimeDocument document;
     RayTracingRuntimeMeshPreviewInfo preview;
+    bool procedural_surface_valid;
+    char procedural_manifest_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency procedural_manifest_dependency;
+    RayTracingRuntimeMeshAssetFileDependency procedural_recipe_dependency;
+    RayTracingRuntimeMeshAssetFileDependency procedural_field_graph_dependency;
+    RayTracingRuntimeMeshAssetFileDependency procedural_binding_dependency;
+    RayTracingRuntimeMeshAssetFileDependency procedural_material_dependency;
+    ProceduralSurfaceDerivedAssetManifest procedural_manifest;
+    ProceduralSurfaceDerivedAssetMaterial procedural_material;
+    bool procedural_solid_material_reference_observed;
+    bool procedural_solid_material_reference_absent;
+    bool procedural_solid_material_valid;
+    char procedural_solid_material_binding_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_solid_material_binding_dependency;
+    ProceduralSolidMaterialBindingV1 procedural_solid_material_binding;
+    bool procedural_solid_authored_reference_observed;
+    bool procedural_solid_authored_reference_absent;
+    bool procedural_solid_authored_material_valid;
+    char procedural_solid_authored_binding_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_solid_authored_binding_dependency;
+    ProceduralSolidAuthoredMaterialBindingV1
+        procedural_solid_authored_binding;
+    size_t procedural_solid_authored_material_count;
+    ProceduralSolidAuthoredMaterialV1
+        procedural_solid_authored_materials[PROCEDURAL_SOLID_REGION_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_solid_authored_material_dependencies[
+            PROCEDURAL_SOLID_REGION_MAX];
+    bool procedural_solid_material_graph_observed;
+    bool procedural_solid_material_graph_absent;
+    bool procedural_solid_material_graph_valid;
+    char procedural_solid_material_graph_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_solid_material_graph_dependency;
+    ProceduralSolidMaterialGraphV1 procedural_solid_material_graph;
+    bool procedural_imported_surface_region_observed;
+    bool procedural_imported_surface_region_absent;
+    bool procedural_imported_surface_region_valid;
+    char procedural_imported_surface_region_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_imported_surface_region_dependency;
+    ProceduralImportedSurfaceRegionV1 procedural_imported_surface_region;
+    bool procedural_named_surface_selectors_observed;
+    bool procedural_named_surface_selectors_absent;
+    size_t procedural_named_surface_selector_count;
+    char procedural_named_surface_selector_names[
+        RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS]
+        [PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
+    char procedural_named_surface_selector_paths[
+        RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS]
+        [RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_named_surface_selector_dependencies[
+            RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS];
+    ProceduralImportedSurfaceRegionV1 procedural_named_surface_selectors[
+        RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS];
+    bool procedural_surface_feature_field_observed;
+    bool procedural_surface_feature_field_absent;
+    bool procedural_surface_feature_field_valid;
+    char procedural_surface_feature_field_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_surface_feature_field_dependency;
+    ProceduralSurfaceFeatureFieldV1 procedural_surface_feature_field;
+    bool procedural_surface_wood_grain_observed;
+    bool procedural_surface_wood_grain_absent;
+    bool procedural_surface_wood_grain_valid;
+    char procedural_surface_wood_grain_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency procedural_surface_wood_grain_dependency;
+    ProceduralSurfaceWoodGrainFieldV1 procedural_surface_wood_grain;
+    bool procedural_surface_feature_curve_field_observed;
+    bool procedural_surface_feature_curve_field_absent;
+    bool procedural_surface_feature_curve_field_valid;
+    char procedural_surface_feature_curve_field_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_surface_feature_curve_field_dependency;
+    ProceduralSurfaceFeatureCurveFieldV1
+        procedural_surface_feature_curve_field;
+    size_t procedural_solid_material_graph_material_count;
+    ProceduralSolidAuthoredMaterialV1 procedural_solid_material_graph_materials[
+        PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_LAYERS];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_solid_material_graph_material_dependencies[
+            PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_LAYERS];
+    ProceduralSolidAuthoredMaterialSurfaceV1
+        *procedural_solid_composed_triangle_materials;
+    size_t procedural_solid_composed_triangle_material_count;
+    ProceduralSolidMaterialRuntimeProgramV1
+        procedural_solid_material_runtime_program;
 } RayTracingRuntimeMeshAsset;
 
 typedef struct RayTracingRuntimeMeshAssetInstance {
@@ -109,6 +220,29 @@ typedef struct RayTracingRuntimeMeshAssetTimingStats {
     unsigned long long loaded_asset_bytes;
     unsigned long long loaded_vertices;
     unsigned long long loaded_triangles;
+    int procedural_surface_assets;
+    unsigned long long procedural_surface_vertices;
+    char procedural_surface_cache_identity_sha256[
+        PROCEDURAL_SURFACE_DERIVED_ASSET_DIGEST_CAPACITY];
+    char procedural_surface_cage_digest_sha256[
+        PROCEDURAL_SURFACE_DERIVED_ASSET_DIGEST_CAPACITY];
+    char procedural_surface_shell_digest_sha256[
+        PROCEDURAL_SURFACE_DERIVED_ASSET_DIGEST_CAPACITY];
+    char procedural_surface_material_digest_sha256[
+        PROCEDURAL_SURFACE_DERIVED_ASSET_DIGEST_CAPACITY];
+    char procedural_surface_collision_owner[32];
+    int procedural_solid_material_assets;
+    unsigned long long procedural_solid_material_regions;
+    char procedural_solid_material_binding_digest_sha256[
+        PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY];
+    char procedural_solid_material_mesh_digest_sha256[
+        PROCEDURAL_SOLID_MESH_DIGEST_CAPACITY];
+    char procedural_solid_material_region_digest_sha256[
+        PROCEDURAL_SOLID_MESH_DIGEST_CAPACITY];
+    int procedural_solid_authored_material_assets;
+    unsigned long long procedural_solid_authored_material_regions;
+    char procedural_solid_authored_binding_digest_sha256[
+        PROCEDURAL_SOLID_MATERIAL_BINDING_DIGEST_CAPACITY];
 } RayTracingRuntimeMeshAssetTimingStats;
 
 void ray_tracing_runtime_mesh_asset_set_init(RayTracingRuntimeMeshAssetSet* set);

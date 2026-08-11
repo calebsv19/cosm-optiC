@@ -1,0 +1,18 @@
+{
+  "schema": "ray_tracing.procedural_surface_sample_points",
+  "schema_version": 1,
+  "coordinate_space": "object",
+  "points": [
+    {"sample_id": "origin", "position": [0.0, 0.0, 0.0]},
+    {"sample_id": "plane_interior_a", "position": [-1.25, -0.75, 0.0]},
+    {"sample_id": "plane_interior_b", "position": [0.75, 1.0, 0.0]},
+    {"sample_id": "plane_edge_lock", "position": [1.875, 0.0, 0.0]},
+    {"sample_id": "prism_pos_x", "position": [2.0, 0.0, 0.0]},
+    {"sample_id": "prism_neg_x", "position": [-2.0, 0.0, 0.0]},
+    {"sample_id": "prism_pos_y", "position": [0.0, 1.5, 0.0]},
+    {"sample_id": "prism_neg_y", "position": [0.0, -1.5, 0.0]},
+    {"sample_id": "prism_pos_z", "position": [0.0, 0.0, 1.0]},
+    {"sample_id": "prism_neg_z", "position": [0.0, 0.0, -1.0]},
+    {"sample_id": "shared_corner", "position": [2.0, 1.5, 1.0]}
+  ]
+}

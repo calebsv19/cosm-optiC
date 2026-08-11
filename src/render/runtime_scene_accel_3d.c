@@ -1,6 +1,7 @@
 #include "render/runtime_scene_accel_3d_internal.h"
 
 #include "render/runtime_dynamic_geometry_accel_3d.h"
+#include "render/runtime_scene_curve_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 
 #include <float.h>
@@ -29,6 +30,8 @@ static const RuntimeScene3D*
 static int gRuntimeSceneAcceleration3DCompatibleSceneCount;
 static int gRuntimeSceneAcceleration3DPreparedPrimitiveCount;
 static int gRuntimeSceneAcceleration3DPreparedTriangleCount;
+static int gRuntimeSceneAcceleration3DPreparedCurveInstanceCount;
+static uint64_t gRuntimeSceneAcceleration3DPreparedCurveSignature;
 static uint64_t gRuntimeSceneAcceleration3DPreparedGeometrySignature;
 static int gRuntimeSceneAcceleration3DInstanceCount;
 static int* gRuntimeSceneAcceleration3DInstanceOrder;
@@ -220,6 +223,8 @@ static void runtime_scene_accel_3d_free_tlas(void) {
     gRuntimeSceneAcceleration3DCompatibleSceneCount = 0;
     gRuntimeSceneAcceleration3DPreparedPrimitiveCount = 0;
     gRuntimeSceneAcceleration3DPreparedTriangleCount = 0;
+    gRuntimeSceneAcceleration3DPreparedCurveInstanceCount = 0;
+    gRuntimeSceneAcceleration3DPreparedCurveSignature = 0u;
     gRuntimeSceneAcceleration3DPreparedGeometrySignature = 0u;
     RuntimeSceneAcceleration3D_FreeInstanceIdentityMaps(
         gRuntimeSceneAcceleration3DInstances,
@@ -354,11 +359,16 @@ static uint64_t runtime_scene_accel_3d_geometry_signature_prefix(
 }
 
 static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* scene) {
+    uint64_t hash = 0u;
     if (!scene) return 0u;
-    return runtime_scene_accel_3d_geometry_signature_prefix(
+    hash = runtime_scene_accel_3d_geometry_signature_prefix(
         scene,
         scene->primitiveCount,
         scene->triangleMesh.triangleCount);
+    return runtime_scene_accel_3d_hash_bytes(
+        hash,
+        &(uint64_t){RuntimeSceneCurve3D_GeometrySignature(scene)},
+        sizeof(uint64_t));
 }
 
 static bool runtime_scene_accel_3d_has_compatible_dynamic_water_extension(
@@ -367,7 +377,11 @@ static bool runtime_scene_accel_3d_has_compatible_dynamic_water_extension(
     const RuntimeTriangle3D* first_water_triangle = NULL;
     const RuntimeTriangle3D* last_water_triangle = NULL;
     if (!scene || scene->primitiveCount != gRuntimeSceneAcceleration3DPreparedPrimitiveCount + 1 ||
-        scene->triangleMesh.triangleCount <= gRuntimeSceneAcceleration3DPreparedTriangleCount) {
+        scene->triangleMesh.triangleCount <= gRuntimeSceneAcceleration3DPreparedTriangleCount ||
+        scene->curveInstanceCount !=
+            gRuntimeSceneAcceleration3DPreparedCurveInstanceCount ||
+        RuntimeSceneCurve3D_GeometrySignature(scene) !=
+            gRuntimeSceneAcceleration3DPreparedCurveSignature) {
         return false;
     }
     water_primitive = &scene->primitives[gRuntimeSceneAcceleration3DPreparedPrimitiveCount];
@@ -409,7 +423,10 @@ bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBuildMs = prior.tlasBuildMs;
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBindMs = prior.tlasBindMs;
 
-    if (!scene || scene->primitiveCount <= 0 || scene->triangleMesh.triangleCount <= 0) {
+    if (!scene ||
+        ((scene->primitiveCount <= 0 ||
+          scene->triangleMesh.triangleCount <= 0) &&
+         scene->curveInstanceCount <= 0)) {
         gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBuildMs +=
             runtime_scene_accel_3d_elapsed_ms_since(&build_start);
         return true;
@@ -459,6 +476,8 @@ bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene
         RUNTIME_SCENE_ACCEL_3D_REUSE_REBUILT;
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasInstanceCount =
         (uint64_t)gRuntimeSceneAcceleration3DInstanceCount;
+    gRuntimeSceneAcceleration3DTLASDiagnostics.tlasCurveInstanceCount =
+        (uint64_t)scene->curveInstanceCount;
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasNodeCount =
         (uint64_t)gRuntimeSceneAcceleration3DTLASNodeCount;
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasRebuilds = prior.tlasRebuilds + 1u;
@@ -467,6 +486,10 @@ bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene
     runtime_scene_accel_3d_register_compatible_scene(scene);
     gRuntimeSceneAcceleration3DPreparedPrimitiveCount = scene->primitiveCount;
     gRuntimeSceneAcceleration3DPreparedTriangleCount = scene->triangleMesh.triangleCount;
+    gRuntimeSceneAcceleration3DPreparedCurveInstanceCount =
+        scene->curveInstanceCount;
+    gRuntimeSceneAcceleration3DPreparedCurveSignature =
+        RuntimeSceneCurve3D_GeometrySignature(scene);
     gRuntimeSceneAcceleration3DPreparedGeometrySignature =
         runtime_scene_accel_3d_geometry_signature(scene);
     RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
@@ -517,7 +540,9 @@ bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D
     if (!compatible_dynamic_water_extension &&
         (scene->primitiveCount != gRuntimeSceneAcceleration3DPreparedPrimitiveCount ||
         scene->triangleMesh.triangleCount !=
-            gRuntimeSceneAcceleration3DPreparedTriangleCount)) {
+            gRuntimeSceneAcceleration3DPreparedTriangleCount ||
+        scene->curveInstanceCount !=
+            gRuntimeSceneAcceleration3DPreparedCurveInstanceCount)) {
         runtime_scene_accel_3d_set_diag(
             "TLAS bind skipped: prepared scene geometry counts differ");
         gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBindMs +=
@@ -659,8 +684,15 @@ static bool runtime_scene_accel_3d_hit_better(const HitInfo3D* candidate,
     if (!found || !best) return true;
     if (candidate->t < best->t - 1e-9) return true;
     if (fabs(candidate->t - best->t) <= 1e-9 &&
-        candidate->triangleIndex > best->triangleIndex) {
-        return true;
+        candidate->source.kind != best->source.kind) {
+        return candidate->source.kind < best->source.kind;
+    }
+    if (fabs(candidate->t - best->t) <= 1e-9) {
+        if (candidate->source.kind == RUNTIME_PRIMITIVE_3D_KIND_CURVE) {
+            return candidate->curveSceneInstanceIndex <
+                   best->curveSceneInstanceIndex;
+        }
+        return candidate->triangleIndex > best->triangleIndex;
     }
     return false;
 }
@@ -778,6 +810,24 @@ static RuntimeSceneAcceleration3DTraceStatus runtime_scene_accel_3d_trace_instan
 
     if (!instance) {
         return RUNTIME_SCENE_ACCEL_3D_TRACE_UNREADY;
+    }
+    if (instance->kind == RUNTIME_SCENE_ACCEL_3D_INSTANCE_CURVE) {
+        gRuntimeSceneAcceleration3DTraceStats.curveBlasTraceCalls += 1u;
+        if (!instance->curveInstance ||
+            !RuntimeCurveAsset3D_HasReadyBLAS(&instance->curveInstance->asset)) {
+            return RUNTIME_SCENE_ACCEL_3D_TRACE_UNREADY;
+        }
+        if (!RuntimeSceneCurve3D_TraceInstance(
+                instance->curveInstance,
+                instance->curveSceneInstanceIndex,
+                world_ray,
+                t_min,
+                t_max,
+                out_hit)) {
+            return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;
+        }
+        gRuntimeSceneAcceleration3DTraceStats.curveBlasTraceHits += 1u;
+        return RUNTIME_SCENE_ACCEL_3D_TRACE_HIT;
     }
     if (!instance->meshAccelerated || !instance->localMesh) {
         return runtime_scene_accel_3d_trace_primitive_instance(scene,
@@ -1014,6 +1064,8 @@ void RuntimeSceneAcceleration3D_AppendTLASDiagnostics(
     diagnostics->tlasNodeCount = gRuntimeSceneAcceleration3DTLASDiagnostics.tlasNodeCount;
     diagnostics->tlasInstanceCount =
         gRuntimeSceneAcceleration3DTLASDiagnostics.tlasInstanceCount;
+    diagnostics->tlasCurveInstanceCount =
+        gRuntimeSceneAcceleration3DTLASDiagnostics.tlasCurveInstanceCount;
     diagnostics->tlasRebuilds = gRuntimeSceneAcceleration3DTLASDiagnostics.tlasRebuilds;
     diagnostics->tlasRefits = gRuntimeSceneAcceleration3DTLASDiagnostics.tlasRefits;
     diagnostics->tlasBuildMs = gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBuildMs;

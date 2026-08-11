@@ -72,6 +72,8 @@ typedef struct {
     HitInfo3D hitInfo;
     RuntimeMaterialPayload3D payload;
     RuntimePrincipledBSDF3D principled;
+    bool hairScatteringApplied;
+    RuntimeHairScattering3DResult hairScattering;
     double diffuseProbability;
     double specularProbability;
     double transmissionProbability;

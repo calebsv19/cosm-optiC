@@ -1,0 +1,104 @@
+{
+  "schema_version": "procedural_surface_field_preset_visual_contract_v1",
+  "proof_id": "procedural_surface_terrain_body_psg8_5",
+  "title": "PSG-8.5 terrain-domain confirmation",
+  "visual_intent": "Compare the historical unbound mountain prism against the corrected top-bound terrain body from above, beside, below, and in a hero view.",
+  "expected_visual_signal": "The corrected terrain keeps the mountain on the upward domain, presents a flat closure bottom and stable side skirt, and retains a valid native material-bound closed shell.",
+  "rejection_condition": "Reject if the corrected mountain remains mirrored underneath, retains mountainous side displacement, loses its top relief, or fails native runtime shell/material checks.",
+  "cage": {
+    "width_units": 8.0,
+    "height_units": 8.0,
+    "depth_units": 0.8
+  },
+  "render": {
+    "width": 720,
+    "height": 540,
+    "integrator_3d": "direct_light",
+    "temporal_frames": 1,
+    "camera_zoom": 1.0
+  },
+  "lighting": {
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.18,
+    "top_fill_strength": 0.72,
+    "light_intensity": 2.8,
+    "light_radius": 0.0
+  },
+  "light_rig": [
+    {
+      "id": "grazing_key",
+      "position": { "x": -6.5, "y": -7.0, "z": 8.5 },
+      "intensity": 3.0
+    },
+    {
+      "id": "warm_fill",
+      "position": { "x": 7.5, "y": -4.0, "z": 5.0 },
+      "intensity": 1.7
+    },
+    {
+      "id": "underside_fill",
+      "position": { "x": -3.0, "y": 5.5, "z": -7.0 },
+      "intensity": 1.5
+    }
+  ],
+  "assertions": {
+    "minimum_primary_hit_pixels": 14000,
+    "minimum_image_luma_standard_deviation": 5.0,
+    "minimum_pairwise_changed_pixels": 1000,
+    "binding_control_comparison": {
+      "view": "underside",
+      "left": "mountain_unbound_control",
+      "right": "mountain_terrain_body",
+      "minimum_changed_pixels": 30000
+    }
+  },
+  "views": [
+    {
+      "id": "hero",
+      "label_suffix": "HERO",
+      "direction": "three_quarter",
+      "camera_position": { "x": 9.5, "y": -10.5, "z": 7.8 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.45 }
+    },
+    {
+      "id": "top",
+      "label_suffix": "TOP",
+      "direction": "positive_z_detail",
+      "camera_position": { "x": 0.0, "y": -0.8, "z": 13.5 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.25 }
+    },
+    {
+      "id": "side",
+      "label_suffix": "SIDE",
+      "direction": "positive_x_profile",
+      "camera_position": { "x": 12.5, "y": -0.5, "z": 1.1 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": 0.0 }
+    },
+    {
+      "id": "underside",
+      "label_suffix": "UNDERSIDE",
+      "direction": "negative_z_closure",
+      "camera_position": { "x": 0.0, "y": 0.8, "z": -13.5 },
+      "camera_look_at": { "x": 0.0, "y": 0.0, "z": -0.25 }
+    }
+  ],
+  "presets": [
+    {
+      "id": "mountain_unbound_control",
+      "label": "OLD MIRRORED MOUNTAIN",
+      "graph": "central_mountain_peak.json",
+      "target_edge_length_units": 0.06,
+      "displacement_amplitude_units": 2.20,
+      "edge_lock_width_units": 0.36
+    },
+    {
+      "id": "mountain_terrain_body",
+      "label": "TOP-BOUND TERRAIN BODY",
+      "graph": "central_mountain_peak.json",
+      "binding": "central_mountain_peak.terrain.binding.json",
+      "target_edge_length_units": 0.06,
+      "displacement_amplitude_units": 2.20,
+      "edge_lock_width_units": 0.36
+    }
+  ]
+}

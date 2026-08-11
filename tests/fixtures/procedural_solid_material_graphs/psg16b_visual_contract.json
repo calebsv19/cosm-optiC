@@ -1,0 +1,265 @@
+{
+  "schema": "ray_tracing.procedural_solid_psg16b_visual_contract",
+  "schema_version": 1,
+  "proof_id": "procedural_solid_material_graphs_psg16b",
+  "title": "PSG-16B deterministic weighted procedural texture layers",
+  "visual_intent": "Prove bounded authored-material mask composition on newly authored family-appropriate geometry, continuous native-hit geometry inputs, and deterministic graph-order procedural texture layers whose effective opacity follows graph weight without a threshold switch.",
+  "expected_visual_signal": "Snow follows the elevated upward-facing terrain body, pore coloration breaks up a newly authored simple solid without changing its silhouette, sediment settles into the tunnel family, dune bands follow a newly authored top-bound sand terrain, and strata read as height-oriented layers on a newly authored tall rock form. A dedicated mountain strip must progress smoothly through texture weights 0.49, 0.50, and 0.51 with no material identity switch and exact repeat determinism.",
+  "rejection_condition": "Reject if semantic families silently reuse one universal shell, if the snow subject is a sphere union, if dunes are shown only on the tunnel block, if any mask debug view is flat or missing, if the mountain raw views exceed the shared-edge continuity bound, if either neighboring texture-weight step is absent or disproportionately large, if the repeated 0.50 render differs, if material variants change geometry identity, or if the proof claims physical pores, bump normals, or material-driven displacement.",
+  "base_recipe": "tests/fixtures/procedural_surface_rock_prism_psg0/recipe.json",
+  "source_passthrough_graph": "tests/fixtures/procedural_solid_graphs/source_mesh_passthrough.json",
+  "render": {
+    "width": 800,
+    "height": 600,
+    "temporal_frames": 8,
+    "integrator_3d": "disney_v2",
+    "camera_zoom": 1.08
+  },
+  "lighting": {
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.42,
+    "top_fill_strength": 1.25,
+    "light_intensity": 4.0,
+    "light_radius": 0.15
+  },
+  "assertions": {
+    "minimum_primary_hit_pixels": 1800,
+    "minimum_image_luma_standard_deviation": 5.0,
+    "minimum_mask_luma_standard_deviation": 3.0,
+    "minimum_subtle_to_strong_changed_pixels": 700,
+    "minimum_mask_changed_pixels_from_balanced_beauty": 700
+  },
+  "weighted_transition": {
+    "family": "mountain_snow",
+    "node": "snow_mask",
+    "weights": [0.0, 0.49, 0.5, 0.51, 1.0],
+    "minimum_neighbor_changed_pixels": 100,
+    "maximum_neighbor_step_fraction_of_endpoint": 0.08,
+    "maximum_neighbor_step_ratio": 1.5
+  },
+  "families": [
+    {
+      "id": "mountain_snow",
+      "label": "SNOW",
+      "claim": "material coverage on a displaced top-bound mountain shell",
+      "template": "snow_accumulation",
+      "geometry": {
+        "kind": "surface_field_source",
+        "field_graph": "tests/fixtures/procedural_surface_field_presets/central_mountain_peak.json",
+        "parameter_manifest": "tests/fixtures/procedural_surface_field_presets/central_mountain_peak.parameters.json",
+        "surface_binding": "tests/fixtures/procedural_surface_field_presets/central_mountain_peak.terrain.binding.json",
+        "authoring_edits": [
+          "mountain_radius=4.35",
+          "mountain_warp_scale=2.15",
+          "mountain_ridge_scale=0.92",
+          "mountain_ridge_seed=7127"
+        ],
+        "width": 8.0,
+        "height": 8.0,
+        "depth": 0.8,
+        "target_edge": 0.30,
+        "amplitude": 2.2,
+        "edge_lock": 0.36,
+        "bounds_min": [-4.4, -4.4, -0.7],
+        "bounds_max": [4.4, 4.4, 3.0],
+        "cells": 24,
+        "maximum_cells": 48,
+        "feature_size": 0.36
+      },
+      "base_material": "rock",
+      "overlay_material": "snow",
+      "variants": [
+        {
+          "label": "Snow .76-.92",
+          "edits": [
+            ["snowline", "maximum", "0.92"],
+            ["snowline", "minimum", "0.76"]
+          ]
+        },
+        {
+          "label": "Snow .52-.72",
+          "edits": []
+        },
+        {
+          "label": "Snow .28-.48",
+          "edits": [
+            ["snowline", "minimum", "0.28"],
+            ["snowline", "maximum", "0.48"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "concrete_pore_mask",
+      "label": "PORE MASK",
+      "claim": "material-only pore coloration on a simple solid; no bump or silhouette claim",
+      "template": "concrete_pores",
+      "geometry": {
+        "kind": "solid_graph",
+        "graph": "tests/fixtures/procedural_solid_graphs/transformed_box.json",
+        "authoring_edits": [
+          "base_box.vector_a.x=1.08",
+          "base_box.vector_a.y=0.72",
+          "base_box.scalar_a=0.13",
+          "object_transform.vector_b.z=0.31"
+        ],
+        "cells": 20,
+        "maximum_cells": 40,
+        "feature_size": 0.18
+      },
+      "base_material": "concrete",
+      "overlay_material": "pore",
+      "variants": [
+        {
+          "label": "Pores .91-.98",
+          "edits": [
+            ["pore_threshold", "maximum", "0.98"],
+            ["pore_threshold", "minimum", "0.91"]
+          ]
+        },
+        {
+          "label": "Pores .78-.91",
+          "edits": []
+        },
+        {
+          "label": "Pores .56-.72 N44",
+          "edits": [
+            ["pore_threshold", "minimum", "0.56"],
+            ["pore_threshold", "maximum", "0.72"],
+            ["pore_noise", "scale", "44"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tunnel_sediment",
+      "label": "SEDIMENT",
+      "claim": "low-height and cavity-biased material settlement on a cut tunnel shell",
+      "template": "sediment",
+      "geometry": {
+        "kind": "solid_graph",
+        "graph": "tests/fixtures/procedural_solid_graphs/rounded_block_with_tunnel.json",
+        "authoring_edits": [
+          "rounded_block.vector_a.x=1.30",
+          "rounded_block.vector_a.y=0.97",
+          "rounded_block.scalar_a=0.13",
+          "tunnel.scalar_a=0.42"
+        ],
+        "cells": 20,
+        "maximum_cells": 40,
+        "feature_size": 0.18,
+        "remesh_mode": "uniform"
+      },
+      "base_material": "rock",
+      "overlay_material": "sediment",
+      "variants": [
+        {
+          "label": "Sed .78-.96",
+          "edits": [
+            ["settle", "maximum", "0.96"],
+            ["settle", "minimum", "0.78"]
+          ]
+        },
+        {
+          "label": "Sed .45-.75",
+          "edits": []
+        },
+        {
+          "label": "Sed .12-.34",
+          "edits": [
+            ["settle", "minimum", "0.12"],
+            ["settle", "maximum", "0.34"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "wind_dune_bands",
+      "label": "DUNE BANDS",
+      "claim": "material bands on an independently displaced top-bound wind-sand terrain",
+      "template": "dune_bands",
+      "geometry": {
+        "kind": "surface_field_source",
+        "field_graph": "tests/fixtures/procedural_surface_field_presets/wind_shaped_sand.json",
+        "parameter_manifest": "tests/fixtures/procedural_surface_field_presets/wind_shaped_sand.parameters.json",
+        "surface_binding": "tests/fixtures/procedural_surface_field_presets/wind_shaped_sand.top.binding.json",
+        "authoring_edits": [
+          "dune_primary_strength=0.61",
+          "dune_secondary_strength=0.19",
+          "dune_spacing=7.4",
+          "warp_seed=5201"
+        ],
+        "width": 8.0,
+        "height": 8.0,
+        "depth": 0.8,
+        "target_edge": 0.30,
+        "amplitude": 0.26,
+        "edge_lock": 0.30,
+        "bounds_min": [-4.4, -4.4, -0.7],
+        "bounds_max": [4.4, 4.4, 1.0],
+        "cells": 24,
+        "maximum_cells": 48,
+        "feature_size": 0.30
+      },
+      "base_material": "sand",
+      "overlay_material": "dune",
+      "variants": [
+        {
+          "label": "Dune F3",
+          "edits": [["bands", "scale", "3"]]
+        },
+        {
+          "label": "Dune F8",
+          "edits": [["bands", "scale", "8"]]
+        },
+        {
+          "label": "Dune F18 O.32",
+          "edits": [
+            ["bands", "scale", "18"],
+            ["bands", "offset", "0.32"]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "column_strata",
+      "label": "STRATA",
+      "claim": "height-oriented material layers on a tall twisted and tapered rock form",
+      "template": "layered_rock",
+      "geometry": {
+        "kind": "solid_graph",
+        "graph": "tests/fixtures/procedural_solid_graphs/twisted_tapered_column.json",
+        "authoring_edits": [
+          "column.vector_a.x=0.82",
+          "column.vector_a.y=0.46",
+          "rounded.scalar_a=0.11",
+          "tapered.scalar_a=0.29",
+          "twisted.scalar_a=1.18"
+        ],
+        "cells": 20,
+        "maximum_cells": 40,
+        "feature_size": 0.18,
+        "remesh_mode": "uniform"
+      },
+      "base_material": "rock",
+      "overlay_material": "strata",
+      "variants": [
+        {
+          "label": "Rock F4",
+          "edits": [["strata", "scale", "4"]]
+        },
+        {
+          "label": "Rock F12",
+          "edits": [["strata", "scale", "12"]]
+        },
+        {
+          "label": "Rock F24 O.38",
+          "edits": [
+            ["strata", "scale", "24"],
+            ["strata", "offset", "0.38"]
+          ]
+        }
+      ]
+    }
+  ]
+}

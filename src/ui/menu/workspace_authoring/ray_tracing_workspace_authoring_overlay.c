@@ -1,5 +1,6 @@
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -8,6 +9,7 @@
 #include "core_theme.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/shared_theme_font_adapter.h"
+#include "ui/menu/workspace_authoring/ray_tracing_surface_authoring_canvas.h"
 
 enum {
     RAY_TRACING_AUTHORING_PANE_ROW_CAP = 3
@@ -242,6 +244,160 @@ static void ray_tracing_authoring_draw_pane_rows(
                                         detail);
         }
     }
+}
+
+static void ray_tracing_authoring_draw_canvas_node(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    SDL_Rect rect,
+    const char* label,
+    const char* kind,
+    SDL_Color border,
+    SDL_Color fill,
+    SDL_Color text,
+    SDL_Color muted) {
+    if (!renderer || !font || rect.w <= 0 || rect.h <= 0) return;
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    SDL_RenderFillRect(renderer, &rect);
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
+    SDL_RenderDrawRect(renderer, &rect);
+    menu_render_draw_text_color(renderer, font, rect.x + 8, rect.y + 7, text,
+                                label ? label : "");
+    menu_render_draw_text_color(renderer, font, rect.x + 8, rect.y + 27, muted,
+                                kind ? kind : "");
+}
+
+static void ray_tracing_authoring_draw_document_canvas(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    const RayTracingWorkspaceAuthoringHostState* host,
+    int width,
+    int height,
+    const SceneEditorPaneLayout* scene_layout,
+    const RayTracingThemePalette* palette,
+    int has_shared_palette) {
+    RayTracingWorkspaceAuthoringPaneRow rows[RAY_TRACING_AUTHORING_PANE_ROW_CAP];
+    SDL_Rect panel;
+    SDL_Color border;
+    SDL_Color fill;
+    SDL_Color text;
+    SDL_Color muted;
+    SDL_Color source_border;
+    SDL_Color lane_border;
+    SDL_Color ref_border;
+    RayTracingSurfaceAuthoringCanvasSnapshot snapshot;
+    const RayTracingSurfaceAuthoringCanvasViewState* view;
+    const char* canvas_path;
+    char subtitle[192];
+    uint32_t count;
+    size_t i;
+    if (!renderer || !font || !host || width <= 0 || height <= 0 || !palette) return;
+    view = &host->canvas_view;
+    count = ray_tracing_workspace_authoring_overlay_build_pane_rows(
+        width, height, scene_layout, rows,
+        (uint32_t)(sizeof(rows) / sizeof(rows[0])));
+    if (count < 2u) return;
+    panel = rows[1].pane_rect;
+    panel.x += 10; panel.y += 10; panel.w -= 20; panel.h -= 20;
+    if (panel.w < 420 || panel.h < 240) return;
+
+    border = ray_tracing_authoring_color(palette->panel_border,
+                                         (SDL_Color){94, 116, 154, 230},
+                                         has_shared_palette);
+    fill = ray_tracing_authoring_color(palette->panel_fill,
+                                       (SDL_Color){12, 16, 23, 248},
+                                       has_shared_palette);
+    text = ray_tracing_authoring_color(palette->text_primary,
+                                       (SDL_Color){238, 242, 250, 255},
+                                       has_shared_palette);
+    muted = ray_tracing_authoring_color(palette->text_muted,
+                                        (SDL_Color){174, 184, 204, 255},
+                                        has_shared_palette);
+    source_border = (SDL_Color){110, 170, 254, 245};
+    lane_border = (SDL_Color){155, 138, 251, 235};
+    ref_border = (SDL_Color){95, 209, 167, 235};
+    canvas_path = getenv("RAY_TRACING_SURFACE_AUTHORING_CANVAS_PATH");
+    if (canvas_path && canvas_path[0] &&
+        !RayTracingSurfaceAuthoringCanvasSnapshot_LoadJsonFile(canvas_path, &snapshot)) {
+        (void)RayTracingSurfaceAuthoringCanvasSnapshot_DefaultCube(&snapshot);
+        snprintf(subtitle, sizeof(subtitle), "canvas load failed: %s", snapshot.error);
+    } else if (!canvas_path || !canvas_path[0]) {
+        (void)RayTracingSurfaceAuthoringCanvasSnapshot_DefaultCube(&snapshot);
+        snprintf(subtitle, sizeof(subtitle), "%s · READ ONLY · v1", snapshot.document_id);
+    } else {
+        snprintf(subtitle, sizeof(subtitle), "%s · READ ONLY · v1", snapshot.document_id);
+    }
+    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+    SDL_RenderFillRect(renderer, &panel);
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
+    SDL_RenderDrawRect(renderer, &panel);
+    menu_render_draw_text_color(renderer, font, panel.x + 14, panel.y + 10, text,
+                                "Surface Authoring Document Canvas");
+    menu_render_draw_text_color(renderer, font, panel.x + 14, panel.y + 31, muted, subtitle);
+    if (!snapshot.valid) return;
+    for (i = 0u; i < snapshot.edge_count; ++i) {
+        int from_index = -1;
+        int to_index = -1;
+        size_t j;
+        for (j = 0u; j < snapshot.node_count; ++j) {
+            if (strcmp(snapshot.nodes[j].id, snapshot.edges[i].from) == 0) from_index = (int)j;
+            if (strcmp(snapshot.nodes[j].id, snapshot.edges[i].to) == 0) to_index = (int)j;
+        }
+        if (from_index >= 0 && to_index >= 0) {
+            SDL_Rect from;
+            SDL_Rect to;
+            int from_x = 0;
+            int from_y = 0;
+            int to_x = 0;
+            int to_y = 0;
+            ray_tracing_surface_authoring_canvas_view_project(
+                view, &panel, snapshot.nodes[from_index].x, snapshot.nodes[from_index].y,
+                &from_x, &from_y);
+            ray_tracing_surface_authoring_canvas_view_project(
+                view, &panel, snapshot.nodes[to_index].x, snapshot.nodes[to_index].y,
+                &to_x, &to_y);
+            from = (SDL_Rect){from_x, from_y,
+                              (int)(156.0f * view->zoom), (int)(44.0f * view->zoom)};
+            to = (SDL_Rect){to_x, to_y,
+                            (int)(176.0f * view->zoom), (int)(44.0f * view->zoom)};
+            SDL_SetRenderDrawColor(renderer, 83, 101, 133, 210);
+            SDL_RenderDrawLine(renderer, from.x + from.w, from.y + from.h / 2, to.x, to.y + to.h / 2);
+        }
+    }
+    for (i = 0u; i < snapshot.node_count; ++i) {
+        const RayTracingSurfaceAuthoringCanvasNode* node = &snapshot.nodes[i];
+        SDL_Rect rect;
+        int node_x = 0;
+        int node_y = 0;
+        int node_width = strcmp(node->kind, "source") == 0 ? 142 :
+                         strcmp(node->kind, "lane") == 0 ? 166 : 176;
+        SDL_Color node_border = strcmp(node->kind, "source") == 0 ? source_border :
+                                strcmp(node->kind, "lane") == 0 ? lane_border : ref_border;
+        SDL_Color node_fill = strcmp(node->kind, "source") == 0 ? (SDL_Color){22, 42, 70, 245} :
+                              strcmp(node->kind, "lane") == 0 ? (SDL_Color){42, 35, 70, 245} : (SDL_Color){24, 68, 57, 245};
+        ray_tracing_surface_authoring_canvas_view_project(
+            view, &panel, node->x, node->y, &node_x, &node_y);
+        rect = (SDL_Rect){node_x, node_y,
+                          (int)(node_width * view->zoom), (int)(44.0f * view->zoom)};
+        if ((int)i == view->selected_node) {
+            node_border = text;
+        }
+        ray_tracing_authoring_draw_canvas_node(renderer, font, rect, node->label, node->kind,
+                                               node_border, node_fill, text, muted);
+    }
+    if (host->edit_active) {
+        char edit_line[640];
+        snprintf(edit_line, sizeof(edit_line), "EDIT %s: %s · Enter commit · Esc cancel",
+                 host->edit_field, host->edit_buffer);
+        menu_render_draw_text_color(renderer, font, panel.x + 14,
+                                    panel.y + panel.h - 42, text, edit_line);
+    }
+    menu_render_draw_text_color(renderer, font, panel.x + 14,
+                                panel.y + panel.h - 22, muted,
+                                host->document_status[0] ? host->document_status
+                                : view->selected_node >= 0
+                                    ? "selection active · editing / saving / promotion disabled"
+                                    : "selection / zoom / pan enabled · editing / saving / promotion disabled");
 }
 
 static void ray_tracing_authoring_draw_section(
@@ -533,6 +689,14 @@ void ray_tracing_workspace_authoring_overlay_draw(
                                              scene_layout,
                                              &palette,
                                              has_shared_palette);
+        ray_tracing_authoring_draw_document_canvas(renderer,
+                                                   font,
+                                                   host,
+                                                   width,
+                                                   height,
+                                                   scene_layout,
+                                                   &palette,
+                                                   has_shared_palette);
     } else if (ray_tracing_workspace_authoring_host_font_theme_overlay_active(host)) {
         ray_tracing_authoring_draw_font_theme_overlay(renderer,
                                                       font,

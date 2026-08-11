@@ -319,6 +319,7 @@ static bool runtime_material_response_3d_shade_hit_with_payload_depth(
     RuntimeMaterialResponse3DResult* out_result) {
     RuntimeMaterialResponse3DResult result = {0};
     RuntimeDiffuseBounce3DResult diffuse_result = {0};
+    HitInfo3D shading_hit;
 
     if (!scene || !hit || !out_result) return false;
     if (payload && payload->valid) {
@@ -326,8 +327,11 @@ static bool runtime_material_response_3d_shade_hit_with_payload_depth(
     } else if (!RuntimeMaterialPayload3D_ResolveFromHit(hit, &result.payload)) {
         return false;
     }
+    shading_hit = *hit;
+    (void)RuntimeMaterialPayload3D_ApplyShadingNormal(
+        &result.payload, &shading_hit);
     if (!RuntimeDiffuseBounce3D_ShadeHitWithPayload(scene,
-                                                    hit,
+                                                    &shading_hit,
                                                     &result.payload,
                                                     sampling,
                                                     &diffuse_result)) {
@@ -339,7 +343,7 @@ static bool runtime_material_response_3d_shade_hit_with_payload_depth(
     result.materialResolved = result.payload.valid;
     result.hitInfo = diffuse_result.hitInfo;
     runtime_material_response_3d_apply_weights(scene,
-                                               hit,
+                                               &shading_hit,
                                                &result.payload,
                                                view_dir,
                                                &diffuse_result,
@@ -349,7 +353,7 @@ static bool runtime_material_response_3d_shade_hit_with_payload_depth(
     result.secondaryHitCount = diffuse_result.secondaryHitCount;
     result.secondaryContributingHitCount = diffuse_result.secondaryContributingHitCount;
     runtime_material_response_3d_apply_specular_reflection(scene,
-                                                           hit,
+                                                           &shading_hit,
                                                            &result.payload,
                                                            sampling,
                                                            view_dir,
@@ -403,6 +407,7 @@ bool RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
     RuntimeMaterialResponse3DResult result = {0};
     RuntimeDiffuseBounce3DResult diffuse_result = {0};
     RuntimePathDepthPolicy3D path_policy = RuntimePathDepthPolicy3D_Resolve();
+    HitInfo3D shading_hit;
     Vec3 view_dir = vec3(0.0, 0.0, 0.0);
 
     if (!scene || !primary_hit || !out_result) return false;
@@ -419,8 +424,11 @@ bool RuntimeMaterialResponse3D_ShadePrimaryHitWithPayload(
         *out_result = result;
         return false;
     }
+    shading_hit = primary_hit->hitInfo;
+    (void)RuntimeMaterialPayload3D_ApplyShadingNormal(
+        &result.payload, &shading_hit);
     if (!RuntimeDiffuseBounce3D_ShadeHitWithPayload(scene,
-                                                    &primary_hit->hitInfo,
+                                                    &shading_hit,
                                                     &result.payload,
                                                     sampling,
                                                     &diffuse_result)) {

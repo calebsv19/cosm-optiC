@@ -1,0 +1,45 @@
+{
+  "schema": "ray_tracing.surface_authoring_document",
+  "schema_version": 2,
+  "document_id": "five_lane_layered_object",
+  "source": {"object_id": "editable_object", "mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+  "resources": [
+    {"id": "upper_carrier", "kind": "selector_carrier", "digest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["selector_mask"], "receipt": {"id": "upper_carrier_receipt", "digest_sha256": "1111111111111111111111111111111111111111111111111111111111111111"}},
+    {"id": "middle_carrier", "kind": "selector_carrier", "digest_sha256": "1212121212121212121212121212121212121212121212121212121212121212", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["selector_mask"], "receipt": {"id": "middle_carrier_receipt", "digest_sha256": "1313131313131313131313131313131313131313131313131313131313131313"}},
+    {"id": "weather_scalar", "kind": "scalar_field", "digest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["scalar_field"], "receipt": {"id": "weather_scalar_receipt", "digest_sha256": "2222222222222222222222222222222222222222222222222222222222222222"}},
+    {"id": "brass_material", "kind": "material_graph", "digest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["material"], "receipt": {"id": "brass_material_receipt", "digest_sha256": "3333333333333333333333333333333333333333333333333333333333333333"}},
+    {"id": "scratch_microdetail", "kind": "microdetail_field", "digest_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["microdetail_normal"], "receipt": {"id": "scratch_microdetail_receipt", "digest_sha256": "4444444444444444444444444444444444444444444444444444444444444444"}},
+    {"id": "moss_attachment", "kind": "attachment_recipe", "digest_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["attached_asset"], "receipt": {"id": "moss_attachment_receipt", "digest_sha256": "5555555555555555555555555555555555555555555555555555555555555555"}},
+    {"id": "pore_relief", "kind": "signed_relief_recipe", "digest_sha256": "6666666666666666666666666666666666666666666666666666666666666666", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["signed_relief"], "receipt": {"id": "pore_relief_receipt", "digest_sha256": "7777777777777777777777777777777777777777777777777777777777777777"}},
+    {"id": "chip_inset", "kind": "deep_inset_recipe", "digest_sha256": "8888888888888888888888888888888888888888888888888888888888888888", "source_mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "output_domains": ["deep_inset"], "receipt": {"id": "chip_inset_receipt", "digest_sha256": "9999999999999999999999999999999999999999999999999999999999999999"}}
+  ],
+  "nodes": [
+    {"id": "upper_selector", "kind": "selector", "selector_name": "upper", "resource": "upper_carrier", "inputs": [], "outputs": [{"name": "mask", "domains": ["selector_mask"]}]},
+    {"id": "weather_weight", "kind": "scalar_field", "resource": "weather_scalar", "inputs": [{"name": "selector", "domains": ["selector_mask"]}], "outputs": [{"name": "value", "domains": ["scalar_field"]}]},
+    {"id": "material_output", "kind": "domain_output", "domain": "material", "inputs": [{"name": "value", "domains": ["scalar_field"]}], "outputs": [{"name": "output", "domains": ["material"]}]},
+    {"id": "microdetail_output", "kind": "domain_output", "domain": "microdetail_normal", "inputs": [{"name": "value", "domains": ["scalar_field"]}], "outputs": [{"name": "output", "domains": ["microdetail_normal"]}]},
+    {"id": "attachment_output", "kind": "domain_output", "domain": "attached_asset", "inputs": [{"name": "value", "domains": ["scalar_field"]}], "outputs": [{"name": "output", "domains": ["attached_asset"]}]},
+    {"id": "relief_output", "kind": "domain_output", "domain": "signed_relief", "inputs": [{"name": "value", "domains": ["scalar_field"]}], "outputs": [{"name": "output", "domains": ["signed_relief"]}]},
+    {"id": "inset_output", "kind": "domain_output", "domain": "deep_inset", "inputs": [{"name": "value", "domains": ["scalar_field"]}], "outputs": [{"name": "output", "domains": ["deep_inset"]}]},
+    {"id": "carrier_binding", "kind": "consumer", "adapter": "selector_carrier_binding", "inputs": [{"name": "input", "domains": ["selector_mask"]}], "outputs": [{"name": "request", "domains": ["selector_mask"]}]},
+    {"id": "material_binding", "kind": "consumer", "adapter": "material_runtime_binding", "resource": "brass_material", "inputs": [{"name": "input", "domains": ["material"]}], "outputs": [{"name": "request", "domains": ["material"]}]},
+    {"id": "microdetail_binding", "kind": "consumer", "adapter": "microdetail_field_binding", "resource": "scratch_microdetail", "inputs": [{"name": "input", "domains": ["microdetail_normal"]}], "outputs": [{"name": "request", "domains": ["microdetail_normal"]}]},
+    {"id": "attachment_request", "kind": "consumer", "adapter": "attachment_compile_request", "resource": "moss_attachment", "root_policy": "carrier_weighted_surface", "clearance_factor": 1.25, "material_resource": "brass_material", "inputs": [{"name": "input", "domains": ["attached_asset"]}], "outputs": [{"name": "request", "domains": ["attached_asset"]}]},
+    {"id": "relief_request", "kind": "consumer", "adapter": "geometry_derived_asset_request", "domain": "signed_relief", "resource": "pore_relief", "inputs": [{"name": "input", "domains": ["signed_relief"]}], "outputs": [{"name": "request", "domains": ["signed_relief"]}]},
+    {"id": "inset_request", "kind": "consumer", "adapter": "geometry_derived_asset_request", "domain": "deep_inset", "resource": "chip_inset", "feature_ids": [17, 23], "inputs": [{"name": "input", "domains": ["deep_inset"]}], "outputs": [{"name": "request", "domains": ["deep_inset"]}]}
+  ],
+  "connections": [
+    {"from": {"node": "upper_selector", "port": "mask"}, "to": {"node": "weather_weight", "port": "selector"}},
+    {"from": {"node": "upper_selector", "port": "mask"}, "to": {"node": "carrier_binding", "port": "input"}},
+    {"from": {"node": "weather_weight", "port": "value"}, "to": {"node": "material_output", "port": "value"}},
+    {"from": {"node": "weather_weight", "port": "value"}, "to": {"node": "microdetail_output", "port": "value"}},
+    {"from": {"node": "weather_weight", "port": "value"}, "to": {"node": "attachment_output", "port": "value"}},
+    {"from": {"node": "weather_weight", "port": "value"}, "to": {"node": "relief_output", "port": "value"}},
+    {"from": {"node": "weather_weight", "port": "value"}, "to": {"node": "inset_output", "port": "value"}},
+    {"from": {"node": "material_output", "port": "output"}, "to": {"node": "material_binding", "port": "input"}},
+    {"from": {"node": "microdetail_output", "port": "output"}, "to": {"node": "microdetail_binding", "port": "input"}},
+    {"from": {"node": "attachment_output", "port": "output"}, "to": {"node": "attachment_request", "port": "input"}},
+    {"from": {"node": "relief_output", "port": "output"}, "to": {"node": "relief_request", "port": "input"}},
+    {"from": {"node": "inset_output", "port": "output"}, "to": {"node": "inset_request", "port": "input"}}
+  ]
+}

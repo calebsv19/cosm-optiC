@@ -1,0 +1,30 @@
+{
+  "schema": "ray_tracing.procedural_surface_plane_mesh_expectation",
+  "schema_version": 1,
+  "implementation_phase": "PSG-2",
+  "numeric_values_status": "frozen",
+  "cage_id": "rock_plane_psg0",
+  "subdivisions": [
+    16,
+    12
+  ],
+  "vertex_count": 221,
+  "triangle_count": 384,
+  "field_evaluation_count": 221,
+  "bounds_min": [
+    -2.0,
+    -1.5,
+    -0.04249976568623212
+  ],
+  "bounds_max": [
+    2.0,
+    1.5,
+    0.05644411904541761
+  ],
+  "maximum_absolute_displacement_units": 0.05644411904541761,
+  "maximum_boundary_absolute_displacement_units": 0.0,
+  "minimum_twice_triangle_area_units2": 0.0625,
+  "total_surface_area_units2": 12.087737094553621,
+  "minimum_normal_z": 0.98263039796473,
+  "mesh_digest_sha256": "fe21f48bc74660164515748b065a145e23d850ae4338154d2cbcc9740b502fdc"
+}

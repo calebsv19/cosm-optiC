@@ -1,0 +1,65 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg9_blended_double_sphere",
+  "semantic_source_id": "primitive_sphere_pair",
+  "max_node_evaluations": 24,
+  "nodes": [
+    {
+      "id": "sphere_a",
+      "op": "sphere",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.82,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "sphere_a_move",
+      "op": "transform",
+      "inputs": ["sphere_a"],
+      "source_id": "",
+      "vector_a": [-0.58, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [1.0, 1.0, 1.0],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "sphere_b",
+      "op": "sphere",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.72,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "sphere_b_move",
+      "op": "transform",
+      "inputs": ["sphere_b"],
+      "source_id": "",
+      "vector_a": [0.62, 0.15, 0.18],
+      "vector_b": [0.0, 0.2, 0.0],
+      "vector_c": [0.85, 1.2, 0.9],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "blend",
+      "op": "smooth_union",
+      "inputs": ["sphere_a_move", "sphere_b_move"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.28,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "blend"
+}

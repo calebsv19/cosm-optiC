@@ -1,0 +1,54 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg9_twisted_tapered_column",
+  "semantic_source_id": "primitive_rect_prism",
+  "max_node_evaluations": 16,
+  "nodes": [
+    {
+      "id": "column",
+      "op": "box",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.72, 0.38, 1.15],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.04,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "rounded",
+      "op": "round",
+      "inputs": ["column"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.07,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "tapered",
+      "op": "taper_z",
+      "inputs": ["rounded"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.22,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "twisted",
+      "op": "twist_z",
+      "inputs": ["tapered"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.95,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "twisted"
+}

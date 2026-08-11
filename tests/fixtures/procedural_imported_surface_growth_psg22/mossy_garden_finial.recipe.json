@@ -1,0 +1,36 @@
+{
+  "schema": "procedural_object_recipe_v1",
+  "asset_id": "psg22_garden_finial",
+  "display_name": "PSG-22 Fresh Mossy Garden Finial",
+  "recipe_family": "lathe_profile",
+  "tags": [
+    "psg22",
+    "fresh_generated_fixture",
+    "imported_stl",
+    "attached_growth"
+  ],
+  "recommended_first_material": "weathered_stone",
+  "notes": "Purpose-built garden finial generated afresh for the PSG-22 attached-growth proof. Broad curved shoulders and a tapered crown make low-profile moss mounds readable in hero and grazing views.",
+  "geometry": {
+    "segments": 144,
+    "cap_start": true,
+    "cap_end": true,
+    "profile": [
+      {"radius": 0.52, "z": 0.0},
+      {"radius": 0.70, "z": 0.08},
+      {"radius": 0.76, "z": 0.18},
+      {"radius": 0.72, "z": 0.31},
+      {"radius": 0.82, "z": 0.48},
+      {"radius": 0.94, "z": 0.72},
+      {"radius": 0.98, "z": 0.98},
+      {"radius": 0.90, "z": 1.22},
+      {"radius": 0.76, "z": 1.42},
+      {"radius": 0.62, "z": 1.58},
+      {"radius": 0.68, "z": 1.72},
+      {"radius": 0.58, "z": 1.88},
+      {"radius": 0.44, "z": 2.03},
+      {"radius": 0.30, "z": 2.17},
+      {"radius": 0.08, "z": 2.28}
+    ]
+  }
+}

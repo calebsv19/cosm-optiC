@@ -1,0 +1,25 @@
+{
+  "schema": "surface_feature_field_authoring_v1",
+  "field_id": "curved_plaster_dirt_spots_v1",
+  "object_units_per_meter": 1.0,
+  "normal_compatibility_cosine": 0.5,
+  "source": {"kind": "closed_curved_plaster", "convex_ridge": true, "concave_trough": true, "opposing_fold_gap_units": 0.18},
+  "populations": [
+    {"id": "fine_speckles", "count": 96, "radius": [0.018, 0.035], "aspect": [0.75, 1.25], "edge_softness": 0.18, "rim_width": 0.16, "height_or_depth": 0.0, "cluster": 0.15, "jitter": 1.0, "cluster_hops": 3, "seed": 241},
+    {"id": "dried_droplets", "density_per_square_unit": 4.2, "radius": [0.05, 0.10], "aspect": [0.65, 1.5], "edge_softness": 0.12, "rim_width": 0.22, "height_or_depth": [-0.028, -0.015], "cluster": 0.35, "jitter": 0.82, "cluster_hops": 2, "seed": 242},
+    {"id": "mud_drops", "count": 8, "radius": [0.14, 0.22], "aspect": [0.7, 1.35], "edge_softness": 0.08, "rim_width": 0.18, "height_or_depth": [0.025, 0.055], "cluster": 0.10, "jitter": 0.65, "cluster_hops": 2, "seed": 243}
+  ],
+  "macro_envelope": {
+    "enabled": true,
+    "minimum_weight": 0.2,
+    "kind": "trough_and_lower_ridge",
+    "receiver_direction": [0.55, -0.79, 0.25],
+    "minimum_facing_cosine": 0.12,
+    "height_range": [-0.72, 0.78],
+    "concavity": {
+      "enabled": true,
+      "minimum_signed_dihedral_degrees": 3.0,
+      "surface_falloff_units": 0.38
+    }
+  }
+}

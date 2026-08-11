@@ -1,0 +1,14 @@
+#!/usr/bin/env python3
+from __future__ import annotations
+import json, subprocess, sys, tempfile
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[2]
+MESH={"mesh":{"vertices":[{"x":-2,"y":0,"z":-2},{"x":2,"y":0,"z":-2},{"x":-2,"y":0,"z":2},{"x":2,"y":0,"z":2}],"triangles":[{"a":0,"b":2,"c":1},{"a":1,"b":2,"c":3}]}}
+def main()->int:
+ with tempfile.TemporaryDirectory() as d:
+  root=Path(d); mesh=root/"mesh.json"; mesh.write_text(json.dumps(MESH)); out=root/"out"; cmd=[sys.executable,str(ROOT/"tools/procedural_surface_wood_preset.py"),"--preset",str(ROOT/"tests/fixtures/procedural_surface_wood_presets/oak_knots.json"),"--mesh",str(mesh),"--source-mesh-digest","a"*64,"--output-root",str(out)]
+  subprocess.run(cmd,check=True,capture_output=True); first=(out/"receipts/wood_surface_preset.receipt.json").read_bytes(); grain=(out/"assets/wood_grain_field_v1.json").read_bytes(); field=(out/"assets/surface_feature_field_v1.json").read_bytes(); subprocess.run(cmd,check=True,capture_output=True); assert first==(out/"receipts/wood_surface_preset.receipt.json").read_bytes() and grain==(out/"assets/wood_grain_field_v1.json").read_bytes() and field==(out/"assets/surface_feature_field_v1.json").read_bytes(); r=json.loads(first); f=json.loads(field); profiles=r["grain_height_profiles"]; assert r["grain"]["geometry_claim"]=="field identity only" and r["deep_topology"]["executed"] is False; assert r["material"]["shared_grain_field_digest_sha256"]==r["shading_normal"]["shared_grain_field_digest_sha256"]==profiles["shared_grain_field_digest_sha256"]==r["grain"]["asset_digest_sha256"]; assert profiles["default_profile"]=="texture_only" and profiles["profiles"]["texture_only"]["maximum_height_units"]==0.0 and profiles["profiles"]["height_subtle"]["maximum_height_units"]==0.004 and profiles["profiles"]["height_standard"]["maximum_height_units"]==0.012 and profiles["profiles"]["height_exaggerated"]["maximum_height_units"]==0.028; assert r["shallow_knot_relief"]["ranges"]=={} and f["features"]==[]
+  for profile, height, geometry in (("texture_only",0.0,"none"),("height_subtle",0.004,"selected_face_shell"),("height_standard",0.012,"selected_face_shell"),("height_exaggerated",0.028,"selected_face_shell")):
+   request=out/f"{profile}.json"; subprocess.run([sys.executable,str(ROOT/"tools/procedural_surface_wood_relief_profile.py"),"--preset",str(ROOT/"tests/fixtures/procedural_surface_wood_presets/oak_knots.json"),"--profile",profile,"--grain-field",str(out/"assets/wood_grain_field_v1.json"),"--selected-face","positive_y","--out",str(request)],check=True,capture_output=True); value=json.loads(request.read_text()); assert value["geometry"]==geometry and value["maximum_height_units"]==height and value["preset_digest_sha256"]==r["preset_digest_sha256"] and value["grain_field_digest_sha256"]==r["grain"]["asset_digest_sha256"]
+ print("wood preset contract passed"); return 0
+if __name__=="__main__": raise SystemExit(main())

@@ -166,6 +166,7 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     double diffuse_scale = 0.0;
     double specular_scale = 0.0;
     double transmission_scale = 0.0;
+    bool hair_scattering_requested = false;
 
     if (!scene || !hit || !out_result) return false;
     result.hit = true;
@@ -184,6 +185,8 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
         *out_result = result;
         return false;
     }
+    hair_scattering_requested = RuntimeHairScattering3D_ShouldApply(
+        hit->hasCurveTangent, &result.payload.hairOptics);
 
     result.principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&result.payload);
     result.pathPolicy = RuntimePathDepthPolicy3D_Resolve();
@@ -240,6 +243,32 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
         result.visible = direct.visible;
     }
 
+    if (hair_scattering_requested &&
+        RuntimeHairScattering3D_EvaluateSingleFiber(
+            &result.payload.hairOptics,
+            hit->curveTangent,
+            hit->geometricNormal,
+            light_dir,
+            view_dir,
+            &result.hairScattering)) {
+        const double incident_r =
+            result.directRadianceR / fmax(result.payload.baseColorR, 1.0e-3);
+        const double incident_g =
+            result.directRadianceG / fmax(result.payload.baseColorG, 1.0e-3);
+        const double incident_b =
+            result.directRadianceB / fmax(result.payload.baseColorB, 1.0e-3);
+        result.hairScatteringApplied = true;
+        result.diffuseRadianceR = 0.0;
+        result.diffuseRadianceG = 0.0;
+        result.diffuseRadianceB = 0.0;
+        result.specularRadianceR = incident_r * result.hairScattering.r;
+        result.specularRadianceG = incident_g * result.hairScattering.g;
+        result.specularRadianceB = incident_b * result.hairScattering.b;
+        result.transmissionRadianceR = 0.0;
+        result.transmissionRadianceG = 0.0;
+        result.transmissionRadianceB = 0.0;
+    }
+
     diffuse_scale = runtime_disney_v2_3d_clamp(result.diffuseProbability *
                                                   (0.25 + result.diffuseBsdfCos),
                                               0.0,
@@ -253,22 +282,26 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
                                                    0.0,
                                                    1.0);
 
-    result.diffuseRadianceR = result.directRadianceR * diffuse_scale;
-    result.diffuseRadianceG = result.directRadianceG * diffuse_scale;
-    result.diffuseRadianceB = result.directRadianceB * diffuse_scale;
-    result.specularRadianceR = result.directRadianceR * specular_scale;
-    result.specularRadianceG = result.directRadianceG * specular_scale;
-    result.specularRadianceB = result.directRadianceB * specular_scale;
-    result.transmissionRadianceR = result.directRadianceR * transmission_scale;
-    result.transmissionRadianceG = result.directRadianceG * transmission_scale;
-    result.transmissionRadianceB = result.directRadianceB * transmission_scale;
+    if (!result.hairScatteringApplied) {
+        result.diffuseRadianceR = result.directRadianceR * diffuse_scale;
+        result.diffuseRadianceG = result.directRadianceG * diffuse_scale;
+        result.diffuseRadianceB = result.directRadianceB * diffuse_scale;
+        result.specularRadianceR = result.directRadianceR * specular_scale;
+        result.specularRadianceG = result.directRadianceG * specular_scale;
+        result.specularRadianceB = result.directRadianceB * specular_scale;
+        result.transmissionRadianceR = result.directRadianceR * transmission_scale;
+        result.transmissionRadianceG = result.directRadianceG * transmission_scale;
+        result.transmissionRadianceB = result.directRadianceB * transmission_scale;
+    }
     result.emissionRadianceR = result.principled.emissiveR * result.principled.emissiveStrength;
     result.emissionRadianceG = result.principled.emissiveG * result.principled.emissiveStrength;
     result.emissionRadianceB = result.principled.emissiveB * result.principled.emissiveStrength;
 
-    runtime_disney_v2_3d_apply_mirror_composition(&result.payload, &result);
-    runtime_disney_v2_3d_apply_specular_reflection(scene, hit, sampling, view_dir, &result);
-    runtime_disney_v2_3d_apply_stochastic_transport(scene, hit, sampling, view_dir, &result);
+    if (!result.hairScatteringApplied) {
+        runtime_disney_v2_3d_apply_mirror_composition(&result.payload, &result);
+        runtime_disney_v2_3d_apply_specular_reflection(scene, hit, sampling, view_dir, &result);
+        runtime_disney_v2_3d_apply_stochastic_transport(scene, hit, sampling, view_dir, &result);
+    }
     runtime_disney_v2_3d_refresh_peaks(&result);
     *out_result = result;
     return true;

@@ -1,9 +1,57 @@
 STABLE_TEST_TARGETS := \
 	test \
+	test-procedural-surface-recipe-contract \
+	test-procedural-surface-field-contract \
+	test-procedural-surface-plane-contract \
+	test-procedural-surface-prism-contract \
+	test-procedural-surface-material-contract \
+	test-procedural-surface-derived-asset-contract \
+	test-procedural-surface-graph-contract \
+	test-procedural-surface-field-graph-contract \
+	test-procedural-surface-feature-field-contract \
+	test-procedural-surface-feature-curve-contract \
+	test-procedural-surface-feature-selection-contract \
+	test-procedural-surface-authoring-contract \
+	test-procedural-surface-authoring-document-contract \
+	test-procedural-surface-binding-contract \
+	test-procedural-surface-terrain-contract \
+	test-procedural-surface-selected-face-shell-contract \
+	test-procedural-surface-feature-relief-shell-contract \
+	test-procedural-surface-feature-relief-compiler-contract \
+	test-procedural-surface-shell-contract \
+	test-procedural-solid-contract \
+	test-procedural-solid-authoring \
+	test-procedural-solid-psg11 \
+	test-procedural-solid-psg12 \
+	test-procedural-solid-agent-flow \
+	test-procedural-solid-psg11-flow \
+	test-procedural-solid-psg12-flow \
+	test-procedural-solid-psg13-flow \
+	test-procedural-solid-psg14-flow \
+	test-procedural-solid-material-graph \
+	test-procedural-solid-psg15-flow \
+	test-procedural-solid-material-runtime \
+	test-procedural-solid-psg16b-visual-contract \
+	test-procedural-solid-psg17-visual-contract \
+	test-procedural-solid-psg14-visual-proof \
+	test-procedural-solid-psg13-visual-proof \
+	test-procedural-solid-psg12-visual-proof \
+	test-procedural-surface-visual-proof \
+	test-procedural-surface-field-preset-visual-proof \
+	test-procedural-surface-binding-visual-proof \
+	test-procedural-surface-terrain-visual-proof \
+	test-procedural-surface-shell-visual-proof \
+	test-procedural-surface-agent-iteration \
 	test-starter-scene-profile-contract \
 	test-ray-tracing-triangle-topology-stability \
 	test-runtime-scene-bridge-contract \
 	test-runtime-mesh-asset-loader \
+	test-procedural-imported-surface-strands-psg23b \
+	test-procedural-imported-surface-strands-psg23c \
+	test-procedural-imported-surface-strands-psg23d \
+	test-procedural-imported-surface-strands-psg23e \
+	test-procedural-imported-surface-strands-psg23f \
+	test-procedural-imported-surface-strands-psg23g \
 	test-scene-editor-mesh-preview-outline \
 	test-scene-editor-mesh-preview-shading \
 	test-scene-editor-primitive-preview-geometry \
@@ -51,6 +99,1372 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-workspace-authoring-host
 
 LEGACY_TEST_TARGETS :=
+
+PROCEDURAL_SOLID_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_solid_test
+PROCEDURAL_SOLID_COMMON_SRCS := \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_field_query.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+PROCEDURAL_SOLID_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_solid.c \
+	$(SRC_DIR)/procedural/procedural_surface_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_noise.c \
+	$(PROCEDURAL_SOLID_COMMON_SRCS)
+
+PROCEDURAL_SOLID_AUTHORING_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_solid_authoring_test
+PROCEDURAL_SOLID_AUTHORING_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_solid_authoring.c \
+	$(SRC_DIR)/procedural/procedural_solid_authoring.c \
+	$(SRC_DIR)/procedural/procedural_solid_remesh.c \
+	$(PROCEDURAL_SOLID_COMMON_SRCS)
+
+PROCEDURAL_SOLID_PSG11_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_solid_psg11_test
+PROCEDURAL_SOLID_PSG11_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_solid_psg11.c \
+	$(SRC_DIR)/procedural/procedural_solid_feature.c \
+	$(SRC_DIR)/procedural/procedural_solid_regions.c \
+	$(SRC_DIR)/procedural/procedural_solid_local_remesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_crease.c \
+	$(SRC_DIR)/procedural/procedural_solid_shading.c \
+	$(SRC_DIR)/procedural/procedural_solid_quality.c \
+	$(PROCEDURAL_SOLID_COMMON_SRCS)
+
+PROCEDURAL_SOLID_PSG12_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_solid_psg12_test
+PROCEDURAL_SOLID_PSG12_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_solid_psg12.c \
+	$(SRC_DIR)/procedural/procedural_solid_feature.c \
+	$(SRC_DIR)/procedural/procedural_solid_regions.c \
+	$(SRC_DIR)/procedural/procedural_solid_local_remesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_crease.c \
+	$(SRC_DIR)/procedural/procedural_solid_shading.c \
+	$(SRC_DIR)/procedural/procedural_solid_quality.c \
+	$(PROCEDURAL_SOLID_COMMON_SRCS)
+
+$(PROCEDURAL_SOLID_TEST_BIN): \
+	$(PROCEDURAL_SOLID_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_graph.h \
+	$(INC_DIR)/procedural/procedural_solid_mesh.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-solid-contract: $(PROCEDURAL_SOLID_TEST_BIN)
+	@$(PROCEDURAL_SOLID_TEST_BIN)
+
+$(PROCEDURAL_SOLID_PSG11_TEST_BIN): \
+	$(PROCEDURAL_SOLID_PSG11_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_local_remesh.h \
+	$(INC_DIR)/procedural/procedural_solid_source_accel.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_PSG11_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-solid-psg11: $(PROCEDURAL_SOLID_PSG11_TEST_BIN)
+	@$(PROCEDURAL_SOLID_PSG11_TEST_BIN)
+
+$(PROCEDURAL_SOLID_PSG12_TEST_BIN): \
+	$(PROCEDURAL_SOLID_PSG12_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_quality.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-Ithird_party/codework_shared/core/core_mesh_asset/include \
+		-Ithird_party/codework_shared/core/core_io/include \
+		-Ithird_party/codework_shared/core/core_object/include \
+		-Ithird_party/codework_shared/core/core_units/include \
+		-Ithird_party/codework_shared/core/core_base/include \
+		-o $@ $(PROCEDURAL_SOLID_PSG12_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-solid-psg12: $(PROCEDURAL_SOLID_PSG12_TEST_BIN)
+	@$(PROCEDURAL_SOLID_PSG12_TEST_BIN)
+
+$(PROCEDURAL_SOLID_AUTHORING_TEST_BIN): \
+	$(PROCEDURAL_SOLID_AUTHORING_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_authoring.h \
+	$(INC_DIR)/procedural/procedural_solid_remesh.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_AUTHORING_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-solid-authoring: $(PROCEDURAL_SOLID_AUTHORING_TEST_BIN)
+	@$(PROCEDURAL_SOLID_AUTHORING_TEST_BIN)
+
+PROCEDURAL_SURFACE_RECIPE_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_recipe_test
+PROCEDURAL_SURFACE_RECIPE_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_RECIPE_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_RECIPE_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_recipe.h \
+	$(INC_DIR)/procedural/procedural_surface_topology_contract.h \
+	$(INC_DIR)/app/ray_tracing_sha256.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_RECIPE_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-surface-recipe-contract: \
+	$(PROCEDURAL_SURFACE_RECIPE_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_RECIPE_TEST_BIN)
+
+PROCEDURAL_SURFACE_FIELD_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_field_test
+PROCEDURAL_SURFACE_FIELD_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_FIELD_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_FIELD_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_field_3d.h \
+	$(INC_DIR)/procedural/procedural_surface_recipe.h \
+	$(INC_DIR)/app/ray_tracing_sha256.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_FIELD_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-surface-field-contract: \
+	$(PROCEDURAL_SURFACE_FIELD_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_FIELD_TEST_BIN)
+
+PROCEDURAL_SURFACE_PLANE_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_plane_test
+PROCEDURAL_SURFACE_PLANE_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_plane_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_plane_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_PLANE_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_PLANE_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_plane_mesh.h \
+	$(INC_DIR)/procedural/procedural_surface_field_3d.h \
+	$(INC_DIR)/procedural/procedural_surface_recipe.h \
+	$(INC_DIR)/procedural/procedural_surface_topology_contract.h \
+	$(INC_DIR)/app/ray_tracing_sha256.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_PLANE_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-surface-plane-contract: \
+	$(PROCEDURAL_SURFACE_PLANE_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_PLANE_TEST_BIN)
+
+PROCEDURAL_SURFACE_PRISM_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_prism_test
+PROCEDURAL_SURFACE_PRISM_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_mesh_asset_adapter.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SURFACE_PRISM_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_PRISM_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_prism_mesh.h \
+	$(INC_DIR)/procedural/procedural_surface_mesh_asset_adapter.h
+	$(INC_DIR)/procedural/procedural_solid_mesh.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SURFACE_PRISM_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-surface-prism-contract: \
+	$(PROCEDURAL_SURFACE_PRISM_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_PRISM_TEST_BIN)
+
+PROCEDURAL_SURFACE_MATERIAL_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_material_test
+PROCEDURAL_SURFACE_MATERIAL_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_material.c \
+	$(SRC_DIR)/procedural/procedural_surface_material.c \
+	$(SRC_DIR)/procedural/procedural_surface_material_runtime_adapter.c \
+	$(SRC_DIR)/procedural/procedural_surface_material_payload_adapter.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(SRC_DIR)/render/materials/runtime_material_payload_surface_eval_3d.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_MATERIAL_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_MATERIAL_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_material.h \
+	$(INC_DIR)/procedural/procedural_surface_material_runtime_adapter.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_MATERIAL_TEST_SRCS) $(JSON_LIBS) -lm
+
+test-procedural-surface-material-contract: \
+	$(PROCEDURAL_SURFACE_MATERIAL_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_MATERIAL_TEST_BIN)
+
+PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_derived_asset_test
+PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_derived_asset.c \
+	$(SRC_DIR)/procedural/procedural_surface_derived_asset.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_derived_asset.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-derived-asset-contract: \
+	$(PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_BIN)
+
+PROCEDURAL_SURFACE_GRAPH_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_graph_test
+PROCEDURAL_SURFACE_GRAPH_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_surface_graph_compile.c \
+	$(SRC_DIR)/procedural/procedural_surface_derived_asset.c \
+	$(SRC_DIR)/procedural/procedural_surface_material.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_GRAPH_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_GRAPH_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_graph.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_GRAPH_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-graph-contract: \
+	$(PROCEDURAL_SURFACE_GRAPH_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_GRAPH_TEST_BIN)
+
+PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_field_graph_test
+PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_field_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_noise.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_field_graph.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-field-graph-contract: \
+	$(PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_BIN)
+
+PROCEDURAL_SURFACE_FEATURE_FIELD_TEST_BIN := $(BUILD_DIR)/tests/procedural_surface_feature_field_test
+$(PROCEDURAL_SURFACE_FEATURE_FIELD_TEST_BIN): $(TEST_DIR)/test_procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/app/ray_tracing_sha256.c $(INC_DIR)/procedural/procedural_surface_feature_field.h
+
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include -o $@ $(TEST_DIR)/test_procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/app/ray_tracing_sha256.c $(CORE_IO_DIR)/src/core_io.c $(CORE_BASE_DIR)/src/core_base.c $(JSON_LIBS) -lm
+
+test-procedural-surface-feature-field-contract: $(PROCEDURAL_SURFACE_FEATURE_FIELD_TEST_BIN)
+	@$<
+
+PROCEDURAL_SURFACE_FEATURE_CURVE_TEST_BIN := $(BUILD_DIR)/tests/procedural_surface_feature_curve_test
+$(PROCEDURAL_SURFACE_FEATURE_CURVE_TEST_BIN): $(TEST_DIR)/test_procedural_surface_feature_curve.c $(SRC_DIR)/procedural/procedural_surface_feature_curve.c $(SRC_DIR)/app/ray_tracing_sha256.c $(INC_DIR)/procedural/procedural_surface_feature_curve.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -o $@ $(TEST_DIR)/test_procedural_surface_feature_curve.c $(SRC_DIR)/procedural/procedural_surface_feature_curve.c $(SRC_DIR)/app/ray_tracing_sha256.c $(JSON_LIBS) -lm
+test-procedural-surface-feature-curve-contract: $(PROCEDURAL_SURFACE_FEATURE_CURVE_TEST_BIN)
+	@$<
+PROCEDURAL_SURFACE_FEATURE_SELECTION_TEST_BIN := $(BUILD_DIR)/tests/procedural_surface_feature_selection_test
+$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TEST_BIN): $(TEST_DIR)/test_procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_imported_surface_region.c $(SRC_DIR)/procedural/procedural_solid_mesh.c $(SRC_DIR)/procedural/procedural_solid_graph.c $(SRC_DIR)/procedural/procedural_solid_graph_json.c $(SRC_DIR)/procedural/procedural_solid_graph_eval.c $(SRC_DIR)/procedural/procedural_solid_source_accel.c $(SRC_DIR)/app/ray_tracing_sha256.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -o $@ $(TEST_DIR)/test_procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_imported_surface_region.c $(SRC_DIR)/procedural/procedural_solid_mesh.c $(SRC_DIR)/procedural/procedural_solid_graph.c $(SRC_DIR)/procedural/procedural_solid_graph_json.c $(SRC_DIR)/procedural/procedural_solid_graph_eval.c $(SRC_DIR)/procedural/procedural_solid_source_accel.c $(SRC_DIR)/app/ray_tracing_sha256.c $(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c $(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c $(CORE_IO_DIR)/src/core_io.c $(CORE_BASE_DIR)/src/core_base.c $(CORE_OBJECT_DIR)/src/core_object.c $(CORE_UNITS_DIR)/src/core_units.c $(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c $(JSON_LIBS) -lm
+test-procedural-surface-feature-selection-contract: $(PROCEDURAL_SURFACE_FEATURE_SELECTION_TEST_BIN)
+	@$<
+
+PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_feature_selection_tool
+PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_SRCS := \
+	tools/cli/procedural_surface_feature_selection_tool.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_selection.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_field.c \
+	$(SRC_DIR)/procedural/procedural_surface_wood_grain.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN): $(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
+		-I$(CORE_BASE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include -o $@ \
+		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_SRCS) $(JSON_LIBS) -lm
+
+procedural-surface-feature-selection-tool: $(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN)
+	@echo "procedural surface feature selection tool ready: $<"
+
+PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN := $(BUILD_DIR)/tools/cli/procedural_solid_mesh_digest_tool
+PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SRCS := \
+	tools/cli/procedural_solid_mesh_digest_tool.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN): $(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include -o $@ \
+		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SRCS) $(JSON_LIBS) -lm
+procedural-solid-mesh-digest-tool: $(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN)
+	@echo "procedural solid mesh digest tool ready: $<"
+
+PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS := \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_noise.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+PROCEDURAL_SURFACE_AUTHORING_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_authoring_test
+PROCEDURAL_SURFACE_AUTHORING_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_authoring.c \
+	$(SRC_DIR)/procedural/procedural_surface_authoring.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS) \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(PROCEDURAL_SURFACE_AUTHORING_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_AUTHORING_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_authoring.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SURFACE_AUTHORING_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-authoring-contract: \
+	$(PROCEDURAL_SURFACE_AUTHORING_TEST_BIN) \
+	test-procedural-surface-authoring-contract-matrix
+	@$(PROCEDURAL_SURFACE_AUTHORING_TEST_BIN)
+
+PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_authoring_document_test
+PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_authoring_document.c \
+	$(SRC_DIR)/procedural/procedural_surface_authoring_document.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_authoring_document.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-authoring-document-contract: \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_BIN) \
+	test-procedural-surface-authoring-document-adapter-contract \
+	test-procedural-surface-authoring-document-canvas-visual
+	@$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_BIN)
+
+PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_authoring_document_tool
+PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_SRCS := \
+	tools/cli/procedural_surface_authoring_document_tool.c \
+	$(SRC_DIR)/procedural/procedural_surface_authoring_document.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN): \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_authoring_document.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-authoring-document-adapter-contract: \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN)
+	@set -e; \
+	tmp="$$(mktemp -d /tmp/surface-authoring-document.XXXXXX)"; \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	fixture="tests/fixtures/procedural_surface_authoring_document_v1/cube_composition.json"; \
+	created="$$tmp/created.json"; edited="$$tmp/edited.json"; \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) create \
+		--output "$$created" --document-id cube_surface_v1 --source-object-id cube \
+		--source-mesh-digest aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+		--material brown_umber_mix_basecolor bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb material,microdetail_normal \
+		--surface-field dirt_noise_microdetail_normal cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc microdetail_normal \
+		--face-selector positive_z_face_selector dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd material,attached_asset \
+		--attachment grass_attachment eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee attached_asset >/dev/null; \
+	python3 -c 'import json,sys; a=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2])); assert a==b' "$$created" "$$fixture"; \
+	readback="$$($(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) inspect --input "$$created")"; \
+	digest="$$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["compile_plan"]["document_digest_sha256"])' "$$readback")"; \
+	edit_readback="$$( $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) edit --input "$$created" --output "$$edited" \
+		--replace material_graph umber_material ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff material,microdetail_normal \
+		--expected-document-digest "$$digest" \
+		--expected-source-mesh-digest aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+		--expected-reference-digest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb )"; \
+	python3 -c 'import json,sys; x=json.loads(sys.argv[1]); f=json.load(open(sys.argv[2])); assert x["status"]=="ok"; assert x["canonical_document"]["source_mesh_digest_sha256"]==f["source_mesh_digest_sha256"]; assert x["undo_document"]==f' "$$edit_readback" "$$fixture"; \
+	canvas_readback="$$( $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) canvas --input "$$created" )"; \
+	python3 -c 'import json,sys; x=json.loads(sys.argv[1]); assert x["schema"]=="ray_tracing.surface_authoring_document_canvas"; assert x["interaction"]=={"read_only":True,"can_select":True,"can_zoom":True,"can_pan":True,"can_edit":False,"can_save":False,"can_promote":False}; assert len(x["nodes"])==9; assert len(x["edges"])==8; assert x["compile_plan"]["source_mesh_digest_sha256"]=="a"*64' "$$canvas_readback"; \
+	if $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) edit --input "$$created" --output "$$tmp/stale.json" \
+		--replace material_graph stale ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff material \
+		--expected-document-digest 0000000000000000000000000000000000000000000000000000000000000000 \
+		--expected-source-mesh-digest aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+		--expected-reference-digest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb >/dev/null; then exit 1; fi; \
+	if $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) edit --input "$$created" --output "$$tmp/source-stale.json" \
+		--replace material_graph stale ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff material \
+		--expected-document-digest "$$digest" \
+		--expected-source-mesh-digest 1111111111111111111111111111111111111111111111111111111111111111 \
+		--expected-reference-digest bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb >/dev/null; then exit 1; fi; \
+	if test -e "$$tmp/source-stale.json"; then exit 1; fi; \
+	if $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) edit --input "$$created" --output "$$tmp/ref-stale.json" \
+		--replace material_graph stale ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff material \
+		--expected-document-digest "$$digest" \
+		--expected-source-mesh-digest aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+		--expected-reference-digest 1111111111111111111111111111111111111111111111111111111111111111 >/dev/null; then exit 1; fi; \
+	if test -e "$$tmp/ref-stale.json"; then exit 1; fi; \
+	printf '%s\n' 'surface_authoring_document_adapter fixture_round_trip=ok stale_guards=ok atomic_failure=ok canvas_readback=ok'
+
+test-procedural-surface-authoring-document-canvas-visual: \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN)
+	@set -e; \
+	root="$(BUILD_DIR)/agent_runs/surface_authoring_document_canvas"; \
+	mkdir -p "$$root"; \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) canvas \
+		--input tests/fixtures/procedural_surface_authoring_document_v1/cube_composition.json \
+		> "$$root/canvas.json"; \
+	python3 tools/procedural_surface_authoring_canvas_visual.py \
+		--canvas "$$root/canvas.json" \
+		--output-svg "$$root/cube_surface_authoring_canvas.svg" \
+		--output-summary "$$root/visual_summary.json" >/dev/null; \
+	python3 -c 'import json,sys; x=json.load(open(sys.argv[1])); assert x["read_only"] is True; assert x["node_count"]==9; assert x["edge_count"]==8; assert x["width"]>=960; assert x["height"]>=620' "$$root/visual_summary.json"; \
+	test -s "$$root/cube_surface_authoring_canvas.svg"; \
+	printf '%s\n' 'surface_authoring_document_canvas_visual svg=ok schema=ok read_only=ok'
+
+test-procedural-surface-authoring-contract-matrix: \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN)
+	@python3 tests/integration/test_procedural_surface_authoring_contract_matrix.py \
+		--document-tool $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN)
+
+# V2 curve grooming keeps placement entirely in selector/carrier data and
+# forwards the typed controls to the existing PSG-23E groom compiler.
+test-procedural-surface-authoring-v2-curve-groom-contract:
+	@python3 tests/integration/test_procedural_surface_authoring_document_v2.py
+	@python3 tests/integration/test_procedural_surface_authoring_v2_execution_resolver.py
+	@python3 tests/integration/test_procedural_surface_authoring_v2_curve_groom_executor.py
+	@python3 tests/integration/test_procedural_surface_authoring_v2_curve_groom_runtime_materializer.py
+
+# This is intentionally separate from the fast planner contract: it runs the
+# established typed PSG-16B/PSG-17 headless proofs and can take materially
+# longer than schema/readback validation.
+test-procedural-surface-authoring-contract-matrix-material-microdetail: \
+	test-procedural-solid-psg16b-visual-proof
+	@python3 tools/procedural_surface_contract_matrix.py \
+		--matrix tests/fixtures/procedural_surface_contract_matrix_v1/material_microdetail_mountain_execution.json \
+		--execute-profile material --execute-profile microdetail \
+		--output-root build/agent_runs/surface_authoring_contract_matrix/material_microdetail
+
+test-procedural-surface-authoring-contract-matrix-material-microdetail-composed: \
+	test-procedural-solid-psg16b-visual-proof \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN)
+	@python3 tools/procedural_surface_material_microdetail_visual_proof.py \
+		--output-root build/agent_runs/surface_authoring_contract_matrix/material_microdetail/composed
+	@python3 tools/procedural_surface_contract_matrix.py \
+		--matrix tests/fixtures/procedural_surface_contract_matrix_v1/material_microdetail_mountain_execution.json \
+		--document-tool $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) \
+		--execute-material-microdetail \
+		--material-microdetail-proof-receipt build/agent_runs/surface_authoring_contract_matrix/material_microdetail/composed/review/material_microdetail_visual_proof.json \
+		--output-root build/agent_runs/surface_authoring_contract_matrix/material_microdetail/composed_matrix
+
+test-procedural-surface-authoring-contract-matrix-selector-material-microdetail: \
+	$(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) \
+	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@python3 tools/procedural_surface_selector_material_microdetail_visual_proof.py \
+		--output-root build/agent_runs/surface_authoring_contract_matrix/selector_material_microdetail/composed
+	@python3 tools/procedural_surface_contract_matrix.py \
+		--matrix tests/fixtures/procedural_surface_contract_matrix_v1/selector_material_microdetail_execution.json \
+		--document-tool $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN) \
+		--execute-selector-material-microdetail \
+		--selector-material-microdetail-proof-receipt build/agent_runs/surface_authoring_contract_matrix/selector_material_microdetail/composed/review/selector_material_microdetail_visual_proof.json \
+		--output-root build/agent_runs/surface_authoring_contract_matrix/selector_material_microdetail/composed_matrix
+
+PROCEDURAL_SURFACE_BINDING_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_binding_test
+PROCEDURAL_SURFACE_BINDING_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS)
+
+$(PROCEDURAL_SURFACE_BINDING_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_BINDING_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_binding.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_BINDING_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-binding-contract: \
+	$(PROCEDURAL_SURFACE_BINDING_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_BINDING_TEST_BIN)
+
+PROCEDURAL_SURFACE_TERRAIN_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_terrain_test
+PROCEDURAL_SURFACE_TERRAIN_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_terrain.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS)
+
+$(PROCEDURAL_SURFACE_TERRAIN_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_TERRAIN_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_prism_binding.h \
+	$(INC_DIR)/procedural/procedural_surface_prism_mesh.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
+		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_TERRAIN_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-terrain-contract: \
+	$(PROCEDURAL_SURFACE_TERRAIN_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_TERRAIN_TEST_BIN)
+
+PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_selected_face_shell_test
+PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_selected_face_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_selected_face_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS)
+
+$(PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_selected_face_shell.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
+		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-selected-face-shell-contract: \
+	$(PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_BIN)
+
+PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_feature_relief_shell_test
+PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_feature_relief_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_relief_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_field.c \
+	$(SRC_DIR)/procedural/procedural_surface_selected_face_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS) \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_feature_relief_shell.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
+		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-feature-relief-shell-contract: \
+	$(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_BIN)
+
+test-procedural-surface-feature-relief-compiler-contract: \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)
+	python3 tests/integration/test_procedural_surface_feature_relief_compiler_psg24r.py \
+		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)"
+
+PROCEDURAL_SURFACE_SHELL_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_surface_shell_test
+PROCEDURAL_SURFACE_SHELL_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_surface_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS) \
+	third_party/codework_shared/core/core_mesh_asset/src/core_mesh_asset.c \
+	third_party/codework_shared/core/core_mesh_asset/src/core_mesh_asset_runtime_document.c \
+	third_party/codework_shared/core/core_io/src/core_io.c \
+	third_party/codework_shared/core/core_object/src/core_object.c \
+	third_party/codework_shared/core/core_units/src/core_units.c \
+	third_party/codework_shared/core/core_base/src/core_base.c \
+	third_party/codework_shared/core/core_mesh_asset/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SURFACE_SHELL_TEST_BIN): \
+	$(PROCEDURAL_SURFACE_SHELL_TEST_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_shell.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-Ithird_party/codework_shared/core/core_mesh_asset/include \
+		-Ithird_party/codework_shared/core/core_object/include \
+		-Ithird_party/codework_shared/core/core_io/include \
+		-Ithird_party/codework_shared/core/core_units/include \
+		-Ithird_party/codework_shared/core/core_base/include \
+		-o $@ $(PROCEDURAL_SURFACE_SHELL_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-surface-shell-contract: \
+	$(PROCEDURAL_SURFACE_SHELL_TEST_BIN)
+	@$(PROCEDURAL_SURFACE_SHELL_TEST_BIN)
+
+PROCEDURAL_SURFACE_SHELL_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_shell_tool
+PROCEDURAL_SURFACE_SHELL_TOOL_SRCS := \
+	tools/cli/procedural_surface_shell_tool.c \
+	$(SRC_DIR)/procedural/procedural_surface_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS) \
+	third_party/codework_shared/core/core_mesh_asset/src/core_mesh_asset.c \
+	third_party/codework_shared/core/core_mesh_asset/src/core_mesh_asset_runtime_document.c \
+	third_party/codework_shared/core/core_io/src/core_io.c \
+	third_party/codework_shared/core/core_object/src/core_object.c \
+	third_party/codework_shared/core/core_units/src/core_units.c \
+	third_party/codework_shared/core/core_base/src/core_base.c \
+	third_party/codework_shared/core/core_mesh_asset/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SURFACE_SHELL_TOOL_BIN): \
+	$(PROCEDURAL_SURFACE_SHELL_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_shell.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-Ithird_party/codework_shared/core/core_mesh_asset/include \
+		-Ithird_party/codework_shared/core/core_object/include \
+		-Ithird_party/codework_shared/core/core_io/include \
+		-Ithird_party/codework_shared/core/core_units/include \
+		-Ithird_party/codework_shared/core/core_base/include \
+		-o $@ $(PROCEDURAL_SURFACE_SHELL_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-surface-shell-tool: $(PROCEDURAL_SURFACE_SHELL_TOOL_BIN)
+	@echo "procedural surface shell tool ready: $(PROCEDURAL_SURFACE_SHELL_TOOL_BIN)"
+
+PROCEDURAL_SOLID_ASSET_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_solid_asset_tool
+PROCEDURAL_SOLID_ASSET_TOOL_SRCS := \
+	tools/cli/procedural_solid_asset_tool.c \
+	$(SRC_DIR)/procedural/procedural_solid_remesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_feature.c \
+	$(SRC_DIR)/procedural/procedural_solid_regions.c \
+	$(SRC_DIR)/procedural/procedural_solid_local_remesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_crease.c \
+	$(SRC_DIR)/procedural/procedural_solid_shading.c \
+	$(SRC_DIR)/procedural/procedural_solid_quality.c \
+	$(PROCEDURAL_SOLID_COMMON_SRCS)
+
+$(PROCEDURAL_SOLID_ASSET_TOOL_BIN): \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_graph.h \
+	$(INC_DIR)/procedural/procedural_solid_mesh.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-Ithird_party/codework_shared/core/core_mesh_asset/include \
+		-Ithird_party/codework_shared/core/core_object/include \
+		-Ithird_party/codework_shared/core/core_io/include \
+		-Ithird_party/codework_shared/core/core_units/include \
+		-Ithird_party/codework_shared/core/core_base/include \
+		-o $@ $(PROCEDURAL_SOLID_ASSET_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-solid-asset-tool: $(PROCEDURAL_SOLID_ASSET_TOOL_BIN)
+	@echo "procedural solid asset tool ready: $(PROCEDURAL_SOLID_ASSET_TOOL_BIN)"
+
+PROCEDURAL_SOLID_AGENT_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_solid_agent_tool
+PROCEDURAL_SOLID_AGENT_TOOL_SRCS := \
+	tools/cli/procedural_solid_agent_tool.c \
+	$(SRC_DIR)/procedural/procedural_solid_authoring.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(PROCEDURAL_SOLID_AGENT_TOOL_BIN): \
+	$(PROCEDURAL_SOLID_AGENT_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_authoring.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_AGENT_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-solid-agent-tool: $(PROCEDURAL_SOLID_AGENT_TOOL_BIN)
+	@echo "procedural solid agent tool ready: $(PROCEDURAL_SOLID_AGENT_TOOL_BIN)"
+
+test-procedural-solid-agent-flow: \
+	$(PROCEDURAL_SOLID_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)
+	python3 tests/integration/test_procedural_solid_agent_flow.py \
+		--agent-tool "$(PROCEDURAL_SOLID_AGENT_TOOL_BIN)" \
+		--asset-tool "$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)"
+
+test-procedural-solid-psg11-flow: $(PROCEDURAL_SOLID_ASSET_TOOL_BIN)
+	python3 tests/integration/test_procedural_solid_psg11_flow.py \
+		"$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)"
+
+test-procedural-solid-psg12-flow: $(PROCEDURAL_SOLID_ASSET_TOOL_BIN)
+	python3 tests/integration/test_procedural_solid_psg12_flow.py \
+		"$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)"
+
+PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_solid_material_agent_tool
+PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_SRCS := \
+	tools/cli/procedural_solid_material_agent_tool.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_binding.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_SRCS) \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN): \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_material_binding.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-solid-material-agent-tool: \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)
+	@echo "procedural solid material agent tool ready: $<"
+
+test-procedural-solid-psg13-flow: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)
+	python3 tests/integration/test_procedural_solid_psg13_flow.py \
+		"$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		"$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)"
+
+PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_solid_authored_material_agent_tool
+PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_SRCS := \
+	tools/cli/procedural_solid_authored_material_agent_tool.c \
+	$(SRC_DIR)/procedural/procedural_solid_authored_material.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN): \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_authored_material.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-solid-authored-material-agent-tool: \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN)
+	@echo "procedural solid authored material agent tool ready: $<"
+
+PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_solid_material_graph_agent_tool
+PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_SRCS := \
+	tools/cli/procedural_solid_material_graph_agent_tool.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry_corner.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_runtime_program.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_field.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_curve.c \
+	$(SRC_DIR)/procedural/procedural_surface_wood_grain.c \
+	$(SRC_DIR)/procedural/procedural_solid_authored_material.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN): \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_material_graph.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-solid-material-graph-agent-tool: \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN)
+	@echo "procedural solid material graph agent tool ready: $<"
+
+PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_solid_material_debug_tool
+PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_SRCS := \
+	tools/cli/procedural_solid_material_debug_tool.c \
+	$(filter-out tools/cli/procedural_solid_material_graph_agent_tool.c, \
+		$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_SRCS)) \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN): \
+	$(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-solid-material-debug-tool: \
+	$(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN)
+	@echo "procedural solid material debug tool ready: $<"
+
+PROCEDURAL_SOLID_MATERIAL_GRAPH_TEST_BIN := \
+	$(BUILD_DIR)/tests/test_procedural_solid_material_graph
+$(PROCEDURAL_SOLID_MATERIAL_GRAPH_TEST_BIN): \
+	tests/test_procedural_solid_material_graph.c \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ tests/test_procedural_solid_material_graph.c \
+		$(filter-out tools/cli/procedural_solid_material_graph_agent_tool.c, \
+			$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_SRCS)) \
+		$(JSON_LIBS) -lm
+
+test-procedural-solid-material-graph: \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_TEST_BIN)
+	$<
+
+test-procedural-solid-psg15-flow: \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN)
+	python3 tests/integration/test_procedural_solid_psg15_flow.py \
+		"$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN)"
+
+PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_solid_authored_binding_agent_tool
+PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_SRCS := \
+	tools/cli/procedural_solid_authored_binding_agent_tool.c \
+	$(SRC_DIR)/procedural/procedural_solid_authored_material.c \
+	$(SRC_DIR)/procedural/procedural_solid_authored_material_binding.c \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_SRCS)
+
+$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN): \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_solid_authored_material.h \
+	$(INC_DIR)/procedural/procedural_solid_authored_material_binding.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(filter-out tools/cli/procedural_solid_material_agent_tool.c, \
+			$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_SRCS)) \
+		$(JSON_LIBS) -lm
+
+procedural-solid-authored-binding-agent-tool: \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN)
+	@echo "procedural solid authored binding agent tool ready: $<"
+
+test-procedural-solid-psg14-flow: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN)
+	python3 tests/integration/test_procedural_solid_psg14_flow.py \
+		"$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		"$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)" \
+		"$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN)" \
+		"$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN)"
+
+PROCEDURAL_SURFACE_AGENT_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_agent_tool
+PROCEDURAL_SURFACE_AGENT_TOOL_SRCS := \
+	tools/cli/procedural_surface_agent_tool.c \
+	$(SRC_DIR)/procedural/procedural_surface_authoring.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(PROCEDURAL_SURFACE_AUTHORING_COMMON_SRCS) \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_BASE_DIR)/src/core_base.c
+
+$(PROCEDURAL_SURFACE_AGENT_TOOL_BIN): \
+	$(PROCEDURAL_SURFACE_AGENT_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_authoring.h \
+	$(INC_DIR)/procedural/procedural_surface_binding.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SURFACE_AGENT_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-surface-agent-tool: $(PROCEDURAL_SURFACE_AGENT_TOOL_BIN)
+	@echo "procedural surface agent tool ready: $(PROCEDURAL_SURFACE_AGENT_TOOL_BIN)"
+
+PROCEDURAL_SURFACE_GRAPH_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_graph_tool
+PROCEDURAL_SURFACE_GRAPH_TOOL_SRCS := \
+	tools/cli/procedural_surface_graph_tool.c \
+	$(SRC_DIR)/procedural/procedural_surface_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_surface_graph_compile.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+$(PROCEDURAL_SURFACE_GRAPH_TOOL_BIN): \
+	$(PROCEDURAL_SURFACE_GRAPH_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_graph.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-o $@ $(PROCEDURAL_SURFACE_GRAPH_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-surface-graph-tool: $(PROCEDURAL_SURFACE_GRAPH_TOOL_BIN)
+	@echo "procedural surface graph tool ready: $(PROCEDURAL_SURFACE_GRAPH_TOOL_BIN)"
+
+PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_preview_asset_tool
+PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_SRCS := \
+	tools/cli/procedural_surface_preview_asset_tool.c \
+	$(SRC_DIR)/procedural/procedural_surface_derived_asset.c \
+	$(SRC_DIR)/procedural/procedural_surface_material.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_mesh_asset_adapter.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN): \
+	$(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_prism_mesh.h \
+	$(INC_DIR)/procedural/procedural_surface_mesh_asset_adapter.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-surface-preview-asset-tool: \
+	$(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN)
+	@echo "procedural surface preview asset tool ready: $(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN)"
+
+PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_surface_field_preset_asset_tool
+PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_SRCS := \
+	tools/cli/procedural_surface_field_preset_asset_tool.c \
+	$(SRC_DIR)/procedural/procedural_surface_derived_asset.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_noise.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_selected_face_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_relief_shell.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_field.c \
+	$(SRC_DIR)/procedural/procedural_surface_wood_grain.c \
+	$(SRC_DIR)/procedural/procedural_surface_material.c \
+	$(SRC_DIR)/procedural/procedural_surface_prism_mesh.c \
+	$(SRC_DIR)/procedural/procedural_surface_mesh_asset_adapter.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_3d.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_topology_contract.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN): \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_SRCS) \
+	$(INC_DIR)/procedural/procedural_surface_field_graph.h \
+	$(INC_DIR)/procedural/procedural_surface_binding.h \
+	$(INC_DIR)/procedural/procedural_surface_prism_binding.h \
+	$(INC_DIR)/procedural/procedural_surface_prism_mesh.h \
+	$(INC_DIR)/procedural/procedural_surface_selected_face_shell.h \
+	$(INC_DIR)/procedural/procedural_surface_feature_relief_shell.h \
+	$(INC_DIR)/procedural/procedural_surface_feature_field.h \
+	$(INC_DIR)/procedural/procedural_surface_wood_grain.h \
+	$(INC_DIR)/procedural/procedural_surface_mesh_asset_adapter.h
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-surface-field-preset-asset-tool: \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)
+	@echo "procedural surface field preset asset tool ready: $(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)"
+
+test-procedural-surface-visual-proof: \
+	$(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_visual_proof.py \
+		--asset-tool "$(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-surface-field-preset-visual-proof: \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_field_preset_visual_proof.py \
+		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-surface-binding-visual-proof: \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_field_preset_visual_proof.py \
+		--contract tests/fixtures/procedural_surface_field_presets/preset_binding_visual_contract.json \
+		--output-root build/agent_runs/ray_tracing/procedural_surface_field_presets/psg8_binding \
+		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-surface-terrain-visual-proof: \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_field_preset_visual_proof.py \
+		--contract tests/fixtures/procedural_surface_field_presets/terrain_body_visual_contract.json \
+		--output-root build/agent_runs/ray_tracing/procedural_surface_field_presets/psg8_5_terrain \
+		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-surface-selected-face-visual-proof: \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_selected_face_visual_proof.py \
+		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-surface-feature-relief-visual-proof: \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_feature_relief_visual_proof.py \
+		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-surface-shell-visual-proof: \
+	$(PROCEDURAL_SURFACE_SHELL_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_shell_visual_proof.py \
+		--shell-tool "$(PROCEDURAL_SURFACE_SHELL_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-solid-visual-proof: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_solid_visual_proof.py \
+		--solid-tool "$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-solid-psg12-visual-proof: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_solid_visual_proof.py \
+		--quality-adaptive \
+		--solid-tool "$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-solid-psg13-visual-proof: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_solid_material_visual_proof.py \
+		--solid-tool "$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		--material-agent-tool "$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-solid-psg14-visual-proof: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_solid_authored_material_visual_proof.py \
+		--solid-tool "$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		--region-binding-tool "$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)" \
+		--material-tool "$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN)" \
+		--authored-binding-tool \
+			"$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-solid-psg16b-visual-contract:
+	python3 tools/procedural_solid_material_graph_visual_proof.py \
+		--validate-contract-only
+
+test-procedural-solid-psg15-visual-contract: \
+	test-procedural-solid-psg16b-visual-contract
+
+test-procedural-solid-psg17-visual-contract:
+	python3 tools/procedural_solid_microdetail_normal_visual_proof.py \
+		--validate-contract-only
+
+test-procedural-solid-psg16b-visual-proof: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SURFACE_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+test-procedural-solid-psg15-visual-proof: \
+	test-procedural-solid-psg16b-visual-proof
+	python3 tools/procedural_solid_material_graph_visual_proof.py \
+		--solid-tool "$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		--solid-agent-tool "$(PROCEDURAL_SOLID_AGENT_TOOL_BIN)" \
+		--surface-agent-tool "$(PROCEDURAL_SURFACE_AGENT_TOOL_BIN)" \
+		--field-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--region-binding-tool "$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)" \
+		--material-tool "$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN)" \
+		--authored-binding-tool \
+			"$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN)" \
+		--graph-tool "$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN)" \
+		--debug-tool "$(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-solid-psg17-visual-proof: \
+	$(PROCEDURAL_SOLID_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SURFACE_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_solid_microdetail_normal_visual_proof.py \
+		--solid-tool "$(PROCEDURAL_SOLID_ASSET_TOOL_BIN)" \
+		--solid-agent-tool "$(PROCEDURAL_SOLID_AGENT_TOOL_BIN)" \
+		--surface-agent-tool "$(PROCEDURAL_SURFACE_AGENT_TOOL_BIN)" \
+		--field-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--region-binding-tool "$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN)" \
+		--material-tool "$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN)" \
+		--authored-binding-tool \
+			"$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN)" \
+		--graph-tool "$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN)" \
+		--debug-tool "$(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
+
+test-procedural-surface-agent-iteration: \
+	$(PROCEDURAL_SURFACE_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tools/procedural_surface_agent_iteration.py \
+		--agent-tool "$(PROCEDURAL_SURFACE_AGENT_TOOL_BIN)" \
+		--asset-tool "$(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN)" \
+		--render-cli "$(RAY_TRACING_RENDER_HEADLESS_BIN)"
 
 test-ray-tracing-artifact-comparison:
 	PYTHONPYCACHEPREFIX="$(CURDIR)/build/pycache" \
@@ -259,13 +1673,543 @@ test-water-surface-import-contract: $(APP_TARGET) $(TEST_BIN)
 	@TEST_RUNNER_GROUP=water_surface_runtime ./$(TEST_BIN) || (echo "ray tracing water surface heightfield builder test failed."; exit 1)
 	@echo "ray tracing water surface import and builder contract lane passed"
 
+PROCEDURAL_SURFACE_DERIVED_ASSET_LOAD_SRCS := \
+	$(SRC_DIR)/procedural/procedural_surface_derived_asset.c \
+	$(SRC_DIR)/procedural/procedural_surface_recipe.c \
+	$(SRC_DIR)/procedural/procedural_surface_binding.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_surface_field_graph_noise.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c
+
+PROCEDURAL_SOLID_MATERIAL_BINDING_LOAD_SRCS := \
+	$(SRC_DIR)/procedural/procedural_solid_material_binding.c \
+	$(SRC_DIR)/procedural/procedural_solid_authored_material.c \
+	$(SRC_DIR)/procedural/procedural_solid_authored_material_binding.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c
+
+PROCEDURAL_SOLID_MATERIAL_GRAPH_LOAD_SRCS := \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_graph_geometry_corner.c \
+	$(SRC_DIR)/procedural/procedural_solid_material_runtime_program.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_field.c \
+	$(SRC_DIR)/procedural/procedural_surface_feature_curve.c \
+	$(SRC_DIR)/procedural/procedural_surface_wood_grain.c
+
+PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_imported_surface_region_tool
+PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_SRCS := \
+	tools/cli/procedural_imported_surface_region_tool.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN): \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-imported-surface-region-tool: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@echo "procedural imported surface region tool ready: $<"
+
+test-procedural-imported-surface-region-psg19: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_imported_surface_region_psg19.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-19 imported surface region lane passed"
+
+test-procedural-imported-surface-region-psg19-visual-proof: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tools/procedural_imported_surface_region_visual_proof.py
+	@echo "PSG-19 imported surface region visual proof passed"
+
+PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_imported_surface_inset_tool
+PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_SRCS := \
+	tools/cli/procedural_imported_surface_inset_tool.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_inset.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_inset_refinement.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_inset_topology.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN): \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-imported-surface-inset-tool: \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN)
+	@echo "procedural imported surface inset tool ready: $<"
+
+test-procedural-imported-surface-inset-psg20: \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_imported_surface_inset_psg20.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-21 adaptive imported surface inset lane passed"
+
+test-procedural-imported-surface-inset-psg21: \
+	test-procedural-imported-surface-inset-psg20
+
+test-procedural-imported-surface-inset-psg20-visual-proof: \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tools/procedural_imported_surface_inset_visual_proof.py
+	@echo "PSG-21 adaptive imported surface inset visual proof passed"
+
+test-procedural-imported-surface-inset-psg21-visual-proof: \
+	test-procedural-imported-surface-inset-psg20-visual-proof
+
+PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_imported_surface_growth_tool
+PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_SRCS := \
+	tools/cli/procedural_imported_surface_growth_tool.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_growth.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_growth_explicit.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_growth_sampling.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_growth_geometry.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_growth_validation.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN): \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-imported-surface-growth-tool: \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN)
+	@echo "procedural imported surface growth tool ready: $<"
+
+test-procedural-imported-surface-growth-psg22: \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_imported_surface_growth_psg22.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-22 imported surface attached growth lane passed"
+
+test-procedural-surface-feature-selection-psg24: \
+	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_surface_feature_selection_psg24.py \
+		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-24 field-selected carrier bridge passed"
+
+test-procedural-surface-feature-inset-psg24c: \
+	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_surface_feature_inset_psg24c.py \
+		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
+		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN) \
+		tools/procedural_surface_feature_inset_compiler.py
+	@echo "PSG-24C physical retained/wall/floor feature inset lane passed"
+
+test-procedural-surface-feature-inset-psg24c-visual-proof: \
+	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@python3 tools/procedural_surface_feature_inset_visual_proof.py
+	@echo "PSG-24C physical feature inset visual proof passed"
+
+test-procedural-surface-feature-deposit-psg24d: \
+	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_surface_feature_deposit_psg24d.py \
+		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
+		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN) \
+		tools/procedural_surface_feature_deposit_compiler.py \
+		../../tools/procedural_object_authoring/procedural_object_bundle.py
+	@echo "PSG-24D positive feature attached-deposit lane passed"
+
+test-procedural-surface-feature-deposit-psg24d-visual-proof: \
+	$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@python3 tools/procedural_surface_feature_deposit_visual_proof.py
+	@echo "PSG-24D attached surface-feature deposit visual proof passed"
+
+test-procedural-imported-surface-growth-psg22-visual-proof: \
+	$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tools/procedural_imported_surface_growth_visual_proof.py
+	@echo "PSG-22 imported surface attached growth visual proof passed"
+
+PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN := \
+	$(BUILD_DIR)/tools/cli/procedural_imported_surface_strands_tool
+PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_SRCS := \
+	tools/cli/procedural_imported_surface_strands_tool.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_strands.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_strands_sampling.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_strands_geometry.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_strands_validation.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_region.c \
+	$(SRC_DIR)/procedural/procedural_solid_mesh.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_json.c \
+	$(SRC_DIR)/procedural/procedural_solid_graph_eval.c \
+	$(SRC_DIR)/procedural/procedural_solid_source_accel.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN): \
+	$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-o $@ $(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_SRCS) \
+		$(JSON_LIBS) -lm
+
+procedural-imported-surface-strands-tool: \
+	$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN)
+	@echo "procedural imported surface strands tool ready: $<"
+
+test-procedural-imported-surface-strands-psg23a: \
+	$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_imported_surface_strands_psg23a.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN) \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
+	@echo "PSG-23A imported surface rooted strand lane passed"
+
+test-procedural-imported-surface-strands-psg23a-visual-proof: \
+	$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN)
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tools/procedural_imported_surface_strands_visual_proof.py
+	@echo "PSG-23A imported surface rooted strand visual proof passed"
+
+RUNTIME_CURVE_BLAS_PSG23B_TEST_BIN := \
+	$(BUILD_DIR)/tests/runtime_curve_blas_psg23b_test
+RUNTIME_CURVE_BLAS_PSG23B_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_curve_blas_psg23b.c \
+	$(TEST_DIR)/test_runtime_material_payload_stub.c \
+	$(SRC_DIR)/procedural/procedural_imported_surface_strand_curve.c \
+	$(SRC_DIR)/render/runtime_curve_primitive_3d.c \
+	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
+	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
+	$(SRC_DIR)/render/runtime_volume_3d.c
+
+$(RUNTIME_CURVE_BLAS_PSG23B_TEST_BIN): \
+	$(RUNTIME_CURVE_BLAS_PSG23B_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
+		-I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include \
+		-o $@ $(RUNTIME_CURVE_BLAS_PSG23B_TEST_SRCS) -lm
+
+test-procedural-imported-surface-strands-psg23b: \
+	$(RUNTIME_CURVE_BLAS_PSG23B_TEST_BIN)
+	@$(RUNTIME_CURVE_BLAS_PSG23B_TEST_BIN)
+	@echo "PSG-23B native curve primitive and BLAS lane passed"
+
+test-procedural-imported-surface-strands-psg23b-visual-proof: \
+	$(RUNTIME_CURVE_BLAS_PSG23B_TEST_BIN)
+	@python3 tools/procedural_imported_surface_curve_parity_proof.py
+	@echo "PSG-23B native curve parity visual proof passed"
+
+RUNTIME_CURVE_SCENE_PSG23C_TEST_BIN := \
+	$(BUILD_DIR)/tests/runtime_curve_scene_psg23c_test
+RUNTIME_CURVE_SCENE_PSG23C_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_curve_scene_psg23c.c \
+	$(TEST_DIR)/test_runtime_curve_scene_psg23c_support.c \
+	$(SRC_DIR)/render/runtime_curve_primitive_3d.c \
+	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
+	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
+	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
+	$(SRC_DIR)/render/runtime_volume_3d.c
+
+$(RUNTIME_CURVE_SCENE_PSG23C_TEST_BIN): \
+	$(RUNTIME_CURVE_SCENE_PSG23C_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
+		-I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include \
+		-o $@ $(RUNTIME_CURVE_SCENE_PSG23C_TEST_SRCS) -lm
+
+test-procedural-imported-surface-strands-psg23c: \
+	$(RUNTIME_CURVE_SCENE_PSG23C_TEST_BIN)
+	@$(RUNTIME_CURVE_SCENE_PSG23C_TEST_BIN)
+	@echo "PSG-23C curve scene TLAS and material dispatch lane passed"
+
+test-procedural-imported-surface-strands-psg23d: \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+	@python3 tests/integration/test_procedural_curve_asset_psg23d.py \
+		tools/procedural_curve_asset_authoring.py \
+		$(BUILD_DIR)/tools/cli/ray_tracing_render_headless \
+		tests/fixtures/procedural_curve_assets_psg23d/baseline.curve_authoring.json
+
+test-procedural-imported-surface-strands-psg23d-visual-proof: \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+	@python3 tools/procedural_curve_asset_visual_proof.py
+
+test-procedural-imported-surface-strands-psg23e: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tests/integration/test_procedural_carrier_curve_groom_psg23e.py \
+		tools/procedural_carrier_curve_groom_authoring.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
+		$(BUILD_DIR)/tools/cli/ray_tracing_render_headless \
+		tests/fixtures/procedural_imported_surface_strands_psg23a
+	@echo "PSG-23E carrier-aware guide/clump groom lane passed"
+
+test-procedural-imported-surface-strands-psg23e-visual-proof: \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@python3 tools/procedural_carrier_curve_groom_visual_proof.py
+	@echo "PSG-23E carrier-aware guide/clump visual proof passed"
+
+RUNTIME_CURVE_DENSITY_PSG23F_TEST_BIN := \
+	$(BUILD_DIR)/tests/runtime_curve_density_psg23f_test
+RUNTIME_CURVE_DENSITY_PSG23F_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_curve_density_psg23f.c \
+	$(TEST_DIR)/test_runtime_material_payload_stub.c \
+	$(SRC_DIR)/render/runtime_curve_primitive_3d.c \
+	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
+	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
+	$(SRC_DIR)/render/runtime_volume_3d.c
+
+$(RUNTIME_CURVE_DENSITY_PSG23F_TEST_BIN): \
+	$(RUNTIME_CURVE_DENSITY_PSG23F_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
+		-I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include \
+		-o $@ $(RUNTIME_CURVE_DENSITY_PSG23F_TEST_SRCS) -lm
+
+test-procedural-imported-surface-strands-psg23f: \
+	$(RUNTIME_CURVE_DENSITY_PSG23F_TEST_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@$(RUNTIME_CURVE_DENSITY_PSG23F_TEST_BIN)
+	@python3 tests/integration/test_procedural_curve_render_children_psg23f.py \
+		tools/procedural_curve_render_children_authoring.py \
+		tools/procedural_carrier_curve_groom_authoring.py \
+		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+		../../tools/procedural_object_authoring/procedural_stl_tool.py \
+		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
+		$(BUILD_DIR)/tools/cli/ray_tracing_render_headless \
+		tests/fixtures/procedural_imported_surface_strands_psg23a
+	@echo "PSG-23F deterministic render-child density and LOD lane passed"
+
+test-procedural-imported-surface-strands-psg23f-visual-proof: \
+	$(RUNTIME_CURVE_DENSITY_PSG23F_TEST_BIN) \
+	$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
+	@$(RUNTIME_CURVE_DENSITY_PSG23F_TEST_BIN)
+	@python3 tools/procedural_curve_render_children_visual_proof.py
+	@echo "PSG-23F guide-to-render-child density visual proof passed"
+
+RUNTIME_HAIR_SCATTERING_PSG23G_TEST_BIN := \
+	$(BUILD_DIR)/tests/runtime_hair_scattering_psg23g_test
+RUNTIME_HAIR_SCATTERING_PSG23G_TEST_SRCS := \
+	$(TEST_DIR)/test_runtime_hair_scattering_psg23g.c \
+	$(SRC_DIR)/render/runtime_hair_scattering_3d.c
+
+$(RUNTIME_HAIR_SCATTERING_PSG23G_TEST_BIN): \
+	$(RUNTIME_HAIR_SCATTERING_PSG23G_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
+		-I$(CORE_BASE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include \
+		-o $@ $(RUNTIME_HAIR_SCATTERING_PSG23G_TEST_SRCS) -lm
+
+test-procedural-imported-surface-strands-psg23g: \
+	$(RUNTIME_HAIR_SCATTERING_PSG23G_TEST_BIN) \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless
+	@$(RUNTIME_HAIR_SCATTERING_PSG23G_TEST_BIN)
+	@echo "PSG-23G Disney-v2 single-fiber hair scattering lane passed"
+
 RUNTIME_MESH_ASSET_LOADER_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_loader_test
 RUNTIME_MESH_ASSET_LOADER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_loader.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_authored_material.c \
+	$(SRC_DIR)/procedural/procedural_surface_wood_grain.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader_cache.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader_utils.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
+	$(PROCEDURAL_SURFACE_DERIVED_ASSET_LOAD_SRCS) \
+	$(PROCEDURAL_SOLID_MATERIAL_BINDING_LOAD_SRCS) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_LOAD_SRCS) \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
@@ -320,10 +2264,17 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_builder.c \
 	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_authored_material.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader_cache.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader_utils.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
+	$(PROCEDURAL_SURFACE_DERIVED_ASSET_LOAD_SRCS) \
+	$(PROCEDURAL_SOLID_MATERIAL_BINDING_LOAD_SRCS) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_LOAD_SRCS) \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
+	$(SRC_DIR)/render/runtime_curve_primitive_3d.c \
+	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
+	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
@@ -343,6 +2294,7 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
 	$(TEST_DIR)/test_runtime_scene_motion_bridge_noop_stub.c \
+	$(TEST_DIR)/test_runtime_curve_asset_loader_noop_stub.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
 	$(CORE_IO_DIR)/src/core_io.c \
@@ -365,6 +2317,66 @@ test-runtime-mesh-asset-builder: $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN)
 	@$(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN) || (echo "ray tracing runtime mesh asset builder test failed."; exit 1)
 	@echo "ray tracing runtime mesh asset builder lane passed"
 
+PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_BIN := \
+	$(BUILD_DIR)/tests/procedural_solid_material_runtime_test
+PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_SRCS := \
+	$(TEST_DIR)/test_procedural_solid_material_runtime.c \
+	$(TEST_DIR)/test_runtime_material_payload_stub.c \
+	$(SRC_DIR)/render/runtime_curve_primitive_3d.c \
+	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
+	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d.c \
+	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_environment_3d.c \
+	$(SRC_DIR)/render/runtime_light_set_3d.c \
+	$(SRC_DIR)/render/runtime_dynamic_geometry_accel_3d.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_authored_material.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
+	$(SRC_DIR)/render/runtime_mesh_accel_pack_3d.c \
+	$(SRC_DIR)/render/runtime_mesh_blas_cache_3d.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
+	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_geometry.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_mesh.c \
+	$(SRC_DIR)/render/runtime_scene_3d_builder_shared.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_cache_3d.c \
+	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
+	$(SRC_DIR)/render/runtime_volume_3d.c \
+	$(TEST_DIR)/test_runtime_scene_motion_bridge_noop_stub.c \
+	$(TEST_DIR)/test_runtime_curve_asset_loader_noop_stub.c \
+	$(PROCEDURAL_SOLID_MATERIAL_BINDING_LOAD_SRCS) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_LOAD_SRCS) \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
+	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
+	$(CORE_IO_DIR)/src/core_io.c \
+	$(CORE_SCENE_DIR)/src/core_scene.c \
+	$(CORE_OBJECT_DIR)/src/core_object.c \
+	$(CORE_UNITS_DIR)/src/core_units.c \
+	$(CORE_BASE_DIR)/src/core_base.c \
+	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+
+$(PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_BIN): \
+	$(PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
+		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include \
+		-I$(CORE_MESH_PREVIEW_DIR)/include \
+		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include \
+		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
+		-I$(CORE_BASE_DIR)/include \
+		-o $@ $(PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_SRCS) \
+		$(JSON_LIBS) -lm
+
+test-procedural-solid-material-runtime: \
+	$(PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_BIN)
+	@$(PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_BIN)
+
 test-smooth-mesh-reflection-fixtures: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	bash tests/integration/run_smooth_mesh_reflection_fixture_smoke.sh
 
@@ -376,11 +2388,18 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_mesh_asset_headless_audit.c \
 	$(TEST_DIR)/test_runtime_material_payload_stub.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader.c \
+	$(SRC_DIR)/import/runtime_mesh_asset_loader_authored_material.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader_cache.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_loader_utils.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
+	$(PROCEDURAL_SURFACE_DERIVED_ASSET_LOAD_SRCS) \
+	$(PROCEDURAL_SOLID_MATERIAL_BINDING_LOAD_SRCS) \
+	$(PROCEDURAL_SOLID_MATERIAL_GRAPH_LOAD_SRCS) \
 	$(CORE_MESH_PREVIEW_DIR)/src/core_mesh_preview.c \
 	$(SRC_DIR)/render/runtime_camera_3d_rays.c \
+	$(SRC_DIR)/render/runtime_curve_primitive_3d.c \
+	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
+	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
@@ -400,6 +2419,7 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_triangle_bvh_trace_3d.c \
 	$(SRC_DIR)/render/runtime_volume_3d.c \
 	$(TEST_DIR)/test_runtime_scene_motion_bridge_noop_stub.c \
+	$(TEST_DIR)/test_runtime_curve_asset_loader_noop_stub.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c \
 	$(CORE_IO_DIR)/src/core_io.c \
@@ -521,6 +2541,9 @@ RUNTIME_TRIANGLE_BVH_3D_TEST_BIN := $(BUILD_DIR)/tests/runtime_triangle_bvh_3d_t
 RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 	$(TEST_DIR)/test_runtime_triangle_bvh_3d.c \
 	$(TEST_DIR)/test_runtime_material_payload_stub.c \
+	$(SRC_DIR)/render/runtime_curve_primitive_3d.c \
+	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
+	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
@@ -565,6 +2588,10 @@ RAY_TRACING_WORKSPACE_AUTHORING_HOST_TEST_SRCS := \
 	$(TEST_DIR)/ray_tracing_workspace_authoring_host_test.c \
 	$(SRC_DIR)/ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.c \
 	$(SRC_DIR)/ui/menu/shared_theme_font_adapter.c \
+	$(SRC_DIR)/ui/menu/workspace_authoring/ray_tracing_surface_authoring_canvas.c \
+	$(SRC_DIR)/ui/menu/workspace_authoring/ray_tracing_surface_authoring_canvas_view.c \
+	$(SRC_DIR)/procedural/procedural_surface_authoring_document.c \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
 	$(KIT_WORKSPACE_AUTHORING_DIR)/src/kit_workspace_authoring.c \
 	$(KIT_WORKSPACE_AUTHORING_DIR)/src/ui/kit_workspace_authoring_ui_overlay.c \
 	$(KIT_WORKSPACE_AUTHORING_DIR)/src/ui/kit_workspace_authoring_ui_font_theme.c \
@@ -580,6 +2607,21 @@ $(RAY_TRACING_WORKSPACE_AUTHORING_HOST_TEST_BIN): $(RAY_TRACING_WORKSPACE_AUTHOR
 
 test-ray-tracing-workspace-authoring-host: $(RAY_TRACING_WORKSPACE_AUTHORING_HOST_TEST_BIN)
 	@$(RAY_TRACING_WORKSPACE_AUTHORING_HOST_TEST_BIN) || (echo "ray tracing workspace authoring host test failed."; exit 1)
+
+RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_surface_authoring_canvas_test
+RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_SRCS := \
+	$(TEST_DIR)/test_ray_tracing_surface_authoring_canvas.c \
+	$(SRC_DIR)/ui/menu/workspace_authoring/ray_tracing_surface_authoring_canvas.c \
+	$(SRC_DIR)/ui/menu/workspace_authoring/ray_tracing_surface_authoring_canvas_view.c
+
+$(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_BIN): $(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_SRCS) \
+		tests/fixtures/procedural_surface_authoring_document_v1/cube_composition.canvas.json
+	@mkdir -p $(dir $@)
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_SRCS) -o $@ $(JSON_LIBS) -lm
+
+test-ray-tracing-surface-authoring-canvas: $(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_BIN)
+	@$(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_BIN) || (echo "ray tracing surface authoring canvas test failed."; exit 1)
 
 RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_core_sim_runtime_frame_contract_test
 RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_SRCS := \
@@ -742,10 +2784,16 @@ test-ray-tracing-render-headless-water-object-coupling-long-review: $(RAY_TRACIN
 test-ray-tracing-animated-water-photon-caustics: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_animated_water_photon_caustics.py
 
-test-ray-tracing-job-runner-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_WORKER_RUNTIME_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
+test-ray-tracing-job-runner-smoke: \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN) \
+	$(RAY_TRACING_JOB_RUNNER_BIN) \
+	$(RAY_TRACING_WORKER_RUNTIME_BIN)
 	tests/integration/run_ray_tracing_job_runner_smoke.sh
 
-test-ray-tracing-job-runner-bundle-smoke: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_WORKER_RUNTIME_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)
+test-ray-tracing-job-runner-bundle-smoke: \
+	$(RAY_TRACING_RENDER_HEADLESS_BIN) \
+	$(RAY_TRACING_JOB_RUNNER_BIN) \
+	$(RAY_TRACING_WORKER_RUNTIME_BIN)
 	tests/integration/run_ray_tracing_job_runner_bundle_smoke.sh
 
 test-ray-tracing-job-runner-policy: $(RAY_TRACING_RENDER_HEADLESS_BIN) $(RAY_TRACING_WORKER_RUNTIME_BIN) $(RAY_TRACING_JOB_RUNNER_BIN)

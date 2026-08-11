@@ -1,0 +1,52 @@
+{
+  "schema_family": "codework_geometry",
+  "schema_variant": "mesh_asset_runtime_v1",
+  "schema_version": 1,
+  "asset_id": "psg10_source_cube",
+  "source_asset_id": "psg10_source_cube",
+  "asset_type": "solid_mesh",
+  "local_bounds": {
+    "min": { "x": -0.7, "y": -0.55, "z": -0.8 },
+    "max": { "x": 0.7, "y": 0.55, "z": 0.8 }
+  },
+  "topology_flags": {
+    "closed_volume": true,
+    "manifold_expected": true
+  },
+  "mesh": {
+    "vertex_count": 8,
+    "triangle_count": 12,
+    "vertices": [
+      { "x": -0.7, "y": -0.55, "z": -0.8 },
+      { "x": 0.7, "y": -0.55, "z": -0.8 },
+      { "x": 0.7, "y": 0.55, "z": -0.8 },
+      { "x": -0.7, "y": 0.55, "z": -0.8 },
+      { "x": -0.7, "y": -0.55, "z": 0.8 },
+      { "x": 0.7, "y": -0.55, "z": 0.8 },
+      { "x": 0.7, "y": 0.55, "z": 0.8 },
+      { "x": -0.7, "y": 0.55, "z": 0.8 }
+    ],
+    "triangles": [
+      { "a": 0, "b": 2, "c": 1, "surface_group_id": "cube_shell" },
+      { "a": 0, "b": 3, "c": 2, "surface_group_id": "cube_shell" },
+      { "a": 4, "b": 5, "c": 6, "surface_group_id": "cube_shell" },
+      { "a": 4, "b": 6, "c": 7, "surface_group_id": "cube_shell" },
+      { "a": 0, "b": 1, "c": 5, "surface_group_id": "cube_shell" },
+      { "a": 0, "b": 5, "c": 4, "surface_group_id": "cube_shell" },
+      { "a": 1, "b": 2, "c": 6, "surface_group_id": "cube_shell" },
+      { "a": 1, "b": 6, "c": 5, "surface_group_id": "cube_shell" },
+      { "a": 2, "b": 3, "c": 7, "surface_group_id": "cube_shell" },
+      { "a": 2, "b": 7, "c": 6, "surface_group_id": "cube_shell" },
+      { "a": 3, "b": 0, "c": 4, "surface_group_id": "cube_shell" },
+      { "a": 3, "b": 4, "c": 7, "surface_group_id": "cube_shell" }
+    ]
+  },
+  "surface_groups": [
+    {
+      "group_id": "cube_shell",
+      "semantic": "cube_shell",
+      "triangle_span": { "start": 0, "count": 12 }
+    }
+  ],
+  "extensions": {}
+}

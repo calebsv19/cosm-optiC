@@ -1,7 +1,40 @@
 NATIVE3D_AUDIT_DEPS = \
+	$(BUILD_DIR)/app/ray_tracing_sha256.o \
 	$(BUILD_DIR)/animation/evaluated_scene_snapshot.o \
 	$(BUILD_DIR)/app/evaluated_scene_service.o \
 	$(BUILD_DIR)/app/preview_camera_sample.o \
+	$(BUILD_DIR)/procedural/procedural_surface_recipe.o \
+	$(BUILD_DIR)/procedural/procedural_surface_derived_asset.o \
+	$(BUILD_DIR)/procedural/procedural_surface_field_3d.o \
+	$(BUILD_DIR)/procedural/procedural_surface_field_graph.o \
+	$(BUILD_DIR)/procedural/procedural_surface_field_graph_json.o \
+	$(BUILD_DIR)/procedural/procedural_surface_field_graph_eval.o \
+	$(BUILD_DIR)/procedural/procedural_surface_field_graph_noise.o \
+	$(BUILD_DIR)/procedural/procedural_surface_feature_field.o \
+	$(BUILD_DIR)/procedural/procedural_surface_feature_curve.o \
+	$(BUILD_DIR)/procedural/procedural_surface_wood_grain.o \
+	$(BUILD_DIR)/procedural/procedural_surface_feature_selection.o \
+	$(BUILD_DIR)/procedural/procedural_surface_binding.o \
+	$(BUILD_DIR)/procedural/procedural_surface_authoring_document.o \
+	$(BUILD_DIR)/procedural/procedural_surface_material.o \
+	$(BUILD_DIR)/procedural/procedural_surface_material_runtime_adapter.o \
+	$(BUILD_DIR)/procedural/procedural_surface_material_payload_adapter.o \
+	$(BUILD_DIR)/procedural/procedural_solid_material_binding.o \
+	$(BUILD_DIR)/procedural/procedural_solid_authored_material.o \
+	$(BUILD_DIR)/procedural/procedural_solid_authored_material_binding.o \
+	$(BUILD_DIR)/procedural/procedural_solid_authored_material_runtime.o \
+	$(BUILD_DIR)/procedural/procedural_imported_surface_region.o \
+	$(BUILD_DIR)/procedural/procedural_solid_material_graph.o \
+	$(BUILD_DIR)/procedural/procedural_solid_material_graph_json.o \
+	$(BUILD_DIR)/procedural/procedural_solid_material_graph_geometry.o \
+	$(BUILD_DIR)/procedural/procedural_solid_material_graph_geometry_corner.o \
+	$(BUILD_DIR)/procedural/procedural_solid_material_runtime_program.o \
+	$(BUILD_DIR)/procedural/procedural_solid_material_texture_runtime.o \
+	$(BUILD_DIR)/procedural/procedural_solid_mesh.o \
+	$(BUILD_DIR)/procedural/procedural_solid_graph.o \
+	$(BUILD_DIR)/procedural/procedural_solid_graph_json.o \
+	$(BUILD_DIR)/procedural/procedural_solid_graph_eval.o \
+	$(BUILD_DIR)/procedural/procedural_solid_source_accel.o \
 	$(BUILD_DIR)/render/materials/material_bsdf.o \
 	$(BUILD_DIR)/material/material_manager.o \
 	$(BUILD_DIR)/material/material.o \
@@ -22,6 +55,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
+	$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
@@ -109,6 +143,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d_json.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_payload_surface_eval_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
@@ -142,6 +177,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
 	$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_primitive_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_blas_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_curve_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
@@ -166,6 +204,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
 	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/scene/object_manager.o \
@@ -192,6 +231,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
+	$(BUILD_DIR)/import/runtime_curve_asset_loader.o \
+	$(BUILD_DIR)/import/runtime_mesh_asset_loader_authored_material.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
@@ -250,7 +291,6 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_checkpoint_transaction.o \
 	$(BUILD_DIR)/app/ray_tracing_durable_io.o \
 	$(BUILD_DIR)/app/ray_tracing_recovery_authority.o \
-	$(BUILD_DIR)/app/ray_tracing_sha256.o \
 	$(BUILD_DIR)/app/ray_tracing_temporal_checkpoint.o \
 	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/agent_render_request.o \
@@ -372,6 +412,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_payload_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_direct_light_suite.o \
 	$(BUILD_DIR)/tests/test_runtime_lighting_materials_transport_suite.o \
+	$(BUILD_DIR)/tests/test_runtime_curve_scene_material_dispatch.o \
 	$(BUILD_DIR)/tests/test_runtime_diffuse_temporal.o \
 	$(BUILD_DIR)/tests/test_runtime_emission_transparency.o \
 	$(BUILD_DIR)/tests/test_runtime_native_3d_denoise.o \
@@ -436,6 +477,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
+		$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
@@ -499,6 +541,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d_json.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_material_payload_surface_eval_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_texture_3d.o \
@@ -522,6 +565,9 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_mesh_accel_pack_3d.o \
 		$(BUILD_DIR)/render/runtime_mesh_blas_cache_3d.o \
 	$(BUILD_DIR)/render/runtime_dynamic_geometry_accel_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_primitive_3d.o \
+	$(BUILD_DIR)/render/runtime_curve_blas_3d.o \
+	$(BUILD_DIR)/render/runtime_scene_curve_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
@@ -544,6 +590,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
 	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
+	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
 	$(BUILD_DIR)/render/runtime_visibility_3d.o \
 	$(BUILD_DIR)/editor/editor_mode_router.o \
@@ -645,6 +692,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/runtime_scene_volume_defaults.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_pack.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader.o \
+	$(BUILD_DIR)/import/runtime_curve_asset_loader.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \

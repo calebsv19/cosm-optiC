@@ -1,0 +1,43 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg9_source_mesh_twist",
+  "semantic_source_id": "fixture_cube_source",
+  "max_node_evaluations": 12,
+  "nodes": [
+    {
+      "id": "source",
+      "op": "source_mesh",
+      "inputs": [],
+      "source_id": "source_cube",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "twist",
+      "op": "twist_z",
+      "inputs": ["source"],
+      "source_id": "",
+      "vector_a": [0.0, 0.0, 0.0],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.72,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "move_scale",
+      "op": "transform",
+      "inputs": ["twist"],
+      "source_id": "",
+      "vector_a": [0.15, 0.05, -0.1],
+      "vector_b": [0.15, -0.2, 0.1],
+      "vector_c": [1.1, 0.8, 1.25],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "move_scale"
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "ray_tracing.procedural_surface_recipe",
+  "schema_version": 1,
+  "recipe_id": "procedural_surface_rock_prism_psg0_v1",
+  "seed": 104729,
+  "coordinate_space": "object",
+  "field": {
+    "base_feature_size_units": 0.75,
+    "micro_feature_size_units": 0.125,
+    "octave_count": 5,
+    "lacunarity": 2.0,
+    "persistence": 0.5,
+    "ridge_valley_blend": 0.6,
+    "macro_micro_mix": 0.8
+  },
+  "geometry": {
+    "target_edge_length_units": 0.25,
+    "displacement_amplitude_units": 0.1,
+    "edge_lock_width_units": 0.25,
+    "output_clamp": "signed_unit"
+  },
+  "material_precursors": {
+    "snow_elevation_threshold_units": 0.5,
+    "snow_slope_threshold": 0.65
+  },
+  "quality_budgets": {
+    "preview_max_triangles": 8192,
+    "inspection_max_triangles": 131072,
+    "final_max_triangles": 1000000,
+    "max_field_evaluations": 4000000
+  }
+}

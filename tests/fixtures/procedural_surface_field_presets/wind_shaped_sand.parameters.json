@@ -1,0 +1,88 @@
+{
+  "schema": "ray_tracing.procedural_surface_parameter_manifest",
+  "schema_version": 1,
+  "manifest_id": "wind_shaped_sand_controls_v1",
+  "graph_program_id": "wind_shaped_sand_v1",
+  "parameters": [
+    {
+      "id": "dune_primary_strength",
+      "label": "Primary dune strength",
+      "unit": "normalized",
+      "node_id": "primary_amp",
+      "target": "node.value",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.52
+    },
+    {
+      "id": "dune_secondary_strength",
+      "label": "Secondary dune strength",
+      "unit": "normalized",
+      "node_id": "secondary_amp",
+      "target": "node.value",
+      "minimum": 0.0,
+      "maximum": 0.5,
+      "default": 0.16
+    },
+    {
+      "id": "dune_spacing",
+      "label": "Primary dune angular frequency",
+      "unit": "radians_per_object_unit",
+      "node_id": "primary_x_frequency",
+      "target": "node.value",
+      "minimum": 0.25,
+      "maximum": 40.0,
+      "default": 8.726646259971648
+    },
+    {
+      "id": "sand_base_red",
+      "label": "Sand base red",
+      "unit": "linear_unit_interval",
+      "node_id": "base_r",
+      "target": "node.value",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.68
+    },
+    {
+      "id": "sand_base_green",
+      "label": "Sand base green",
+      "unit": "linear_unit_interval",
+      "node_id": "base_g",
+      "target": "node.value",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.515
+    },
+    {
+      "id": "sand_base_blue",
+      "label": "Sand base blue",
+      "unit": "linear_unit_interval",
+      "node_id": "base_b",
+      "target": "node.value",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.295
+    },
+    {
+      "id": "sand_roughness",
+      "label": "Sand base roughness",
+      "unit": "unit_interval",
+      "node_id": "rough_base",
+      "target": "node.value",
+      "minimum": 0.02,
+      "maximum": 1.0,
+      "default": 0.52
+    },
+    {
+      "id": "warp_seed",
+      "label": "Dune warp seed",
+      "unit": "integer",
+      "node_id": "warp_a",
+      "target": "node.seed",
+      "minimum": 0,
+      "maximum": 1000000,
+      "default": 2101
+    }
+  ]
+}

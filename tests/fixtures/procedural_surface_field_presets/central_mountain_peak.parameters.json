@@ -1,0 +1,48 @@
+{
+  "schema": "ray_tracing.procedural_surface_parameter_manifest",
+  "schema_version": 1,
+  "manifest_id": "central_mountain_peak_controls_v1",
+  "graph_program_id": "central_mountain_peak_v1",
+  "parameters": [
+    {
+      "id": "mountain_radius",
+      "label": "Mountain radial reach",
+      "unit": "object_units",
+      "node_id": "peak_outer",
+      "target": "node.value",
+      "minimum": 2.0,
+      "maximum": 8.0,
+      "default": 4.7
+    },
+    {
+      "id": "mountain_warp_scale",
+      "label": "Mountain macro warp scale",
+      "unit": "object_units",
+      "node_id": "warp_size",
+      "target": "node.value",
+      "minimum": 0.25,
+      "maximum": 6.0,
+      "default": 2.4
+    },
+    {
+      "id": "mountain_ridge_scale",
+      "label": "Mountain ridge scale",
+      "unit": "object_units",
+      "node_id": "ridge_size",
+      "target": "node.value",
+      "minimum": 0.1,
+      "maximum": 4.0,
+      "default": 1.05
+    },
+    {
+      "id": "mountain_ridge_seed",
+      "label": "Mountain ridge seed",
+      "unit": "integer",
+      "node_id": "ridge",
+      "target": "node.seed",
+      "minimum": 0,
+      "maximum": 1000000,
+      "default": 4127
+    }
+  ]
+}

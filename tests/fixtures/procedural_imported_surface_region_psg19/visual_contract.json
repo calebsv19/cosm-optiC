@@ -1,0 +1,30 @@
+{
+  "schema": "ray_tracing.procedural_imported_surface_region_psg19_visual_contract",
+  "schema_version": 1,
+  "proof_id": "psg19_imported_stl_plaster_peel",
+  "title": "PSG-19 Imported STL Plaster-over-Concrete Surface Regions",
+  "visual_intent": "A fresh purpose-built statue fragment is imported from STL. Warm aged plaster remains the base; a continuous authored region reveals darker pitted concrete through irregular, feathered patches without changing topology or silhouette.",
+  "expected_visual_signal": "The layered beauty must show readable concrete exposure islands with smooth cross-layer borders, while the raw mask and provenance views explain exactly where the blend came from.",
+  "rejection_condition": "Reject if the object is a reused preset, the coating boundary is binary, repeat pixels differ, source topology changes, or the beauty result cannot be associated with the raw region field.",
+  "render": {
+    "width": 1280,
+    "height": 960,
+    "temporal_frames": 8,
+    "integrator_3d": "disney_v2",
+    "camera_zoom": 1.30
+  },
+  "lighting": {
+    "ambient_light": 0.28,
+    "direct_light": 1.42,
+    "light_direction": {"x": -0.62, "y": -0.71, "z": -0.42},
+    "light_color": {"r": 1.0, "g": 0.91, "b": 0.80},
+    "background_color": {"r": 0.075, "g": 0.083, "b": 0.096}
+  },
+  "assertions": {
+    "minimum_primary_hit_pixels": 180000,
+    "minimum_beauty_changed_pixels": 25000,
+    "minimum_mask_luma_standard_deviation": 14.0,
+    "maximum_repeat_changed_pixels": 0,
+    "minimum_transition_vertices": 16
+  }
+}

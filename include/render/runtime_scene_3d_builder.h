@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "import/runtime_mesh_asset_loader.h"
+#include "import/runtime_curve_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
 #include "render/runtime_scene_3d.h"
 
@@ -61,6 +62,9 @@ void RuntimeScene3DBuilder_TimingSnapshot(RuntimeScene3DBuilderTimingStats* out_
 bool RuntimeScene3DBuilder_AppendMeshAssetSet(
     RuntimeScene3D* scene,
     const RayTracingRuntimeMeshAssetSet* mesh_assets);
+bool RuntimeScene3DBuilder_AppendCurveAssetSet(
+    RuntimeScene3D* scene,
+    const RayTracingRuntimeCurveAssetSet* curve_assets);
 bool RuntimeScene3DBuilder_AppendHeightfieldSurface(
     RuntimeScene3D* scene,
     const RuntimeScene3DHeightfieldSurfaceDesc* desc,

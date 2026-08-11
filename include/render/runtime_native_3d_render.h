@@ -32,6 +32,7 @@ typedef struct RuntimeNative3DFeatureBuffer RuntimeNative3DFeatureBuffer;
 typedef struct {
     int hitPixelCount;
     int visiblePixelCount;
+    int hairScatteringPixelCount;
     int bouncePixelCount;
     int secondaryRayCount;
     int secondaryHitCount;

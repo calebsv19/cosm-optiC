@@ -8,6 +8,8 @@
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "material/material_manager.h"
+#include "procedural/procedural_solid_authored_material_runtime.h"
+#include "procedural/procedural_surface_material_runtime_adapter.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
 #include "render/runtime_water_material_3d.h"
@@ -35,6 +37,30 @@ static double runtime_material_payload_3d_clamp01(double value) {
     if (value < 0.0) return 0.0;
     if (value > 1.0) return 1.0;
     return value;
+}
+
+static void runtime_material_payload_3d_apply_region_preset(
+    SceneObject* object,
+    int material_id) {
+    const Material* preset = NULL;
+    if (!object) return;
+    object->material_id =
+        runtime_material_payload_3d_clamp_material_id(material_id);
+    preset = MaterialManagerGet(object->material_id);
+    if (!preset) return;
+    object->reflectivity =
+        runtime_material_payload_3d_clamp01(preset->reflectivity);
+    object->roughness =
+        runtime_material_payload_3d_clamp01(preset->roughness);
+    object->emissiveStrength =
+        (preset->emissive.x > 0.0f || preset->emissive.y > 0.0f ||
+         preset->emissive.z > 0.0f)
+            ? 1.0
+            : 0.0;
+    object->hasGlassTransportOverride = false;
+    object->hasGlassInterfaceTintOverride = false;
+    object->hasGlassAbsorptionColorOverride = false;
+    object->hasMirrorResponseOverride = false;
 }
 
 static double runtime_material_payload_3d_lerp(double a, double b, double t) {
@@ -505,6 +531,10 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     }
 
     object_copy = sceneSettings.sceneObjects[scene_object_index];
+    if (hit && hit->hasRegionMaterial) {
+        runtime_material_payload_3d_apply_region_preset(
+            &object_copy, hit->regionMaterialId);
+    }
     object_copy.material_id = runtime_material_payload_3d_clamp_material_id(object_copy.material_id);
 
     RuntimeMaterialPayload3D_Reset(&payload);
@@ -570,6 +600,9 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     payload.valid = true;
     runtime_material_payload_3d_apply_texture(&object_copy, hit, &payload);
     RuntimeWaterMaterial3D_ApplyToPayload(scene_object_index, &payload);
+    (void)ProceduralSurfaceMaterial_ApplyHitToPayload(hit, &payload);
+    (void)ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
+        &object_copy, hit, &payload);
     payload.hasGlassInterfaceTintOverride =
         object_copy.hasGlassInterfaceTintOverride;
     payload.hasGlassAbsorptionColorOverride =
@@ -599,6 +632,18 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
                                         ? (double)(object_copy.glassAbsorptionColor & 0xFF) /
                                               255.0
                                         : payload.baseColorB;
+    payload.hairOptics.enabled = object_copy.hasHairOpticsOverride;
+    payload.hairOptics.absorptionR = object_copy.hairAbsorptionR;
+    payload.hairOptics.absorptionG = object_copy.hairAbsorptionG;
+    payload.hairOptics.absorptionB = object_copy.hairAbsorptionB;
+    payload.hairOptics.longitudinalRoughness =
+        object_copy.hairLongitudinalRoughness;
+    payload.hairOptics.azimuthalRoughness =
+        object_copy.hairAzimuthalRoughness;
+    payload.hairOptics.ior = object_copy.hairIor;
+    payload.hairOptics.cuticleTiltDegrees =
+        object_copy.hairCuticleTiltDegrees;
+    payload.hairOptics = RuntimeHairOptics3D_Normalize(&payload.hairOptics);
 
     *out_payload = payload;
     return true;

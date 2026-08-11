@@ -1,4 +1,5 @@
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_curve_asset_loader.h"
 #include "import/runtime_scene_bridge_internal.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "import/runtime_mesh_asset_loader.h"
@@ -525,7 +526,9 @@ static void apply_object_material(json_object *object_obj,
                                   SceneObject *out_object) {
     json_object *material_ref = NULL;
     json_object *id = NULL;
+    json_object *material = NULL;
     const char *mat_id = NULL;
+    size_t material_index = 0u;
     if (!object_obj || !out_object) return;
     if (!json_object_object_get_ex(object_obj, "material_ref", &material_ref) ||
         !json_object_is_type(material_ref, json_type_object)) {
@@ -537,6 +540,48 @@ static void apply_object_material(json_object *object_obj,
     mat_id = json_object_get_string(id);
     if (!mat_id) return;
     out_object->color = runtime_scene_bridge_color_from_material_albedo(materials_array, mat_id);
+    if (!materials_array || !json_object_is_type(materials_array, json_type_array)) {
+        return;
+    }
+    for (material_index = 0u;
+         material_index < json_object_array_length(materials_array);
+         ++material_index) {
+        json_object *candidate =
+            json_object_array_get_idx(materials_array, material_index);
+        json_object *candidate_id = NULL;
+        json_object *roughness = NULL;
+        json_object *metallic = NULL;
+        double value = 0.0;
+        if (!candidate || !json_object_is_type(candidate, json_type_object)) {
+            continue;
+        }
+        if ((!json_object_object_get_ex(candidate, "material_id", &candidate_id) ||
+             !json_object_is_type(candidate_id, json_type_string)) &&
+            (!json_object_object_get_ex(candidate, "id", &candidate_id) ||
+             !json_object_is_type(candidate_id, json_type_string))) {
+            continue;
+        }
+        if (strcmp(json_object_get_string(candidate_id), mat_id) != 0) continue;
+        material = candidate;
+        if (json_object_object_get_ex(material, "roughness", &roughness) &&
+            (json_object_is_type(roughness, json_type_double) ||
+             json_object_is_type(roughness, json_type_int))) {
+            value = json_object_get_double(roughness);
+            if (isfinite(value) && value >= 0.0 && value <= 1.0) {
+                out_object->roughness = value;
+            }
+        }
+        if (json_object_object_get_ex(material, "metallic", &metallic) &&
+            (json_object_is_type(metallic, json_type_double) ||
+             json_object_is_type(metallic, json_type_int))) {
+            value = json_object_get_double(metallic);
+            if (isfinite(value) && value >= 0.0 && value <= 1.0) {
+                /* Native material payloads call this scalar reflectivity. */
+                out_object->reflectivity = value;
+            }
+        }
+        return;
+    }
 }
 
 static void apply_object_flags(json_object *object_obj, SceneObject *out_object) {
@@ -798,6 +843,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     if (!runtime_scene_json || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
     ray_tracing_runtime_mesh_assets_reset_last();
+    ray_tracing_runtime_curve_assets_reset_last();
     RuntimeNative3DPreparedSceneMarkDirty("runtime_scene_bridge_apply_json");
 
     root = json_tokener_parse(runtime_scene_json);

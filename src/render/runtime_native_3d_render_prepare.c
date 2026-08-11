@@ -463,8 +463,9 @@ static bool runtime_native_3d_render_build_live_scene(RuntimeScene3D* scene,
     (void)width;
     (void)height;
     runtime_native_3d_render_apply_live_camera(scene, normalized_t);
-    if (scene->primitiveCount > 0 &&
-        scene->triangleMesh.triangleCount > 0 &&
+    if (((scene->primitiveCount > 0 &&
+          scene->triangleMesh.triangleCount > 0) ||
+         scene->curveInstanceCount > 0) &&
         scene->hasLight &&
         scene->hasCamera) {
         if (stats->dataflowStatsEnabled) {

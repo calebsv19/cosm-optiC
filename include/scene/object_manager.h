@@ -62,6 +62,14 @@ typedef struct {
     double mirrorRoughness;         // 0..1 mirror sharpness/roughness override.
     double mirrorSpecular;          // 0..1 mirror specular lobe strength override.
     int mirrorTint;                 // Packed RGB mirror tint override.
+    bool hasHairOpticsOverride;     // Curve-only Disney-v2 hair scattering opt-in.
+    double hairAbsorptionR;         // Fiber absorption coefficient, red.
+    double hairAbsorptionG;         // Fiber absorption coefficient, green.
+    double hairAbsorptionB;         // Fiber absorption coefficient, blue.
+    double hairLongitudinalRoughness;
+    double hairAzimuthalRoughness;
+    double hairIor;
+    double hairCuticleTiltDegrees;
 
     bool dirty;            // Needs update?
     bool guideOnly;        // Authoring helper visible in editor/preview, excluded from render geometry

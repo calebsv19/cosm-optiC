@@ -1,0 +1,26 @@
+{
+  "schema": "ray_tracing.procedural_imported_surface_region_recipe",
+  "schema_version": 1,
+  "region_id": "multiple_plaster_insets",
+  "source_asset_id": "psg20_weathered_urn",
+  "patches": [
+    {
+      "center": [0.77, 0.27, 0.50],
+      "radius": [0.22, 0.23, 0.18],
+      "feather": 0.34,
+      "noise_scale": 24.0,
+      "noise_strength": 0.10,
+      "strength": 1.0,
+      "seed": 2101
+    },
+    {
+      "center": [0.23, 0.27, 0.58],
+      "radius": [0.21, 0.22, 0.17],
+      "feather": 0.32,
+      "noise_scale": 21.0,
+      "noise_strength": 0.09,
+      "strength": 1.0,
+      "seed": 2102
+    }
+  ]
+}

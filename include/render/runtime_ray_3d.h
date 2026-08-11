@@ -22,12 +22,28 @@ typedef struct {
     int localTriangleIndex;
     int primitiveIndex;
     int sceneObjectIndex;
+    bool hasCurveTangent;
+    Vec3 curveTangent;
+    double curveU;
+    double curveRadius;
+    int curvePrimitiveIndex;
+    int curveStrandIndex;
+    int curveSegmentIndex;
+    int curveSceneInstanceIndex;
     RuntimePrimitive3DSourceRef source;
     double baryU;
     double baryV;
     double baryW;
     bool hasObjectTextureCoord;
     Vec3 objectTextureCoord;
+    bool hasProceduralSurfaceMaterial;
+    RuntimeSurfaceMaterialVertex3D proceduralSurfaceMaterial;
+    bool hasRegionMaterial;
+    int regionMaterialId;
+    bool hasRegionAuthoredMaterial;
+    ProceduralSolidAuthoredMaterialSurfaceV1 regionAuthoredMaterial;
+    const ProceduralSolidMaterialRuntimeProgramV1
+        *proceduralSolidMaterialRuntimeProgram;
 } HitInfo3D;
 
 typedef enum RuntimeRay3DTraceRoute {

@@ -1,7 +1,9 @@
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.h"
 
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "config/config_manager.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -202,6 +204,143 @@ static void test_overlay_buttons_control_state(void) {
     assert(host.cancel_count == 1u);
 }
 
+static void test_canvas_navigation_events_are_read_only(void) {
+    RayTracingWorkspaceAuthoringHostState host;
+    SDL_Event click;
+    SDL_Event wheel;
+    SDL_Event middle_down;
+    SDL_Event motion;
+    SDL_Event middle_up;
+    SDL_Rect solved_panel = {100, 80, 900, 500};
+
+    ray_tracing_workspace_authoring_host_reset(&host);
+    ray_tracing_workspace_authoring_host_set_viewport(&host, 1280, 720);
+    ray_tracing_workspace_authoring_host_set_canvas_panel(&host, &solved_panel);
+    assert(ray_tracing_workspace_authoring_host_enter(&host).code == CORE_OK);
+
+    memset(&click, 0, sizeof(click));
+    click.type = SDL_MOUSEBUTTONDOWN;
+    click.button.type = SDL_MOUSEBUTTONDOWN;
+    click.button.button = SDL_BUTTON_LEFT;
+    click.button.x = 165;
+    click.button.y = 343;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &click, 0));
+    assert(host.canvas_view.selected_node == 0);
+    assert(host.apply_count == 0u && host.cancel_count == 0u);
+
+    memset(&wheel, 0, sizeof(wheel));
+    wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.type = SDL_MOUSEWHEEL;
+    wheel.wheel.x = 0;
+    wheel.wheel.y = 2;
+    wheel.wheel.mouseX = 165;
+    wheel.wheel.mouseY = 343;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &wheel, 0));
+    assert(host.canvas_view.zoom > 1.0f);
+
+    memset(&middle_down, 0, sizeof(middle_down));
+    middle_down.type = SDL_MOUSEBUTTONDOWN;
+    middle_down.button.type = SDL_MOUSEBUTTONDOWN;
+    middle_down.button.button = SDL_BUTTON_MIDDLE;
+    middle_down.button.x = 165;
+    middle_down.button.y = 343;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &middle_down, 0));
+    assert(host.canvas_view.panning);
+
+    memset(&motion, 0, sizeof(motion));
+    motion.type = SDL_MOUSEMOTION;
+    motion.motion.type = SDL_MOUSEMOTION;
+    motion.motion.x = 370;
+    motion.motion.y = 400;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &motion, 0));
+
+    memset(&middle_up, 0, sizeof(middle_up));
+    middle_up.type = SDL_MOUSEBUTTONUP;
+    middle_up.button.type = SDL_MOUSEBUTTONUP;
+    middle_up.button.button = SDL_BUTTON_MIDDLE;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &middle_up, 0));
+    assert(!host.canvas_view.panning && host.canvas_view.pan_x != 0);
+    assert(host.apply_count == 0u && host.cancel_count == 0u);
+}
+
+static void test_canvas_edit_event_transaction_and_save(void) {
+    const char *path = "/tmp/ray_tracing_surface_authoring_host_edit.json";
+    const char *digest = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+    RayTracingWorkspaceAuthoringHostState host;
+    SDL_Event click;
+    SDL_Event key;
+    SDL_Event backspace;
+    SDL_Event text;
+    FILE *file;
+
+    file = fopen(path, "w");
+    assert(file != NULL);
+    fprintf(file,
+            "{\"schema\":\"ray_tracing.surface_authoring_document\","
+            "\"schema_version\":1,\"document_id\":\"host_edit\","
+            "\"source_object_id\":\"cube\","
+            "\"source_mesh_digest_sha256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+            "\"material_graph\":{\"id\":\"brown_mix\",\"digest_sha256\":\"%s\",\"output_domains\":3},"
+            "\"surface_field_graph\":null,\"face_region_selector\":null,\"attachments\":[]}\n",
+            digest);
+    fclose(file);
+
+    ray_tracing_workspace_authoring_host_reset(&host);
+    ray_tracing_workspace_authoring_host_set_viewport(&host, 1280, 720);
+    {
+        SDL_Rect panel = {100, 80, 900, 500};
+        ray_tracing_workspace_authoring_host_set_canvas_panel(&host, &panel);
+    }
+    ray_tracing_workspace_authoring_host_set_document_path(&host, path);
+    assert(ray_tracing_workspace_authoring_host_load_document(&host).code == CORE_OK);
+    assert(ray_tracing_workspace_authoring_host_enter(&host).code == CORE_OK);
+
+    memset(&click, 0, sizeof(click));
+    click.type = SDL_MOUSEBUTTONDOWN;
+    click.button.type = SDL_MOUSEBUTTONDOWN;
+    click.button.button = SDL_BUTTON_LEFT;
+    click.button.x = 750;
+    click.button.y = 210;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &click, 0));
+    assert(host.canvas_view.selected_node >= 0);
+    assert(host.canvas_view.selected_node != 0);
+
+    memset(&key, 0, sizeof(key));
+    key.type = SDL_KEYDOWN;
+    key.key.type = SDL_KEYDOWN;
+    key.key.keysym.sym = SDLK_e;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &key, 0));
+    assert(host.edit_active);
+    memset(&backspace, 0, sizeof(backspace));
+    backspace.type = SDL_KEYDOWN;
+    backspace.key.type = SDL_KEYDOWN;
+    backspace.key.keysym.sym = SDLK_BACKSPACE;
+    while (host.edit_buffer_length > 0u) {
+        assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &backspace, 0));
+    }
+
+    memset(&text, 0, sizeof(text));
+    text.type = SDL_TEXTINPUT;
+    text.text.type = SDL_TEXTINPUT;
+    snprintf(text.text.text, sizeof(text.text.text), "edited_material|");
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &text, 0));
+    snprintf(text.text.text, sizeof(text.text.text), "fffffffffffffffffffffffffffffff");
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &text, 0));
+    snprintf(text.text.text, sizeof(text.text.text), "fffffffffffffffffffffffffffffff");
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &text, 0));
+    snprintf(text.text.text, sizeof(text.text.text), "ff|3");
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &text, 0));
+    key.key.keysym.sym = SDLK_RETURN;
+    assert(ray_tracing_workspace_authoring_host_handle_sdl_event(&host, &key, 0));
+    assert(!host.edit_active && host.document_dirty);
+    assert(strcmp(host.document.material_graph.id, "edited_material") == 0);
+    assert(host.document_edit_count == 1u);
+    assert(ray_tracing_workspace_authoring_host_apply(&host).code == CORE_OK);
+    assert(!host.document_dirty && host.document_save_count == 1u);
+    assert(host.document_readback_count >= 2u);
+    unlink(path);
+}
+
 static void test_font_theme_buttons_preview_and_cancel(void) {
     RayTracingWorkspaceAuthoringHostState host;
     KitWorkspaceAuthoringFontThemeLayout layout;
@@ -298,6 +437,8 @@ int main(void) {
     test_sequential_physical_chord_and_apply();
     test_runtime_events_captured_while_active();
     test_overlay_buttons_control_state();
+    test_canvas_navigation_events_are_read_only();
+    test_canvas_edit_event_transaction_and_save();
     test_font_theme_buttons_preview_and_cancel();
     test_font_theme_buttons_apply_marks_accepted();
     return 0;

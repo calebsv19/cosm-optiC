@@ -51,6 +51,21 @@ typedef struct MenuAuthoringSceneEditorDrawContext {
     RayTracingWorkspaceAuthoringHostState* host;
 } MenuAuthoringSceneEditorDrawContext;
 
+static void menu_sync_authoring_canvas_panel(
+    RayTracingWorkspaceAuthoringHostState* host) {
+    SceneEditorPaneLayout layout;
+    SDL_Rect panel;
+    if (!host || !SceneEditorGetPaneLayout(&layout)) return;
+    panel = layout.center_pane_rect;
+    panel.x += 10;
+    panel.y += 10;
+    panel.w -= 20;
+    panel.h -= 20;
+    if (panel.w < 0) panel.w = 0;
+    if (panel.h < 0) panel.h = 0;
+    ray_tracing_workspace_authoring_host_set_canvas_panel(host, &panel);
+}
+
 static void menu_authoring_scene_editor_post_draw(SceneEditor* editor,
                                                   SDL_Renderer* renderer,
                                                   void* context) {
@@ -66,6 +81,7 @@ static void menu_authoring_scene_editor_post_draw(SceneEditor* editor,
     }
     SDL_GetWindowSize(editor->window, &width, &height);
     ray_tracing_workspace_authoring_host_set_viewport(draw_context->host, width, height);
+    menu_sync_authoring_canvas_panel(draw_context->host);
     if (SceneEditorGetPaneLayout(&pane_layout)) {
         pane_layout_ptr = &pane_layout;
     }
@@ -364,6 +380,7 @@ static bool menu_process_event(SDL_Window* window,
         ray_tracing_workspace_authoring_host_set_viewport(authoring_host,
                                                           authoring_width,
                                                           authoring_height);
+        menu_sync_authoring_canvas_panel(authoring_host);
     }
     if (mutable_event.type == SDL_QUIT ||
         menu_event_is_host_window_close(window, &mutable_event)) {

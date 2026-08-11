@@ -524,6 +524,23 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
             preflight.scene_acceleration_stats.tlasNodeCount > 0u;
         preflight.environment_summary = frame.scene.environment;
         preflight.environment_summary_built = true;
+        for (int triangle_index = 0;
+             triangle_index < frame.scene.triangleMesh.triangleCount;
+             ++triangle_index) {
+            const RuntimeTriangle3D* triangle =
+                &frame.scene.triangleMesh.triangles[triangle_index];
+            if (!triangle->hasRegionMaterial) continue;
+            preflight.procedural_solid_material_bound_triangles += 1;
+            if (triangle->regionMaterialId >= 0 &&
+                triangle->regionMaterialId < 6) {
+                preflight.procedural_solid_material_triangle_counts[
+                    triangle->regionMaterialId] += 1;
+            }
+            if (triangle->hasRegionAuthoredMaterial) {
+                preflight
+                    .procedural_solid_authored_material_bound_triangles += 1;
+            }
+        }
         ray_tracing_headless_note_registered_lights(&preflight, &frame);
         if (frame.causticPhotonRenderPrepReadbackBuilt) {
             preflight.causticPhotonCallsiteReadback =

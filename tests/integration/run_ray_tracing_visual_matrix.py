@@ -205,12 +205,23 @@ def render_stats_digest(summary: dict) -> dict:
 def validate_run(summary: dict, frame_path: Path, requested_integrator: str) -> dict:
     bvh = summary.get("bvh_summary", {})
     stats = summary.get("render_stats", {})
+    prepared = summary.get("prepared_acceleration", {})
+    scene_trace = summary.get("scene_acceleration_trace_summary", {})
+    flat_bvh_ok = bool(bvh.get("ready", False))
+    tlas_blas_ok = (
+        bool(prepared.get("enabled", False))
+        and prepared.get("active_trace_route") == "tlas_blas"
+        and int(prepared.get("tlas_instance_count", 0)) > 0
+        and int(prepared.get("route_acceleration_failure_calls", 0)) == 0
+        and int(prepared.get("route_tlas_trace_errors", 0)) == 0
+        and int(scene_trace.get("trace_errors", 0)) == 0
+    )
     return {
         "route_label_ok": summary.get("integrator_3d") == requested_integrator,
         "rendered_ok": summary.get("rendered_frames") is True and int(summary.get("frames_rendered", 0)) > 0,
         "frame_ok": frame_path.exists() and bmp_magic_ok(frame_path),
         "nonzero_ok": int(stats.get("nonzero_pixels", 0)) > 0,
-        "bvh_ok": bool(bvh.get("ready", False)) and int(bvh.get("trace_overflows", 0)) == 0,
+        "bvh_ok": (flat_bvh_ok or tlas_blas_ok) and int(bvh.get("trace_overflows", 0)) == 0,
     }
 
 

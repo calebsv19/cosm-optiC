@@ -1,4 +1,5 @@
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_scene_curve_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 
 #include <float.h>
@@ -227,6 +228,10 @@ void HitInfo3D_Reset(HitInfo3D* hit) {
     hit->localTriangleIndex = -1;
     hit->primitiveIndex = -1;
     hit->sceneObjectIndex = -1;
+    hit->curvePrimitiveIndex = -1;
+    hit->curveStrandIndex = -1;
+    hit->curveSegmentIndex = -1;
+    hit->curveSceneInstanceIndex = -1;
     hit->source.kind = RUNTIME_PRIMITIVE_3D_KIND_INVALID;
 }
 
@@ -390,6 +395,31 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                               vec3_scale(triangle->objectTexture1, bary_v)),
                      vec3_scale(triangle->objectTexture2, bary_w));
     }
+    if (triangle->hasProceduralSurfaceMaterial) {
+        const RuntimeSurfaceMaterialVertex3D *m0 =
+            &triangle->proceduralMaterial0;
+        const RuntimeSurfaceMaterialVertex3D *m1 =
+            &triangle->proceduralMaterial1;
+        const RuntimeSurfaceMaterialVertex3D *m2 =
+            &triangle->proceduralMaterial2;
+        hit.hasProceduralSurfaceMaterial = true;
+#define INTERPOLATE_MATERIAL_FIELD(FIELD)                                      \
+        hit.proceduralSurfaceMaterial.FIELD =                                  \
+            (m0->FIELD * bary_u) + (m1->FIELD * bary_v) +                     \
+            (m2->FIELD * bary_w)
+        INTERPOLATE_MATERIAL_FIELD(colorR);
+        INTERPOLATE_MATERIAL_FIELD(colorG);
+        INTERPOLATE_MATERIAL_FIELD(colorB);
+        INTERPOLATE_MATERIAL_FIELD(roughness);
+        INTERPOLATE_MATERIAL_FIELD(snowLikelihood);
+#undef INTERPOLATE_MATERIAL_FIELD
+    }
+    hit.hasRegionMaterial = triangle->hasRegionMaterial;
+    hit.regionMaterialId = triangle->regionMaterialId;
+    hit.hasRegionAuthoredMaterial = triangle->hasRegionAuthoredMaterial;
+    hit.regionAuthoredMaterial = triangle->regionAuthoredMaterial;
+    hit.proceduralSolidMaterialRuntimeProgram =
+        triangle->proceduralSolidMaterialRuntimeProgram;
 
     *out_hit = hit;
     return true;
@@ -460,6 +490,7 @@ static bool runtime_ray_3d_trace_scene_first_hit_flat(
     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
     HitInfo3D* out_hit) {
     HitInfo3D best_hit = {0};
+    HitInfo3D curve_hit = {0};
     bool found = false;
     if (!scene || !ray || !out_hit) return false;
 
@@ -477,6 +508,19 @@ static bool runtime_ray_3d_trace_scene_first_hit_flat(
         runtime_ray_3d_apply_source_ref(scene, &hit);
         best_hit = hit;
         found = true;
+    }
+    if (RuntimeSceneCurve3D_TraceAllInstances(
+            scene,
+            ray,
+            t_min,
+            found ? best_hit.t : t_max,
+            &curve_hit)) {
+        if (!found || curve_hit.t < best_hit.t - 1.0e-9 ||
+            (fabs(curve_hit.t - best_hit.t) <= 1.0e-9 &&
+             curve_hit.source.kind < best_hit.source.kind)) {
+            best_hit = curve_hit;
+            found = true;
+        }
     }
 
     if (!found) {
@@ -627,6 +671,30 @@ static bool runtime_ray_3d_hits_match(const HitInfo3D* expected,
     if (expected->hasObjectTextureCoord != actual->hasObjectTextureCoord) {
         snprintf(reason, reason_size, "object_texture_presence");
         return false;
+    }
+    if (expected->hasCurveTangent != actual->hasCurveTangent) {
+        snprintf(reason, reason_size, "curve_payload_presence");
+        return false;
+    }
+    if (expected->hasCurveTangent) {
+        if (expected->curveSceneInstanceIndex !=
+                actual->curveSceneInstanceIndex ||
+            expected->curvePrimitiveIndex != actual->curvePrimitiveIndex ||
+            expected->curveStrandIndex != actual->curveStrandIndex ||
+            expected->curveSegmentIndex != actual->curveSegmentIndex) {
+            snprintf(reason, reason_size, "curve_identity");
+            return false;
+        }
+        if (fabs(expected->curveU - actual->curveU) > 1e-7 ||
+            fabs(expected->curveRadius - actual->curveRadius) > 1e-7) {
+            snprintf(reason, reason_size, "curve_parameters");
+            return false;
+        }
+        if (vec3_length(vec3_sub(expected->curveTangent,
+                                 actual->curveTangent)) > 1e-7) {
+            snprintf(reason, reason_size, "curve_tangent");
+            return false;
+        }
     }
     return true;
 }

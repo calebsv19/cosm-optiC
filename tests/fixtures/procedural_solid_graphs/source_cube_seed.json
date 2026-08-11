@@ -1,0 +1,21 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg10_source_cube_seed",
+  "semantic_source_id": "primitive_rect_prism",
+  "max_node_evaluations": 4,
+  "nodes": [
+    {
+      "id": "cube",
+      "op": "box",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.7, 0.55, 0.8],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.035,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "cube"
+}

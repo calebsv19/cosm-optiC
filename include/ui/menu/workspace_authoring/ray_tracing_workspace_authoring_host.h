@@ -7,6 +7,8 @@
 #include "core_base.h"
 #include "kit_workspace_authoring.h"
 #include "kit_workspace_authoring_ui.h"
+#include "procedural/procedural_surface_authoring_document.h"
+#include "ui/menu/workspace_authoring/ray_tracing_surface_authoring_canvas_view.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,6 +56,26 @@ typedef struct RayTracingWorkspaceAuthoringHostState {
     uint32_t font_theme_status_count;
     uint32_t last_font_theme_button_id;
     char font_theme_status[160];
+    RayTracingSurfaceAuthoringCanvasViewState canvas_view;
+    SDL_Rect canvas_panel;
+    uint8_t canvas_panel_ready;
+    uint8_t document_loaded;
+    uint8_t document_dirty;
+    uint8_t edit_active;
+    char document_path[1024];
+    ProceduralSurfaceAuthoringDocumentV1 document;
+    ProceduralSurfaceAuthoringDocumentV1 undo_document;
+    ProceduralSurfaceAuthoringDocumentCompilePlan document_readback_plan;
+    char document_status[192];
+    char edit_field[128];
+    char edit_buffer[512];
+    size_t edit_buffer_length;
+    char edit_expected_document_digest[65];
+    char edit_expected_source_mesh_digest[65];
+    char edit_expected_reference_digest[65];
+    uint32_t document_edit_count;
+    uint32_t document_save_count;
+    uint32_t document_readback_count;
 } RayTracingWorkspaceAuthoringHostState;
 
 void ray_tracing_workspace_authoring_host_reset(
@@ -62,6 +84,20 @@ void ray_tracing_workspace_authoring_host_set_viewport(
     RayTracingWorkspaceAuthoringHostState* host,
     int width,
     int height);
+void ray_tracing_workspace_authoring_host_set_canvas_panel(
+    RayTracingWorkspaceAuthoringHostState* host,
+    const SDL_Rect* panel);
+void ray_tracing_workspace_authoring_host_set_document_path(
+    RayTracingWorkspaceAuthoringHostState* host,
+    const char* path);
+CoreResult ray_tracing_workspace_authoring_host_load_document(
+    RayTracingWorkspaceAuthoringHostState* host);
+CoreResult ray_tracing_workspace_authoring_host_save_document(
+    RayTracingWorkspaceAuthoringHostState* host);
+CoreResult ray_tracing_workspace_authoring_host_replace_reference(
+    RayTracingWorkspaceAuthoringHostState* host,
+    const char* field,
+    const ProceduralSurfaceAuthoringDocumentRef* replacement);
 int ray_tracing_workspace_authoring_host_active(
     const RayTracingWorkspaceAuthoringHostState* host);
 int ray_tracing_workspace_authoring_host_pane_overlay_active(

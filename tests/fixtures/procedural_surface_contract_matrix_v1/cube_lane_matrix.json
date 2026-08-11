@@ -1,0 +1,31 @@
+{
+  "schema": "ray_tracing.surface_authoring_contract_matrix",
+  "schema_version": 1,
+  "matrix_id": "cube_surface_lane_matrix_v1",
+  "source": {
+    "object_id": "cube",
+    "mesh_digest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "source_kind": "semantic_cube",
+    "topology": {"vertex_count": 8, "triangle_count": 12}
+  },
+  "references": {
+    "brown_material": {"id": "brown_material", "digest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "output_domains": ["material"], "proof_profiles": ["material"]},
+    "dirt_microdetail": {"id": "dirt_microdetail", "digest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "output_domains": ["microdetail_normal"], "proof_profiles": ["microdetail"]},
+    "positive_z_selector": {"id": "positive_z_selector", "digest_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "output_domains": ["material", "attached_asset"], "proof_profiles": ["selector"]},
+    "signed_relief": {"id": "signed_relief", "digest_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "output_domains": ["signed_relief"], "proof_profiles": ["signed_relief"]},
+    "deep_inset": {"id": "deep_inset", "digest_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "output_domains": ["deep_inset"], "proof_profiles": ["deep_inset"]},
+    "grass_attachment": {"id": "grass_attachment", "digest_sha256": "1111111111111111111111111111111111111111111111111111111111111111", "output_domains": ["attached_asset"], "proof_profiles": ["attachment"]},
+    "compound_surface_field": {"id": "compound_surface_field", "digest_sha256": "2222222222222222222222222222222222222222222222222222222222222222", "output_domains": ["microdetail_normal", "signed_relief", "deep_inset"], "proof_profiles": ["microdetail", "signed_relief", "deep_inset"]}
+  },
+  "cells": [
+    {"id": "control", "bindings": {}, "proof_profiles": []},
+    {"id": "material_only", "bindings": {"material_graph": "brown_material"}},
+    {"id": "microdetail_only", "bindings": {"surface_field_graph": "dirt_microdetail"}},
+    {"id": "selector_only", "bindings": {"face_region_selector": "positive_z_selector"}},
+    {"id": "signed_relief_only", "bindings": {"surface_field_graph": "signed_relief"}},
+    {"id": "deep_inset_only", "bindings": {"surface_field_graph": "deep_inset"}},
+    {"id": "attachment_only", "bindings": {"attachments": ["grass_attachment"]}},
+    {"id": "material_microdetail", "bindings": {"material_graph": "brown_material", "surface_field_graph": "dirt_microdetail"}},
+    {"id": "full_lanes", "bindings": {"material_graph": "brown_material", "surface_field_graph": "compound_surface_field", "face_region_selector": "positive_z_selector", "attachments": ["grass_attachment"]}}
+  ]
+}

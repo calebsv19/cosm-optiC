@@ -1,0 +1,38 @@
+{
+  "schema": "procedural_object_recipe_v1",
+  "asset_id": "psg20_weathered_urn",
+  "display_name": "PSG-20 Fresh Weathered Urn",
+  "recipe_family": "lathe_profile",
+  "tags": [
+    "psg20",
+    "fresh_generated_fixture",
+    "imported_stl",
+    "physical_inset"
+  ],
+  "recommended_first_material": "aged_plaster",
+  "notes": "Purpose-built curved urn carrier generated afresh for PSG-20. The broad shoulder makes one localized recessed coating failure readable in beauty and low-profile views.",
+  "geometry": {
+    "segments": 160,
+    "cap_start": true,
+    "cap_end": true,
+    "profile": [
+      {"radius": 0.36, "z": 0.0},
+      {"radius": 0.55, "z": 0.08},
+      {"radius": 0.60, "z": 0.18},
+      {"radius": 0.53, "z": 0.28},
+      {"radius": 0.66, "z": 0.42},
+      {"radius": 0.84, "z": 0.66},
+      {"radius": 0.96, "z": 0.94},
+      {"radius": 1.00, "z": 1.24},
+      {"radius": 0.94, "z": 1.53},
+      {"radius": 0.80, "z": 1.75},
+      {"radius": 0.62, "z": 1.91},
+      {"radius": 0.48, "z": 2.02},
+      {"radius": 0.46, "z": 2.14},
+      {"radius": 0.60, "z": 2.20},
+      {"radius": 0.64, "z": 2.28},
+      {"radius": 0.50, "z": 2.36},
+      {"radius": 0.32, "z": 2.42}
+    ]
+  }
+}

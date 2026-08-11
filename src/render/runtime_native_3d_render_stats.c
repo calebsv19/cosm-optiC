@@ -5,6 +5,7 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     if (!dst || !src) return;
     dst->hitPixelCount += src->hitPixelCount;
     dst->visiblePixelCount += src->visiblePixelCount;
+    dst->hairScatteringPixelCount += src->hairScatteringPixelCount;
     dst->bouncePixelCount += src->bouncePixelCount;
     dst->secondaryRayCount += src->secondaryRayCount;
     dst->secondaryHitCount += src->secondaryHitCount;
@@ -783,6 +784,9 @@ void runtime_native_3d_render_stats_normalize_temporal(
         runtime_native_3d_render_stats_round_divide(stats->hitPixelCount, committed_subpasses);
     stats->visiblePixelCount =
         runtime_native_3d_render_stats_round_divide(stats->visiblePixelCount, committed_subpasses);
+    stats->hairScatteringPixelCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->hairScatteringPixelCount, committed_subpasses);
     stats->bouncePixelCount =
         runtime_native_3d_render_stats_round_divide(stats->bouncePixelCount, committed_subpasses);
     stats->secondaryRayCount =

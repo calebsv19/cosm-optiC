@@ -516,10 +516,15 @@ RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromHitRGB(
         return RuntimeVisibility3D_UnitTransmittance();
     }
 
+    /* Shading normals affect BRDF response only.  Offset visibility rays with
+     * the unperturbed geometric normal so normal-mapped dense meshes do not
+     * self-occlude along their triangle edges. */
     return runtime_visibility_3d_trace_transmittance_rgb(scene,
                                                          surface_hit,
                                                          surface_hit->position,
-                                                         surface_hit->normal,
+                                                         vec3_length(surface_hit->geometricNormal) > 1e-9
+                                                             ? surface_hit->geometricNormal
+                                                             : surface_hit->normal,
                                                          vec3_scale(to_light, 1.0 / light_distance),
                                                          light_distance,
                                                          -1,
@@ -572,7 +577,9 @@ RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromHitToPoint
     return runtime_visibility_3d_trace_transmittance_rgb(scene,
                                                          surface_hit,
                                                          surface_hit->position,
-                                                         surface_hit->normal,
+                                                         vec3_length(surface_hit->geometricNormal) > 1e-9
+                                                             ? surface_hit->geometricNormal
+                                                             : surface_hit->normal,
                                                          vec3_scale(to_target, 1.0 / target_distance),
                                                          target_distance,
                                                          target_scene_object_index,

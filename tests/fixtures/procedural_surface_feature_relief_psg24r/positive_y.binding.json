@@ -1,0 +1,19 @@
+{
+  "schema": "ray_tracing.procedural_surface_binding",
+  "schema_version": 1,
+  "binding_id": "psg24r_positive_y_wall",
+  "graph_program_id": "pitted_concrete_v1",
+  "selector": "surface_group",
+  "surface_group_id": "positive_y",
+  "up_axis": [0.0, 0.0, 1.0],
+  "selector_min_dot": 0.7,
+  "selector_feather": 0.0,
+  "projection": "planar_xz",
+  "projection_scale": 1.0,
+  "displacement_direction": "source_normal",
+  "displacement_scale": 1.0,
+  "fallback_color_r": 0.36,
+  "fallback_color_g": 0.35,
+  "fallback_color_b": 0.33,
+  "fallback_roughness": 0.88
+}

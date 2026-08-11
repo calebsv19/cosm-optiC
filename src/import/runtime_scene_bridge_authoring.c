@@ -588,6 +588,7 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         json_object *glass_thin_walled_obj = NULL;
         json_object *glass_interface_tint_obj = NULL;
         json_object *glass_absorption_color_obj = NULL;
+        json_object *hair_optics_enabled_obj = NULL;
         const char *object_id = NULL;
         int material_id = MaterialManagerDefaultId();
         int object_color = 0xFFFFFF;
@@ -613,6 +614,15 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
         bool has_glass_absorption_color = false;
         int glass_interface_tint = 0xFFFFFF;
         int glass_absorption_color = 0xFFFFFF;
+        bool hair_optics_enabled = false;
+        bool has_hair_optics_enabled = false;
+        double hair_absorption_r = 0.35;
+        double hair_absorption_g = 0.70;
+        double hair_absorption_b = 1.20;
+        double hair_longitudinal_roughness = 0.30;
+        double hair_azimuthal_roughness = 0.35;
+        double hair_ior = 1.55;
+        double hair_cuticle_tilt_degrees = 2.0;
         int scene_index = 0;
         if (!entry || !json_object_is_type(entry, json_type_object)) continue;
         if (!json_object_object_get_ex(entry, "object_id", &object_id_obj) ||
@@ -714,6 +724,35 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
             glass_thin_walled = json_object_get_boolean(glass_thin_walled_obj);
             has_glass_thin_walled = true;
         }
+        if ((json_object_object_get_ex(entry, "hair_optics_enabled", &hair_optics_enabled_obj) ||
+             json_object_object_get_ex(entry, "hairOpticsEnabled", &hair_optics_enabled_obj)) &&
+            json_object_is_type(hair_optics_enabled_obj, json_type_boolean)) {
+            hair_optics_enabled = json_object_get_boolean(hair_optics_enabled_obj);
+            has_hair_optics_enabled = true;
+        }
+        (void)runtime_scene_bridge_parse_double_field_any(
+            entry, "hair_absorption_r", "hairAbsorptionR", &hair_absorption_r);
+        (void)runtime_scene_bridge_parse_double_field_any(
+            entry, "hair_absorption_g", "hairAbsorptionG", &hair_absorption_g);
+        (void)runtime_scene_bridge_parse_double_field_any(
+            entry, "hair_absorption_b", "hairAbsorptionB", &hair_absorption_b);
+        (void)runtime_scene_bridge_parse_double_field_any(
+            entry,
+            "hair_longitudinal_roughness",
+            "hairLongitudinalRoughness",
+            &hair_longitudinal_roughness);
+        (void)runtime_scene_bridge_parse_double_field_any(
+            entry,
+            "hair_azimuthal_roughness",
+            "hairAzimuthalRoughness",
+            &hair_azimuthal_roughness);
+        (void)runtime_scene_bridge_parse_double_field_any(
+            entry, "hair_ior", "hairIor", &hair_ior);
+        (void)runtime_scene_bridge_parse_double_field_any(
+            entry,
+            "hair_cuticle_tilt_degrees",
+            "hairCuticleTiltDegrees",
+            &hair_cuticle_tilt_degrees);
         if (!object_id || !object_id[0]) continue;
         for (scene_index = 0;
              scene_index < sceneSettings.objectCount && scene_index < g_last_runtime_object_id_count;
@@ -780,6 +819,26 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                 sceneSettings.sceneObjects[scene_index].glassAbsorptionColor =
                     has_glass_absorption_color ? glass_absorption_color
                                               : object_color;
+                if (has_hair_optics_enabled) {
+                    sceneSettings.sceneObjects[scene_index].hasHairOpticsOverride =
+                        hair_optics_enabled;
+                }
+                if (hair_optics_enabled) {
+                    sceneSettings.sceneObjects[scene_index].hairAbsorptionR =
+                        fmax(0.0, fmin(8.0, hair_absorption_r));
+                    sceneSettings.sceneObjects[scene_index].hairAbsorptionG =
+                        fmax(0.0, fmin(8.0, hair_absorption_g));
+                    sceneSettings.sceneObjects[scene_index].hairAbsorptionB =
+                        fmax(0.0, fmin(8.0, hair_absorption_b));
+                    sceneSettings.sceneObjects[scene_index].hairLongitudinalRoughness =
+                        fmax(0.02, fmin(1.0, hair_longitudinal_roughness));
+                    sceneSettings.sceneObjects[scene_index].hairAzimuthalRoughness =
+                        fmax(0.02, fmin(1.0, hair_azimuthal_roughness));
+                    sceneSettings.sceneObjects[scene_index].hairIor =
+                        fmax(1.0, fmin(2.5, hair_ior));
+                    sceneSettings.sceneObjects[scene_index].hairCuticleTiltDegrees =
+                        fmax(-10.0, fmin(10.0, hair_cuticle_tilt_degrees));
+                }
                 apply_ray_authoring_object_authored_texture(entry, scene_index, object_id);
                 apply_ray_authoring_object_procedural_texture(entry, scene_index);
                 apply_ray_authoring_object_material_stack(entry, scene_index);

@@ -1,0 +1,125 @@
+{
+  "schema": "ray_tracing.procedural_surface_field_expectation",
+  "schema_version": 1,
+  "implementation_phase": "PSG-1",
+  "numeric_values_status": "frozen",
+  "sample_count": 11,
+  "output_names": [
+    "height",
+    "macro_variation",
+    "micro_variation",
+    "rock_mask",
+    "roughness",
+    "snow_precursor"
+  ],
+  "determinism_requirements": {
+    "same_recipe_same_point_exact": true,
+    "sample_traversal_order_independent": true,
+    "thread_order_independent": true,
+    "global_random_state_independent": true,
+    "non_finite_input_rejected_without_output_mutation": true
+  },
+  "canonical_recipe_digest_sha256": "563d838258da20c7c9a106323470fedc642558d90154ce62f25f2a006fe99525",
+  "canonical_field_summary_digest_sha256": "ed2d2bf6d1e8939ab4a99ca9d3872316c1d3081f173572da68fcdd352653065d",
+  "samples": [
+    {
+      "sample_id": "origin",
+      "height": 0.24421288210949085,
+      "macro_variation": 0.20832407054716515,
+      "micro_variation": -0.5122985637016172,
+      "rock_mask": 0.6938938514399087,
+      "roughness": 0.7494066384602777,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "plane_interior_a",
+      "height": 0.4181779665082797,
+      "macro_variation": 0.08607936568836337,
+      "micro_variation": -0.033656197255838884,
+      "rock_mask": 0.6058280813421074,
+      "roughness": 0.6096452801222215,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "plane_interior_b",
+      "height": 0.4847352437005809,
+      "macro_variation": 0.15258659481064143,
+      "micro_variation": 0.5119533218969569,
+      "rock_mask": 0.730002376037018,
+      "roughness": 0.7673918523979003,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "plane_edge_lock",
+      "height": 0.4295544552857969,
+      "macro_variation": -0.02332633296293736,
+      "micro_variation": -0.1029391926082168,
+      "rock_mask": 0.6708666009869666,
+      "roughness": 0.6560211390151267,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "prism_pos_x",
+      "height": 0.3051162611422747,
+      "macro_variation": 0.12723624110001963,
+      "micro_variation": -0.467262722768564,
+      "rock_mask": 0.7308383962539846,
+      "roughness": 0.7588717426807051,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "prism_neg_x",
+      "height": 0.17342429216171526,
+      "macro_variation": -0.27229277574074423,
+      "micro_variation": 0.20979522554933958,
+      "rock_mask": 0.5464380247107851,
+      "roughness": 0.6151780574652604,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "prism_pos_y",
+      "height": -0.07397673631665844,
+      "macro_variation": -0.4105594400608624,
+      "micro_variation": -0.14230326519377268,
+      "rock_mask": 0.43294250677825985,
+      "roughness": 0.5449319064278845,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "prism_neg_y",
+      "height": 0.08403401831356659,
+      "macro_variation": -0.2851224062383977,
+      "micro_variation": -0.155046508506422,
+      "rock_mask": 0.5189367139222892,
+      "roughness": 0.590477658662429,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "prism_pos_z",
+      "height": 0.19990079954726073,
+      "macro_variation": 0.40481381854556714,
+      "micro_variation": -0.10509178291788165,
+      "rock_mask": 0.4236531419666399,
+      "roughness": 0.5328449275668963,
+      "snow_precursor": 0.89408671450834
+    },
+    {
+      "sample_id": "prism_neg_z",
+      "height": 0.4965505624805702,
+      "macro_variation": 0.024729432558487575,
+      "micro_variation": 0.1618869965900114,
+      "rock_mask": 0.6905863176434871,
+      "roughness": 0.6776705581397459,
+      "snow_precursor": 0.0
+    },
+    {
+      "sample_id": "shared_corner",
+      "height": 0.4408385040843923,
+      "macro_variation": -0.07758087147278428,
+      "micro_variation": 0.3007100978477807,
+      "rock_mask": 0.7048209677894135,
+      "roughness": 0.7125525034642628,
+      "snow_precursor": 0.8237947580526466
+    }
+  ]
+}

@@ -48,11 +48,12 @@ bool RuntimeSceneAcceleration3D_CaptureInstanceBounds(
     if (out_instances) *out_instances = NULL;
     if (out_instance_count) *out_instance_count = 0;
     if (!out_instances || !out_instance_count) return false;
-    if (!scene || scene->primitiveCount <= 0 || scene->triangleMesh.triangleCount <= 0) {
+    if (!scene ||
+        (scene->primitiveCount <= 0 && scene->curveInstanceCount <= 0)) {
         return true;
     }
     instances = (RuntimeSceneAcceleration3DInstanceBounds*)calloc(
-        (size_t)scene->primitiveCount,
+        (size_t)(scene->primitiveCount + scene->curveInstanceCount),
         sizeof(*instances));
     if (!instances) {
         if (set_diag) set_diag("TLAS build failed: instance allocation failed");
@@ -71,6 +72,8 @@ bool RuntimeSceneAcceleration3D_CaptureInstanceBounds(
         bounds.min = vec3(DBL_MAX, DBL_MAX, DBL_MAX);
         bounds.max = vec3(-DBL_MAX, -DBL_MAX, -DBL_MAX);
         bounds.primitiveIndex = primitive_index;
+        bounds.curveSceneInstanceIndex = -1;
+        bounds.kind = RUNTIME_SCENE_ACCEL_3D_INSTANCE_TRIANGLE;
         bounds.sceneObjectIndex = scene->primitives[primitive_index].source.sceneObjectIndex;
         snprintf(bounds.objectId,
                  sizeof(bounds.objectId),
@@ -121,6 +124,36 @@ bool RuntimeSceneAcceleration3D_CaptureInstanceBounds(
                     bounds.sceneTriangleIndexByLocalTriangleCount = 0;
                 }
             }
+        }
+        instances[instance_count++] = bounds;
+    }
+
+    for (int curve_index = 0; curve_index < scene->curveInstanceCount; ++curve_index) {
+        const RuntimeCurveSceneInstance3D* curve = &scene->curveInstances[curve_index];
+        RuntimeSceneAcceleration3DInstanceBounds bounds;
+        memset(&bounds, 0, sizeof(bounds));
+        bounds.primitiveIndex = -1;
+        bounds.curveSceneInstanceIndex = curve_index;
+        bounds.sceneObjectIndex = curve->source.sceneObjectIndex;
+        bounds.kind = RUNTIME_SCENE_ACCEL_3D_INSTANCE_CURVE;
+        bounds.curveInstance = curve;
+        snprintf(bounds.objectId,
+                 sizeof(bounds.objectId),
+                 "%s",
+                 curve->source.objectId);
+        snprintf(bounds.assetId,
+                 sizeof(bounds.assetId),
+                 "%s",
+                 curve->assetId);
+        if (!RuntimeSceneCurve3D_InstanceWorldBounds(
+                curve, &bounds.min, &bounds.max)) {
+            RuntimeSceneAcceleration3D_FreeInstanceIdentityMaps(
+                instances, instance_count);
+            free(instances);
+            if (set_diag) {
+                set_diag("TLAS build failed: invalid curve instance bounds");
+            }
+            return false;
         }
         instances[instance_count++] = bounds;
     }

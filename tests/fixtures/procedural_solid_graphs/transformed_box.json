@@ -1,0 +1,32 @@
+{
+  "schema": "ray_tracing.procedural_solid_graph",
+  "schema_version": 1,
+  "graph_id": "psg9_transformed_box",
+  "semantic_source_id": "primitive_rect_prism",
+  "max_node_evaluations": 8,
+  "nodes": [
+    {
+      "id": "base_box",
+      "op": "box",
+      "inputs": [],
+      "source_id": "",
+      "vector_a": [0.9, 0.65, 0.55],
+      "vector_b": [0.0, 0.0, 0.0],
+      "vector_c": [0.0, 0.0, 0.0],
+      "scalar_a": 0.08,
+      "scalar_b": 0.0
+    },
+    {
+      "id": "object_transform",
+      "op": "transform",
+      "inputs": ["base_box"],
+      "source_id": "",
+      "vector_a": [0.35, -0.2, 0.1],
+      "vector_b": [0.3, 0.45, 0.2],
+      "vector_c": [1.4, 0.65, 1.1],
+      "scalar_a": 0.0,
+      "scalar_b": 0.0
+    }
+  ],
+  "output": "object_transform"
+}
