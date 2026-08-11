@@ -41,7 +41,7 @@ const char *ProceduralSolidMaterialNodeKind_Name(
         "constant", "height", "slope", "curvature", "cavity",
         "authored_region", "region", "boundary_distance", "noise", "add",
         "multiply", "invert", "smoothstep", "bands", "feature_coverage",
-        "feature_interior", "feature_rim", "feature_id", "clamp", "subtract", "remap"};
+        "feature_interior", "feature_rim", "feature_id", "clamp", "subtract", "remap", "named_selector"};
     if ((unsigned)kind >= sizeof(names) / sizeof(names[0])) return "invalid";
     return names[(unsigned)kind];
 }
@@ -50,7 +50,7 @@ bool ProceduralSolidMaterialNodeKind_FromName(
     const char *name, ProceduralSolidMaterialNodeKind *out_kind) {
     if (!name || !out_kind) return false;
     for (int i = PROCEDURAL_SOLID_MATERIAL_NODE_CONSTANT;
-         i <= PROCEDURAL_SOLID_MATERIAL_NODE_REMAP; ++i) {
+         i <= PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR; ++i) {
         if (strcmp(name, ProceduralSolidMaterialNodeKind_Name(
                              (ProceduralSolidMaterialNodeKind)i)) == 0) {
             *out_kind = (ProceduralSolidMaterialNodeKind)i;
@@ -258,7 +258,7 @@ bool ProceduralSolidMaterialGraphV1_Validate(
         if (!stable_id(node->node_id, sizeof(node->node_id)) ||
             find_node(graph, node->node_id) != (int)i ||
             (unsigned)node->kind >
-                (unsigned)PROCEDURAL_SOLID_MATERIAL_NODE_REMAP ||
+                (unsigned)PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR ||
             !isfinite(node->value) || !isfinite(node->minimum) ||
             !isfinite(node->maximum) || !isfinite(node->scale) ||
             !isfinite(node->offset) ||
@@ -410,6 +410,13 @@ static bool eval_node(
         case PROCEDURAL_SOLID_MATERIAL_NODE_CAVITY: t = in->cavity; break;
         case PROCEDURAL_SOLID_MATERIAL_NODE_AUTHORED_REGION:
             t = in->authored_region; break;
+        case PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR:
+            t = 0.0;
+            for (size_t i = 0u; i < in->selector_count; ++i)
+                if (strcmp(in->selector_names[i], node->region_kind) == 0) {
+                    t = in->selector_weights[i]; break;
+                }
+            break;
         case PROCEDURAL_SOLID_MATERIAL_NODE_BOUNDARY_DISTANCE:
             t = in->boundary_distance; break;
         case PROCEDURAL_SOLID_MATERIAL_NODE_REGION:

@@ -44,6 +44,19 @@ int main(void) {
     assert(selection.feature_id_count == 1u &&
            ProceduralSurfaceFeatureSelectionV1_Contains(&selection, 2u) &&
            !ProceduralSurfaceFeatureSelectionV1_Contains(&selection, 1u));
+    {
+        const uint32_t explicit_ids[] = {1u, 2u};
+        assert(ProceduralSurfaceFeatureSelectionV1_BuildExplicit(
+            &field, explicit_ids, 2u, &selection));
+        assert(selection.feature_id_count == 2u &&
+               selection.feature_ids[0] == 1u &&
+               selection.feature_ids[1] == 2u);
+        assert(!ProceduralSurfaceFeatureSelectionV1_BuildExplicit(
+            &field, (const uint32_t[]){2u, 2u}, 2u, &selection));
+        assert(!ProceduralSurfaceFeatureSelectionV1_BuildExplicit(
+            &field, (const uint32_t[]){99u}, 1u, &selection));
+    }
+    assert(ProceduralSurfaceFeatureSelectionV1_Build(&field, .1, &selection));
     assert(ProceduralSurfaceFeatureSelectionV1_BuildCarrierValues(
         &field, &selection, &vertex, 1u, &value) && value > 0.0);
     assert(ProceduralSurfaceFeatureSelectionV1_BuildRegion(

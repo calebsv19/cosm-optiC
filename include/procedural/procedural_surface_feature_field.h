@@ -18,6 +18,7 @@ typedef struct ProceduralSurfaceFeatureRootV1 {
     double barycentric[3];
     ProceduralSurfaceFeatureVec3 position, normal, tangent, bitangent;
     double radius, aspect, rotation, edge_softness, rim_width;
+    double height_or_depth;
     uint32_t population, feature_id;
 } ProceduralSurfaceFeatureRootV1;
 

@@ -18,6 +18,7 @@ INTEGRATION_DIR = ROOT / "tests" / "integration"
 sys.path.insert(0, str(INTEGRATION_DIR))
 
 import generate_ray_tracing_denoise_review_artifacts as review_artifacts  # noqa: E402
+from procedural_surface_feature_spot_compiler import mesh_analysis  # noqa: E402
 from procedural_surface_visual_proof import (  # noqa: E402
     image_metrics,
     object_audit,
@@ -76,6 +77,8 @@ def parse_args() -> argparse.Namespace:
                         default=fixture / "plaster_peel.region_recipe.json")
     parser.add_argument("--surface-feature-field", type=Path,
                         help="Optional digest-bound PSG-24 field used as the overlay weight.")
+    parser.add_argument("--surface-feature-authoring", type=Path,
+                        help="Compile a PSG-24A field against the fresh proof mesh.")
     parser.add_argument("--force-render", action="store_true",
                         help="Regenerate native frames even when prior proof files exist.")
     parser.add_argument("--output-root", type=Path)
@@ -270,6 +273,19 @@ def views(mesh: dict) -> dict[str, dict]:
                 "z": center["z"] + 0.12 * radius,
             },
         },
+        "grazing": {
+            "id": "grazing",
+            "camera_position": {
+                "x": center["x"] + 1.72 * radius,
+                "y": center["y"] - 0.72 * radius,
+                "z": center["z"] + 0.08 * radius,
+            },
+            "camera_look_at": {
+                "x": center["x"],
+                "y": center["y"],
+                "z": center["z"] - 0.04 * radius,
+            },
+        },
     }
 
 
@@ -322,6 +338,135 @@ def changed_pixels(left: list, right: list) -> int:
         for left_row, right_row in zip(left, right)
         for a, b in zip(left_row, right_row)
     )
+
+
+def read_ppm_rgb(path: Path) -> tuple[int, int, list]:
+    data = path.read_bytes()
+    header, dimensions, maximum, payload = data.split(b"\n", 3)
+    if header != b"P6" or maximum != b"255":
+        raise ValueError(f"{path}: unsupported PPM")
+    width_text, height_text = dimensions.split()
+    width_value, height_value = int(width_text), int(height_text)
+    if len(payload) != width_value * height_value * 3:
+        raise ValueError(f"{path}: truncated PPM")
+    pixels = []
+    for y in range(height_value):
+        row = []
+        for x in range(width_value):
+            offset = (y * width_value + x) * 3
+            row.append(tuple(payload[offset:offset + 3]))
+        pixels.append(row)
+    return width_value, height_value, pixels
+
+
+def resize_nearest(pixels: list, width: int, height: int) -> list:
+    source_height = len(pixels)
+    source_width = len(pixels[0])
+    return [[
+        pixels[min(source_height - 1, y * source_height // height)][
+            min(source_width - 1, x * source_width // width)]
+        for x in range(width)
+    ] for y in range(height)]
+
+
+def feature_diagnostic_projection(
+    mesh: dict, field: dict, analysis: dict, width: int, height: int, mode: str,
+) -> list[list[tuple[int, int, int]]]:
+    vertices = mesh["mesh"]["vertices"]
+    triangles = mesh["mesh"]["triangles"]
+    low, high = mesh["local_bounds"]["min"], mesh["local_bounds"]["max"]
+    span_x, span_z = high["x"] - low["x"], high["z"] - low["z"]
+    scale_value = min((width - 80) / span_x, (height - 80) / span_z)
+    offset_x = (width - span_x * scale_value) * 0.5
+    offset_y = (height - span_z * scale_value) * 0.5
+    projected = [(
+        offset_x + (vertex["x"] - low["x"]) * scale_value,
+        height - offset_y - (vertex["z"] - low["z"]) * scale_value,
+        vertex["y"],
+    ) for vertex in vertices]
+    canvas = [[(9, 11, 14) for _ in range(width)] for _ in range(height)]
+    depth = [[math.inf for _ in range(width)] for _ in range(height)]
+    for triangle_index, triangle in enumerate(triangles):
+        indices = (triangle["a"], triangle["b"], triangle["c"])
+        points = [projected[index] for index in indices]
+        x0 = max(0, int(math.floor(min(point[0] for point in points))))
+        x1 = min(width - 1, int(math.ceil(max(point[0] for point in points))))
+        y0 = max(0, int(math.floor(min(point[1] for point in points))))
+        y1 = min(height - 1, int(math.ceil(max(point[1] for point in points))))
+        denominator = (
+            (points[1][1] - points[2][1]) * (points[0][0] - points[2][0])
+            + (points[2][0] - points[1][0]) * (points[0][1] - points[2][1]))
+        if abs(denominator) < 1.0e-12:
+            continue
+        for y in range(y0, y1 + 1):
+            for x in range(x0, x1 + 1):
+                px, py = x + 0.5, y + 0.5
+                a = ((points[1][1] - points[2][1]) * (px - points[2][0])
+                     + (points[2][0] - points[1][0]) * (py - points[2][1])) / denominator
+                b = ((points[2][1] - points[0][1]) * (px - points[2][0])
+                     + (points[0][0] - points[2][0]) * (py - points[2][1])) / denominator
+                c = 1.0 - a - b
+                if min(a, b, c) < -1.0e-8:
+                    continue
+                z_depth = a * points[0][2] + b * points[1][2] + c * points[2][2]
+                if z_depth >= depth[y][x]:
+                    continue
+                depth[y][x] = z_depth
+                if mode == "macro_envelope":
+                    value = analysis["weights"][triangle_index]
+                    canvas[y][x] = (
+                        int(22 + 220 * value), int(28 + 132 * value),
+                        int(38 + 42 * value))
+                else:
+                    if mode == "geometric_normal":
+                        normal = analysis["face_normals"][triangle_index]
+                    else:
+                        smooth = analysis["smooth_normals"]
+                        normal = [
+                            a * smooth[indices[0]][axis]
+                            + b * smooth[indices[1]][axis]
+                            + c * smooth[indices[2]][axis]
+                            for axis in range(3)]
+                        magnitude = math.sqrt(sum(value * value for value in normal))
+                        normal = [value / magnitude for value in normal]
+                    canvas[y][x] = tuple(
+                        max(0, min(255, int((value * 0.5 + 0.5) * 255)))
+                        for value in normal)
+    if mode == "feature_id":
+        # Not reached through the triangle fill above; retained for callers
+        # that want a dark source silhouette with stable-ID root markers.
+        pass
+    return canvas
+
+
+def feature_id_projection(
+    mesh: dict, field: dict, width: int, height: int,
+) -> list[list[tuple[int, int, int]]]:
+    background = diagnostic_projection(
+        mesh, {"vertex_weights": [0.08] * len(mesh["mesh"]["vertices"])},
+        width, height, wireframe=False)
+    low, high = mesh["local_bounds"]["min"], mesh["local_bounds"]["max"]
+    scale_value = min(
+        (width - 80) / (high["x"] - low["x"]),
+        (height - 80) / (high["z"] - low["z"]))
+    offset_x = (width - (high["x"] - low["x"]) * scale_value) * 0.5
+    offset_y = (height - (high["z"] - low["z"]) * scale_value) * 0.5
+    for feature in field["features"]:
+        # The diagnostic camera looks from negative Y; rear roots are omitted
+        # so the ID view reads as deposits on the visible object, not a flat map.
+        if feature["position"][1] > 0.12:
+            continue
+        center_x = int(offset_x + (feature["position"][0] - low["x"]) * scale_value)
+        center_y = int(height - offset_y - (feature["position"][2] - low["z"]) * scale_value)
+        radius = max(2, int(feature["radius"] * scale_value))
+        value = feature["feature_id"]
+        color = ((value * 67) % 224 + 31, (value * 131) % 224 + 31,
+                 (value * 197) % 224 + 31)
+        for y in range(max(0, center_y - radius), min(height, center_y + radius + 1)):
+            for x in range(max(0, center_x - radius), min(width, center_x + radius + 1)):
+                if (x - center_x) ** 2 + (y - center_y) ** 2 <= radius ** 2:
+                    background[y][x] = color
+    return background
 
 
 def diagnostic_projection(
@@ -492,6 +637,19 @@ def main() -> int:
         "--solid-receipt-out", str(solid_receipt_path)])
     mesh_document = load(mesh)
     surface_region_document = load(surface_region)
+    feature_proof_root = None
+    if args.surface_feature_authoring:
+        feature_proof_root = output / "field"
+        run([
+            sys.executable,
+            str((ROOT / "tools" / "procedural_surface_feature_field_authoring.py").resolve()),
+            "--authoring", str(args.surface_feature_authoring.resolve()),
+            "--mesh", str(mesh),
+            "--solid-receipt", str(solid_receipt_path),
+            "--output-root", str(feature_proof_root),
+        ])
+        args.surface_feature_field = (
+            feature_proof_root / "assets" / "surface_feature_field_v1.json")
 
     materials = generated / "materials"
     plaster = init_and_edit_material(
@@ -597,6 +755,7 @@ def main() -> int:
         ("all_plaster_control", control_graph, "hero"),
         ("plaster_concrete_layered", beauty_graph, "hero"),
         ("plaster_concrete_detail", beauty_graph, "detail"),
+        ("plaster_concrete_grazing", beauty_graph, "grazing"),
         ("plaster_concrete_repeat", beauty_graph, "hero"),
     ]
     if args.surface_feature_field:
@@ -637,8 +796,18 @@ def main() -> int:
     repeat_pixels = renders["plaster_concrete_repeat"][0]
     changed = changed_pixels(control_pixels, layered_pixels)
     repeat_changed = changed_pixels(layered_pixels, repeat_pixels)
+    mask_separation = (
+        changed_pixels(
+            renders["feature_interior_mask"][0],
+            renders["feature_rim_mask"][0])
+        if args.surface_feature_field else 0
+    )
     assertions = fixture_contract["assertions"]
     failures: list[str] = []
+    feature_receipt = (
+        load(feature_proof_root / "receipts" / "surface_feature_field.receipt.json")
+        if feature_proof_root else None
+    )
     for name, (_, audit, metrics, _) in renders.items():
         if audit["triangle_count"] != region_receipt["triangle_count"]:
             failures.append(f"{name}: source triangle count drift")
@@ -654,6 +823,8 @@ def main() -> int:
         failures.append("layered beauty is too similar to all-plaster control")
     if repeat_changed > assertions["maximum_repeat_changed_pixels"]:
         failures.append("exact repeat pixels differ")
+    if args.surface_feature_field and mask_separation == 0:
+        failures.append("feature interior and rim masks are identical")
     mask_names = (
         [f"{channel}_mask" for channel in feature_mask_graphs]
         if args.surface_feature_field else ["native_region_mask"]
@@ -671,6 +842,37 @@ def main() -> int:
         region_receipt["source_file_digest_sha256"] == digest(mesh)
     ):
         failures.append("source identity or provenance contract failed")
+    if feature_receipt:
+        if not all(
+                population["accepted_count"] == population["requested_count"]
+                for population in feature_receipt["populations"]):
+            failures.append("feature population count or density target was not met")
+        if not all(
+                population["declared_radius_range"][0]
+                <= population["radius_quantiles"]["minimum"]
+                <= population["radius_quantiles"]["maximum"]
+                <= population["declared_radius_range"][1]
+                for population in feature_receipt["populations"]):
+            failures.append("feature population radius quantile is out of range")
+        coverage = feature_receipt["coverage"]
+        if not (0.03 <= coverage["eligible_measured"] <= 0.55 and
+                coverage["clean_base_measured"] >= 0.45 and
+                coverage["interior_positive_area_fraction"] > 0.0 and
+                coverage["rim_positive_area_fraction"] > 0.0):
+            failures.append("feature coverage is outside the bounded acceptance range")
+        provenance = feature_receipt["provenance"]
+        if not (provenance["all_source_triangles_in_range"] and
+                provenance["stable_feature_ids_unique"] and
+                provenance["maximum_barycentric_sum_error"] <= 1.0e-8 and
+                provenance["maximum_frame_orthonormal_error"] <= 1.0e-8):
+            failures.append("feature provenance or local tangent frame is invalid")
+        if (feature_receipt["normal_compatibility"]
+                ["opposing_fold_incompatible_assignments"] != 0):
+            failures.append("normal-incompatible opposing fold assignment detected")
+        search = feature_receipt["candidate_search"]
+        if not (search["capacity_respected"] and
+                search["observed_max_cell_candidates"] < feature_receipt["feature_count"]):
+            failures.append("feature candidate search is not bounded")
 
     if args.surface_feature_field:
         contact = review / "psg24_surface_feature_field_review.png"
@@ -678,10 +880,47 @@ def main() -> int:
             ("CLEAN PLASTER CONTROL", control_pixels),
             ("SPOT BEAUTY - HERO", layered_pixels),
             ("SPOT BEAUTY - DETAIL", renders["plaster_concrete_detail"][0]),
+            ("SPOT BEAUTY - GRAZING", renders["plaster_concrete_grazing"][0]),
             ("SPOT COVERAGE", renders["feature_coverage_mask"][0]),
             ("SPOT INTERIOR", renders["feature_interior_mask"][0]),
             ("SPOT RIM", renders["feature_rim_mask"][0]),
-        ], columns=3)
+        ], columns=4)
+        diagnostic_contact = None
+        diagnostic_images = {}
+        if feature_proof_root:
+            field_document = load(args.surface_feature_field)
+            field_analysis = mesh_analysis(
+                mesh_document, load(args.surface_feature_authoring)["macro_envelope"])
+            projected_diagnostics = {
+                "feature_id": feature_id_projection(
+                    mesh_document, field_document, width, height),
+                "envelope": feature_diagnostic_projection(
+                    mesh_document, field_document, field_analysis,
+                    width, height, "macro_envelope"),
+                "geometric_normal": feature_diagnostic_projection(
+                    mesh_document, field_document, field_analysis,
+                    width, height, "geometric_normal"),
+                "shading_normal": feature_diagnostic_projection(
+                    mesh_document, field_document, field_analysis,
+                    width, height, "shading_normal"),
+            }
+            _, _, repeat_pixels_diagnostic = read_ppm_rgb(
+                feature_proof_root / "proof" / "repeat_difference.ppm")
+            projected_diagnostics["repeat_difference"] = resize_nearest(
+                repeat_pixels_diagnostic, width, height)
+            for name, resized in projected_diagnostics.items():
+                path = review / f"compiler_{name}.png"
+                review_artifacts.write_png_rgb(path, width, height, resized)
+                diagnostic_images[name] = (resized, path)
+            diagnostic_contact = review / "psg24_surface_feature_diagnostics_review.png"
+            write_labeled_contact_sheet(diagnostic_contact, [
+                ("STABLE FEATURE ROOT IDS", diagnostic_images["feature_id"][0]),
+                ("MACRO ENVELOPE WEIGHT", diagnostic_images["envelope"][0]),
+                ("GEOMETRIC NORMAL CARRIER", diagnostic_images["geometric_normal"][0]),
+                ("SHADING NORMAL CARRIER", diagnostic_images["shading_normal"][0]),
+                ("EXACT-REPEAT DIFFERENCE", diagnostic_images["repeat_difference"][0]),
+                ("SOURCE TRIANGLE PROVENANCE", wire),
+            ], columns=3)
         lineage_contact = review / "psg24_source_lineage_review.png"
         write_labeled_contact_sheet(lineage_contact, [
             ("LEGACY PSG-19 CARRIER - NOT SPOTS", raw_mask),
@@ -722,6 +961,7 @@ def main() -> int:
         "surface_feature_field": ({
             "path": str(args.surface_feature_field.resolve()),
             "digest_sha256": digest(args.surface_feature_field.resolve()),
+            "compile_receipt": feature_receipt,
         } if args.surface_feature_field else None),
         "bindings": {
             "region_binding_digest_sha256":
@@ -740,6 +980,7 @@ def main() -> int:
         "acceptance": {
             "beauty_changed_pixels": changed,
             "repeat_changed_pixels": repeat_changed,
+            "interior_rim_changed_pixels": mask_separation,
             "source_triangle_count": region_receipt["triangle_count"],
             "render_triangle_counts": {
                 name: value[1]["triangle_count"]
@@ -758,7 +999,14 @@ def main() -> int:
             "raw_authored_region": str(raw_mask_path),
             "source_triangle_provenance": str(wire_path),
             "contact_sheet": str(contact),
-        } | ({"source_lineage_contact_sheet": str(lineage_contact)}
+        } | ({
+            "diagnostic_contact_sheet": str(diagnostic_contact),
+            **{
+                f"compiler_{name}": str(value[1])
+                for name, value in diagnostic_images.items()
+            },
+        } if args.surface_feature_field and diagnostic_contact else {}) | (
+            {"source_lineage_contact_sheet": str(lineage_contact)}
              if lineage_contact else {}),
     }
     write_json(output / "proof_summary.json", summary)

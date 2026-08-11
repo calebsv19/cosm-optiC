@@ -13,6 +13,7 @@
 #define PROCEDURAL_SOLID_MATERIAL_GRAPH_SCHEMA_VERSION 1u
 #define PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_NODES 64u
 #define PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_LAYERS 8u
+#define PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_SELECTORS 8u
 #define PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY 64u
 #define PROCEDURAL_SOLID_MATERIAL_GRAPH_PATH_CAPACITY 512u
 #define PROCEDURAL_SOLID_MATERIAL_GRAPH_DIGEST_CAPACITY 65u
@@ -38,7 +39,8 @@ typedef enum ProceduralSolidMaterialNodeKind {
     PROCEDURAL_SOLID_MATERIAL_NODE_FEATURE_ID,
     PROCEDURAL_SOLID_MATERIAL_NODE_CLAMP,
     PROCEDURAL_SOLID_MATERIAL_NODE_SUBTRACT,
-    PROCEDURAL_SOLID_MATERIAL_NODE_REMAP
+    PROCEDURAL_SOLID_MATERIAL_NODE_REMAP,
+    PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR
 } ProceduralSolidMaterialNodeKind;
 
 typedef struct ProceduralSolidMaterialNodeV1 {
@@ -46,7 +48,7 @@ typedef struct ProceduralSolidMaterialNodeV1 {
     ProceduralSolidMaterialNodeKind kind;
     char input_a[PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
     char input_b[PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
-    char region_kind[16];
+    char region_kind[PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
     double value;
     double minimum;
     double maximum;
@@ -98,6 +100,10 @@ typedef struct ProceduralSolidMaterialGeometryInputs {
     double feature_interior;
     double feature_rim;
     double feature_id;
+    size_t selector_count;
+    char selector_names[PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_SELECTORS]
+        [PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
+    double selector_weights[PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_SELECTORS];
 } ProceduralSolidMaterialGeometryInputs;
 
 typedef enum ProceduralSolidMaterialGraphStatus {

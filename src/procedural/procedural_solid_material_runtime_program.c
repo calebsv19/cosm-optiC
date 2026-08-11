@@ -1,6 +1,7 @@
 #include "procedural/procedural_solid_material_runtime_program.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,6 +38,7 @@ void ProceduralSolidMaterialRuntimeProgramV1_Free(
     ProceduralSolidMaterialRuntimeProgramV1 *program) {
     if (!program) return;
     free(program->corner_inputs);
+    free(program->corner_vertex_indices);
     memset(program, 0, sizeof(*program));
 }
 
@@ -80,7 +82,13 @@ bool ProceduralSolidMaterialRuntimeProgramV1_BuildWithImportedRegion(
         return false;
     }
     program.corner_inputs = calloc(input_count, sizeof(*program.corner_inputs));
-    if (!program.corner_inputs && input_count > 0u) return false;
+    program.corner_vertex_indices = calloc(
+        input_count, sizeof(*program.corner_vertex_indices));
+    if ((!program.corner_inputs || !program.corner_vertex_indices) &&
+        input_count > 0u) {
+        ProceduralSolidMaterialRuntimeProgramV1_Free(&program);
+        return false;
+    }
     if (!ProceduralSolidMaterialGeometryCornerInputs_Build(
             mesh, region_kinds, program.corner_inputs, input_count, report)) {
         ProceduralSolidMaterialRuntimeProgramV1_Free(&program);
@@ -100,17 +108,27 @@ bool ProceduralSolidMaterialRuntimeProgramV1_BuildWithImportedRegion(
             const size_t indices[3] = {
                 triangle->a, triangle->b, triangle->c};
             for (size_t corner = 0u; corner < 3u; ++corner) {
+                program.corner_vertex_indices[
+                    (triangle_index * 3u) + corner] = indices[corner];
                 program.corner_inputs[
                     (triangle_index * 3u) + corner].authored_region =
                         imported_region->vertex_weights[indices[corner]];
             }
         }
+    } else for (size_t triangle_index = 0u;
+               triangle_index < mesh->triangle_count; ++triangle_index) {
+        const CoreMeshAssetRuntimeTriangle *triangle =
+            &mesh->triangles[triangle_index];
+        program.corner_vertex_indices[triangle_index * 3u] = triangle->a;
+        program.corner_vertex_indices[(triangle_index * 3u) + 1u] = triangle->b;
+        program.corner_vertex_indices[(triangle_index * 3u) + 2u] = triangle->c;
     }
     program.graph = *graph;
     memcpy(program.materials, materials,
            material_count * sizeof(*materials));
     program.material_count = material_count;
     program.triangle_count = mesh->triangle_count;
+    program.vertex_count = mesh->vertex_count;
     program.valid = true;
     ProceduralSolidMaterialRuntimeProgramV1_Free(out_program);
     *out_program = program;
@@ -128,6 +146,41 @@ bool ProceduralSolidMaterialRuntimeProgramV1_AttachFeatureField(
     return true;
 }
 
+bool ProceduralSolidMaterialRuntimeProgramV1_AttachNamedSelector(
+    ProceduralSolidMaterialRuntimeProgramV1 *program, const char *selector_id,
+    const ProceduralImportedSurfaceRegionV1 *region) {
+    size_t slot;
+    if (!program || !program->valid || program->triangle_count == 0u ||
+        !selector_id || !selector_id[0] ||
+        strlen(selector_id) >= PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY ||
+        !region || !region->vertex_weights ||
+        region->vertex_count != program->vertex_count ||
+        region->triangle_count != program->triangle_count) {
+        return false;
+    }
+    slot = program->corner_inputs[0].selector_count;
+    if (slot >= PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_SELECTORS) return false;
+    for (size_t existing = 0u; existing < slot; ++existing) {
+        if (strcmp(program->corner_inputs[0].selector_names[existing],
+                   selector_id) == 0) {
+            return false;
+        }
+    }
+    for (size_t i = 0u; i < program->triangle_count * 3u; ++i) {
+        if (program->corner_vertex_indices[i] >= region->vertex_count) {
+            return false;
+        }
+    }
+    for (size_t i = 0u; i < program->triangle_count * 3u; ++i) {
+        ProceduralSolidMaterialGeometryInputs *in = &program->corner_inputs[i];
+        snprintf(in->selector_names[slot], sizeof(in->selector_names[slot]),
+                 "%s", selector_id);
+        in->selector_weights[slot] = region->vertex_weights[program->corner_vertex_indices[i]];
+        in->selector_count = slot + 1u;
+    }
+    return true;
+}
+
 bool ProceduralSolidMaterialRuntimeProgramV1_AttachCurveField(
     ProceduralSolidMaterialRuntimeProgramV1 *program,
     const ProceduralSurfaceFeatureCurveFieldV1 *field) {
@@ -136,6 +189,16 @@ bool ProceduralSolidMaterialRuntimeProgramV1_AttachCurveField(
         field->grid_index_count == 0u) return false;
     program->curve_field = *field;
     program->curve_field_valid = true;
+    return true;
+}
+
+bool ProceduralSolidMaterialRuntimeProgramV1_AttachWoodGrain(
+    ProceduralSolidMaterialRuntimeProgramV1 *program,
+    const ProceduralSurfaceWoodGrainFieldV1 *field) {
+    if (!program || !program->valid ||
+        !ProceduralSurfaceWoodGrainFieldV1_Validate(field)) return false;
+    program->wood_grain = *field;
+    program->wood_grain_valid = true;
     return true;
 }
 
@@ -168,6 +231,15 @@ bool ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
     INTERPOLATE_FIELD(curvature);
     INTERPOLATE_FIELD(cavity);
     INTERPOLATE_FIELD(authored_region);
+    sample.geometry.selector_count = a->selector_count;
+    for (size_t i = 0u; i < sample.geometry.selector_count; ++i) {
+        snprintf(sample.geometry.selector_names[i],
+                 sizeof(sample.geometry.selector_names[i]), "%s",
+                 a->selector_names[i]);
+        sample.geometry.selector_weights[i] = interpolate(
+            a->selector_weights[i], b->selector_weights[i], c->selector_weights[i],
+            bary_u, bary_v, bary_w);
+    }
     INTERPOLATE_FIELD(boundary_distance);
     INTERPOLATE_FIELD(region_retained);
     INTERPOLATE_FIELD(region_cut);
@@ -208,7 +280,22 @@ bool ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
                     sample.geometry.normal_y / normal_length,
                     sample.geometry.normal_z / normal_length}, &sample.curve_feature))
             return false;
+        if (sample.curve_feature.coverage >=
+                sample.geometry.feature_coverage) {
+            sample.geometry.feature_coverage =
+                sample.curve_feature.coverage;
+            sample.geometry.feature_interior =
+                sample.curve_feature.interior;
+            sample.geometry.feature_rim = sample.curve_feature.rim;
+            sample.geometry.feature_id =
+                (double)sample.curve_feature.curve_id;
+        }
     }
+    if (program->wood_grain_valid &&
+        !ProceduralSurfaceWoodGrainFieldV1_Sample(&program->wood_grain,
+            sample.geometry.object_x, sample.geometry.object_z,
+            &sample.wood_grain)) return false;
+    sample.wood_grain_valid = program->wood_grain_valid;
     if (!ProceduralSolidMaterialGraphV1_EvaluateWithReadback(
             &program->graph, &sample.geometry, program->materials,
             program->material_count, &sample.surface,

@@ -35,6 +35,16 @@ typedef struct ProceduralImportedSurfaceGrowthConfig {
     size_t max_triangles;
 } ProceduralImportedSurfaceGrowthConfig;
 
+typedef struct ProceduralImportedSurfaceGrowthExplicitRoot {
+    size_t source_triangle_index;
+    double barycentric[3];
+    CoreObjectVec3 normal;
+    CoreObjectVec3 tangent;
+    CoreObjectVec3 bitangent;
+    double aspect;
+    double rotation_radians;
+} ProceduralImportedSurfaceGrowthExplicitRoot;
+
 typedef struct ProceduralImportedSurfaceGrowthProvenance {
     size_t triangle_count;
     size_t *source_triangle_indices;
@@ -111,6 +121,19 @@ bool ProceduralImportedSurfaceGrowth_Compile(
     const ProceduralImportedSurfaceRegionV1 *region,
     const char *region_path,
     const ProceduralImportedSurfaceGrowthConfig *config,
+    const char *growth_asset_id,
+    CoreMeshAssetRuntimeDocument *out_document,
+    ProceduralImportedSurfaceGrowthProvenance *out_provenance,
+    ProceduralImportedSurfaceGrowthReceipt *out_receipt,
+    ProceduralImportedSurfaceGrowthReport *report);
+
+bool ProceduralImportedSurfaceGrowth_CompileExplicitRoot(
+    const CoreMeshAssetRuntimeDocument *source,
+    const char *source_runtime_path,
+    const ProceduralImportedSurfaceRegionV1 *region,
+    const char *region_path,
+    const ProceduralImportedSurfaceGrowthConfig *config,
+    const ProceduralImportedSurfaceGrowthExplicitRoot *root,
     const char *growth_asset_id,
     CoreMeshAssetRuntimeDocument *out_document,
     ProceduralImportedSurfaceGrowthProvenance *out_provenance,

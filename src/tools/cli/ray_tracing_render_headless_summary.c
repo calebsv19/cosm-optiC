@@ -2,6 +2,7 @@
 
 #include "app/ray_tracing_request_utils.h"
 #include "app/ray_tracing_temporal_checkpoint.h"
+#include "import/runtime_mesh_asset_loader.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -42,6 +43,39 @@ static const char* ray_tracing_headless_mesh_asset_persistent_cache_mode_label(i
         default:
             return "read_write";
     }
+}
+
+static void ray_tracing_headless_write_named_surface_selector_readback(FILE *file) {
+    const RayTracingRuntimeMeshAssetSet *assets =
+        ray_tracing_runtime_mesh_assets_last();
+    bool first = true;
+    fprintf(file, "[");
+    if (assets) {
+        for (int asset_index = 0; asset_index < assets->asset_count; ++asset_index) {
+            const RayTracingRuntimeMeshAsset *asset = &assets->assets[asset_index];
+            for (size_t selector_index = 0u;
+                 selector_index < asset->procedural_named_surface_selector_count;
+                 ++selector_index) {
+                const RayTracingRuntimeMeshAssetFileDependency *dependency =
+                    &asset->procedural_named_surface_selector_dependencies[selector_index];
+                if (!first) fprintf(file, ",");
+                fprintf(file, "{\"asset_id\":");
+                RayTracingJsonWriteString(file, asset->asset_id);
+                fprintf(file, ",\"name\":");
+                RayTracingJsonWriteString(
+                    file, asset->procedural_named_surface_selector_names[selector_index]);
+                fprintf(file, ",\"surface_region_path\":");
+                RayTracingJsonWriteString(
+                    file, asset->procedural_named_surface_selector_paths[selector_index]);
+                fprintf(file, ",\"dependency_stamp\":{\"valid\":%s,\"size_bytes\":%lld,\"mtime_sec\":%lld,\"mtime_nsec\":%lld}}",
+                        dependency->stamp_valid ? "true" : "false",
+                        dependency->size_bytes, dependency->mtime_sec,
+                        dependency->mtime_nsec);
+                first = false;
+            }
+        }
+    }
+    fprintf(file, "]");
 }
 
 void ray_tracing_render_headless_write_summary(
@@ -858,6 +892,9 @@ void ray_tracing_render_headless_write_summary(
         file,
         preflight->mesh_asset_timing_stats
             .procedural_solid_material_region_digest_sha256);
+    fprintf(file, ",\n");
+    fprintf(file, "    \"named_surface_selectors\": ");
+    ray_tracing_headless_write_named_surface_selector_readback(file);
     fprintf(file, ",\n");
     fprintf(file, "    \"authored_materials\": {\n");
     fprintf(file, "      \"loaded\": %s,\n",

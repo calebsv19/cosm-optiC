@@ -53,6 +53,23 @@ bool ProceduralSurfaceSelectedFaceShell_Compile(
     ProceduralSurfacePrismMeshSummary *out_summary,
     ProceduralSurfaceSelectedFaceShellReceipt *out_receipt,
     ProceduralSurfaceSelectedFaceShellReport *report) {
+    return ProceduralSurfaceSelectedFaceShell_CompileWithEvaluator(
+        request, NULL, NULL, NULL, NULL, field_budget, buffers,
+        out_requirements, out_summary, out_receipt, report);
+}
+
+bool ProceduralSurfaceSelectedFaceShell_CompileWithEvaluator(
+    const ProceduralSurfaceSelectedFaceShellRequest *request,
+    ProceduralSurfacePrismFieldEvaluator evaluator,
+    const void *evaluator_context,
+    ProceduralSurfacePrismDisplacementDirectionResolver direction_resolver,
+    const void *direction_context,
+    ProceduralSurfaceFieldBudget *field_budget,
+    ProceduralSurfacePrismMeshBuffers *buffers,
+    ProceduralSurfacePrismMeshRequirements *out_requirements,
+    ProceduralSurfacePrismMeshSummary *out_summary,
+    ProceduralSurfaceSelectedFaceShellReceipt *out_receipt,
+    ProceduralSurfaceSelectedFaceShellReport *report) {
     ProceduralSurfacePrismBindingContext binding_context;
     ProceduralSurfaceBindingReport binding_report;
     ProceduralSurfacePrismMeshReport mesh_report;
@@ -117,9 +134,15 @@ bool ProceduralSurfaceSelectedFaceShell_Compile(
     }
     if (!ProceduralSurfacePrismMesh_GenerateWithEvaluatorAndDirection(
             request->cage, request->recipe, request->quality,
-            ProceduralSurfacePrismBinding_EvaluateLegacy, &binding_context,
-            ProceduralSurfacePrismBinding_ResolveDisplacementDirection,
-            &binding_context, field_budget, buffers, &summary, &mesh_report)) {
+            evaluator ? evaluator : ProceduralSurfacePrismBinding_EvaluateLegacy,
+            evaluator ? evaluator_context : (const void *)&binding_context,
+            direction_resolver
+                ? direction_resolver
+                : ProceduralSurfacePrismBinding_ResolveDisplacementDirection,
+            direction_resolver
+                ? direction_context
+                : (const void *)&binding_context,
+            field_budget, buffers, &summary, &mesh_report)) {
         report_set(report,
                    PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_STATUS_GENERATION,
                    mesh_report.field, mesh_report.message);

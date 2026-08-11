@@ -16,6 +16,10 @@ typedef struct ProceduralSurfaceFeatureSelectionV1 {
 } ProceduralSurfaceFeatureSelectionV1;
 bool ProceduralSurfaceFeatureSelectionV1_Build(const ProceduralSurfaceFeatureFieldV1 *field,
     double minimum_radius, ProceduralSurfaceFeatureSelectionV1 *out_selection);
+bool ProceduralSurfaceFeatureSelectionV1_BuildExplicit(
+    const ProceduralSurfaceFeatureFieldV1 *field,
+    const uint32_t *feature_ids, size_t feature_id_count,
+    ProceduralSurfaceFeatureSelectionV1 *out_selection);
 bool ProceduralSurfaceFeatureSelectionV1_Contains(const ProceduralSurfaceFeatureSelectionV1 *selection,
     uint32_t feature_id);
 bool ProceduralSurfaceFeatureSelectionV1_BuildCarrierValues(

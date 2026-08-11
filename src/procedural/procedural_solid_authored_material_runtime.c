@@ -11,6 +11,13 @@ static double clamp01(double value) {
     return value;
 }
 
+static double clamp_wood_grain_slope(double value) {
+    const double maximum = 0.25;
+    if (value < -maximum) return -maximum;
+    if (value > maximum) return maximum;
+    return value;
+}
+
 static bool resolve_uv(const HitInfo3D *hit, double *out_u, double *out_v) {
     double ax;
     double ay;
@@ -42,6 +49,7 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
     const HitInfo3D *hit,
     RuntimeMaterialPayload3D *payload) {
     const ProceduralSolidAuthoredMaterialSurfaceV1 *surface;
+    ProceduralSolidAuthoredMaterialSurfaceV1 wood_surface;
     ProceduralSolidMaterialRuntimeSampleV1 runtime_sample;
     ProceduralSolidMaterialGraphReport graph_report;
     ProceduralSolidMaterialWeightedTextureV1 fallback_texture;
@@ -68,6 +76,15 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
         textures = runtime_sample.textures;
         texture_count = runtime_sample.texture_count;
         curve_feature = runtime_sample.curve_feature;
+        if (runtime_sample.wood_grain_valid) {
+            wood_surface = *surface;
+            wood_surface.base_color_r = runtime_sample.wood_grain.color[0];
+            wood_surface.base_color_g = runtime_sample.wood_grain.color[1];
+            wood_surface.base_color_b = runtime_sample.wood_grain.color[2];
+            wood_surface.roughness = clamp01(surface->roughness +
+                runtime_sample.wood_grain.roughness_delta);
+            surface = &wood_surface;
+        }
     } else if (surface->texture.enabled) {
         memset(&fallback_texture, 0, sizeof(fallback_texture));
         fallback_texture.texture = surface->texture;
@@ -100,13 +117,17 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
         return false;
     }
     if (curve_feature.coverage > 0.0) {
-        Vec3 normal = hit->geometricNormal;
+        /* The gradient is evaluated in object space.  Convert it through the
+         * same interpolated frame that ResolveShadingNormal will use below;
+         * mixing a per-triangle geometric frame here with the shading frame
+         * there makes a continuous grain field break into triangle dots. */
+        Vec3 normal = hit->shadingNormal;
         Vec3 helper;
         Vec3 tangent;
         Vec3 bitangent;
         Vec3 direction = vec3(curve_feature.direction.x, curve_feature.direction.y,
                               curve_feature.direction.z);
-        double scale = fmin(0.35, -curve_feature.signed_depth) * curve_feature.coverage;
+        double scale = fmin(0.35, fabs(curve_feature.depth_slope));
         if (vec3_length(normal) <= 1e-9) normal = hit->normal;
         if (vec3_length(normal) > 1e-9 && vec3_length(direction) > 1e-9 && scale > 0.0) {
             normal = vec3_normalize(normal);
@@ -115,9 +136,36 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
             bitangent = vec3_normalize(vec3_cross(normal, tangent));
             payload->hasMicrodetailNormal = true;
             payload->microdetailHeight = scale;
+            direction = vec3_normalize(vec3_cross(normal, direction));
+            if (curve_feature.depth_slope < 0.0)
+                direction = vec3_scale(direction, -1.0);
             payload->microdetailSlopeU = scale * vec3_dot(direction, tangent);
             payload->microdetailSlopeV = scale * vec3_dot(direction, bitangent);
         }
+    }
+    if (runtime_sample.wood_grain_valid) {
+        Vec3 normal = hit->geometricNormal;
+        Vec3 helper;
+        Vec3 tangent;
+        Vec3 bitangent;
+        Vec3 gradient = vec3(runtime_sample.wood_grain.slope_x, 0.0,
+                             runtime_sample.wood_grain.slope_z);
+        if (vec3_length(normal) <= 1e-9) normal = hit->normal;
+        if (vec3_length(normal) <= 1e-9) return false;
+        normal = vec3_normalize(normal);
+        helper = fabs(normal.z) < 0.999 ? vec3(0.0, 0.0, 1.0)
+                                        : vec3(0.0, 1.0, 0.0);
+        tangent = vec3_normalize(vec3_cross(helper, normal));
+        bitangent = vec3_normalize(vec3_cross(normal, tangent));
+        payload->hasMicrodetailNormal = true;
+        payload->microdetailHeight = 0.0;
+        /* Grain is a shading-normal microdetail, not a physical groove.  The
+         * bounded tangent slopes keep high-frequency fields readable under a
+         * grazing key light instead of producing channel-like banding. */
+        payload->microdetailSlopeU = clamp_wood_grain_slope(
+            vec3_dot(gradient, tangent));
+        payload->microdetailSlopeV = clamp_wood_grain_slope(
+            vec3_dot(gradient, bitangent));
     }
     (void)RuntimeMaterialPayload3D_ResolveShadingNormal(hit, payload);
     payload->emissive = fmax(

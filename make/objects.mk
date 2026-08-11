@@ -12,8 +12,10 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/procedural/procedural_surface_field_graph_noise.o \
 	$(BUILD_DIR)/procedural/procedural_surface_feature_field.o \
 	$(BUILD_DIR)/procedural/procedural_surface_feature_curve.o \
+	$(BUILD_DIR)/procedural/procedural_surface_wood_grain.o \
 	$(BUILD_DIR)/procedural/procedural_surface_feature_selection.o \
 	$(BUILD_DIR)/procedural/procedural_surface_binding.o \
+	$(BUILD_DIR)/procedural/procedural_surface_authoring_document.o \
 	$(BUILD_DIR)/procedural/procedural_surface_material.o \
 	$(BUILD_DIR)/procedural/procedural_surface_material_runtime_adapter.o \
 	$(BUILD_DIR)/procedural/procedural_surface_material_payload_adapter.o \

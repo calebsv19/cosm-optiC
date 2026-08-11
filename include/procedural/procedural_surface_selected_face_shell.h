@@ -74,6 +74,19 @@ bool ProceduralSurfaceSelectedFaceShell_Compile(
     ProceduralSurfaceSelectedFaceShellReceipt *out_receipt,
     ProceduralSurfaceSelectedFaceShellReport *report);
 
+bool ProceduralSurfaceSelectedFaceShell_CompileWithEvaluator(
+    const ProceduralSurfaceSelectedFaceShellRequest *request,
+    ProceduralSurfacePrismFieldEvaluator evaluator,
+    const void *evaluator_context,
+    ProceduralSurfacePrismDisplacementDirectionResolver direction_resolver,
+    const void *direction_context,
+    ProceduralSurfaceFieldBudget *field_budget,
+    ProceduralSurfacePrismMeshBuffers *buffers,
+    ProceduralSurfacePrismMeshRequirements *out_requirements,
+    ProceduralSurfacePrismMeshSummary *out_summary,
+    ProceduralSurfaceSelectedFaceShellReceipt *out_receipt,
+    ProceduralSurfaceSelectedFaceShellReport *report);
+
 bool ProceduralSurfacePrismFace_Parse(
     const char *name,
     ProceduralSurfacePrismFace *out_face);

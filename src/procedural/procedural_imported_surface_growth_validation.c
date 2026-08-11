@@ -6,7 +6,7 @@ static double validation_bound_radius(
     const SurfaceGrowthElement *element) {
     const double half_vertical =
         (element->height + element->attachment_depth) * 0.5;
-    return fmax(element->radius, half_vertical);
+    return fmax(element->radius * fmax(1.0, element->aspect), half_vertical);
 }
 
 static CoreObjectVec3 validation_bound_center(

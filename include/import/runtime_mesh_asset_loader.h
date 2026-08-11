@@ -14,6 +14,8 @@
 #define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_ASSETS 32
 #define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_INSTANCES 64
 #define RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX 4096
+#define RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS \
+    PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_SELECTORS
 
 typedef enum RayTracingRuntimeMeshRotationPivotPolicy {
     RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN = 0,
@@ -103,6 +105,20 @@ typedef struct RayTracingRuntimeMeshAsset {
     RayTracingRuntimeMeshAssetFileDependency
         procedural_imported_surface_region_dependency;
     ProceduralImportedSurfaceRegionV1 procedural_imported_surface_region;
+    bool procedural_named_surface_selectors_observed;
+    bool procedural_named_surface_selectors_absent;
+    size_t procedural_named_surface_selector_count;
+    char procedural_named_surface_selector_names[
+        RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS]
+        [PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
+    char procedural_named_surface_selector_paths[
+        RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS]
+        [RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_named_surface_selector_dependencies[
+            RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS];
+    ProceduralImportedSurfaceRegionV1 procedural_named_surface_selectors[
+        RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS];
     bool procedural_surface_feature_field_observed;
     bool procedural_surface_feature_field_absent;
     bool procedural_surface_feature_field_valid;
@@ -111,6 +127,21 @@ typedef struct RayTracingRuntimeMeshAsset {
     RayTracingRuntimeMeshAssetFileDependency
         procedural_surface_feature_field_dependency;
     ProceduralSurfaceFeatureFieldV1 procedural_surface_feature_field;
+    bool procedural_surface_wood_grain_observed;
+    bool procedural_surface_wood_grain_absent;
+    bool procedural_surface_wood_grain_valid;
+    char procedural_surface_wood_grain_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency procedural_surface_wood_grain_dependency;
+    ProceduralSurfaceWoodGrainFieldV1 procedural_surface_wood_grain;
+    bool procedural_surface_feature_curve_field_observed;
+    bool procedural_surface_feature_curve_field_absent;
+    bool procedural_surface_feature_curve_field_valid;
+    char procedural_surface_feature_curve_field_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX];
+    RayTracingRuntimeMeshAssetFileDependency
+        procedural_surface_feature_curve_field_dependency;
+    ProceduralSurfaceFeatureCurveFieldV1
+        procedural_surface_feature_curve_field;
     size_t procedural_solid_material_graph_material_count;
     ProceduralSolidAuthoredMaterialV1 procedural_solid_material_graph_materials[
         PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_LAYERS];

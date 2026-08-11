@@ -1,0 +1,33 @@
+{
+  "schema": "ray_tracing.surface_authoring_contract_matrix",
+  "schema_version": 1,
+  "matrix_id": "mountain_snow_material_microdetail_execution_v1",
+  "source": {
+    "object_id": "mountain_snow",
+    "mesh_digest_sha256": "74e7355b580406ab53dbeb188406cd144e7aaee0b21e877cf40fe3eaa044a859",
+    "source_kind": "typed_procedural_solid",
+    "topology": {"authority": "PSG-16B/PSG-17 typed proof receipts"}
+  },
+  "references": {
+    "mountain_material_layers": {
+      "id": "mountain_material_layers",
+      "digest_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "output_domains": ["material"],
+      "proof_profiles": ["material"],
+      "execution": {"adapter": "psg16b_material_visual_proof", "family_id": "mountain_snow"}
+    },
+    "mountain_microdetail_normal": {
+      "id": "mountain_microdetail_normal",
+      "digest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "output_domains": ["microdetail_normal"],
+      "proof_profiles": ["microdetail"],
+      "execution": {"adapter": "psg17_microdetail_visual_proof"}
+    }
+  },
+  "cells": [
+    {"id": "control", "bindings": {}},
+    {"id": "material_only", "bindings": {"material_graph": "mountain_material_layers"}},
+    {"id": "microdetail_only", "bindings": {"surface_field_graph": "mountain_microdetail_normal"}},
+    {"id": "material_microdetail", "bindings": {"material_graph": "mountain_material_layers", "surface_field_graph": "mountain_microdetail_normal"}, "extensions": {"execution": {"adapter": "psg16b_psg17_material_microdetail_visual_proof"}}}
+  ]
+}

@@ -115,15 +115,56 @@ def object_document(
     }
 
 
-def make_scene(scene_id: str, include_growth: bool) -> dict:
-    objects = [
-        object_document(
-            f"{scene_id}_source", "psg22_garden_finial", "weathered_stone")
-    ]
+def load_runtime_binding(path: Path, expected_digest_sha256: str) -> dict:
+    """Load a v2 binding without permitting proof-only substitutions."""
+    if digest(path) != expected_digest_sha256:
+        raise ValueError("attachment runtime binding digest is stale")
+    binding = load(path)
+    if (binding.get("schema") !=
+            "ray_tracing.surface_authoring_attachment_runtime_binding" or
+            binding.get("schema_version") != 1):
+        raise ValueError("attachment runtime binding schema is unsupported")
+    for side in ("source", "attachment"):
+        item = binding.get(side)
+        if not isinstance(item, dict) or not all(
+                isinstance(item.get(key), str) and item[key]
+                for key in ("object_id", "asset_id", "path", "digest_sha256")):
+            raise ValueError(f"attachment runtime binding {side} identity is invalid")
+        if not isinstance(item.get("material"), dict) or not isinstance(
+                item["material"].get("id"), str):
+            raise ValueError(f"attachment runtime binding {side} material is invalid")
+    target = binding["attachment"]["material"]
+    if not all(isinstance(target.get(key), str) and target[key]
+               for key in ("resource_id", "resource_digest_sha256",
+                           "receipt_digest_sha256")):
+        raise ValueError("attachment runtime binding material target is invalid")
+    if (not isinstance(binding.get("lighting"), dict) or
+            binding["lighting"].get("environment_light_mode") != "ambient"):
+        raise ValueError("attachment runtime binding lighting is invalid")
+    return binding
+
+
+def make_scene(scene_id: str, include_growth: bool,
+               runtime_binding: dict | None = None) -> dict:
+    source = (runtime_binding or {}).get("source", {})
+    attachment = (runtime_binding or {}).get("attachment", {})
+    source_object_id = source.get("object_id", f"{scene_id}_source")
+    source_asset_id = source.get("asset_id", "psg22_garden_finial")
+    source_material = source.get("material", {
+        "id": "weathered_stone", "name": "Weathered garden stone",
+        "base_color": {"r": 0.48, "g": 0.44, "b": 0.37},
+        "roughness": 0.91, "metallic": 0.0})
+    attachment_object_id = attachment.get("object_id", f"{scene_id}_growth")
+    attachment_asset_id = attachment.get("asset_id", "psg22_finial_moss_growth")
+    attachment_material = attachment.get("material", {
+        "id": "living_moss", "name": "Attached moss geometry",
+        "base_color": {"r": 0.16, "g": 0.34, "b": 0.10},
+        "roughness": 0.97, "metallic": 0.0})
+    objects = [object_document(source_object_id, source_asset_id,
+                               source_material["id"])]
     if include_growth:
-        objects.append(object_document(
-            f"{scene_id}_growth",
-            "psg22_finial_moss_growth", "living_moss"))
+        objects.append(object_document(attachment_object_id, attachment_asset_id,
+                                       attachment_material["id"]))
     return {
         "schema_family": "codework_scene",
         "schema_variant": "scene_runtime_v1",
@@ -140,22 +181,7 @@ def make_scene(scene_id: str, include_growth: bool) -> dict:
         "unit_system": "meters",
         "world_scale": 1.0,
         "objects": objects,
-        "materials": [
-            {
-                "id": "weathered_stone",
-                "name": "Weathered garden stone",
-                "base_color": {"r": 0.48, "g": 0.44, "b": 0.37},
-                "roughness": 0.91,
-                "metallic": 0.0,
-            },
-            {
-                "id": "living_moss",
-                "name": "Attached moss geometry",
-                "base_color": {"r": 0.16, "g": 0.34, "b": 0.10},
-                "roughness": 0.97,
-                "metallic": 0.0,
-            },
-        ],
+        "materials": [source_material, attachment_material],
         "lights": [],
         "extensions": {},
     }
@@ -182,16 +208,18 @@ def render(
     name: str,
     view: dict,
     include_growth: bool,
+    runtime_binding: dict | None = None,
 ) -> tuple[list, dict, dict, Path]:
     scene = generated / f"{name}.scene.json"
     request = generated / "requests" / f"{name}.request.json"
     raw = generated / "raw" / name
-    write_json(scene, make_scene(name, include_growth))
+    write_json(scene, make_scene(name, include_growth, runtime_binding))
+    lighting = (runtime_binding or {}).get("lighting", contract["lighting"])
     write_json(request, render_request(
         contract["proof_id"], {**view, "id": name},
         scene, request, raw, {
             "render": contract["render"],
-            "lighting": contract["lighting"],
+            "lighting": lighting,
         }))
     summary_path = raw / "render_summary.json"
     frame = raw / "frames/frame_0000.bmp"

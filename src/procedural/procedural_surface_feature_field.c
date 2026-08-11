@@ -30,7 +30,8 @@ bool ProceduralSurfaceFeatureFieldV1_Validate(const ProceduralSurfaceFeatureFiel
     for (size_t i=0; i<f->feature_count; ++i) { const ProceduralSurfaceFeatureRootV1 *r=&f->features[i];
         if (!r->feature_id || !isfinite(r->radius) || r->radius<=0.0 || !isfinite(r->aspect) || r->aspect<=0.0 ||
             !isfinite(r->rotation) || !isfinite(r->edge_softness) || r->edge_softness<0.0 || r->edge_softness>1.0 ||
-            !isfinite(r->rim_width) || r->rim_width<=0.0 || r->rim_width>=1.0 || !unit(r->normal) || !unit(r->tangent) || !unit(r->bitangent) ||
+            !isfinite(r->rim_width) || r->rim_width<=0.0 || r->rim_width>=1.0 ||
+            !isfinite(r->height_or_depth) || !unit(r->normal) || !unit(r->tangent) || !unit(r->bitangent) ||
             fabs(dot(r->normal,r->tangent))>1e-6 || fabs(dot(r->normal,r->bitangent))>1e-6 || fabs(dot(r->tangent,r->bitangent))>1e-6 ||
             !isfinite(r->position.x)||!isfinite(r->position.y)||!isfinite(r->position.z) ||
             r->barycentric[0]<0.0 || r->barycentric[1]<0.0 || r->barycentric[2]<0.0 || fabs(r->barycentric[0]+r->barycentric[1]+r->barycentric[2]-1.0)>1e-6) return false;
@@ -92,7 +93,7 @@ bool ProceduralSurfaceFeatureFieldV1_CanonicalJson(const ProceduralSurfaceFeatur
     if (wrote < 0 || (size_t)wrote >= cap - used) return false; used += (size_t)wrote; } while (0)
     APPEND("{\"schema\":\"surface_feature_field_v1\",\"schema_version\":1,\"source_mesh_digest_sha256\":\"%s\",\"authoring_digest_sha256\":\"%s\",\"seed\":%llu,\"normal_compatibility_cosine\":%.17g,\"features\":[", f->source_mesh_digest_sha256, f->authoring_digest_sha256, (unsigned long long)f->seed, f->normal_compatibility_cosine);
     for (size_t i=0;i<f->feature_count;i++) { const ProceduralSurfaceFeatureRootV1 *r=&f->features[i];
-        APPEND("%s{\"feature_id\":%u,\"population\":%u,\"source_triangle\":%u,\"barycentric_root\":[%.17g,%.17g,%.17g],\"position\":[%.17g,%.17g,%.17g],\"normal\":[%.17g,%.17g,%.17g],\"tangent\":[%.17g,%.17g,%.17g],\"bitangent\":[%.17g,%.17g,%.17g],\"radius\":%.17g,\"aspect\":%.17g,\"rotation\":%.17g,\"edge_softness\":%.17g,\"rim_width\":%.17g}", i ? "," : "", r->feature_id,r->population,r->source_triangle,r->barycentric[0],r->barycentric[1],r->barycentric[2],r->position.x,r->position.y,r->position.z,r->normal.x,r->normal.y,r->normal.z,r->tangent.x,r->tangent.y,r->tangent.z,r->bitangent.x,r->bitangent.y,r->bitangent.z,r->radius,r->aspect,r->rotation,r->edge_softness,r->rim_width); }
+        APPEND("%s{\"feature_id\":%u,\"population\":%u,\"source_triangle\":%u,\"barycentric_root\":[%.17g,%.17g,%.17g],\"position\":[%.17g,%.17g,%.17g],\"normal\":[%.17g,%.17g,%.17g],\"tangent\":[%.17g,%.17g,%.17g],\"bitangent\":[%.17g,%.17g,%.17g],\"radius\":%.17g,\"aspect\":%.17g,\"rotation\":%.17g,\"edge_softness\":%.17g,\"rim_width\":%.17g,\"height_or_depth\":%.17g}", i ? "," : "", r->feature_id,r->population,r->source_triangle,r->barycentric[0],r->barycentric[1],r->barycentric[2],r->position.x,r->position.y,r->position.z,r->normal.x,r->normal.y,r->normal.z,r->tangent.x,r->tangent.y,r->tangent.z,r->bitangent.x,r->bitangent.y,r->bitangent.z,r->radius,r->aspect,r->rotation,r->edge_softness,r->rim_width,r->height_or_depth); }
     APPEND("]}");
 #undef APPEND
     return true;
@@ -166,6 +167,10 @@ bool ProceduralSurfaceFeatureFieldV1_LoadJsonFile(
         READ_NUM("radius", r->radius); READ_NUM("aspect", r->aspect);
         READ_NUM("rotation", r->rotation); READ_NUM("edge_softness", r->edge_softness);
         READ_NUM("rim_width", r->rim_width);
+        if (json_object_object_get_ex(entry, "height_or_depth", &value))
+            r->height_or_depth = json_object_get_double(value);
+        else
+            r->height_or_depth = 1.0;
 #undef READ_UINT
 #undef READ_NUM
     }
@@ -191,7 +196,7 @@ bool ProceduralSurfaceFeatureFieldV1_Sample(const ProceduralSurfaceFeatureFieldV
         double edge=clamp01((1.0-q)/fmax(r->edge_softness,1e-9));
         double cov=r->edge_softness>0.0 ? edge*edge*(3.0-2.0*edge) : 1.0;
         if (cov>best) { best=cov; out->coverage=cov; out->interior=clamp01((1.0-q-r->rim_width)/fmax(1.0-r->rim_width,1e-9));
-            out->rim=clamp01(cov-out->interior); out->height_or_depth=cov*(1.0-0.35*q); out->feature_id=r->feature_id; out->direction=r->tangent; }
+            out->rim=clamp01(cov-out->interior); out->height_or_depth=r->height_or_depth*cov*(1.0-0.35*q); out->feature_id=r->feature_id; out->direction=r->tangent; }
     }
     return true;
 }

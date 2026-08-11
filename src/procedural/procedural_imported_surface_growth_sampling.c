@@ -40,7 +40,7 @@ static bool make_basis(
 static double element_bound_radius(const SurfaceGrowthElement *element) {
     const double half_vertical =
         (element->height + element->attachment_depth) * 0.5;
-    return fmax(element->radius, half_vertical);
+    return fmax(element->radius * fmax(1.0, element->aspect), half_vertical);
 }
 
 static CoreObjectVec3 element_bound_center(
@@ -109,6 +109,7 @@ bool surface_growth_select(
             (1.0 - config->radius_variation +
              config->radius_variation * (0.5 * normalized +
                                           0.5 * variation_key));
+        element.aspect = 1.0;
         element.height = config->mound_height_units *
             (1.0 - config->height_variation +
              config->height_variation * (0.65 * normalized +

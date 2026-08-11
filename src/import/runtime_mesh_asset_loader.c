@@ -555,6 +555,12 @@ void ray_tracing_runtime_mesh_asset_set_free(RayTracingRuntimeMeshAssetSet* set)
             &set->assets[i].procedural_solid_material_runtime_program);
         ProceduralImportedSurfaceRegionV1_Free(
             &set->assets[i].procedural_imported_surface_region);
+        for (size_t selector = 0u;
+             selector < set->assets[i].procedural_named_surface_selector_count;
+             ++selector) {
+            ProceduralImportedSurfaceRegionV1_Free(
+                &set->assets[i].procedural_named_surface_selectors[selector]);
+        }
     }
     memset(set, 0, sizeof(*set));
 }

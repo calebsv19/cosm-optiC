@@ -12,6 +12,7 @@ typedef struct SurfaceGrowthElement {
     CoreObjectVec3 tangent;
     CoreObjectVec3 bitangent;
     double radius;
+    double aspect;
     double height;
     double attachment_depth;
     double carrier_weight;
@@ -88,5 +89,18 @@ bool surface_growth_validate_separation(
     size_t *out_overlap_pairs,
     size_t *out_self_intersection_pairs,
     double *out_minimum_clearance);
+
+bool surface_growth_compile_selection(
+    const CoreMeshAssetRuntimeDocument *source,
+    const char *source_runtime_path,
+    const ProceduralImportedSurfaceRegionV1 *region,
+    const char *region_path,
+    const ProceduralImportedSurfaceGrowthConfig *config,
+    const SurfaceGrowthSelection *selection,
+    const char *growth_asset_id,
+    CoreMeshAssetRuntimeDocument *out_document,
+    ProceduralImportedSurfaceGrowthProvenance *out_provenance,
+    ProceduralImportedSurfaceGrowthReceipt *out_receipt,
+    ProceduralImportedSurfaceGrowthReport *report);
 
 #endif

@@ -266,6 +266,7 @@ static void test_continuous_program_survives_flattened_and_tlas_hits(void) {
     ProceduralSolidMaterialRuntimeSampleV1 flat_sample;
     ProceduralSolidMaterialRuntimeSampleV1 tlas_sample;
     ProceduralSolidMaterialRuntimeSampleV1 neighbor_sample;
+    ProceduralSurfaceWoodGrainFieldV1 grain = {0};
     HitInfo3D flat_hit;
     HitInfo3D tlas_hit;
     HitInfo3D neighbor_hit;
@@ -311,6 +312,28 @@ static void test_continuous_program_survives_flattened_and_tlas_hits(void) {
             &asset->procedural_solid_material_runtime_program,
             &graph_report),
         "PSG-16A runtime program builds");
+    snprintf(grain.preset_digest_sha256, sizeof(grain.preset_digest_sha256),
+             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef");
+    snprintf(grain.source_mesh_digest_sha256,
+             sizeof(grain.source_mesh_digest_sha256),
+             "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210");
+    grain.orientation_radians = 0.0;
+    grain.frequency_per_unit = 3.0;
+    grain.width_variation = 0.2;
+    grain.turbulence = 0.1;
+    grain.flow_kind = 1;
+    grain.base_color[0] = 0.42;
+    grain.base_color[1] = 0.18;
+    grain.base_color[2] = 0.05;
+    grain.latewood_color[0] = 0.12;
+    grain.latewood_color[1] = 0.04;
+    grain.latewood_color[2] = 0.01;
+    grain.contrast = 0.8;
+    grain.normal_strength = 0.08;
+    expect_true(
+        ProceduralSolidMaterialRuntimeProgramV1_AttachWoodGrain(
+            &asset->procedural_solid_material_runtime_program, &grain),
+        "wood grain field attaches to the same asset-level material program");
     asset->procedural_solid_material_graph_valid = true;
     asset->procedural_solid_composed_triangle_material_count =
         mesh->triangle_count;
@@ -353,6 +376,11 @@ static void test_continuous_program_survives_flattened_and_tlas_hits(void) {
             neighbor_hit.baryU, neighbor_hit.baryV, neighbor_hit.baryW,
             &neighbor_sample, &graph_report) &&
         neighbor_sample.geometry.height > flat_sample.geometry.height &&
+        flat_sample.wood_grain_valid && neighbor_sample.wood_grain_valid &&
+        fabs(neighbor_sample.wood_grain.color[0] -
+             flat_sample.wood_grain.color[0]) > 1e-5 &&
+        (fabs(flat_sample.wood_grain.slope_x) > 1e-5 ||
+         fabs(flat_sample.wood_grain.slope_z) > 1e-5) &&
         fabs(neighbor_sample.primary_layer_weight -
              flat_sample.primary_layer_weight) < 0.08,
         "PSG-16A neighboring triangles expose continuous height and mask");
@@ -371,8 +399,13 @@ static void test_continuous_program_survives_flattened_and_tlas_hits(void) {
         fabs(tlas_sample.geometry.height -
              flat_sample.geometry.height) < 1e-12 &&
         fabs(tlas_sample.primary_layer_weight -
-             flat_sample.primary_layer_weight) < 1e-12,
-        "PSG-16A flattened and TLAS hits evaluate identical scalar masks");
+             flat_sample.primary_layer_weight) < 1e-12 &&
+        tlas_sample.wood_grain_valid &&
+        fabs(tlas_sample.wood_grain.color[0] -
+             flat_sample.wood_grain.color[0]) < 1e-12 &&
+        fabs(tlas_sample.wood_grain.slope_x -
+             flat_sample.wood_grain.slope_x) < 1e-12,
+        "wood chroma and normal gradient are identical across flattened and TLAS hits");
     RuntimeRay3D_ResetTraceRouteForTests();
     RuntimeScene3D_Free(&scene);
 cleanup:

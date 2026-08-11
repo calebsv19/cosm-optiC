@@ -17,12 +17,26 @@ typedef struct Options {
     double radius;
     double height;
     double attachment_depth;
+    size_t explicit_source_triangle;
+    double explicit_barycentric[3];
+    CoreObjectVec3 explicit_normal;
+    CoreObjectVec3 explicit_tangent;
+    CoreObjectVec3 explicit_bitangent;
+    double explicit_aspect;
+    double explicit_rotation;
     size_t max_elements;
     bool has_threshold;
     bool has_radius;
     bool has_height;
     bool has_attachment_depth;
     bool has_max_elements;
+    bool has_explicit_source_triangle;
+    bool has_explicit_barycentric;
+    bool has_explicit_normal;
+    bool has_explicit_tangent;
+    bool has_explicit_bitangent;
+    bool has_explicit_aspect;
+    bool has_explicit_rotation;
 } Options;
 
 static void usage(const char *program) {
@@ -30,8 +44,18 @@ static void usage(const char *program) {
             "usage: %s --mesh FILE --region FILE --out FILE "
             "--growth-asset-id ID --summary-out FILE "
             "--provenance-out FILE [--threshold N] [--radius N] "
-            "[--height N] [--attachment-depth N] [--max-elements N]\n",
+            "[--height N] [--attachment-depth N] [--max-elements N] "
+            "[--explicit-source-triangle N --explicit-barycentric A,B,C "
+            "--explicit-normal X,Y,Z --explicit-tangent X,Y,Z "
+            "--explicit-bitangent X,Y,Z --aspect N --rotation N]\n",
             program);
+}
+
+static bool parse_vec3_value(const char *text, double out[3]) {
+    char trailing = '\0';
+    return text && out &&
+        sscanf(text, "%lf,%lf,%lf%c", &out[0], &out[1], &out[2],
+               &trailing) == 3;
 }
 
 static bool parse_double_value(const char *text, double *out) {
@@ -101,11 +125,65 @@ static bool parse_options(int argc, char **argv, Options *out) {
             if (!options.has_max_elements) return false;
             continue;
         }
+        if (strcmp(argv[i], "--explicit-source-triangle") == 0 &&
+            i + 1 < argc) {
+            options.has_explicit_source_triangle = parse_size_value(
+                argv[++i], &options.explicit_source_triangle);
+            if (!options.has_explicit_source_triangle) return false;
+            continue;
+        }
+#define VEC3_OPTION(flag_, array_, present_) \
+        if (strcmp(argv[i], (flag_)) == 0 && i + 1 < argc) { \
+            double values_[3]; \
+            if (!parse_vec3_value(argv[++i], values_)) return false; \
+            options.array_.x = values_[0]; \
+            options.array_.y = values_[1]; \
+            options.array_.z = values_[2]; \
+            options.present_ = true; \
+            continue; \
+        }
+        if (strcmp(argv[i], "--explicit-barycentric") == 0 &&
+            i + 1 < argc) {
+            options.has_explicit_barycentric = parse_vec3_value(
+                argv[++i], options.explicit_barycentric);
+            if (!options.has_explicit_barycentric) return false;
+            continue;
+        }
+        VEC3_OPTION("--explicit-normal", explicit_normal,
+                    has_explicit_normal)
+        VEC3_OPTION("--explicit-tangent", explicit_tangent,
+                    has_explicit_tangent)
+        VEC3_OPTION("--explicit-bitangent", explicit_bitangent,
+                    has_explicit_bitangent)
+#undef VEC3_OPTION
+        if (strcmp(argv[i], "--aspect") == 0 && i + 1 < argc) {
+            options.has_explicit_aspect = parse_double_value(
+                argv[++i], &options.explicit_aspect);
+            if (!options.has_explicit_aspect) return false;
+            continue;
+        }
+        if (strcmp(argv[i], "--rotation") == 0 && i + 1 < argc) {
+            options.has_explicit_rotation = parse_double_value(
+                argv[++i], &options.explicit_rotation);
+            if (!options.has_explicit_rotation) return false;
+            continue;
+        }
         return false;
     }
     if (!options.mesh_path || !options.region_path || !options.output_path ||
         !options.growth_asset_id || !options.summary_path ||
         !options.provenance_path) return false;
+    {
+        const unsigned int explicit_count =
+            (unsigned int)options.has_explicit_source_triangle +
+            (unsigned int)options.has_explicit_barycentric +
+            (unsigned int)options.has_explicit_normal +
+            (unsigned int)options.has_explicit_tangent +
+            (unsigned int)options.has_explicit_bitangent +
+            (unsigned int)options.has_explicit_aspect +
+            (unsigned int)options.has_explicit_rotation;
+        if (explicit_count != 0u && explicit_count != 7u) return false;
+    }
     *out = options;
     return true;
 }
@@ -253,6 +331,7 @@ int main(int argc, char **argv) {
     CoreResult core_result;
     json_object *summary = NULL;
     int exit_code = 1;
+    ProceduralImportedSurfaceGrowthExplicitRoot explicit_root = {0};
     if (!parse_options(argc, argv, &options)) {
         usage(argv[0]);
         return 2;
@@ -274,11 +353,30 @@ int main(int argc, char **argv) {
     if (core_result.code != CORE_OK ||
         !ProceduralImportedSurfaceRegionV1_LoadJsonFile(
             options.region_path, &source, options.mesh_path,
-            &region, &region_report) ||
-        !ProceduralImportedSurfaceGrowth_Compile(
-            &source, options.mesh_path, &region, options.region_path,
-            &config, options.growth_asset_id, &growth, &provenance,
-            &growth_receipt, &report)) {
+            &region, &region_report)) {
+        fprintf(stderr, "growth compile failed: %s%s%s\n",
+                core_result.code != CORE_OK ? core_result.message : "",
+                core_result.code != CORE_OK ? "; " : "",
+                report.message[0] ? report.message : region_report.message);
+        goto cleanup;
+    }
+    explicit_root.source_triangle_index = options.explicit_source_triangle;
+    memcpy(explicit_root.barycentric, options.explicit_barycentric,
+           sizeof(explicit_root.barycentric));
+    explicit_root.normal = options.explicit_normal;
+    explicit_root.tangent = options.explicit_tangent;
+    explicit_root.bitangent = options.explicit_bitangent;
+    explicit_root.aspect = options.explicit_aspect;
+    explicit_root.rotation_radians = options.explicit_rotation;
+    if (!(options.has_explicit_source_triangle
+            ? ProceduralImportedSurfaceGrowth_CompileExplicitRoot(
+                &source, options.mesh_path, &region, options.region_path,
+                &config, &explicit_root, options.growth_asset_id, &growth,
+                &provenance, &growth_receipt, &report)
+            : ProceduralImportedSurfaceGrowth_Compile(
+                &source, options.mesh_path, &region, options.region_path,
+                &config, options.growth_asset_id, &growth, &provenance,
+                &growth_receipt, &report))) {
         fprintf(stderr, "growth compile failed: %s%s%s\n",
                 core_result.code != CORE_OK ? core_result.message : "",
                 core_result.code != CORE_OK ? "; " : "",

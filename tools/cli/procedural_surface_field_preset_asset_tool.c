@@ -1,11 +1,15 @@
 #include "procedural/procedural_surface_derived_asset.h"
+#include "procedural/procedural_surface_feature_relief_shell.h"
 #include "procedural/procedural_surface_field_graph.h"
 #include "procedural/procedural_surface_material.h"
 #include "procedural/procedural_surface_mesh_asset_adapter.h"
 #include "procedural/procedural_surface_prism_binding.h"
 #include "procedural/procedural_surface_prism_mesh.h"
 #include "procedural/procedural_surface_selected_face_shell.h"
+#include "procedural/procedural_surface_wood_grain.h"
 
+#include "app/ray_tracing_sha256.h"
+#include "core_io.h"
 #include <json-c/json.h>
 
 #include <errno.h>
@@ -23,16 +27,30 @@ typedef struct ToolOptions {
     const char *material_path;
     const char *manifest_path;
     const char *summary_path;
+    const char *solid_receipt_path;
     const char *asset_id;
     const char *source_asset_id;
     const char *selected_face_name;
+    const char *surface_feature_field_path;
+    const char *feature_source_mesh_digest;
+    const char *wood_grain_field_path;
     double width;
     double height;
     double depth;
     double target_edge;
     double amplitude;
     double edge_lock;
+    double relief_scale;
+    double wood_grain_relief_scale;
 } ToolOptions;
+
+typedef struct WoodGrainReliefContext {
+    const ProceduralSurfacePrismBindingContext *binding;
+    const ProceduralSurfaceCageContract *cage;
+    const ProceduralSurfaceWoodGrainFieldV1 *grain;
+    const char *selected_face_name;
+    double scale;
+} WoodGrainReliefContext;
 
 typedef struct MaterialStats {
     double min_height;
@@ -55,10 +73,13 @@ static void usage(const char *program) {
         stderr,
         "usage: %s --graph PATH [--binding PATH] --base-recipe PATH --recipe-out PATH "
         "--asset-out PATH --material-out PATH --manifest-out PATH "
-        "--summary-out PATH --width N --height N --depth N "
+        "--summary-out PATH [--solid-receipt-out PATH] --width N --height N --depth N "
         "--target-edge N --amplitude N --edge-lock N "
         "[--asset-id ID] [--source-asset-id ID] "
-        "[--selected-face FACE]\n",
+        "[--selected-face FACE] "
+        "[--surface-feature-field PATH --feature-source-mesh-digest SHA256 "
+        "--relief-scale N] [--wood-grain-field PATH "
+        "--wood-grain-relief-scale N]\n",
         program);
 }
 
@@ -94,6 +115,8 @@ static bool parse_options(
     memset(options, 0, sizeof(*options));
     options->asset_id = "procedural_surface_field_preset";
     options->source_asset_id = "procedural_surface_field_preset_cage";
+    options->relief_scale = 1.0;
+    options->wood_grain_relief_scale = 1.0;
     for (int i = 1; i < argc; ++i) {
         const char *flag = argv[i];
         if (i + 1 >= argc) return false;
@@ -107,9 +130,13 @@ static bool parse_options(
         else STRING_OPTION("--material-out", material_path)
         else STRING_OPTION("--manifest-out", manifest_path)
         else STRING_OPTION("--summary-out", summary_path)
+        else STRING_OPTION("--solid-receipt-out", solid_receipt_path)
         else STRING_OPTION("--asset-id", asset_id)
         else STRING_OPTION("--source-asset-id", source_asset_id)
         else STRING_OPTION("--selected-face", selected_face_name)
+        else STRING_OPTION("--surface-feature-field", surface_feature_field_path)
+        else STRING_OPTION("--feature-source-mesh-digest", feature_source_mesh_digest)
+        else STRING_OPTION("--wood-grain-field", wood_grain_field_path)
 #undef STRING_OPTION
         else if (strcmp(flag, "--width") == 0) {
             if (!parse_positive(argv[++i], &options->width)) return false;
@@ -123,6 +150,10 @@ static bool parse_options(
             if (!parse_nonnegative(argv[++i], &options->amplitude)) return false;
         } else if (strcmp(flag, "--edge-lock") == 0) {
             if (!parse_nonnegative(argv[++i], &options->edge_lock)) return false;
+        } else if (strcmp(flag, "--relief-scale") == 0) {
+            if (!parse_positive(argv[++i], &options->relief_scale)) return false;
+        } else if (strcmp(flag, "--wood-grain-relief-scale") == 0) {
+            if (!parse_positive(argv[++i], &options->wood_grain_relief_scale)) return false;
         } else {
             return false;
         }
@@ -132,7 +163,11 @@ static bool parse_options(
            options->material_path && options->manifest_path &&
            options->summary_path && options->width > 0.0 &&
            options->height > 0.0 && options->depth > 0.0 &&
-           options->target_edge > 0.0;
+           options->target_edge > 0.0 &&
+           (!options->surface_feature_field_path ||
+            (options->selected_face_name &&
+             options->feature_source_mesh_digest)) &&
+           (!options->wood_grain_field_path || options->selected_face_name);
 }
 
 static bool evaluate_graph_legacy(
@@ -143,6 +178,28 @@ static bool evaluate_graph_legacy(
     ProceduralSurfaceFieldReport *report) {
     return ProceduralSurfaceFieldGraphV1_EvaluateLegacy(
         context, point, budget, out_field, report);
+}
+
+static bool evaluate_wood_grain_relief(
+    const void *opaque_context,
+    ProceduralSurfaceFieldPoint3D point,
+    ProceduralSurfaceFieldBudget *budget,
+    ProceduralSurfaceFieldOutput *out_field,
+    ProceduralSurfaceFieldReport *report) {
+    const WoodGrainReliefContext *context = opaque_context;
+    ProceduralSurfaceWoodGrainSampleV1 grain_sample;
+    const char *surface_group = "";
+    if (!context || !context->binding || !context->grain || !out_field ||
+        !ProceduralSurfacePrismBinding_EvaluateLegacy(
+            context->binding, point, budget, out_field, report)) return false;
+    (void)ProceduralSurfacePrismBinding_NominalNormal(
+        context->cage, point, &surface_group);
+    out_field->height = 0.0;
+    if (strcmp(surface_group, context->selected_face_name) != 0) return true;
+    if (!ProceduralSurfaceWoodGrainFieldV1_Sample(
+            context->grain, point.x, point.z, &grain_sample)) return false;
+    out_field->height = (grain_sample.height - 0.5) * 2.0 * context->scale;
+    return isfinite(out_field->height) && fabs(out_field->height) <= 1.0;
 }
 
 static struct json_object *new_vec3(
@@ -163,6 +220,114 @@ static void add_vec3_object(
     json_object_object_add(object, "y", json_object_new_double(value.y));
     json_object_object_add(object, "z", json_object_new_double(value.z));
     json_object_object_add(root, key, object);
+}
+
+/* Emit the same complete, mesh-order region partition consumed by the
+ * authored-material binding adapter.  A prism has six named cage-face groups,
+ * so the older imported-surface one-group receipt cannot represent it. */
+static bool solid_mesh_digest(
+    const CoreMeshAssetRuntimeDocument *mesh,
+    char out_digest[RAY_TRACING_SHA256_HEX_SIZE]) {
+    size_t capacity;
+    size_t length = 0u;
+    char *canonical;
+    if (!mesh || mesh->vertex_count > (SIZE_MAX - 256u) / 128u ||
+        mesh->triangle_count > (SIZE_MAX - 256u) / 96u) return false;
+    capacity = 256u + mesh->vertex_count * 128u + mesh->triangle_count * 96u;
+    canonical = malloc(capacity);
+    if (!canonical) return false;
+#define APPEND(...) do { \
+    const int count = snprintf(canonical + length, capacity - length, __VA_ARGS__); \
+    if (count < 0 || (size_t)count >= capacity - length) { free(canonical); return false; } \
+    length += (size_t)count; \
+} while (0)
+    APPEND("solid_mesh_v1|%s|%s|%zu|%zu|", mesh->contract.asset_id,
+           mesh->contract.source_asset_id, mesh->vertex_count, mesh->triangle_count);
+    for (size_t i = 0u; i < mesh->vertex_count; ++i) {
+        const CoreObjectVec3 p = mesh->vertices[i].position;
+        APPEND("v|%.17g|%.17g|%.17g|", p.x, p.y, p.z);
+    }
+    for (size_t i = 0u; i < mesh->triangle_count; ++i) {
+        const CoreMeshAssetRuntimeTriangle *triangle = &mesh->triangles[i];
+        APPEND("t|%zu|%zu|%zu|", triangle->a, triangle->b, triangle->c);
+    }
+#undef APPEND
+    {
+        const bool result = ray_tracing_sha256_bytes(canonical, length, out_digest);
+        free(canonical);
+        return result;
+    }
+}
+
+static bool write_solid_receipt(
+    const char *path,
+    const CoreMeshAssetRuntimeDocument *mesh) {
+    json_object *root = NULL;
+    json_object *regions = NULL;
+    char mesh_digest[RAY_TRACING_SHA256_HEX_SIZE] = {0};
+    char region_digest[RAY_TRACING_SHA256_HEX_SIZE] = {0};
+    char *canonical = NULL;
+    size_t capacity;
+    size_t used = 0u;
+    bool result = false;
+    if (!path) return true;
+    if (!mesh || mesh->surface_group_count == 0u ||
+        !solid_mesh_digest(mesh, mesh_digest)) {
+        return false;
+    }
+    capacity = mesh->surface_group_count * 160u + 1u;
+    canonical = calloc(capacity, 1u);
+    if (!canonical) goto cleanup;
+    for (size_t i = 0u; i < mesh->surface_group_count; ++i) {
+        const CoreMeshAssetSurfaceGroup *group = &mesh->surface_groups[i];
+        int count = snprintf(canonical + used, capacity - used,
+                             "%s|retained|source_mesh||%zu;",
+                             group->group_id, group->triangle_count);
+        if (count < 0 || (size_t)count >= capacity - used) goto cleanup;
+        used += (size_t)count;
+    }
+    if (!ray_tracing_sha256_bytes(canonical, used, region_digest)) goto cleanup;
+    root = json_object_new_object();
+    regions = json_object_new_array();
+    if (!root || !regions) goto cleanup;
+    json_object_object_add(root, "schema",
+        json_object_new_string("ray_tracing.procedural_solid_receipt"));
+    json_object_object_add(root, "schema_version", json_object_new_int(1));
+    json_object_object_add(root, "asset_id",
+        json_object_new_string(mesh->contract.asset_id));
+    json_object_object_add(root, "semantic_source_id",
+        json_object_new_string(mesh->contract.source_asset_id));
+    json_object_object_add(root, "mesh_digest_sha256",
+        json_object_new_string(mesh_digest));
+    json_object_object_add(root, "region_digest_sha256",
+        json_object_new_string(region_digest));
+    for (size_t i = 0u; i < mesh->surface_group_count; ++i) {
+        const CoreMeshAssetSurfaceGroup *group = &mesh->surface_groups[i];
+        json_object *entry = json_object_new_object();
+        if (!entry) goto cleanup;
+        json_object_object_add(entry, "region_id",
+            json_object_new_string(group->group_id));
+        json_object_object_add(entry, "kind", json_object_new_string("retained"));
+        json_object_object_add(entry, "primary_node_id",
+            json_object_new_string("source_mesh"));
+        json_object_object_add(entry, "secondary_node_id", json_object_new_string(""));
+        json_object_object_add(entry, "triangle_count",
+            json_object_new_int64((int64_t)group->triangle_count));
+        json_object_array_add(regions, entry);
+    }
+    json_object_object_add(root, "regions", regions);
+    regions = NULL;
+    {
+        const char *text = json_object_to_json_string_ext(
+            root, JSON_C_TO_STRING_PRETTY | JSON_C_TO_STRING_SPACED);
+        result = core_io_write_all_atomic(path, text, strlen(text)).code == CORE_OK;
+    }
+
+cleanup:
+    free(canonical);
+    if (regions) json_object_put(regions);
+    if (root) json_object_put(root);
+    return result;
 }
 
 static bool write_material(
@@ -423,7 +588,8 @@ static bool write_summary(
     const ProceduralSurfacePrismMeshSummary *summary,
     const char *material_digest,
     const MaterialStats *stats,
-    const ProceduralSurfaceSelectedFaceShellReceipt *selected_receipt) {
+    const ProceduralSurfaceSelectedFaceShellReceipt *selected_receipt,
+    const ProceduralSurfaceFeatureReliefShellReceipt *relief_receipt) {
     char graph_digest[PROCEDURAL_SURFACE_FIELD_GRAPH_DIGEST_CAPACITY];
     char binding_digest[PROCEDURAL_SURFACE_BINDING_DIGEST_CAPACITY] = "";
     ProceduralSurfaceFieldGraphReport graph_report;
@@ -540,6 +706,79 @@ static bool write_summary(
             json_object_new_string(selected_receipt->mesh_digest_sha256));
         json_object_object_add(root, "selected_face_shell", receipt);
     }
+    if (relief_receipt) {
+        struct json_object *receipt = json_object_new_object();
+        json_object_object_add(
+            receipt, "schema",
+            json_object_new_string(
+                PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_SCHEMA));
+        json_object_object_add(
+            receipt, "schema_version",
+            json_object_new_int(relief_receipt->schema_version));
+        json_object_object_add(
+            receipt, "source_mesh_digest_sha256",
+            json_object_new_string(
+                relief_receipt->source_mesh_digest_sha256));
+        json_object_object_add(
+            receipt, "feature_field_digest_sha256",
+            json_object_new_string(
+                relief_receipt->feature_field_digest_sha256));
+        json_object_object_add(
+            receipt, "feature_count",
+            json_object_new_int64(relief_receipt->feature_count));
+        json_object_object_add(
+            receipt, "zero_height_feature_count",
+            json_object_new_int64(
+                relief_receipt->zero_height_feature_count));
+        json_object_object_add(
+            receipt, "negative_depth_feature_count",
+            json_object_new_int64(
+                relief_receipt->negative_depth_feature_count));
+        json_object_object_add(
+            receipt, "positive_height_feature_count",
+            json_object_new_int64(
+                relief_receipt->positive_height_feature_count));
+        json_object_object_add(
+            receipt, "negatively_displaced_vertex_count",
+            json_object_new_int64(
+                relief_receipt->negatively_displaced_vertex_count));
+        json_object_object_add(
+            receipt, "positively_displaced_vertex_count",
+            json_object_new_int64(
+                relief_receipt->positively_displaced_vertex_count));
+        json_object_object_add(
+            receipt, "maximum_candidates_considered_per_vertex",
+            json_object_new_int64(
+                relief_receipt->maximum_candidates_considered_per_vertex));
+        json_object_object_add(
+            receipt, "minimum_authored_height_or_depth_units",
+            json_object_new_double(
+                relief_receipt->minimum_authored_height_or_depth_units));
+        json_object_object_add(
+            receipt, "maximum_authored_height_or_depth_units",
+            json_object_new_double(
+                relief_receipt->maximum_authored_height_or_depth_units));
+        json_object_object_add(
+            receipt, "minimum_emitted_displacement_units",
+            json_object_new_double(
+                relief_receipt->minimum_emitted_displacement_units));
+        json_object_object_add(
+            receipt, "maximum_emitted_displacement_units",
+            json_object_new_double(
+                relief_receipt->maximum_emitted_displacement_units));
+        json_object_object_add(
+            receipt, "relief_scale",
+            json_object_new_double(relief_receipt->relief_scale));
+        json_object_object_add(
+            receipt, "feature_source_identity_bound",
+            json_object_new_boolean(
+                relief_receipt->feature_source_identity_bound));
+        json_object_object_add(
+            receipt, "one_coherent_derived_shell",
+            json_object_new_boolean(
+                relief_receipt->one_coherent_derived_shell));
+        json_object_object_add(root, "signed_feature_relief", receipt);
+    }
     json_object_object_add(
         root, "vertex_count", json_object_new_int64(summary->vertex_count));
     json_object_object_add(
@@ -621,9 +860,16 @@ int main(int argc, char **argv) {
     ProceduralSurfacePrismMeshReport mesh_report;
     ProceduralSurfaceSelectedFaceShellReceipt selected_receipt;
     ProceduralSurfaceSelectedFaceShellReport selected_report;
+    ProceduralSurfaceFeatureFieldV1 feature_field;
+    ProceduralSurfaceWoodGrainFieldV1 wood_grain_field;
+    WoodGrainReliefContext wood_grain_relief_context;
+    ProceduralSurfaceFeatureReliefShellReceipt relief_receipt;
+    ProceduralSurfaceFeatureReliefShellReport relief_report;
     ProceduralSurfacePrismFace selected_face =
         PROCEDURAL_SURFACE_PRISM_FACE_COUNT;
     const ProceduralSurfaceSelectedFaceShellReceipt *active_selected_receipt =
+        NULL;
+    const ProceduralSurfaceFeatureReliefShellReceipt *active_relief_receipt =
         NULL;
     ProceduralSurfaceFieldBudget budget;
     ProceduralSurfacePrismVertex *vertices = NULL;
@@ -661,6 +907,18 @@ int main(int argc, char **argv) {
              options.selected_face_name, &selected_face))) {
         fprintf(stderr,
                 "--selected-face requires a valid face name and --binding\n");
+        return 1;
+    }
+    if (options.surface_feature_field_path &&
+        !ProceduralSurfaceFeatureFieldV1_LoadJsonFile(
+            options.surface_feature_field_path, &feature_field)) {
+        fprintf(stderr, "surface feature field load failed\n");
+        return 1;
+    }
+    if (options.wood_grain_field_path &&
+        !ProceduralSurfaceWoodGrainFieldV1_LoadJsonFile(
+            options.wood_grain_field_path, &wood_grain_field)) {
+        fprintf(stderr, "wood grain field load failed\n");
         return 1;
     }
     snprintf(recipe.recipe_id, sizeof(recipe.recipe_id), "%s_recipe",
@@ -720,13 +978,48 @@ int main(int argc, char **argv) {
             .graph = &graph,
             .binding = active_binding,
             .quality = PROCEDURAL_SURFACE_PLANE_QUALITY_FINAL};
-        if (!ProceduralSurfaceSelectedFaceShell_Compile(
-                &request, &budget, &buffers, &requirements, &summary,
-                &selected_receipt, &selected_report)) {
-            fprintf(stderr,
-                    "selected-face shell compilation failed: %s (%s)\n",
-                    selected_report.message, selected_report.field);
-            goto cleanup;
+        if (options.surface_feature_field_path) {
+            const ProceduralSurfaceFeatureReliefShellRequest relief_request = {
+                .selected_face_shell = request,
+                .feature_field = &feature_field,
+                .expected_source_mesh_digest_sha256 =
+                    options.feature_source_mesh_digest,
+                .relief_scale = options.relief_scale};
+            if (!ProceduralSurfaceFeatureReliefShell_Compile(
+                    &relief_request, &budget, &buffers, &requirements,
+                    &summary, &relief_receipt, &relief_report)) {
+                fprintf(stderr,
+                        "signed feature relief compilation failed: %s (%s)\n",
+                        relief_report.message, relief_report.field);
+                goto cleanup;
+            }
+            selected_receipt = relief_receipt.selected_face_shell;
+            active_relief_receipt = &relief_receipt;
+        } else if (options.wood_grain_field_path) {
+            wood_grain_relief_context = (WoodGrainReliefContext){
+                .binding = active_binding_context,
+                .cage = &cage,
+                .grain = &wood_grain_field,
+                .selected_face_name = options.selected_face_name,
+                .scale = options.wood_grain_relief_scale};
+            if (!ProceduralSurfaceSelectedFaceShell_CompileWithEvaluator(
+                    &request, evaluate_wood_grain_relief,
+                    &wood_grain_relief_context,
+                    ProceduralSurfacePrismBinding_ResolveDisplacementDirection,
+                    active_binding_context, &budget, &buffers, &requirements,
+                    &summary, &selected_receipt, &selected_report)) {
+                fprintf(stderr,
+                        "wood grain relief compilation failed: %s (%s)\n",
+                        selected_report.message, selected_report.field);
+                goto cleanup;
+            }
+        } else if (!ProceduralSurfaceSelectedFaceShell_Compile(
+                       &request, &budget, &buffers, &requirements, &summary,
+                       &selected_receipt, &selected_report)) {
+                fprintf(stderr,
+                        "selected-face shell compilation failed: %s (%s)\n",
+                        selected_report.message, selected_report.field);
+                goto cleanup;
         }
         active_selected_receipt = &selected_receipt;
     } else if (!ProceduralSurfacePrismMesh_GenerateWithEvaluatorAndDirection(
@@ -765,12 +1058,18 @@ int main(int argc, char **argv) {
     }
     core_result = core_mesh_asset_runtime_document_save_file(
         &document, options.asset_path);
-    core_mesh_asset_runtime_document_free(&document);
     if (core_result.code != CORE_OK) {
         fprintf(stderr, "preset mesh asset write failed: %s\n",
                 core_result.message);
+        core_mesh_asset_runtime_document_free(&document);
         goto cleanup;
     }
+    if (!write_solid_receipt(options.solid_receipt_path, &document)) {
+        fprintf(stderr, "preset solid receipt write failed\n");
+        core_mesh_asset_runtime_document_free(&document);
+        goto cleanup;
+    }
+    core_mesh_asset_runtime_document_free(&document);
     if (!write_material(
             &options, &recipe, &graph, active_binding_context,
             &mesh, &summary,
@@ -786,7 +1085,8 @@ int main(int argc, char **argv) {
     }
     if (!write_summary(
             &options, &graph, active_binding, &requirements, &summary,
-            material_digest, &stats, active_selected_receipt)) {
+            material_digest, &stats, active_selected_receipt,
+            active_relief_receipt)) {
         fprintf(stderr, "preset summary write failed\n");
         goto cleanup;
     }

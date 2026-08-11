@@ -494,11 +494,7 @@ bool ProceduralSolidMaterialBindingV1_Validate(
                  sizeof(region->secondary_node_id))) ||
             region->triangle_count == 0u ||
             strcmp(region->region_id, group->group_id) != 0 ||
-            region->triangle_count != group->triangle_count ||
-            (i > 0u &&
-             strcmp(
-                 binding->regions[i - 1u].region_id,
-                 region->region_id) >= 0)) {
+            region->triangle_count != group->triangle_count) {
             set_report(
                 report, PROCEDURAL_SOLID_MATERIAL_BINDING_STATUS_REGION,
                 "regions", "region records do not match mesh groups");

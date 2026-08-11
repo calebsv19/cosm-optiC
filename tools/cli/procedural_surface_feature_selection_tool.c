@@ -19,12 +19,34 @@ typedef struct Options {
     const char *region_id;
     const char *summary_path;
     double minimum_radius;
+    uint32_t feature_ids[PROCEDURAL_SURFACE_FEATURE_SELECTION_MAX_IDS];
+    size_t feature_id_count;
 } Options;
 
 static void usage(const char *program) {
     fprintf(stderr,
         "usage: %s --mesh PATH --field PATH --base-region PATH --out PATH "
-        "--region-id ID --minimum-radius VALUE [--summary-out PATH]\n", program);
+        "--region-id ID (--feature-ids ID[,ID...] | --minimum-radius VALUE) "
+        "[--summary-out PATH]\n", program);
+}
+
+static bool parse_feature_ids(const char *text, Options *options) {
+    const char *cursor = text;
+    if (!text || !*text || !options) return false;
+    while (*cursor) {
+        char *end = NULL;
+        unsigned long value;
+        if (options->feature_id_count >=
+            PROCEDURAL_SURFACE_FEATURE_SELECTION_MAX_IDS) return false;
+        errno = 0;
+        value = strtoul(cursor, &end, 10);
+        if (errno != 0 || !end || end == cursor || value == 0u ||
+            value > UINT32_MAX || (*end != ',' && *end != '\0')) return false;
+        options->feature_ids[options->feature_id_count++] = (uint32_t)value;
+        cursor = *end == ',' ? end + 1 : end;
+        if (*end == ',' && *cursor == '\0') return false;
+    }
+    return options->feature_id_count > 0u;
 }
 
 static bool parse_options(int argc, char **argv, Options *out) {
@@ -38,6 +60,9 @@ static bool parse_options(int argc, char **argv, Options *out) {
         else if (strcmp(argv[i], "--out") == 0) options.out_path = argv[++i];
         else if (strcmp(argv[i], "--region-id") == 0) options.region_id = argv[++i];
         else if (strcmp(argv[i], "--summary-out") == 0) options.summary_path = argv[++i];
+        else if (strcmp(argv[i], "--feature-ids") == 0) {
+            if (!parse_feature_ids(argv[++i], &options)) return false;
+        }
         else if (strcmp(argv[i], "--minimum-radius") == 0) {
             char *end = NULL;
             errno = 0;
@@ -48,7 +73,8 @@ static bool parse_options(int argc, char **argv, Options *out) {
         } else return false;
     }
     if (!options.mesh_path || !options.field_path || !options.base_region_path ||
-        !options.out_path || !options.region_id || !has_radius) return false;
+        !options.out_path || !options.region_id ||
+        (has_radius == (options.feature_id_count > 0u))) return false;
     *out = options;
     return true;
 }
@@ -71,6 +97,14 @@ static bool write_summary(const char *path,
         json_object_new_string(field->source_mesh_digest_sha256));
     json_object_object_add(root, "selected_feature_count",
         json_object_new_int64((int64_t)selection->feature_id_count));
+    {
+        json_object *ids = json_object_new_array();
+        if (!ids) { json_object_put(root); return false; }
+        for (size_t i = 0u; i < selection->feature_id_count; ++i)
+            json_object_array_add(ids,
+                json_object_new_int64((int64_t)selection->feature_ids[i]));
+        json_object_object_add(root, "selected_feature_ids", ids);
+    }
     json_object_object_add(root, "region_id",
         json_object_new_string(region->region_id));
     json_object_object_add(root, "carrier_value_digest_sha256",
@@ -148,8 +182,12 @@ int main(int argc, char **argv) {
         !ProceduralImportedSurfaceRegionV1_LoadJsonFile(options.base_region_path,
             &mesh, options.mesh_path, &base, &report) ||
         !derived_vertices_with_normals(&mesh, &vertices) ||
-        !ProceduralSurfaceFeatureSelectionV1_Build(&field,
-            options.minimum_radius, &selection) ||
+        !(options.feature_id_count > 0u
+            ? ProceduralSurfaceFeatureSelectionV1_BuildExplicit(
+                &field, options.feature_ids, options.feature_id_count,
+                &selection)
+            : ProceduralSurfaceFeatureSelectionV1_Build(
+                &field, options.minimum_radius, &selection)) ||
         !ProceduralSurfaceFeatureSelectionV1_BuildRegion(&base, &field,
             &selection, vertices, mesh.vertex_count, options.region_id,
             &output) ||

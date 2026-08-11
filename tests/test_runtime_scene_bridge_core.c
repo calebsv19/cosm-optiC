@@ -5,6 +5,7 @@
 #include "core_scene_compile.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge.h"
+#include "render/material_bsdf.h"
 #include "test_runtime_scene_bridge_core.h"
 #include "test_support.h"
 
@@ -786,7 +787,9 @@ static int test_runtime_scene_bridge_apply_accepts_id_base_color_material(void) 
         "}],"
         "\"materials\":[{"
           "\"id\":\"mat_imported_surface\","
-          "\"base_color\":{\"r\":0.8,\"g\":0.7,\"b\":0.55}"
+          "\"base_color\":{\"r\":0.8,\"g\":0.7,\"b\":0.55},"
+          "\"roughness\":0.21,"
+          "\"metallic\":0.74"
         "}],"
         "\"lights\":[],"
         "\"cameras\":[],"
@@ -794,6 +797,7 @@ static int test_runtime_scene_bridge_apply_accepts_id_base_color_material(void) 
         "\"extensions\":{}"
         "}";
     RuntimeSceneBridgePreflight summary;
+    MaterialBSDF payload;
     bool ok = runtime_scene_bridge_apply_json(runtime_json, &summary);
     assert_true("runtime_scene_apply_id_base_color_material_ok", ok);
     if (!ok) return 0;
@@ -801,6 +805,23 @@ static int test_runtime_scene_bridge_apply_accepts_id_base_color_material(void) 
                 sceneSettings.objectCount == 1);
     assert_true("runtime_scene_apply_id_base_color_material",
                 sceneSettings.sceneObjects[0].color == 0xCCB38C);
+    assert_close("runtime_scene_apply_id_base_color_roughness",
+                 sceneSettings.sceneObjects[0].roughness,
+                 0.21,
+                 1e-9);
+    assert_close("runtime_scene_apply_id_base_color_metallic_reflectivity",
+                 sceneSettings.sceneObjects[0].reflectivity,
+                 0.74,
+                 1e-9);
+    MaterialBSDFInitFromSceneObject(&sceneSettings.sceneObjects[0], &payload);
+    assert_close("runtime_scene_apply_id_base_color_payload_roughness",
+                 payload.roughness,
+                 0.21,
+                 1e-9);
+    assert_close("runtime_scene_apply_id_base_color_payload_reflectivity",
+                 payload.reflectivity,
+                 0.74,
+                 1e-9);
     return 0;
 }
 

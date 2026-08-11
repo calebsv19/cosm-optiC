@@ -267,8 +267,11 @@ static double face_edge_lock_weight(
         distance_a = cage->width_units * 0.5 - fabs(cage_position.x);
         distance_b = cage->height_units * 0.5 - fabs(cage_position.y);
     }
-    return smoother_step(fmin(distance_a, distance_b) /
-                         recipe->edge_lock_width_units);
+    /* smoother_step's polynomial can round infinitesimally above one at
+     * densely sampled interior points.  The edge-lock is a [0,1] contract,
+     * so make that bound explicit before it becomes serialized geometry. */
+    return clamp01(smoother_step(fmin(distance_a, distance_b) /
+                                 recipe->edge_lock_width_units));
 }
 
 static void face_lattice(const FaceDescriptor *face,

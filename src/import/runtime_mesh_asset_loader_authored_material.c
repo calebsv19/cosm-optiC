@@ -129,6 +129,113 @@ static const char *region_kind_for_triangle(
     return "retained";
 }
 
+static void free_named_surface_selectors(RayTracingRuntimeMeshAsset *asset) {
+    if (!asset) return;
+    for (size_t i = 0u;
+         i < asset->procedural_named_surface_selector_count; ++i) {
+        ProceduralImportedSurfaceRegionV1_Free(
+            &asset->procedural_named_surface_selectors[i]);
+    }
+    asset->procedural_named_surface_selector_count = 0u;
+    memset(asset->procedural_named_surface_selector_names, 0,
+           sizeof(asset->procedural_named_surface_selector_names));
+    memset(asset->procedural_named_surface_selector_paths, 0,
+           sizeof(asset->procedural_named_surface_selector_paths));
+    memset(asset->procedural_named_surface_selector_dependencies, 0,
+           sizeof(asset->procedural_named_surface_selector_dependencies));
+}
+
+static bool load_named_surface_selectors(
+    const char *runtime_scene_path, json_object *reference,
+    RayTracingRuntimeMeshAsset *asset, char *out_diagnostics,
+    size_t out_diagnostics_size) {
+    json_object *values = NULL;
+    size_t count;
+    if (!json_object_object_get_ex(
+            reference, "named_surface_selectors", &values)) {
+        if (asset->procedural_named_surface_selectors_observed) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "named surface selector references must be consistent "
+                     "across instances of one mesh asset");
+            return false;
+        }
+        asset->procedural_named_surface_selectors_absent = true;
+        return true;
+    }
+    if (asset->procedural_named_surface_selectors_absent ||
+        json_object_get_type(values) != json_type_array ||
+        json_object_array_length(values) == 0u ||
+        json_object_array_length(values) >
+            RAY_TRACING_RUNTIME_MESH_ASSET_MAX_NAMED_SURFACE_SELECTORS) {
+        set_diag(out_diagnostics, out_diagnostics_size,
+                 "named_surface_selectors must be a bounded non-empty array");
+        return false;
+    }
+    count = json_object_array_length(values);
+    if (asset->procedural_named_surface_selectors_observed) {
+        if (count != asset->procedural_named_surface_selector_count) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "named surface selector instance count mismatch");
+            return false;
+        }
+        for (size_t i = 0u; i < count; ++i) {
+            json_object *item = json_object_array_get_idx(values, i);
+            const char *name = string_field(item, "name");
+            const char *path = string_field(item, "surface_region_path");
+            char resolved[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+            if (!name || !path || !resolve_relative(runtime_scene_path, path,
+                                                    resolved, sizeof(resolved)) ||
+                strcmp(name, asset->procedural_named_surface_selector_names[i]) != 0 ||
+                strcmp(resolved, asset->procedural_named_surface_selector_paths[i]) != 0) {
+                set_diag(out_diagnostics, out_diagnostics_size,
+                         "named surface selector instance mismatch");
+                return false;
+            }
+        }
+        return true;
+    }
+    free_named_surface_selectors(asset);
+    for (size_t i = 0u; i < count; ++i) {
+        json_object *item = json_object_array_get_idx(values, i);
+        const char *name = string_field(item, "name");
+        const char *path = string_field(item, "surface_region_path");
+        char resolved[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+        ProceduralImportedSurfaceRegionReport report = {0};
+        if (!item || json_object_get_type(item) != json_type_object || !name ||
+            !name[0] || strlen(name) >=
+                PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY || !path ||
+            !resolve_relative(runtime_scene_path, path, resolved,
+                              sizeof(resolved)) ||
+            !ProceduralImportedSurfaceRegionV1_LoadJsonFile(
+                resolved, &asset->document, asset->path,
+                &asset->procedural_named_surface_selectors[i], &report) ||
+            !capture_dependency(
+                resolved,
+                &asset->procedural_named_surface_selector_dependencies[i])) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     report.message[0] ? report.message :
+                     "named surface selector identity is stale");
+            return false;
+        }
+        for (size_t prior = 0u; prior < i; ++prior) {
+            if (strcmp(name, asset->procedural_named_surface_selector_names[prior]) == 0) {
+                set_diag(out_diagnostics, out_diagnostics_size,
+                         "named surface selector names must be unique");
+                return false;
+            }
+        }
+        snprintf(asset->procedural_named_surface_selector_names[i],
+                 sizeof(asset->procedural_named_surface_selector_names[i]),
+                 "%s", name);
+        snprintf(asset->procedural_named_surface_selector_paths[i],
+                 sizeof(asset->procedural_named_surface_selector_paths[i]),
+                 "%s", resolved);
+        asset->procedural_named_surface_selector_count = i + 1u;
+    }
+    asset->procedural_named_surface_selectors_observed = true;
+    return true;
+}
+
 static bool load_material_graph(
     const char *runtime_scene_path,
     json_object *reference,
@@ -141,6 +248,12 @@ static bool load_material_graph(
         string_field(reference, "surface_region_path");
     const char *feature_field_reference =
         string_field(reference, "surface_feature_field_path");
+    const char *feature_curve_field_reference =
+        string_field(reference, "surface_feature_curve_field_path");
+    const char *wood_grain_reference =
+        string_field(reference, "wood_grain_field_path");
+    const char *wood_grain_preset_digest =
+        string_field(reference, "wood_grain_preset_digest_sha256");
     ProceduralSolidMaterialGraphV1 graph;
     ProceduralSolidMaterialGraphReport graph_report = {0};
     ProceduralSolidAuthoredMaterialV1
@@ -156,6 +269,9 @@ static bool load_material_graph(
         RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     const ProceduralImportedSurfaceRegionV1 *surface_region = NULL;
     char feature_field_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char feature_curve_field_path[
+        RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
+    char wood_grain_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     char mesh_digest[PROCEDURAL_SURFACE_FEATURE_FIELD_DIGEST_CAPACITY] = {0};
     memset(materials, 0, sizeof(materials));
     memset(dependencies, 0, sizeof(dependencies));
@@ -233,6 +349,42 @@ static bool load_material_graph(
                      "surface feature field instance mismatch");
             return false;
         }
+        if ((feature_curve_field_reference != NULL) !=
+            asset->procedural_surface_feature_curve_field_valid) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature curve field references must be "
+                     "consistent across instances of one mesh asset");
+            return false;
+        }
+        if (feature_curve_field_reference &&
+            (!resolve_relative(runtime_scene_path,
+                               feature_curve_field_reference,
+                               feature_curve_field_path,
+                               sizeof(feature_curve_field_path)) ||
+             strcmp(feature_curve_field_path,
+                    asset->procedural_surface_feature_curve_field_path) != 0)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature curve field instance mismatch");
+            return false;
+        }
+        if ((wood_grain_reference != NULL) !=
+            asset->procedural_surface_wood_grain_valid) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "wood grain references must be consistent across instances of one mesh asset");
+            return false;
+        }
+        if (wood_grain_reference &&
+            (!wood_grain_preset_digest ||
+             !resolve_relative(runtime_scene_path, wood_grain_reference,
+                               wood_grain_path, sizeof(wood_grain_path)) ||
+             strcmp(wood_grain_path,
+                    asset->procedural_surface_wood_grain_path) != 0 ||
+             strcmp(wood_grain_preset_digest,
+                    asset->procedural_surface_wood_grain.preset_digest_sha256) != 0)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "wood grain field instance mismatch");
+            return false;
+        }
         return true;
     }
     if (surface_region_reference) {
@@ -268,6 +420,9 @@ static bool load_material_graph(
         }
         asset->procedural_imported_surface_region_absent = true;
     }
+    if (!load_named_surface_selectors(
+            runtime_scene_path, reference, asset, out_diagnostics,
+            out_diagnostics_size)) goto fail;
     if (feature_field_reference) {
         if (asset->procedural_surface_feature_field_absent ||
             !resolve_relative(runtime_scene_path, feature_field_reference,
@@ -296,6 +451,71 @@ static bool load_material_graph(
             goto fail;
         }
         asset->procedural_surface_feature_field_absent = true;
+    }
+    if (wood_grain_reference) {
+        if (asset->procedural_surface_wood_grain_absent ||
+            !wood_grain_preset_digest ||
+            !resolve_relative(runtime_scene_path, wood_grain_reference,
+                              wood_grain_path, sizeof(wood_grain_path)) ||
+            !ProceduralSolidMesh_Digest(&asset->document, mesh_digest) ||
+            !ProceduralSurfaceWoodGrainFieldV1_LoadJsonFile(
+                wood_grain_path, &asset->procedural_surface_wood_grain) ||
+            strcmp(mesh_digest, asset->procedural_surface_wood_grain.
+                source_mesh_digest_sha256) != 0 ||
+            strcmp(wood_grain_preset_digest, asset->procedural_surface_wood_grain.
+                preset_digest_sha256) != 0 ||
+            !capture_dependency(wood_grain_path,
+                &asset->procedural_surface_wood_grain_dependency)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "wood grain field identity is stale");
+            goto fail;
+        }
+        asset->procedural_surface_wood_grain_observed = true;
+        asset->procedural_surface_wood_grain_valid = true;
+        snprintf(asset->procedural_surface_wood_grain_path,
+                 sizeof(asset->procedural_surface_wood_grain_path), "%s",
+                 wood_grain_path);
+    } else {
+        if (asset->procedural_surface_wood_grain_observed) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "wood grain references must be consistent across instances of one mesh asset");
+            goto fail;
+        }
+        asset->procedural_surface_wood_grain_absent = true;
+    }
+    if (feature_curve_field_reference) {
+        if (asset->procedural_surface_feature_curve_field_absent ||
+            !resolve_relative(runtime_scene_path,
+                              feature_curve_field_reference,
+                              feature_curve_field_path,
+                              sizeof(feature_curve_field_path)) ||
+            !ProceduralSolidMesh_Digest(&asset->document, mesh_digest) ||
+            !ProceduralSurfaceFeatureCurveFieldV1_LoadJsonFile(
+                feature_curve_field_path,
+                &asset->procedural_surface_feature_curve_field) ||
+            strcmp(mesh_digest,
+                   asset->procedural_surface_feature_curve_field.
+                       source_mesh_digest_sha256) != 0 ||
+            !capture_dependency(
+                feature_curve_field_path,
+                &asset->procedural_surface_feature_curve_field_dependency)) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature curve field identity is stale");
+            goto fail;
+        }
+        asset->procedural_surface_feature_curve_field_observed = true;
+        asset->procedural_surface_feature_curve_field_valid = true;
+        snprintf(asset->procedural_surface_feature_curve_field_path,
+                 sizeof(asset->procedural_surface_feature_curve_field_path),
+                 "%s", feature_curve_field_path);
+    } else {
+        if (asset->procedural_surface_feature_curve_field_observed) {
+            set_diag(out_diagnostics, out_diagnostics_size,
+                     "surface feature curve field references must be "
+                     "consistent across instances of one mesh asset");
+            goto fail;
+        }
+        asset->procedural_surface_feature_curve_field_absent = true;
     }
     for (size_t i = 0u; i < graph.layer_count; ++i) {
         char material_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
@@ -341,10 +561,25 @@ static bool load_material_graph(
             &graph_report)) {
         goto fail;
     }
+    for (size_t i = 0u;
+         i < asset->procedural_named_surface_selector_count; ++i) {
+        if (!ProceduralSolidMaterialRuntimeProgramV1_AttachNamedSelector(
+                &asset->procedural_solid_material_runtime_program,
+                asset->procedural_named_surface_selector_names[i],
+                &asset->procedural_named_surface_selectors[i])) goto fail;
+    }
     if (asset->procedural_surface_feature_field_valid &&
         !ProceduralSolidMaterialRuntimeProgramV1_AttachFeatureField(
             &asset->procedural_solid_material_runtime_program,
             &asset->procedural_surface_feature_field)) goto fail;
+    if (asset->procedural_surface_feature_curve_field_valid &&
+        !ProceduralSolidMaterialRuntimeProgramV1_AttachCurveField(
+            &asset->procedural_solid_material_runtime_program,
+            &asset->procedural_surface_feature_curve_field)) goto fail;
+    if (asset->procedural_surface_wood_grain_valid &&
+        !ProceduralSolidMaterialRuntimeProgramV1_AttachWoodGrain(
+            &asset->procedural_solid_material_runtime_program,
+            &asset->procedural_surface_wood_grain)) goto fail;
     if (!capture_dependency(
             graph_path, &asset->procedural_solid_material_graph_dependency))
         goto fail;
@@ -367,6 +602,7 @@ static bool load_material_graph(
 fail:
     ProceduralSolidMaterialRuntimeProgramV1_Free(
         &asset->procedural_solid_material_runtime_program);
+    free_named_surface_selectors(asset);
     free(inputs);
     free(region_kinds);
     free(surfaces);
@@ -508,6 +744,16 @@ bool runtime_mesh_asset_procedural_solid_authored_dependencies_match(
     if (asset->procedural_imported_surface_region_valid &&
         !dependency_matches(
             &asset->procedural_imported_surface_region_dependency))
+        return false;
+    for (size_t i = 0u;
+         i < asset->procedural_named_surface_selector_count; ++i) {
+        if (!dependency_matches(
+                &asset->procedural_named_surface_selector_dependencies[i])) {
+            return false;
+        }
+    }
+    if (asset->procedural_surface_wood_grain_valid &&
+        !dependency_matches(&asset->procedural_surface_wood_grain_dependency))
         return false;
     return true;
 }

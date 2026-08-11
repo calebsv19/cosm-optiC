@@ -1,0 +1,61 @@
+{
+  "schema": "surface_feature_curve_authoring_v1",
+  "schema_version": 1,
+  "field_id": "curved_plaster_scratches_v1",
+  "seed": 24,
+  "normal_compatibility_cosine": 0.5,
+  "object_units": "meters",
+  "macro_envelope": {
+    "enabled": true,
+    "receiver_direction": [0.0, 0.0, 1.0],
+    "minimum_facing_cosine": -0.9,
+    "height_range": [-1.2, 1.2],
+    "minimum_weight": 0.12,
+    "trace_minimum_weight": 0.025,
+    "concavity": {
+      "enabled": true,
+      "minimum_signed_dihedral_degrees": 3.0,
+      "surface_falloff_units": 0.52
+    }
+  },
+  "populations": [
+    {
+      "id": "long_weathered_scratches",
+      "count": 5,
+      "segment_count": [18, 28],
+      "width": [0.027, 0.047],
+      "depth": [0.007, 0.014],
+      "end_width_scale": [0.48, 0.76],
+      "end_depth_scale": [0.52, 0.82],
+      "edge_softness": 0.28,
+      "rim_width": 0.18,
+      "jitter": 0.16,
+      "seed": 244,
+      "branching": {
+        "maximum_branches": 1,
+        "probability": 0.6,
+        "segment_count": [4, 7],
+        "angle_degrees": [28.0, 48.0]
+      }
+    },
+    {
+      "id": "fine_cross_scratches",
+      "count": 4,
+      "segment_count": [8, 14],
+      "width": [0.0135, 0.0235],
+      "depth": [0.003, 0.007],
+      "end_width_scale": [0.42, 0.7],
+      "end_depth_scale": [0.45, 0.74],
+      "edge_softness": 0.34,
+      "rim_width": 0.2,
+      "jitter": 0.34,
+      "seed": 245,
+      "branching": {
+        "maximum_branches": 1,
+        "probability": 0.35,
+        "segment_count": [2, 4],
+        "angle_degrees": [36.0, 62.0]
+      }
+    }
+  ]
+}

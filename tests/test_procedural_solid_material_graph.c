@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static void test_snow_composition(void) {
     ProceduralSolidMaterialGraphV1 graph;
@@ -34,6 +35,134 @@ static void test_snow_composition(void) {
         &graph, &input, materials, 2u, &underside, &report));
     assert(high.base_color_b > low.base_color_b + 0.4);
     assert(fabs(underside.base_color_b - low.base_color_b) < 1e-9);
+}
+
+static void test_named_selector_node(void) {
+    ProceduralSolidMaterialGraphV1 graph;
+    ProceduralSolidMaterialGraphV1 loaded;
+    ProceduralSolidMaterialGraphReport report;
+    ProceduralSolidAuthoredMaterialV1 materials[2];
+    ProceduralSolidAuthoredMaterialReport material_report;
+    ProceduralSolidMaterialGeometryInputs input = {0};
+    ProceduralSolidAuthoredMaterialSurfaceV1 surface;
+    double weights[PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_LAYERS] = {0};
+    const char *binding_digest =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    assert(ProceduralSolidMaterialGraphV1_FromTemplate(
+        "snow_accumulation", "named_selector", "binding", binding_digest,
+        &graph, &report));
+    /* The base layer is intentionally driven by a stable selector ID, not a
+       fixture-specific band or a positional convention. */
+    graph.nodes[0].kind = PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR;
+    snprintf(graph.nodes[0].region_kind, sizeof(graph.nodes[0].region_kind),
+             "upper");
+    assert(ProceduralSolidMaterialGraphV1_SaveJsonFileAtomic(
+        "/tmp/named_selector_graph.json", &graph, &report));
+    assert(ProceduralSolidMaterialGraphV1_LoadJsonFile(
+        "/tmp/named_selector_graph.json", &loaded, &report));
+    assert(loaded.nodes[0].kind == PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR);
+    assert(strcmp(loaded.nodes[0].region_kind, "upper") == 0);
+    assert(ProceduralSolidAuthoredMaterialV1_FromTemplate(
+        "weathered_rock", "base_material", &materials[0], &material_report));
+    assert(ProceduralSolidAuthoredMaterialV1_FromTemplate(
+        "snow", "snow_material", &materials[1], &material_report));
+    input.selector_count = 2u;
+    snprintf(input.selector_names[0], sizeof(input.selector_names[0]), "lower");
+    input.selector_weights[0] = 0.9;
+    snprintf(input.selector_names[1], sizeof(input.selector_names[1]), "upper");
+    input.selector_weights[1] = 0.35;
+    assert(ProceduralSolidMaterialGraphV1_EvaluateWithReadback(
+        &loaded, &input, materials, 2u, &surface, weights, &report));
+    assert(fabs(weights[0] - 0.35) < 1e-12);
+    snprintf(input.selector_names[1], sizeof(input.selector_names[1]), "other");
+    assert(ProceduralSolidMaterialGraphV1_EvaluateWithReadback(
+        &loaded, &input, materials, 2u, &surface, weights, &report));
+    assert(weights[0] == 0.0);
+    unlink("/tmp/named_selector_graph.json");
+}
+
+static void test_named_selector_carrier_runtime(void) {
+    CoreMeshAssetRuntimeVertex vertices[4] = {
+        {{-1.0, -1.0, 0.0}, {0.0, 0.0, 1.0}},
+        {{ 1.0, -1.0, 0.0}, {0.0, 0.0, 1.0}},
+        {{ 1.0,  1.0, 1.0}, {0.0, 0.0, 1.0}},
+        {{-1.0,  1.0, 1.0}, {0.0, 0.0, 1.0}},
+    };
+    CoreMeshAssetRuntimeTriangle triangles[2] = {
+        {0u, 1u, 2u, "retained.shell"},
+        {0u, 2u, 3u, "retained.shell"},
+    };
+    CoreMeshAssetRuntimeDocument mesh = {0};
+    ProceduralSolidMaterialGraphV1 graph;
+    ProceduralSolidMaterialGraphReport report = {0};
+    ProceduralSolidAuthoredMaterialV1 materials[2];
+    ProceduralSolidAuthoredMaterialReport material_report;
+    ProceduralSolidMaterialRuntimeProgramV1 program;
+    ProceduralSolidMaterialRuntimeSampleV1 lower_sample;
+    ProceduralSolidMaterialRuntimeSampleV1 upper_sample;
+    ProceduralImportedSurfaceRegionV1 lower = {0};
+    ProceduralImportedSurfaceRegionV1 upper = {0};
+    const double lower_weights[4] = {0.0, 0.2, 0.4, 0.8};
+    const double upper_weights[4] = {1.0, 0.6, 0.2, 0.0};
+    const char *kinds[2] = {"retained", "retained"};
+    const char *binding_digest =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+
+    mesh.vertex_count = 4u;
+    mesh.vertex_normal_count = 4u;
+    mesh.vertices = vertices;
+    mesh.triangle_count = 2u;
+    mesh.triangles = triangles;
+    mesh.contract.local_bounds.min.x = -1.0;
+    mesh.contract.local_bounds.min.y = -1.0;
+    mesh.contract.local_bounds.min.z = 0.0;
+    mesh.contract.local_bounds.max.x = 1.0;
+    mesh.contract.local_bounds.max.y = 1.0;
+    mesh.contract.local_bounds.max.z = 1.0;
+    assert(ProceduralSolidMaterialGraphV1_FromTemplate(
+        "snow_accumulation", "carrier_runtime", "binding", binding_digest,
+        &graph, &report));
+    graph.nodes[0].kind = PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR;
+    snprintf(graph.nodes[0].region_kind, sizeof(graph.nodes[0].region_kind),
+             "lower");
+    assert(ProceduralSolidAuthoredMaterialV1_FromTemplate(
+        "weathered_rock", "base_material", &materials[0], &material_report));
+    assert(ProceduralSolidAuthoredMaterialV1_FromTemplate(
+        "snow", "snow_material", &materials[1], &material_report));
+    lower.vertex_count = 4u;
+    lower.triangle_count = 2u;
+    lower.vertex_weights = (double *)lower_weights;
+    upper.vertex_count = 4u;
+    upper.triangle_count = 2u;
+    upper.vertex_weights = (double *)upper_weights;
+    ProceduralSolidMaterialRuntimeProgramV1_Init(&program);
+    assert(ProceduralSolidMaterialRuntimeProgramV1_Build(
+        &graph, materials, 2u, &mesh, kinds, &program, &report));
+    assert(ProceduralSolidMaterialRuntimeProgramV1_AttachNamedSelector(
+        &program, "lower", &lower));
+    assert(ProceduralSolidMaterialRuntimeProgramV1_AttachNamedSelector(
+        &program, "upper", &upper));
+    assert(!ProceduralSolidMaterialRuntimeProgramV1_AttachNamedSelector(
+        &program, "lower", &lower));
+    assert(ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
+        &program, 0u, 0.2, 0.3, 0.5, &lower_sample, &report));
+    assert(lower_sample.geometry.selector_count == 2u);
+    assert(strcmp(lower_sample.geometry.selector_names[0], "lower") == 0);
+    assert(strcmp(lower_sample.geometry.selector_names[1], "upper") == 0);
+    assert(fabs(lower_sample.geometry.selector_weights[0] - 0.26) < 1e-12);
+    assert(fabs(lower_sample.geometry.selector_weights[1] - 0.48) < 1e-12);
+    assert(fabs(lower_sample.layer_weights[0] - 0.26) < 1e-12);
+
+    /* This is the authoring edit: switch the stable selector reference only.
+       The carrier fields and mesh stay untouched. */
+    snprintf(program.graph.nodes[0].region_kind,
+             sizeof(program.graph.nodes[0].region_kind), "upper");
+    assert(ProceduralSolidMaterialRuntimeProgramV1_EvaluateTriangleHit(
+        &program, 0u, 0.2, 0.3, 0.5, &upper_sample, &report));
+    assert(fabs(upper_sample.layer_weights[0] - 0.48) < 1e-12);
+    assert(fabs(upper_sample.layer_weights[0] -
+                lower_sample.layer_weights[0]) > 0.1);
+    ProceduralSolidMaterialRuntimeProgramV1_Free(&program);
 }
 
 static void test_typed_edit_connect_and_cycle_rejection(void) {
@@ -177,12 +306,18 @@ static void test_continuous_hit_program(void) {
         &program, &feature_field));
     curve_field.segment_count = 1u;
     curve_field.normal_compatibility_cosine = .5;
+    memset(curve_field.source_mesh_digest_sha256, 'a', 64u);
+    memset(curve_field.authoring_digest_sha256, 'b', 64u);
     curve_field.segments[0] = (ProceduralSurfaceFeatureCurveSegmentV1){
         .curve_id = 24u, .segment_id = 1u, .source_triangle = 0u,
-        .barycentric_root = {.6, 0.0, .4},
+        .barycentric_start = {.6, 0.0, .4},
+        .barycentric_end = {.2, .4, .4},
         .start = {-.5, -.2, .4}, .end = {.5, -.2, .4},
-        .normal = {0, 0, 1}, .tangent = {1, 0, 0},
-        .width = .2, .depth = .08, .edge_softness = .1};
+        .normal_start = {0, 0, 1}, .normal_end = {0, 0, 1},
+        .tangent = {1, 0, 0},
+        .width_start = .2, .width_end = .2,
+        .depth_start = .08, .depth_end = .08,
+        .edge_softness = .1, .rim_width = .16};
     assert(ProceduralSurfaceFeatureCurveFieldV1_BuildIndex(&curve_field));
     assert(ProceduralSolidMaterialRuntimeProgramV1_AttachCurveField(
         &program, &curve_field));
@@ -317,6 +452,8 @@ static void test_missing_vertex_normals_feature_fallback(void) {
 }
 
 int main(void) {
+    test_named_selector_node();
+    test_named_selector_carrier_runtime();
     test_snow_composition();
     test_typed_edit_connect_and_cycle_rejection();
     test_all_geometry_inputs();

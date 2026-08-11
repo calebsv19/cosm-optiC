@@ -87,7 +87,7 @@ static CoreObjectVec3 growth_position(
             element->tangent, radial * cos(phi)));
     result = growth_vec_add(
         result, growth_vec_scale(
-            element->bitangent, radial * sin(phi)));
+            element->bitangent, radial * element->aspect * sin(phi)));
     return growth_vec_add(result, growth_vec_scale(element->normal, z));
 }
 

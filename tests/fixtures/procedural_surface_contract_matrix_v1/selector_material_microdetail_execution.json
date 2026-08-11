@@ -1,0 +1,36 @@
+{
+  "schema": "ray_tracing.surface_authoring_contract_matrix",
+  "schema_version": 1,
+  "matrix_id": "selected_region_material_microdetail_execution_v1",
+  "source": {
+    "object_id": "psg19_plaster_statue_fragment",
+    "mesh_digest_sha256": "2738044ebcf579ef5e200164335326cfe4f42d2a0738e523d141deb528e2710e",
+    "source_kind": "imported_closed_surface",
+    "topology": {"authority": "selected carrier and headless proof receipt"}
+  },
+  "references": {
+    "selected_overlay_material": {
+      "id": "selected_mud_microdetail_material",
+      "digest_sha256": "37bb2b41fb5ed8120f5e807099441eaa79148482c05730a3c067439eb544852b",
+      "output_domains": ["material"],
+      "proof_profiles": ["material"]
+    },
+    "selected_microdetail_field": {
+      "id": "selected_mud_microdetail_normal",
+      "digest_sha256": "76c10e5f285095b4f5e21c59f763fa5ff1246c312ed30b7c5a094a9c2cbabd90",
+      "output_domains": ["microdetail_normal"],
+      "proof_profiles": ["microdetail"]
+    },
+    "selected_mud_droplet_region": {
+      "id": "selected_mud_droplets",
+      "digest_sha256": "227f1e061664e490072b147fffde2db60bc34b50a384bfc4e7bdc0dd9b06242a",
+      "output_domains": ["material", "microdetail_normal"],
+      "proof_profiles": ["selector"]
+    }
+  },
+  "cells": [
+    {"id": "control", "bindings": {}},
+    {"id": "selector_mask", "bindings": {"face_region_selector": "selected_mud_droplet_region"}},
+    {"id": "selected_material_microdetail", "bindings": {"material_graph": "selected_overlay_material", "surface_field_graph": "selected_microdetail_field", "face_region_selector": "selected_mud_droplet_region"}, "extensions": {"execution": {"adapter": "psg24_selector_material_microdetail_visual_proof"}}}
+  ]
+}

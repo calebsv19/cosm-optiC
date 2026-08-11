@@ -131,18 +131,18 @@ const char *ProceduralImportedSurfaceGrowthRole_Name(
     return "unknown";
 }
 
-bool ProceduralImportedSurfaceGrowth_Compile(
+bool surface_growth_compile_selection(
     const CoreMeshAssetRuntimeDocument *source,
     const char *source_runtime_path,
     const ProceduralImportedSurfaceRegionV1 *region,
     const char *region_path,
     const ProceduralImportedSurfaceGrowthConfig *config,
+    const SurfaceGrowthSelection *selection,
     const char *growth_asset_id,
     CoreMeshAssetRuntimeDocument *out_document,
     ProceduralImportedSurfaceGrowthProvenance *out_provenance,
     ProceduralImportedSurfaceGrowthReceipt *out_receipt,
     ProceduralImportedSurfaceGrowthReport *report) {
-    SurfaceGrowthSelection selection = {0};
     CoreMeshAssetRuntimeDocument document;
     ProceduralImportedSurfaceGrowthProvenance provenance;
     ProceduralImportedSurfaceGrowthReceipt receipt = {0};
@@ -163,6 +163,7 @@ bool ProceduralImportedSurfaceGrowth_Compile(
     ProceduralImportedSurfaceGrowthProvenance_Init(&provenance);
     report_set(report, false, "arguments", "PSG-22 growth inputs are required");
     if (!source || !source_runtime_path || !region || !region_path || !config ||
+        !selection || !selection->elements || selection->count == 0u ||
         !growth_asset_id || !out_document || !out_provenance || !out_receipt ||
         growth_id_length == 0u || growth_id_length >= 64u ||
         strcmp(source->contract.asset_id, growth_asset_id) == 0) return false;
@@ -210,13 +211,8 @@ bool ProceduralImportedSurfaceGrowth_Compile(
                    "source and carrier identity must reproduce exactly");
         return false;
     }
-    if (!surface_growth_select(source, region, config, &selection)) {
-        report_set(report, false, "growth_selection",
-                   "carrier produced no separated growth candidates");
-        return false;
-    }
     if (!surface_growth_validate_separation(
-            &selection, &overlap_pairs, &intersection_pairs,
+            selection, &overlap_pairs, &intersection_pairs,
             &minimum_clearance)) {
         report_set(report, false, "growth_overlap",
                    "growth elements overlap or self-intersect");
@@ -247,27 +243,27 @@ bool ProceduralImportedSurfaceGrowth_Compile(
              carrier_file_digest);
     receipt.source_vertex_count = source->vertex_count;
     receipt.source_triangle_count = source->triangle_count;
-    receipt.candidate_triangle_count = selection.candidate_count;
-    receipt.growth_element_count = selection.count;
+    receipt.candidate_triangle_count = selection->candidate_count;
+    receipt.growth_element_count = selection->count;
     receipt.rejected_clearance_candidate_count =
-        selection.rejected_clearance_count;
+        selection->rejected_clearance_count;
     receipt.inter_element_overlap_pair_count = overlap_pairs;
     receipt.self_intersection_pair_count = intersection_pairs;
     receipt.minimum_inter_element_clearance_units = minimum_clearance;
     receipt.minimum_attachment_depth_units = DBL_MAX;
-    for (size_t i = 0u; i < selection.count; ++i) {
-        if (selection.elements[i].attachment_depth <
+    for (size_t i = 0u; i < selection->count; ++i) {
+        if (selection->elements[i].attachment_depth <
             receipt.minimum_attachment_depth_units)
             receipt.minimum_attachment_depth_units =
-                selection.elements[i].attachment_depth;
-        if (selection.elements[i].height >
+                selection->elements[i].attachment_depth;
+        if (selection->elements[i].height >
             receipt.maximum_growth_height_units)
             receipt.maximum_growth_height_units =
-                selection.elements[i].height;
+                selection->elements[i].height;
     }
     if (!config_digest(config, receipt.config_digest_sha256) ||
         !surface_growth_build_geometry(
-            source, &selection, config, growth_asset_id,
+            source, selection, config, growth_asset_id,
             &document, &provenance, &receipt)) {
         report_set(report, false, "growth_geometry",
                    "closed growth geometry construction failed");
@@ -278,8 +274,8 @@ bool ProceduralImportedSurfaceGrowth_Compile(
     mesh_config.bounds_max = document.contract.local_bounds.max;
     mesh_config.max_vertices = config->max_vertices;
     mesh_config.max_triangles = config->max_triangles;
-    mesh_config.min_components = selection.count;
-    mesh_config.max_components = selection.count;
+    mesh_config.min_components = selection->count;
+    mesh_config.max_components = selection->count;
     mesh_config.minimum_triangle_area2 = config->minimum_triangle_area2;
     mesh_config.require_closed_manifold = true;
     mesh_config.require_positive_volume = true;
@@ -328,15 +324,38 @@ bool ProceduralImportedSurfaceGrowth_Compile(
                    "growth attachment, overlap, intersection, or closure gate failed");
         goto fail;
     }
-    surface_growth_selection_free(&selection);
     *out_document = document;
     *out_provenance = provenance;
     *out_receipt = receipt;
     report_set(report, true, "", "ok");
     return true;
 fail:
-    surface_growth_selection_free(&selection);
     core_mesh_asset_runtime_document_free(&document);
     ProceduralImportedSurfaceGrowthProvenance_Free(&provenance);
     return false;
+}
+
+bool ProceduralImportedSurfaceGrowth_Compile(
+    const CoreMeshAssetRuntimeDocument *source,
+    const char *source_runtime_path,
+    const ProceduralImportedSurfaceRegionV1 *region,
+    const char *region_path,
+    const ProceduralImportedSurfaceGrowthConfig *config,
+    const char *growth_asset_id,
+    CoreMeshAssetRuntimeDocument *out_document,
+    ProceduralImportedSurfaceGrowthProvenance *out_provenance,
+    ProceduralImportedSurfaceGrowthReceipt *out_receipt,
+    ProceduralImportedSurfaceGrowthReport *report) {
+    SurfaceGrowthSelection selection = {0};
+    bool ok;
+    if (!surface_growth_select(source, region, config, &selection)) {
+        report_set(report, false, "growth_selection",
+                   "carrier produced no separated growth candidates");
+        return false;
+    }
+    ok = surface_growth_compile_selection(
+        source, source_runtime_path, region, region_path, config, &selection,
+        growth_asset_id, out_document, out_provenance, out_receipt, report);
+    surface_growth_selection_free(&selection);
+    return ok;
 }

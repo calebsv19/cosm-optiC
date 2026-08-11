@@ -293,7 +293,15 @@ def render_request(
     contract: dict,
 ) -> dict:
     render = contract["render"]
-    lighting = contract["lighting"]
+    lighting = dict(contract["lighting"])
+    # Older proof contracts used authoring-facing names.  Normalize them at
+    # the render boundary so summary readback can prove that lighting applied.
+    if "ambient_light" in lighting:
+        lighting.setdefault("ambient_strength", lighting["ambient_light"])
+        lighting.setdefault("environment_brightness", lighting["ambient_light"])
+        lighting.setdefault("environment_light_mode", "ambient")
+    if "direct_light" in lighting:
+        lighting.setdefault("light_intensity", lighting["direct_light"])
     return {
         "schema_version": "ray_tracing_agent_render_request_v1",
         "run_id": f"{proof_id}_{view['id']}",

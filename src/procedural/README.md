@@ -127,6 +127,15 @@ PSG-6 adds the first UI-free procedural graph/compiler contract:
   compile-plan and compiled-recipe JSON without changing scene or package
   state.
 
+The surface-authoring foundation adds `ray_tracing.surface_authoring_document`
+v1 as a digest-bound composition container. It references independent
+material, surface-field, face/region-selector, and attached-asset documents,
+validates their output domains and source mesh identity, canonicalizes the
+references, provides deterministic SHA-256 identity, and emits a transactional
+compile/readback plan. It intentionally
+does not evaluate a second graph, deform geometry through a material mask, or
+generate attachments; those remain owned by their existing compilers.
+
 PSG-7 adds the first actual composable spatial-field authoring contract:
 
 - schema `ray_tracing.procedural_surface_field_graph` v1 evaluates object-space
@@ -634,6 +643,71 @@ the full production path-traced model. It does not add inter-fiber multiple
 scattering, stochastic hair-lobe sampling, opacity/transmission transport,
 dynamics, collision simulation, or motion blur.
 
+PSG-24A adds a reusable `surface_feature_field_v1` morphology lane for deterministic
+spot scatter. Its mesh-aware compiler derives signed concavity from shared
+triangle edges, propagates a bounded surface-distance macro envelope, supports
+count- and density-driven populations, and retains triangle/barycentric root,
+smooth normal, orthonormal tangent frame, calibrated shape parameters,
+population, stable feature ID, and signed object-unit height/depth for every
+accepted feature. Zero-amplitude populations remain material-only. Signed spot
+values can instead feed `procedural_surface_feature_relief_shell`, which uses
+the PSG-18 selected-face refinement to emit one closed shell with shallow
+inward and outward relief while holding cage edges and unselected faces fixed.
+Deep cuts route to PSG-24C; genuinely separate attached pieces may use PSG-24D. Runtime sampling
+uses a conservative 32x32 footprint index and rejects candidates below the
+declared normal-compatibility cosine before they contribute coverage, interior,
+rim, signed height/depth, ID, or direction. The field changes no mesh bytes,
+silhouette, acceleration structure, or hit topology. PSG-17 normal, PSG-20/21
+inset, and PSG-22 attached-geometry consumption remain separate.
+
+PSG-24B adds a dedicated `surface_feature_curve_field_v1` lane instead of
+growing the material-graph implementation. The compiler traces deterministic
+surface-adjacent polylines, including bounded branches, and serializes stable
+curve/segment/parent IDs with triangle and barycentric endpoint provenance,
+normal-compatible tangent frames, tapered object-unit width/depth, edge
+softness, and rim width. Native capsule sampling exposes coverage, floor,
+edge, signed depth/slope, and tangent direction through the existing feature
+graph channels and PSG-17-style shading-normal response. Its 32x32 candidate
+index is bounded at 32 segments per cell; incompatible nearby folds are
+rejected before contribution. This remains material/normal microdetail until a
+physical curve-relief adapter is added; deep cuts remain PSG-24C work.
+
+PSG-24C adds a dedicated deep field-to-inset adapter around the existing PSG-21
+compiler. It requires the exact `surface_feature_field_v1`, source mesh,
+source-bound carrier metadata, and an explicit stable feature-ID list whose
+members all carry negative authored depth. Before
+topology changes, the adapter extracts the carrier-supported triangle
+neighborhood plus a closure/stitch ring and records its reduction from the
+whole source. It emits a separate closed positive-volume shell with retained,
+transition-wall, and inset-floor groups plus per-derived-triangle source,
+feature-ID, and role provenance. Unselected source vertices remain fixed, and
+the deterministic bundle exposes source, field, selection, shell, role, and
+receipt entrypoints. This is physical inset topology; it does not start
+PSG-24D attached deposits or modify the source shell.
+
+PSG-24D adds an optional positive-height field-to-growth adapter around the
+existing PSG-22 geometry lane. It compiles each explicitly selected spot into
+its own replaceable closed mesh asset at the retained source triangle and
+barycentric root, preserving the feature tangent-frame aspect and rotation.
+Aggregate provenance retains feature, population, source triangle,
+barycentric attachment, PSG-22 element, role, and material semantic. The
+composite gate checks one positive-volume component per asset, positive
+attachment, conservative cross-asset clearance, zero forbidden overlap and
+self-intersection pairs, immutable source/field identity, exact repeat, and
+field-to-element material agreement. Zero/negative selections fail closed and
+the adapter keeps each mound equator at or below its root plane to avoid a
+floating perimeter. The source and any PSG-24C inset remain
+separate; no Boolean union or conformal multi-triangle footprint is claimed.
+This lane is for genuinely attached mud, moss, or similar elements, not for
+ordinary raised relief such as concrete aggregate or wood knots.
+
+Wood grain is authored through `ray_tracing.wood_surface_preset_v1`. Its named
+`texture_only`, `height_subtle`, `height_standard`, and
+`height_exaggerated` profiles keep material/normal-only and true PSG-18
+selected-face displacement distinct. The physical profiles express maximum
+height in object units and produce a separate closed derived shell; they never
+relabel a normal perturbation as geometry.
+
 Boundary decisions:
 
 - `core_mesh_asset` remains the intended derived-shell output contract.
@@ -683,6 +757,13 @@ make test-procedural-imported-surface-strands-psg23e
 make test-procedural-imported-surface-strands-psg23e-visual-proof
 make test-procedural-imported-surface-strands-psg23f
 make test-procedural-imported-surface-strands-psg23f-visual-proof
+make test-procedural-surface-feature-field-contract
+python3 tests/integration/test_procedural_surface_feature_spot_compiler_psg24a.py
+make test-procedural-surface-feature-curve-contract
+python3 tests/integration/test_procedural_surface_feature_curve_compiler_psg24b.py
+make test-procedural-surface-feature-inset-psg24c
+make test-procedural-surface-feature-deposit-psg24d
+make test-procedural-surface-feature-deposit-psg24d-visual-proof
 make test-procedural-solid-psg11-flow
 make test-procedural-solid-psg12-flow
 make test-procedural-solid-psg12-visual-proof

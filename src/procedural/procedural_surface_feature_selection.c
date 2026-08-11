@@ -15,3 +15,16 @@ bool ProceduralSurfaceFeatureSelectionV1_BuildRegion(const ProceduralImportedSur
  snprintf(r.recipe_digest_sha256,sizeof(r.recipe_digest_sha256),"%s",s->field_digest_sha256);
  if(!ProceduralImportedSurfaceRegionV1_RefreshValues(&r)){free(r.vertex_weights);return false;}*out=r;return true;
 }
+bool ProceduralSurfaceFeatureSelectionV1_BuildExplicit(const ProceduralSurfaceFeatureFieldV1*f,const uint32_t*ids,size_t n,ProceduralSurfaceFeatureSelectionV1*out){
+ char digest[PROCEDURAL_SURFACE_FEATURE_FIELD_DIGEST_CAPACITY];
+ if(!f||!ids||!out||n==0||n>PROCEDURAL_SURFACE_FEATURE_SELECTION_MAX_IDS||!ProceduralSurfaceFeatureFieldV1_Validate(f)||!ProceduralSurfaceFeatureFieldV1_Digest(f,digest))return false;
+ memset(out,0,sizeof(*out));snprintf(out->field_digest_sha256,sizeof(out->field_digest_sha256),"%s",digest);
+ for(size_t i=0;i<n;i++){
+  bool found=false;
+  if(ids[i]==0||ProceduralSurfaceFeatureSelectionV1_Contains(out,ids[i]))return false;
+  for(size_t j=0;j<f->feature_count;j++)if(f->features[j].feature_id==ids[i]){found=true;break;}
+  if(!found)return false;
+  out->feature_ids[out->feature_id_count++]=ids[i];
+ }
+ return true;
+}
