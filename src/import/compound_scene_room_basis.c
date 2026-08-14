@@ -72,6 +72,34 @@ void ray_compound_scene_room_basis_init(RayCompoundSceneRoomBasis *b) {
       (RayCompoundSceneQuat){0x1.6a09e667f3bcdp-1, 0x1.6a09e667f3bcdp-1, 0, 0};
   b->basis_digest = ray_compound_scene_room_basis_digest(b);
 }
+bool ray_compound_scene_room_basis_init_for_source(
+    RayCompoundSceneRoomBasis *b, const char *source_coordinate_system) {
+  if (!b || !source_coordinate_system)
+    return false;
+  if (!strcmp(source_coordinate_system,
+              RAY_COMPOUND_SCENE_STATIC_ROOM_COORDINATE_SYSTEM)) {
+    ray_compound_scene_room_basis_init(b);
+    return true;
+  }
+  if (strcmp(source_coordinate_system,
+             RAY_COMPOUND_SCENE_RENDER_COORDINATE_SYSTEM))
+    return false;
+  memset(b, 0, sizeof(*b));
+  snprintf(b->schema, sizeof b->schema, "%s",
+           RAY_COMPOUND_SCENE_ROOM_BASIS_SCHEMA);
+  b->schema_version = 2;
+  snprintf(b->mapping_id, sizeof b->mapping_id, "%s",
+           RAY_COMPOUND_SCENE_ROOM_IDENTITY_BASIS_ID);
+  snprintf(b->source_coordinate_system, sizeof b->source_coordinate_system,
+           "%s", RAY_COMPOUND_SCENE_RENDER_COORDINATE_SYSTEM);
+  snprintf(b->target_coordinate_system, sizeof b->target_coordinate_system,
+           "%s", RAY_COMPOUND_SCENE_RENDER_COORDINATE_SYSTEM);
+  for (size_t i = 0; i < 3; ++i)
+    b->render_from_simulation.m[i][i] = 1.0;
+  b->render_from_simulation_orientation.w = 1.0;
+  b->basis_digest = ray_compound_scene_room_basis_digest(b);
+  return ray_compound_scene_room_basis_validate(b);
+}
 uint64_t
 ray_compound_scene_room_basis_digest(const RayCompoundSceneRoomBasis *b) {
   if (!b)
@@ -89,22 +117,26 @@ ray_compound_scene_room_basis_digest(const RayCompoundSceneRoomBasis *b) {
 }
 bool ray_compound_scene_room_basis_validate(
     const RayCompoundSceneRoomBasis *b) {
+  const bool identity = b && !strcmp(
+      b->mapping_id, RAY_COMPOUND_SCENE_ROOM_IDENTITY_BASIS_ID);
   if (!b || strcmp(b->schema, RAY_COMPOUND_SCENE_ROOM_BASIS_SCHEMA) ||
-      b->schema_version != 1 ||
-      strcmp(b->mapping_id, RAY_COMPOUND_SCENE_ROOM_BASIS_ID) ||
+      b->schema_version != (identity ? 2u : 1u) ||
+      (!identity && strcmp(b->mapping_id, RAY_COMPOUND_SCENE_ROOM_BASIS_ID)) ||
       strcmp(b->source_coordinate_system,
-             RAY_COMPOUND_SCENE_STATIC_ROOM_COORDINATE_SYSTEM) ||
+             identity ? RAY_COMPOUND_SCENE_RENDER_COORDINATE_SYSTEM
+                      : RAY_COMPOUND_SCENE_STATIC_ROOM_COORDINATE_SYSTEM) ||
       strcmp(b->target_coordinate_system,
              RAY_COMPOUND_SCENE_RENDER_COORDINATE_SYSTEM))
     return false;
-  static const double expected[3][3] = {{1, 0, 0}, {0, 0, -1}, {0, 1, 0}};
+  static const double legacy[3][3] = {{1, 0, 0}, {0, 0, -1}, {0, 1, 0}};
   for (size_t r = 0; r < 3; ++r)
     for (size_t c = 0; c < 3; ++c)
-      if (!near(b->render_from_simulation.m[r][c], expected[r][c]))
+      if (!near(b->render_from_simulation.m[r][c],
+                identity ? (r == c ? 1.0 : 0.0) : legacy[r][c]))
         return false;
-  const double s = 0x1.6a09e667f3bcdp-1;
+  const double s = identity ? 0.0 : 0x1.6a09e667f3bcdp-1;
   RayCompoundSceneQuat q = b->render_from_simulation_orientation;
-  return finite_quat(q) && near(q.w, s) && near(q.x, s) && near(q.y, 0) &&
+  return finite_quat(q) && near(q.w, identity ? 1.0 : s) && near(q.x, s) && near(q.y, 0) &&
          near(q.z, 0) && b->basis_digest &&
          b->basis_digest == ray_compound_scene_room_basis_digest(b);
 }
@@ -113,7 +145,18 @@ ray_compound_scene_room_basis_map_vec3(const RayCompoundSceneRoomBasis *b,
                                        RayCompoundSceneVec3 v) {
   if (!ray_compound_scene_room_basis_validate(b))
     return (RayCompoundSceneVec3){NAN, NAN, NAN};
-  return (RayCompoundSceneVec3){v.x, -v.z, v.y};
+  if (strcmp(b->mapping_id, RAY_COMPOUND_SCENE_ROOM_IDENTITY_BASIS_ID))
+    return (RayCompoundSceneVec3){v.x, -v.z, v.y};
+  return (RayCompoundSceneVec3){
+      b->render_from_simulation.m[0][0] * v.x +
+          b->render_from_simulation.m[0][1] * v.y +
+          b->render_from_simulation.m[0][2] * v.z,
+      b->render_from_simulation.m[1][0] * v.x +
+          b->render_from_simulation.m[1][1] * v.y +
+          b->render_from_simulation.m[1][2] * v.z,
+      b->render_from_simulation.m[2][0] * v.x +
+          b->render_from_simulation.m[2][1] * v.y +
+          b->render_from_simulation.m[2][2] * v.z};
 }
 RayCompoundSceneQuat
 ray_compound_scene_room_basis_map_quat(const RayCompoundSceneRoomBasis *b,
@@ -130,9 +173,12 @@ map_surface(const RayCompoundSceneRoomBasis *b,
   RayCompoundSceneStaticRoomSurface m = *s;
   m.collision_box_center_m =
       ray_compound_scene_room_basis_map_vec3(b, s->collision_box_center_m);
-  m.collision_box_half_extent_m = (RayCompoundSceneVec3){
-      s->collision_box_half_extent_m.x, s->collision_box_half_extent_m.z,
-      s->collision_box_half_extent_m.y};
+  m.collision_box_half_extent_m = !strcmp(
+      b->mapping_id, RAY_COMPOUND_SCENE_ROOM_IDENTITY_BASIS_ID)
+      ? s->collision_box_half_extent_m
+      : (RayCompoundSceneVec3){s->collision_box_half_extent_m.x,
+                               s->collision_box_half_extent_m.z,
+                               s->collision_box_half_extent_m.y};
   m.collision_box_orientation =
       ray_compound_scene_room_basis_map_quat(b, s->collision_box_orientation);
   m.interior_plane_origin_m =
@@ -220,9 +266,16 @@ bool ray_compound_scene_room_basis_bind(const RayCompoundSceneHandoff *h,
       *f = RAY_COMPOUND_SCENE_ROOM_BASIS_INVALID;
     return false;
   }
-  if (h->fixture_digest != r->provenance.transform_fixture_digest ||
-      h->seed != r->provenance.seed ||
-      h->fixed_dt_s != r->provenance.fixed_dt_s) {
+  if (strcmp(h->coordinate_system, r->coordinate_system) ||
+      strcmp(b->source_coordinate_system, h->coordinate_system) ||
+      (!strcmp(h->coordinate_system, RAY_COMPOUND_SCENE_COORDINATE_Z_UP)
+           ? (h->handoff_digest != r->provenance.transform_fixture_digest ||
+              h->request_digest != r->provenance.pair_request_digest ||
+              h->room_spec_digest != r->provenance.room_spec_digest ||
+              h->result_digest != r->provenance.pair_room_result_digest)
+           : (h->fixture_digest != r->provenance.transform_fixture_digest ||
+              h->seed != r->provenance.seed ||
+              h->fixed_dt_s != r->provenance.fixed_dt_s))) {
     if (f)
       *f = RAY_COMPOUND_SCENE_ROOM_BASIS_PROVENANCE;
     return false;

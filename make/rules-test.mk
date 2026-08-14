@@ -2835,6 +2835,7 @@ RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN := \
 RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS := \
 	$(TEST_DIR)/compound_scene_handoff_import_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_binding_manifest.c
 RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE := \
 	$(TEST_DIR)/fixtures/compound_scene_handoff/compound_scene_renderer_handoff_v1.txt
@@ -2867,7 +2868,9 @@ RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN := \
 RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_SRCS := \
 	$(TEST_DIR)/compound_scene_static_room_import_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_static_room_import.c \
+	$(SRC_DIR)/import/compound_scene_static_room_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_room_basis.c
 
 $(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN): \
@@ -2894,12 +2897,54 @@ test-ray-tracing-compound-scene-static-room-import-sanitize:
 		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
 		$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
 
+RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN := \
+	$(BUILD_DIR)/tests/compound_scene_z_up_v2_import_contract_test
+RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_SRCS := \
+	$(TEST_DIR)/compound_scene_z_up_v2_import_contract_test.c \
+	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
+	$(SRC_DIR)/import/compound_scene_static_room_import.c \
+	$(SRC_DIR)/import/compound_scene_static_room_z_up_v2_import.c \
+	$(SRC_DIR)/import/compound_scene_room_basis.c
+RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF ?=
+RAY_TRACING_COMPOUND_Z_UP_V2_ROOM ?=
+
+$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN): \
+	$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) \
+		-o $@ $(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_SRCS) -lm
+
+test-ray-tracing-compound-scene-z-up-v2-import: \
+	$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN)
+	@test -n "$(RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF)" -a \
+		-n "$(RAY_TRACING_COMPOUND_Z_UP_V2_ROOM)" || \
+		(echo "set RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF and RAY_TRACING_COMPOUND_Z_UP_V2_ROOM to fresh producer artifacts" >&2; exit 2)
+	@$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN) \
+		$(RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF) \
+		$(RAY_TRACING_COMPOUND_Z_UP_V2_ROOM)
+
+test-ray-tracing-compound-scene-z-up-v2-import-sanitize:
+	@test -n "$(RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF)" -a \
+		-n "$(RAY_TRACING_COMPOUND_Z_UP_V2_ROOM)" || \
+		(echo "set RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF and RAY_TRACING_COMPOUND_Z_UP_V2_ROOM to fresh producer artifacts" >&2; exit 2)
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-o $(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_SRCS) -lm
+	@$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN).sanitize \
+		$(RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF) \
+		$(RAY_TRACING_COMPOUND_Z_UP_V2_ROOM)
+
 RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN := \
 	$(BUILD_DIR)/tests/compound_scene_room_geometry_contract_test
 RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_SRCS := \
 	$(TEST_DIR)/compound_scene_room_geometry_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_static_room_import.c \
+	$(SRC_DIR)/import/compound_scene_static_room_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_room_basis.c \
 	$(SRC_DIR)/render/compound_scene_room_geometry.c
 
@@ -2932,6 +2977,7 @@ RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN := \
 RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS := \
 	$(TEST_DIR)/compound_scene_evaluated_scene_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
 	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
 	$(SRC_DIR)/animation/evaluated_scene_snapshot.c \
@@ -2963,6 +3009,7 @@ RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN := \
 RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS := \
 	$(TEST_DIR)/compound_scene_detached_geometry_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
 	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
 	$(SRC_DIR)/render/compound_scene_detached_geometry.c \
@@ -2999,12 +3046,14 @@ RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH := \
 RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS := \
 	$(TEST_DIR)/compound_scene_assembly_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
 	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
 	$(SRC_DIR)/render/compound_scene_detached_geometry.c \
 	$(SRC_DIR)/render/compound_scene_assembly.c \
 	$(SRC_DIR)/import/compound_scene_ingestion.c \
 	$(SRC_DIR)/import/compound_scene_static_room_import.c \
+	$(SRC_DIR)/import/compound_scene_static_room_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_room_basis.c \
 	$(SRC_DIR)/render/compound_scene_room_geometry.c \
 	$(SRC_DIR)/animation/evaluated_scene_snapshot.c \
@@ -3191,6 +3240,18 @@ test-ray-tracing-compound-scene-s9h3-visual-proof: \
 		--emitter $(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN) \
 		--renderer $(RAY_TRACING_RENDER_HEADLESS_BIN)
 
+test-ray-tracing-fresh-compound-collision-event-proof: \
+	ray-tracing-render-headless compound-scene-s9h3-visual-proof-emitter
+	@python3 tools/run_compound_scene_fresh_collision_event_proof.py \
+		--emitter $(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN) \
+		--renderer $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+test-ray-tracing-compound-scene-z-up-comparison-proof: \
+	ray-tracing-render-headless compound-scene-s9h3-visual-proof-emitter
+	@python3 tools/run_compound_scene_z_up_comparison_proof.py \
+		--emitter $(RAY_TRACING_COMPOUND_S9H3_EMITTER_BIN) \
+		--renderer $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
 RAY_TRACING_COMPOUND_S9E_EMITTER_BIN := \
 	$(BUILD_DIR)/tools/compound_scene_visual_proof_emit
 RAY_TRACING_COMPOUND_S9E_SOURCE_MESH := \
@@ -3198,6 +3259,7 @@ RAY_TRACING_COMPOUND_S9E_SOURCE_MESH := \
 RAY_TRACING_COMPOUND_S9E_EMITTER_SRCS := \
 	tools/compound_scene_visual_proof_emit.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
+	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
 	$(SRC_DIR)/import/compound_scene_binding_manifest.c \
 	$(SRC_DIR)/import/compound_scene_evaluated_scene.c \
 	$(SRC_DIR)/render/compound_scene_detached_geometry.c \

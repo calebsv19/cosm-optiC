@@ -69,6 +69,10 @@ def make_contact_sheet(frames: list[Path], output: Path) -> None:
 
 def source_scene_for(payload: dict, fixture: Path, tick: int) -> dict:
     visible_planes = [plane for plane in payload["planes"] if plane["visible"]]
+    opening = next(plane for plane in payload["planes"] if not plane["visible"])
+    plane_colors = ([0.30, 0.34, 0.40], [0.20, 0.23, 0.29],
+                    [0.18, 0.25, 0.33], [0.24, 0.20, 0.30],
+                    [0.15, 0.19, 0.25])
     return {
         "schema_family": "codework_scene", "schema_variant": "scene_runtime_v1",
         "schema_version": 1, "scene_id": f"compound_scene_s9i_tick_{tick:04d}",
@@ -95,11 +99,9 @@ def source_scene_for(payload: dict, fixture: Path, tick: int) -> dict:
             {"asset_id": "mesh_c1_l_bracket", "path": str(fixture / "assets" / "mesh_assets" / "mesh_c1_l_bracket.runtime.json")}]},
         "hierarchy": [],
         "materials": [
-            {"material_id": "mat_sim_room_floor", "kind": "lambert", "albedo": [0.30, 0.34, 0.40]},
-            {"material_id": "mat_sim_room_ceiling", "kind": "lambert", "albedo": [0.20, 0.23, 0.29]},
-            {"material_id": "mat_sim_room_x_min", "kind": "lambert", "albedo": [0.18, 0.25, 0.33]},
-            {"material_id": "mat_sim_room_x_max", "kind": "lambert", "albedo": [0.24, 0.20, 0.30]},
-            {"material_id": "mat_sim_room_z_min", "kind": "lambert", "albedo": [0.15, 0.19, 0.25]},
+            *[{"material_id": plane["material_id"], "kind": "lambert",
+               "albedo": color}
+              for plane, color in zip(visible_planes, plane_colors)],
             {"material_id": "mat_c2_authored", "kind": "lambert", "albedo": [0.90, 0.43, 0.16]},
             {"material_id": "mat_c1_authored", "kind": "lambert", "albedo": [0.18, 0.72, 0.48]}],
         "lights": [{"light_id": "light_key", "kind": "point",
@@ -112,14 +114,16 @@ def source_scene_for(payload: dict, fixture: Path, tick: int) -> dict:
         "constraints": [],
         "extensions": {"compound_scene_s9i": {
             "source_tick": tick, "room_geometry_digest": payload["room_geometry_digest"],
-            "camera_opening_surface_id": "sim_room_z_max",
+            "camera_opening_surface_id": opening["object_id"],
             "collision_geometry_included": False}},
     }
 
 
 def descriptor_for(packet: Path, room: Path, payload: dict, tick: int) -> dict:
+    native_z_up = payload.get("coordinate_system") == "right_handed_z_up_meters"
     return {
-        "schema": "ray_tracing_compound_scene_ingestion_v1",
+        "schema": ("ray_tracing_compound_scene_ingestion_v2" if native_z_up
+                   else "ray_tracing_compound_scene_ingestion_legacy_y_up_v1"),
         "handoff_path": str(packet), "room_path": str(room), "tick": tick,
         "bodies": [
             {"body_id": 4101, "object_id": "sim_body_c2", "mesh_asset_id": "mesh_c2_u_channel"},
@@ -131,7 +135,8 @@ def descriptor_for(packet: Path, room: Path, payload: dict, tick: int) -> dict:
 
 
 def render_tick(args: argparse.Namespace, fixture: Path, packet: Path, room: Path,
-                tick: int) -> tuple[dict, str, str]:
+                tick: int, allowed_penetration_m: float = 1e-9
+                ) -> tuple[dict, str, str]:
     command = [str(args.emitter), str(packet), str(room),
                str(fixture / "assets" / "mesh_assets" / "mesh_c2_u_channel.runtime.json"),
                str(fixture / "assets" / "mesh_assets" / "mesh_c1_l_bracket.runtime.json"), str(tick)]
@@ -140,14 +145,17 @@ def render_tick(args: argparse.Namespace, fixture: Path, packet: Path, room: Pat
     if first != second:
         raise RuntimeError(f"tick {tick}: exact producer emitter is nondeterministic")
     payload = json.loads(first)
+    expected_opening = (4 if payload.get("coordinate_system") ==
+                        "right_handed_z_up_meters" else 5)
     if (payload["schema"] != "ray_compound_scene_s9h3_visual_payload_v1" or
-            len(payload["planes"]) != 6 or sum(p["visible"] for p in payload["planes"]) != 5 or
-            payload["planes"][5]["visible"]):
+            len(payload["planes"]) != 6 or
+            sum(p["visible"] for p in payload["planes"]) != 5 or
+            payload["planes"][expected_opening]["visible"]):
         raise RuntimeError(f"tick {tick}: six-plane room presentation mismatch")
     clearances = {body["object_id"]: min(plane_clearance(body["vertices"], plane)
                                           for plane in payload["planes"])
                   for body in payload["bodies"]}
-    if min(clearances.values()) < -1e-9:
+    if min(clearances.values()) < -allowed_penetration_m - 1e-9:
         raise RuntimeError(f"tick {tick}: producer body crossed a collision plane")
     run_root = args.output_root / "runs" / f"tick_{tick:04d}"
     scene_path = run_root / "scene_runtime.json"

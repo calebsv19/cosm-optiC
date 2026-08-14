@@ -42,6 +42,7 @@ bool ray_compound_scene_ingestion_file_read(const char* path,
     json_object* bodies = NULL;
     json_object* room = NULL;
     const char* schema = NULL;
+    bool legacy_schema = false;
     int tick = 0;
     bool ok = false;
     ray_compound_scene_ingestion_file_init(&candidate);
@@ -52,7 +53,8 @@ bool ray_compound_scene_ingestion_file_read(const char* path,
     text = NULL;
     if (!root || !json_object_is_type(root, json_type_object) ||
         !RayTracingJsonGetString(root, "schema", &schema) ||
-        strcmp(schema, RAY_COMPOUND_SCENE_INGESTION_SCHEMA) ||
+        (strcmp(schema, RAY_COMPOUND_SCENE_INGESTION_SCHEMA) &&
+         strcmp(schema, RAY_COMPOUND_SCENE_INGESTION_LEGACY_Y_UP_SCHEMA)) ||
         !RayTracingJsonGetInt(root, "tick", &tick) || tick < 0 ||
         !copy_json_string(root, "handoff_path", candidate.handoff_path,
                           sizeof(candidate.handoff_path)) ||
@@ -67,6 +69,8 @@ bool ray_compound_scene_ingestion_file_read(const char* path,
         set_diag(diagnostics, diagnostics_size, "compound ingestion file schema is invalid");
         goto done;
     }
+    legacy_schema = !strcmp(
+        schema, RAY_COMPOUND_SCENE_INGESTION_LEGACY_Y_UP_SCHEMA);
     RayTracingDirnameOf(path, directory, sizeof(directory));
     if (!RayTracingResolveRequestInputPath(directory, candidate.handoff_path,
                                            candidate.handoff_path,
@@ -80,6 +84,12 @@ bool ray_compound_scene_ingestion_file_read(const char* path,
     }
     ray_compound_scene_ingestion_descriptor_init(&candidate.descriptor,
                                                  &candidate.handoff, &candidate.room);
+    if (candidate.descriptor.legacy_y_up_compatibility != legacy_schema ||
+        strcmp(candidate.descriptor.schema, schema)) {
+        set_diag(diagnostics, diagnostics_size,
+                 "compound ingestion schema does not match source coordinate system");
+        goto done;
+    }
     candidate.descriptor.tick = (uint64_t)tick;
     for (size_t i = 0; i < RAY_COMPOUND_SCENE_HANDOFF_BODY_COUNT; ++i) {
         json_object* body = json_object_array_get_idx(bodies, (int)i);

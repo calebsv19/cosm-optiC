@@ -120,6 +120,37 @@ static int check_envelope_rejections(const char *room_path) {
   return 0;
 }
 
+static int check_derived_room_validation(
+    const RayCompoundSceneStaticRoom *canonical) {
+  RayCompoundSceneStaticRoom derived = *canonical;
+  derived.provenance.room_spec_digest ^= UINT64_C(0x13579bdf);
+  derived.provenance.pair_room_result_digest ^= UINT64_C(0x2468ace0);
+  derived.provenance.transform_fixture_digest ^= UINT64_C(0x10203040);
+  derived.surfaces[1].collision_box_center_m.y = 7.5;
+  derived.surfaces[1].interior_plane_origin_m.y = 7.0;
+  for (size_t i = 2; i < 6; ++i) {
+    derived.surfaces[i].collision_box_center_m.y = 3.5;
+    derived.surfaces[i].collision_box_half_extent_m.y = 3.5;
+    derived.surfaces[i].interior_plane_origin_m.y = 3.5;
+    if (i <= 3)
+      derived.surfaces[i].half_extent_u_m = 3.5;
+    else
+      derived.surfaces[i].half_extent_v_m = 3.5;
+  }
+  for (size_t i = 0; i < 6; ++i)
+    derived.surfaces[i].surface_digest =
+        ray_compound_scene_static_room_surface_digest(&derived.surfaces[i]);
+  derived.surface_set_digest =
+      ray_compound_scene_static_room_surface_set_digest(&derived);
+  derived.artifact_digest = ray_compound_scene_static_room_digest(&derived);
+  CHECK(derived.surface_set_digest != canonical->surface_set_digest);
+  CHECK(derived.artifact_digest != canonical->artifact_digest);
+  CHECK(ray_compound_scene_static_room_validate(&derived));
+  derived.surfaces[1].collision_box_center_m.y += 0.25;
+  CHECK(!ray_compound_scene_static_room_validate(&derived));
+  return 0;
+}
+
 static int check_join_and_mapping(const char *handoff_path,
                                   const RayCompoundSceneStaticRoom *room) {
   RayCompoundSceneHandoff handoff;
@@ -196,6 +227,7 @@ int main(int argc, char **argv) {
   CHECK(argc == 3);
   RayCompoundSceneStaticRoom room;
   CHECK(check_import(argv[2], &room) == 0);
+  CHECK(check_derived_room_validation(&room) == 0);
   CHECK(check_envelope_rejections(argv[2]) == 0);
   CHECK(check_join_and_mapping(argv[1], &room) == 0);
   puts("compound scene static room import contract passed");

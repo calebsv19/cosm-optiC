@@ -1,6 +1,35 @@
 # optiC Current Truth
 
-Last updated: 2026-08-02
+Last updated: 2026-08-13
+
+## 2026-08-13 Native Z-Up Compound Scene Ingestion
+
+- The absent-by-default local `scene.compound_scene_ingestion_path` route now
+  consumes both the explicitly named frozen `legacy_y_up_v1` handoff/room
+  format and the authoritative `right_handed_z_up_meters` producer v2 format.
+  The v2 readers are linked into the normal headless renderer, validate all
+  provenance and digests before mutation, and apply the native identity basis
+  atomically while binding Ball body IDs to existing RayTracing object/mesh
+  identities. The base scene and saved scene remain unchanged.
+- `make test-ray-tracing-fresh-compound-collision-event-proof` regenerates two
+  native Z-up Ball Bounce exports, then renders them through the normal local
+  request path. Producer evidence selects body/body ticks `400/401/618/619`
+  and body/wall ticks `96/97/115/116`; the review render adds a declared
+  96-tick approach/departure context without editing producer coordinates or
+  transforms. Both source meshes are visible, contained within the exact
+  six-plane producer room to the declared solver tolerance, and deterministic
+  on repeat.
+- `make test-ray-tracing-compound-scene-z-up-comparison-proof` compares the frozen
+  legacy mapping with native identity ingestion at the shared collision ticks.
+  It verifies an identical physical six-plane room and records the expected
+  source-mesh geometry and pixel deltas caused by removing the legacy
+  post-bake frame workaround. Legacy output is a compatibility reference, not
+  the native acceptance oracle.
+- Every proof frame renders both bound source meshes and five presentation
+  planes and retains the coordinate-appropriate sixth collision plane as the
+  camera opening. Collision mechanics remain Ball Bounce-owned. The proof is
+  local and promotion-ineligible and does not alter RayTracing defaults,
+  workers, packages, or releases.
 
 ## 2026-08-02 Water-Body Compatibility Repair
 

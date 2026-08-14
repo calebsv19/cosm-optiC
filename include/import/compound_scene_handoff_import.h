@@ -6,10 +6,16 @@
 
 #define RAY_COMPOUND_SCENE_HANDOFF_SCHEMA \
     "ball_compound_scene_renderer_handoff_v1"
+#define RAY_COMPOUND_SCENE_HANDOFF_Z_UP_SCHEMA \
+    "ball_compound_scene_handoff_z_up_v2"
 #define RAY_COMPOUND_SCENE_HANDOFF_ID \
     "phase43_pair_room_renderer_handoff_v1"
 #define RAY_COMPOUND_SCENE_SOURCE_BINDING_SCHEMA \
     "ball_compound_scene_source_mesh_binding_v1"
+#define RAY_COMPOUND_SCENE_SOURCE_BINDING_Z_UP_SCHEMA \
+    "ball_compound_scene_source_binding_z_up_v2"
+#define RAY_COMPOUND_SCENE_COORDINATE_Y_UP "right_handed_y_up_meters"
+#define RAY_COMPOUND_SCENE_COORDINATE_Z_UP "right_handed_z_up_meters"
 
 enum {
     RAY_COMPOUND_SCENE_HANDOFF_CODEC_VERSION = 1,
@@ -38,6 +44,7 @@ typedef struct RayCompoundSceneMat3 {
 
 typedef struct RayCompoundSceneSourceBinding {
     char schema[64];
+    uint64_t descriptor_digest;
     uint64_t fixture_digest;
     size_t body_index;
     int body_id;
@@ -46,6 +53,8 @@ typedef struct RayCompoundSceneSourceBinding {
     char representation_role[32];
     RayCompoundSceneVec3 source_center_m;
     RayCompoundSceneMat3 principal_to_source;
+    uint64_t geometry_hash;
+    uint64_t body_hash;
     uint64_t binding_digest;
 } RayCompoundSceneSourceBinding;
 
@@ -63,9 +72,14 @@ typedef struct RayCompoundSceneFrame {
 typedef struct RayCompoundSceneHandoff {
     char schema[64];
     uint32_t schema_version;
+    char coordinate_system[64];
     char handoff_id[64];
     char fixture_reference[128];
     uint64_t fixture_digest;
+    uint64_t descriptor_digest;
+    uint64_t request_digest;
+    uint64_t room_spec_digest;
+    uint64_t result_digest;
     uint64_t seed;
     double fixed_dt_s;
     RayCompoundSceneSourceBinding
@@ -98,6 +112,10 @@ bool ray_compound_scene_handoff_validate(
 
 /* Initialize output before first use and free it before reusing it. */
 bool ray_compound_scene_handoff_parse(
+    const char* text,
+    RayCompoundSceneHandoff* output,
+    RayCompoundSceneImportFailure* failure);
+bool ray_compound_scene_handoff_z_up_v2_parse(
     const char* text,
     RayCompoundSceneHandoff* output,
     RayCompoundSceneImportFailure* failure);

@@ -8,16 +8,13 @@
 
 #define RAY_COMPOUND_SCENE_STATIC_ROOM_SCHEMA                                  \
   "ball_compound_scene_static_room_v1"
+#define RAY_COMPOUND_SCENE_STATIC_ROOM_Z_UP_SCHEMA                             \
+  "ball_compound_scene_static_room_z_up_v2"
 #define RAY_COMPOUND_SCENE_STATIC_ROOM_ID "phase43_pair_room_static_room_v1"
 #define RAY_COMPOUND_SCENE_STATIC_ROOM_ROOM_ID                                 \
   "phase43_pair_room_2_dynamic_6_static_v1"
 #define RAY_COMPOUND_SCENE_STATIC_ROOM_COORDINATE_SYSTEM                       \
   "right_handed_y_up_meters"
-#define RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_SET_DIGEST                      \
-  UINT64_C(0xc8bb28d5a68a6511)
-#define RAY_COMPOUND_SCENE_STATIC_ROOM_ARTIFACT_DIGEST                         \
-  UINT64_C(0x9f2a72c9dba0bab3)
-
 enum {
   RAY_COMPOUND_SCENE_STATIC_ROOM_VERSION = 1,
   RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_COUNT = 6,
@@ -34,6 +31,8 @@ typedef enum RayCompoundSceneStaticRoomRole {
   RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MIN,
   RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX
 } RayCompoundSceneStaticRoomRole;
+#define RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MIN RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MIN
+#define RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MAX RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX
 
 typedef struct RayCompoundSceneStaticRoomProvenance {
   uint64_t pair_request_digest;
@@ -45,6 +44,7 @@ typedef struct RayCompoundSceneStaticRoomProvenance {
 } RayCompoundSceneStaticRoomProvenance;
 
 typedef struct RayCompoundSceneStaticRoomSurface {
+  uint32_t schema_version;
   RayCompoundSceneStaticRoomRole role;
   char surface_id[32];
   int body_id;
@@ -96,6 +96,9 @@ ray_compound_scene_static_room_digest(const RayCompoundSceneStaticRoom *room);
 bool ray_compound_scene_static_room_validate(
     const RayCompoundSceneStaticRoom *room);
 bool ray_compound_scene_static_room_parse(
+    const char *text, RayCompoundSceneStaticRoom *output,
+    RayCompoundSceneStaticRoomImportFailure *failure);
+bool ray_compound_scene_static_room_z_up_v2_parse(
     const char *text, RayCompoundSceneStaticRoom *output,
     RayCompoundSceneStaticRoomImportFailure *failure);
 bool ray_compound_scene_static_room_read(

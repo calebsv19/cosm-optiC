@@ -1,5 +1,5 @@
 {
-  "schema":"ray_tracing_compound_scene_ingestion_v1",
+  "schema":"ray_tracing_compound_scene_ingestion_legacy_y_up_v1",
   "handoff_path":"compound_scene_renderer_handoff_v1.txt",
   "room_path":"compound_scene_static_room_v1.txt",
   "tick":480,

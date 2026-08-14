@@ -61,10 +61,13 @@ void ray_compound_scene_static_room_init(RayCompoundSceneStaticRoom *room) {
     memset(room, 0, sizeof(*room));
 }
 
-static const char *role_name(size_t i) {
-  static const char *names[] = {"floor", "ceiling", "x_min",
-                                "x_max", "z_min",   "z_max"};
-  return i < RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_COUNT ? names[i] : NULL;
+static const char *role_name(size_t i, bool z_up) {
+  static const char *legacy_names[] = {"floor", "ceiling", "x_min",
+                                       "x_max", "z_min", "z_max"};
+  static const char *z_up_names[] = {"floor", "ceiling", "x_min",
+                                     "x_max", "y_min", "y_max"};
+  return i < RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_COUNT
+      ? (z_up ? z_up_names[i] : legacy_names[i]) : NULL;
 }
 
 static bool derive_plane(RayCompoundSceneStaticRoomRole role,
@@ -101,6 +104,46 @@ static bool derive_plane(RayCompoundSceneStaticRoomRole role,
   return true;
 }
 
+static bool derive_plane_z_up(RayCompoundSceneStaticRoomRole role,
+                              RayCompoundSceneVec3 center,
+                              RayCompoundSceneVec3 half,
+                              RayCompoundSceneVec3 *origin,
+                              RayCompoundSceneVec3 *normal,
+                              RayCompoundSceneVec3 *u,
+                              RayCompoundSceneVec3 *v,
+                              double *hu, double *hv) {
+  if ((unsigned)role >= 6u || !finite_vec3(center) || !finite_vec3(half) ||
+      half.x <= 0 || half.y <= 0 || half.z <= 0 || !origin || !normal || !u ||
+      !v || !hu || !hv)
+    return false;
+  if (role <= RAY_COMPOUND_SCENE_STATIC_ROOM_CEILING) {
+    const double sign = role == RAY_COMPOUND_SCENE_STATIC_ROOM_FLOOR ? 1 : -1;
+    *origin = (RayCompoundSceneVec3){center.x, center.y,
+                                     center.z + sign * half.z};
+    *normal = (RayCompoundSceneVec3){0, 0, sign};
+    *u = (RayCompoundSceneVec3){1, 0, 0};
+    *v = (RayCompoundSceneVec3){0, 1, 0};
+    *hu = half.x; *hv = half.y;
+  } else if (role <= RAY_COMPOUND_SCENE_STATIC_ROOM_X_MAX) {
+    const double sign = role == RAY_COMPOUND_SCENE_STATIC_ROOM_X_MIN ? 1 : -1;
+    *origin = (RayCompoundSceneVec3){center.x + sign * half.x, center.y,
+                                     center.z};
+    *normal = (RayCompoundSceneVec3){sign, 0, 0};
+    *u = (RayCompoundSceneVec3){0, 1, 0};
+    *v = (RayCompoundSceneVec3){0, 0, 1};
+    *hu = half.y; *hv = half.z;
+  } else {
+    const double sign = role == RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MIN ? 1 : -1;
+    *origin = (RayCompoundSceneVec3){center.x, center.y + sign * half.y,
+                                     center.z};
+    *normal = (RayCompoundSceneVec3){0, sign, 0};
+    *u = (RayCompoundSceneVec3){1, 0, 0};
+    *v = (RayCompoundSceneVec3){0, 0, 1};
+    *hu = half.x; *hv = half.z;
+  }
+  return true;
+}
+
 uint64_t ray_compound_scene_static_room_surface_digest(
     const RayCompoundSceneStaticRoomSurface *s) {
   if (!s)
@@ -112,7 +155,8 @@ uint64_t ray_compound_scene_static_room_surface_digest(
   h = hash_u64(h, s->contact_mask_bit);
   h = hash_vec3(h, s->collision_box_center_m);
   h = hash_vec3(h, s->collision_box_half_extent_m);
-  h = hash_quat(h, s->collision_box_orientation);
+  if (s->schema_version != 2u)
+    h = hash_quat(h, s->collision_box_orientation);
   h = hash_vec3(h, s->interior_plane_origin_m);
   h = hash_vec3(h, s->inward_normal);
   h = hash_vec3(h, s->tangent_u);
@@ -127,8 +171,10 @@ uint64_t ray_compound_scene_static_room_surface_set_digest(
   if (!room)
     return 0;
   uint64_t h = UINT64_C(1469598103934665603);
-  h = hash_u64(h, room->provenance.room_spec_digest);
-  h = hash_u64(h, room->surface_count);
+  if (room->schema_version != 2u) {
+    h = hash_u64(h, room->provenance.room_spec_digest);
+    h = hash_u64(h, room->surface_count);
+  }
   for (size_t i = 0; i < 6; ++i)
     h = hash_u64(h, room->surfaces[i].surface_digest);
   return h;
@@ -140,6 +186,15 @@ ray_compound_scene_static_room_digest(const RayCompoundSceneStaticRoom *room) {
   uint64_t h = UINT64_C(1469598103934665603);
   h = hash_string(h, room->schema);
   h = hash_u64(h, room->schema_version);
+  if (room->schema_version == 2u) {
+    h = hash_string(h, room->coordinate_system);
+    h = hash_u64(h, room->provenance.pair_request_digest);
+    h = hash_u64(h, room->provenance.room_spec_digest);
+    h = hash_u64(h, room->provenance.pair_room_result_digest);
+    h = hash_u64(h, room->provenance.transform_fixture_digest);
+    h = hash_u64(h, room->surface_count);
+    return hash_u64(h, room->surface_set_digest);
+  }
   h = hash_string(h, room->artifact_id);
   h = hash_string(h, room->room_id);
   h = hash_string(h, room->coordinate_system);
@@ -160,17 +215,22 @@ static bool surface_valid(const RayCompoundSceneStaticRoomSurface *s,
                           size_t i) {
   RayCompoundSceneVec3 o, n, u, v;
   double hu = 0, hv = 0;
-  return s && s->role == (RayCompoundSceneStaticRoomRole)i &&
-         !strcmp(s->surface_id, role_name(i)) &&
+  const bool z_up = s && s->schema_version == 2u;
+  return s && (s->schema_version == 1u || z_up) &&
+         s->role == (RayCompoundSceneStaticRoomRole)i &&
+         !strcmp(s->surface_id, role_name(i, z_up)) &&
          s->body_id == RAY_COMPOUND_SCENE_STATIC_ROOM_BODY_ID_BASE + (int)i &&
          s->contact_mask_bit == (uint8_t)(1u << i) &&
          s->collision_box_orientation.w == 1 &&
          s->collision_box_orientation.x == 0 &&
          s->collision_box_orientation.y == 0 &&
          s->collision_box_orientation.z == 0 &&
-         derive_plane(s->role, s->collision_box_center_m,
-                      s->collision_box_half_extent_m, &o, &n, &u, &v, &hu,
-                      &hv) &&
+         (z_up ? derive_plane_z_up(s->role, s->collision_box_center_m,
+                                   s->collision_box_half_extent_m,
+                                   &o, &n, &u, &v, &hu, &hv)
+               : derive_plane(s->role, s->collision_box_center_m,
+                              s->collision_box_half_extent_m,
+                              &o, &n, &u, &v, &hu, &hv)) &&
          same_vec3(s->interior_plane_origin_m, o) &&
          same_vec3(s->inward_normal, n) && same_vec3(s->tangent_u, u) &&
          same_vec3(s->tangent_v, v) && s->half_extent_u_m == hu &&
@@ -181,25 +241,29 @@ static bool surface_valid(const RayCompoundSceneStaticRoomSurface *s,
 }
 bool ray_compound_scene_static_room_validate(
     const RayCompoundSceneStaticRoom *room) {
-  if (!room || strcmp(room->schema, RAY_COMPOUND_SCENE_STATIC_ROOM_SCHEMA) ||
-      room->schema_version != 1 ||
-      strcmp(room->artifact_id, RAY_COMPOUND_SCENE_STATIC_ROOM_ID) ||
-      strcmp(room->room_id, RAY_COMPOUND_SCENE_STATIC_ROOM_ROOM_ID) ||
-      strcmp(room->coordinate_system,
-             RAY_COMPOUND_SCENE_STATIC_ROOM_COORDINATE_SYSTEM) ||
+  const bool z_up = room && !strcmp(
+      room->schema, RAY_COMPOUND_SCENE_STATIC_ROOM_Z_UP_SCHEMA);
+  if (!room ||
+      (!z_up && strcmp(room->schema, RAY_COMPOUND_SCENE_STATIC_ROOM_SCHEMA)) ||
+      room->schema_version != (z_up ? 2u : 1u) ||
+      (z_up ? strcmp(room->coordinate_system,
+                     RAY_COMPOUND_SCENE_COORDINATE_Z_UP)
+            : (strcmp(room->artifact_id, RAY_COMPOUND_SCENE_STATIC_ROOM_ID) ||
+               strcmp(room->room_id, RAY_COMPOUND_SCENE_STATIC_ROOM_ROOM_ID) ||
+               strcmp(room->coordinate_system,
+                      RAY_COMPOUND_SCENE_STATIC_ROOM_COORDINATE_SYSTEM))) ||
       !room->provenance.pair_request_digest ||
       !room->provenance.room_spec_digest ||
       !room->provenance.pair_room_result_digest ||
-      !room->provenance.transform_fixture_digest || !room->provenance.seed ||
-      room->provenance.fixed_dt_s != 1.0 / 240.0 || room->surface_count != 6)
+      !room->provenance.transform_fixture_digest ||
+      (!z_up && (!room->provenance.seed ||
+                 room->provenance.fixed_dt_s != 1.0 / 240.0)) ||
+      room->surface_count != 6)
     return false;
   for (size_t i = 0; i < 6; ++i)
     if (!surface_valid(&room->surfaces[i], i))
       return false;
-  return room->surface_set_digest ==
-             RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_SET_DIGEST &&
-         room->artifact_digest ==
-             RAY_COMPOUND_SCENE_STATIC_ROOM_ARTIFACT_DIGEST &&
+  return room->surface_set_digest && room->artifact_digest &&
          room->surface_set_digest ==
              ray_compound_scene_static_room_surface_set_digest(room) &&
          room->artifact_digest == ray_compound_scene_static_room_digest(room);
@@ -272,6 +336,7 @@ static bool decode(const unsigned char *p, size_t n,
     r.ok = false;
   for (size_t i = 0; r.ok && i < 6; ++i) {
     RayCompoundSceneStaticRoomSurface *s = &x.surfaces[i];
+    s->schema_version = 1u;
     s->role = (RayCompoundSceneStaticRoomRole)u32(&r);
     str(&r, s->surface_id, sizeof s->surface_id);
     s->body_id = (int)u32(&r);
@@ -312,6 +377,9 @@ bool ray_compound_scene_static_room_parse(
     fail(failure, RAY_COMPOUND_SCENE_STATIC_ROOM_IMPORT_INPUT);
     return false;
   }
+  if (!strncmp(text, RAY_COMPOUND_SCENE_STATIC_ROOM_Z_UP_SCHEMA "\n",
+               strlen(RAY_COMPOUND_SCENE_STATIC_ROOM_Z_UP_SCHEMA) + 1u))
+    return ray_compound_scene_static_room_z_up_v2_parse(text, out, failure);
   const char *prefix =
       RAY_COMPOUND_SCENE_STATIC_ROOM_SCHEMA "\ncodec_version=1\npayload_hex=";
   size_t pn = strlen(prefix);

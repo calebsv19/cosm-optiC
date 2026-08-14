@@ -45,12 +45,23 @@ static bool same_vec3(RayCompoundSceneVec3 a, RayCompoundSceneVec3 b) {
   return a.x == b.x && a.y == b.y && a.z == b.z;
 }
 
-static const char *role_name(RayCompoundSceneStaticRoomRole role) {
-  static const char *names[] = {"floor", "ceiling", "x_min",
-                                "x_max", "z_min",   "z_max"};
-  return (unsigned)role < RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_COUNT
-             ? names[(size_t)role]
-             : NULL;
+static bool native_z_up_room(const RayCompoundSceneMappedRoom *room) {
+  return room &&
+         !strcmp(room->surfaces[RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MIN].surface_id,
+                 "y_min") &&
+         !strcmp(room->surfaces[RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MAX].surface_id,
+                 "y_max");
+}
+
+static size_t camera_opening_index(const RayCompoundSceneMappedRoom *room) {
+  return native_z_up_room(room) ? RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MIN
+                                : RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX;
+}
+
+static const char *visibility_policy(const RayCompoundSceneMappedRoom *room) {
+  return native_z_up_room(room)
+             ? RAY_COMPOUND_SCENE_ROOM_Z_UP_VISIBILITY_POLICY
+             : RAY_COMPOUND_SCENE_ROOM_VISIBILITY_POLICY;
 }
 
 uint64_t ray_compound_scene_room_geometry_digest(
@@ -99,8 +110,8 @@ uint64_t ray_compound_scene_room_geometry_digest(
 
 static bool plane_matches(const RayCompoundSceneRoomPlane *plane,
                           const RayCompoundSceneStaticRoomSurface *surface,
-                          size_t index) {
-  const bool expected_visible = index != RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX;
+                          size_t index, size_t opening_index) {
+  const bool expected_visible = index != opening_index;
   return plane && surface && plane->role == surface->role &&
          plane->role == (RayCompoundSceneStaticRoomRole)index &&
          plane->producer_body_id == surface->body_id &&
@@ -124,8 +135,7 @@ bool ray_compound_scene_room_geometry_validate(
     const RayCompoundSceneMappedRoom *mapped_room) {
   if (!geometry || !mapped_room || !geometry->valid ||
       strcmp(geometry->schema, RAY_COMPOUND_SCENE_ROOM_GEOMETRY_SCHEMA) ||
-      strcmp(geometry->visibility_policy,
-             RAY_COMPOUND_SCENE_ROOM_VISIBILITY_POLICY) ||
+      strcmp(geometry->visibility_policy, visibility_policy(mapped_room)) ||
       geometry->handoff_digest != mapped_room->handoff_digest ||
       geometry->source_artifact_digest != mapped_room->source_artifact_digest ||
       geometry->source_surface_set_digest !=
@@ -135,8 +145,10 @@ bool ray_compound_scene_room_geometry_validate(
       geometry->plane_count != RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_COUNT ||
       geometry->visible_plane_count != 5u)
     return false;
+  const size_t opening_index = camera_opening_index(mapped_room);
   for (size_t i = 0; i < geometry->plane_count; ++i)
-    if (!plane_matches(&geometry->planes[i], &mapped_room->surfaces[i], i))
+    if (!plane_matches(&geometry->planes[i], &mapped_room->surfaces[i], i,
+                       opening_index))
       return false;
   return geometry->geometry_digest != 0 &&
          geometry->geometry_digest ==
@@ -165,7 +177,7 @@ bool ray_compound_scene_room_geometry_build(
   snprintf(candidate.schema, sizeof(candidate.schema), "%s",
            RAY_COMPOUND_SCENE_ROOM_GEOMETRY_SCHEMA);
   snprintf(candidate.visibility_policy, sizeof(candidate.visibility_policy),
-           "%s", RAY_COMPOUND_SCENE_ROOM_VISIBILITY_POLICY);
+           "%s", visibility_policy(mapped_room));
   candidate.handoff_digest = mapped_room->handoff_digest;
   candidate.source_artifact_digest = mapped_room->source_artifact_digest;
   candidate.source_surface_set_digest = mapped_room->source_surface_set_digest;
@@ -176,15 +188,15 @@ bool ray_compound_scene_room_geometry_build(
     const RayCompoundSceneStaticRoomSurface *surface =
         &mapped_room->surfaces[i];
     RayCompoundSceneRoomPlane *plane = &candidate.planes[i];
-    const char *name = role_name(surface->role);
-    if (!name) {
+    if (!surface->surface_id[0]) {
       set_failure(failure, RAY_COMPOUND_SCENE_ROOM_GEOMETRY_PLANE_MATCH);
       return false;
     }
     plane->role = surface->role;
-    snprintf(plane->object_id, sizeof(plane->object_id), "sim_room_%s", name);
+    snprintf(plane->object_id, sizeof(plane->object_id), "sim_room_%s",
+             surface->surface_id);
     snprintf(plane->material_id, sizeof(plane->material_id), "mat_sim_room_%s",
-             name);
+             surface->surface_id);
     plane->producer_body_id = surface->body_id;
     plane->contact_mask_bit = surface->contact_mask_bit;
     plane->producer_surface_digest = surface->surface_digest;
@@ -194,8 +206,7 @@ bool ray_compound_scene_room_geometry_build(
     plane->inward_normal = surface->inward_normal;
     plane->width_m = 2.0 * surface->half_extent_u_m;
     plane->height_m = 2.0 * surface->half_extent_v_m;
-    plane->render_visible =
-        surface->role != RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX;
+    plane->render_visible = i != camera_opening_index(mapped_room);
     if (plane->render_visible)
       ++candidate.visible_plane_count;
   }

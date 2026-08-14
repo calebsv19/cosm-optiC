@@ -132,7 +132,11 @@ uint64_t ray_compound_scene_source_binding_digest(
         return 0;
     uint64_t hash = UINT64_C(1469598103934665603);
     hash = hash_string(hash, binding->schema);
-    hash = hash_u64(hash, binding->fixture_digest);
+    if (!strcmp(binding->schema,
+                RAY_COMPOUND_SCENE_SOURCE_BINDING_Z_UP_SCHEMA))
+        hash = hash_u64(hash, binding->descriptor_digest);
+    else
+        hash = hash_u64(hash, binding->fixture_digest);
     hash = hash_u64(hash, binding->body_index);
     hash = hash_u64(hash, (uint64_t)binding->body_id);
     hash = hash_string(hash, binding->source_asset_id);
@@ -145,14 +149,25 @@ uint64_t ray_compound_scene_source_binding_digest(
         for (size_t column = 0; column < 3; ++column)
             hash = hash_double(hash,
                 binding->principal_to_source.m[row][column]);
+    if (!strcmp(binding->schema,
+                RAY_COMPOUND_SCENE_SOURCE_BINDING_Z_UP_SCHEMA)) {
+        hash = hash_u64(hash, binding->geometry_hash);
+        hash = hash_u64(hash, binding->body_hash);
+    }
     return hash;
 }
 
 bool ray_compound_scene_source_binding_validate(
     const RayCompoundSceneSourceBinding* binding) {
-    if (!binding || strcmp(binding->schema,
-            RAY_COMPOUND_SCENE_SOURCE_BINDING_SCHEMA) ||
-        !binding->fixture_digest ||
+    if (!binding ||
+        (strcmp(binding->schema, RAY_COMPOUND_SCENE_SOURCE_BINDING_SCHEMA) &&
+         strcmp(binding->schema,
+                RAY_COMPOUND_SCENE_SOURCE_BINDING_Z_UP_SCHEMA)) ||
+        (!strcmp(binding->schema,
+                 RAY_COMPOUND_SCENE_SOURCE_BINDING_SCHEMA)
+             ? !binding->fixture_digest
+             : (!binding->descriptor_digest || !binding->geometry_hash ||
+                !binding->body_hash)) ||
         binding->body_index >= RAY_COMPOUND_SCENE_HANDOFF_BODY_COUNT ||
         binding->body_id <= 0 || !binding->source_asset_id[0] ||
         !lowercase_sha256(binding->source_sha256) ||
@@ -172,6 +187,38 @@ uint64_t ray_compound_scene_handoff_digest(
     uint64_t hash = UINT64_C(1469598103934665603);
     hash = hash_string(hash, handoff->schema);
     hash = hash_u64(hash, handoff->schema_version);
+    if (!strcmp(handoff->schema, RAY_COMPOUND_SCENE_HANDOFF_Z_UP_SCHEMA)) {
+        hash = hash_string(hash, handoff->coordinate_system);
+        hash = hash_u64(hash, handoff->descriptor_digest);
+        hash = hash_u64(hash, handoff->request_digest);
+        hash = hash_u64(hash, handoff->room_spec_digest);
+        hash = hash_u64(hash, handoff->result_digest);
+        hash = hash_u64(hash, handoff->seed);
+        hash = hash_double(hash, handoff->fixed_dt_s);
+        for (size_t body = 0; body < RAY_COMPOUND_SCENE_HANDOFF_BODY_COUNT;
+             ++body)
+            hash = hash_u64(hash, handoff->bindings[body].binding_digest);
+        hash = hash_u64(hash, handoff->frame_count);
+        if (!handoff->frames)
+            return hash;
+        for (size_t i = 0; i < handoff->frame_count; ++i) {
+            hash = hash_u64(hash, handoff->frames[i].tick);
+            for (size_t body = 0; body < RAY_COMPOUND_SCENE_HANDOFF_BODY_COUNT;
+                 ++body) {
+                const RayCompoundSceneBodyTransform* transform =
+                    &handoff->frames[i].bodies[body];
+                hash = hash_u64(hash, (uint64_t)transform->body_id);
+                hash = hash_double(hash, transform->position_m.x);
+                hash = hash_double(hash, transform->position_m.y);
+                hash = hash_double(hash, transform->position_m.z);
+                hash = hash_double(hash, transform->orientation.w);
+                hash = hash_double(hash, transform->orientation.x);
+                hash = hash_double(hash, transform->orientation.y);
+                hash = hash_double(hash, transform->orientation.z);
+            }
+        }
+        return hash;
+    }
     hash = hash_string(hash, handoff->handoff_id);
     hash = hash_string(hash, handoff->fixture_reference);
     hash = hash_u64(hash, handoff->fixture_digest);
@@ -204,12 +251,23 @@ uint64_t ray_compound_scene_handoff_digest(
 
 bool ray_compound_scene_handoff_validate(
     const RayCompoundSceneHandoff* handoff) {
-    if (!handoff || strcmp(handoff->schema,
-            RAY_COMPOUND_SCENE_HANDOFF_SCHEMA) ||
-        handoff->schema_version != RAY_COMPOUND_SCENE_HANDOFF_CODEC_VERSION ||
-        strcmp(handoff->handoff_id, RAY_COMPOUND_SCENE_HANDOFF_ID) ||
-        !safe_reference(handoff->fixture_reference) ||
-        !handoff->fixture_digest || !handoff->seed ||
+    const bool z_up = handoff && !strcmp(
+        handoff->schema, RAY_COMPOUND_SCENE_HANDOFF_Z_UP_SCHEMA);
+    if (!handoff ||
+        (!z_up && strcmp(handoff->schema, RAY_COMPOUND_SCENE_HANDOFF_SCHEMA)) ||
+        handoff->schema_version != (z_up ? 2u :
+            RAY_COMPOUND_SCENE_HANDOFF_CODEC_VERSION) ||
+        (z_up
+             ? (strcmp(handoff->coordinate_system,
+                       RAY_COMPOUND_SCENE_COORDINATE_Z_UP) ||
+                !handoff->descriptor_digest || !handoff->request_digest ||
+                !handoff->room_spec_digest || !handoff->result_digest)
+             : (strcmp(handoff->coordinate_system,
+                       RAY_COMPOUND_SCENE_COORDINATE_Y_UP) ||
+                strcmp(handoff->handoff_id,
+                       RAY_COMPOUND_SCENE_HANDOFF_ID) ||
+                !safe_reference(handoff->fixture_reference) ||
+                !handoff->fixture_digest || !handoff->seed)) ||
         !isfinite(handoff->fixed_dt_s) || handoff->fixed_dt_s <= 0.0 ||
         handoff->frame_count < 2 ||
         handoff->frame_count > RAY_COMPOUND_SCENE_HANDOFF_MAX_FRAMES ||
@@ -220,10 +278,11 @@ bool ray_compound_scene_handoff_validate(
         const RayCompoundSceneSourceBinding* binding =
             &handoff->bindings[body];
         if (!ray_compound_scene_source_binding_validate(binding) ||
-            binding->fixture_digest != handoff->fixture_digest ||
+            (z_up ? binding->descriptor_digest != handoff->descriptor_digest
+                  : binding->fixture_digest != handoff->fixture_digest) ||
             binding->body_index != body ||
             (body && binding->body_id == handoff->bindings[0].body_id) ||
-            (body && !strcmp(binding->source_asset_id,
+            (!z_up && body && !strcmp(binding->source_asset_id,
                 handoff->bindings[0].source_asset_id)))
             return false;
     }
@@ -357,6 +416,8 @@ static bool decode_payload(const unsigned char* payload, size_t payload_size,
     ray_compound_scene_handoff_init(&handoff);
     reader_string(&reader, handoff.schema, sizeof(handoff.schema));
     handoff.schema_version = reader_u32(&reader);
+    snprintf(handoff.coordinate_system, sizeof(handoff.coordinate_system),
+             "%s", RAY_COMPOUND_SCENE_COORDINATE_Y_UP);
     reader_string(&reader, handoff.handoff_id, sizeof(handoff.handoff_id));
     reader_string(&reader, handoff.fixture_reference,
         sizeof(handoff.fixture_reference));
@@ -415,6 +476,10 @@ bool ray_compound_scene_handoff_parse(
         set_failure(failure, RAY_COMPOUND_SCENE_IMPORT_FAILURE_INPUT);
         return false;
     }
+    if (!strncmp(text, RAY_COMPOUND_SCENE_HANDOFF_Z_UP_SCHEMA "\n",
+                 strlen(RAY_COMPOUND_SCENE_HANDOFF_Z_UP_SCHEMA) + 1u))
+        return ray_compound_scene_handoff_z_up_v2_parse(
+            text, output, failure);
     char prefix[128];
     const int prefix_size = snprintf(prefix, sizeof(prefix),
         "%s\ncodec_version=%u\npayload_hex=",

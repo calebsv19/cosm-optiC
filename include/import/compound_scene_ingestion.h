@@ -4,12 +4,17 @@
 #include "render/compound_scene_assembly.h"
 #include "render/compound_scene_room_geometry.h"
 
-#define RAY_COMPOUND_SCENE_INGESTION_SCHEMA "ray_tracing_compound_scene_ingestion_v1"
+#define RAY_COMPOUND_SCENE_INGESTION_SCHEMA \
+    "ray_tracing_compound_scene_ingestion_v2"
+#define RAY_COMPOUND_SCENE_INGESTION_LEGACY_Y_UP_SCHEMA \
+    "ray_tracing_compound_scene_ingestion_legacy_y_up_v1"
 
 /* App-local, request-independent descriptor.  I-2 alone may decode it from a
  * render request; I-1 deliberately accepts this typed form only. */
 typedef struct RayCompoundSceneIngestionDescriptor {
     char schema[64];
+    char coordinate_system[64];
+    bool legacy_y_up_compatibility;
     uint64_t expected_handoff_digest;
     uint64_t expected_room_digest;
     uint64_t tick;

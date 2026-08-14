@@ -5,6 +5,7 @@
 #define RAY_COMPOUND_SCENE_ROOM_BASIS_SCHEMA                                   \
   "ray_tracing_compound_scene_room_basis_v1"
 #define RAY_COMPOUND_SCENE_ROOM_BASIS_ID "ball_y_up_to_ray_z_up_v1"
+#define RAY_COMPOUND_SCENE_ROOM_IDENTITY_BASIS_ID "native_z_up_identity_v2"
 #define RAY_COMPOUND_SCENE_RENDER_COORDINATE_SYSTEM "right_handed_z_up_meters"
 
 typedef struct RayCompoundSceneRoomBasis {
@@ -36,6 +37,8 @@ typedef enum RayCompoundSceneRoomBasisFailure {
 } RayCompoundSceneRoomBasisFailure;
 
 void ray_compound_scene_room_basis_init(RayCompoundSceneRoomBasis *basis);
+bool ray_compound_scene_room_basis_init_for_source(
+    RayCompoundSceneRoomBasis *basis, const char *source_coordinate_system);
 uint64_t
 ray_compound_scene_room_basis_digest(const RayCompoundSceneRoomBasis *basis);
 bool ray_compound_scene_room_basis_validate(

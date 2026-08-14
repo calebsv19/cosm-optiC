@@ -21,19 +21,25 @@ static uint64_t final_geometry_digest(const RayCompoundSceneAssembly* a) {
     return h;
 }
 void ray_compound_scene_ingestion_descriptor_init(RayCompoundSceneIngestionDescriptor* d,const RayCompoundSceneHandoff* h,const RayCompoundSceneStaticRoom* r){
-    if(!d)return; memset(d,0,sizeof(*d)); snprintf(d->schema,sizeof(d->schema),"%s",RAY_COMPOUND_SCENE_INGESTION_SCHEMA);
+    if(!d)return; memset(d,0,sizeof(*d));
     if(!h||!r||!ray_compound_scene_handoff_validate(h)||!ray_compound_scene_static_room_validate(r))return;
+    d->legacy_y_up_compatibility=!strcmp(h->coordinate_system,RAY_COMPOUND_SCENE_COORDINATE_Y_UP);
+    snprintf(d->schema,sizeof(d->schema),"%s",d->legacy_y_up_compatibility?RAY_COMPOUND_SCENE_INGESTION_LEGACY_Y_UP_SCHEMA:RAY_COMPOUND_SCENE_INGESTION_SCHEMA);
+    snprintf(d->coordinate_system,sizeof(d->coordinate_system),"%s",h->coordinate_system);
     d->expected_handoff_digest=h->handoff_digest; d->expected_room_digest=r->artifact_digest; ray_compound_scene_binding_manifest_init(&d->bindings,h);
+    const size_t opening=d->legacy_y_up_compatibility?RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX:RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MIN;
     for(size_t i=0;i<RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_COUNT;++i){
-        d->room_visible[i]=i!=RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX;
-        if(d->room_visible[i]) snprintf(d->room_object_ids[i],sizeof(d->room_object_ids[i]),"sim_room_%zu",i);
-        snprintf(d->room_material_ids[i],sizeof(d->room_material_ids[i]),"mat_sim_room_%zu",i);
+        d->room_visible[i]=i!=opening;
+        if(d->room_visible[i]) snprintf(d->room_object_ids[i],sizeof(d->room_object_ids[i]),"sim_room_%s",r->surfaces[i].surface_id);
+        snprintf(d->room_material_ids[i],sizeof(d->room_material_ids[i]),"mat_sim_room_%s",r->surfaces[i].surface_id);
     }
 }
 bool ray_compound_scene_ingestion_descriptor_validate(const RayCompoundSceneIngestionDescriptor* d,const RayCompoundSceneHandoff* h,const RayCompoundSceneStaticRoom* r){
-    if(!d||!h||!r||strcmp(d->schema,RAY_COMPOUND_SCENE_INGESTION_SCHEMA)||d->expected_handoff_digest!=h->handoff_digest||d->expected_room_digest!=r->artifact_digest||d->tick>=RAY_COMPOUND_SCENE_HANDOFF_MAX_FRAMES||!ray_compound_scene_binding_manifest_validate(&d->bindings,h))return false;
+    const bool legacy=h&&!strcmp(h->coordinate_system,RAY_COMPOUND_SCENE_COORDINATE_Y_UP);
+    if(!d||!h||!r||strcmp(d->schema,legacy?RAY_COMPOUND_SCENE_INGESTION_LEGACY_Y_UP_SCHEMA:RAY_COMPOUND_SCENE_INGESTION_SCHEMA)||d->legacy_y_up_compatibility!=legacy||strcmp(d->coordinate_system,h->coordinate_system)||strcmp(r->coordinate_system,h->coordinate_system)||d->expected_handoff_digest!=h->handoff_digest||d->expected_room_digest!=r->artifact_digest||d->tick>=h->frame_count||!ray_compound_scene_binding_manifest_validate(&d->bindings,h))return false;
+    const size_t opening=legacy?RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX:RAY_COMPOUND_SCENE_STATIC_ROOM_Y_MIN;
     for(size_t i=0;i<RAY_COMPOUND_SCENE_STATIC_ROOM_SURFACE_COUNT;++i)
-        if(!d->room_material_ids[i][0]||d->room_visible[i]!=(i!=RAY_COMPOUND_SCENE_STATIC_ROOM_Z_MAX)||
+        if(!d->room_material_ids[i][0]||d->room_visible[i]!=(i!=opening)||
            (d->room_visible[i]&&!d->room_object_ids[i][0])) return false;
     return true;
 }
@@ -44,7 +50,7 @@ bool ray_compound_scene_ingestion_resolve_exact(const RayCompoundSceneIngestionD
     RayCompoundSceneRoomBasis basis; RayCompoundSceneMappedRoom mapped; RayCompoundSceneIngestionResult c={0}; RayCompoundSceneAssemblyFailure af; RayCompoundSceneRoomGeometryFailure rf; RayCompoundSceneEvaluatedSceneFailure ef;
     fail(f,RAY_COMPOUND_SCENE_INGESTION_FAILURE_NONE); if(!d||!h||!r||!base||!req||!out){fail(f,RAY_COMPOUND_SCENE_INGESTION_FAILURE_INPUT);return false;}
     if(!ray_compound_scene_ingestion_descriptor_validate(d,h,r)){fail(f,RAY_COMPOUND_SCENE_INGESTION_FAILURE_DESCRIPTOR);return false;}
-    ray_compound_scene_room_basis_init(&basis);
+    if(!ray_compound_scene_room_basis_init_for_source(&basis,h->coordinate_system)){fail(f,RAY_COMPOUND_SCENE_INGESTION_FAILURE_PROVENANCE);return false;}
     if(!ray_compound_scene_room_basis_bind(h,r,&basis,&mapped,NULL)||!ray_compound_scene_room_geometry_build(h,r,&basis,&mapped,&c.room,&rf)){fail(f,RAY_COMPOUND_SCENE_INGESTION_FAILURE_PROVENANCE);return false;}
     for(size_t i=0;i<c.room.plane_count;++i){c.room.planes[i].render_visible=d->room_visible[i];snprintf(c.room.planes[i].material_id,sizeof(c.room.planes[i].material_id),"%s",d->room_material_ids[i]);}
     c.room.geometry_digest=ray_compound_scene_room_geometry_digest(&c.room);

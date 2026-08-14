@@ -326,9 +326,11 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_usage.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_volume_water_selection.o \
 	$(BUILD_DIR)/import/compound_scene_handoff_import.o \
+	$(BUILD_DIR)/import/compound_scene_handoff_z_up_v2_import.o \
 	$(BUILD_DIR)/import/compound_scene_binding_manifest.o \
 	$(BUILD_DIR)/import/compound_scene_evaluated_scene.o \
 	$(BUILD_DIR)/import/compound_scene_static_room_import.o \
+	$(BUILD_DIR)/import/compound_scene_static_room_z_up_v2_import.o \
 	$(BUILD_DIR)/import/compound_scene_room_basis.o \
 	$(BUILD_DIR)/import/compound_scene_ingestion.o \
 	$(BUILD_DIR)/import/compound_scene_ingestion_codec.o \

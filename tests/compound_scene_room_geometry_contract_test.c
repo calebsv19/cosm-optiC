@@ -52,8 +52,8 @@ int main(int argc, char **argv) {
   CHECK(geometry.source_surface_set_digest == UINT64_C(0xc8bb28d5a68a6511));
   CHECK(geometry.source_artifact_digest == UINT64_C(0x9f2a72c9dba0bab3));
   CHECK(geometry.basis_digest == UINT64_C(0xbbbb6543d3f3ccd2));
-    CHECK(geometry.mapped_room_digest == UINT64_C(0xa37ee71b3810d6ee));
-    CHECK(geometry.geometry_digest == UINT64_C(0x6d3bd95497f8e37b));
+  CHECK(geometry.mapped_room_digest == UINT64_C(0xa37ee71b3810d6ee));
+  CHECK(geometry.geometry_digest == UINT64_C(0x6d3bd95497f8e37b));
   for (size_t i = 0; i < geometry.plane_count; ++i) {
     const RayCompoundSceneRoomPlane *plane = &geometry.planes[i];
     const RayCompoundSceneStaticRoomSurface *surface = &mapped.surfaces[i];

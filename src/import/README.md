@@ -43,16 +43,18 @@ not own native `3D` shading policy or worker orchestration policy.
   ownership.
 - `compound_scene_static_room_import.c`: strict independent reader for the
   Ball-owned six-surface room sidecar. `compound_scene_room_basis.c` owns the
-  single provenance join and frozen right-handed `(x,y,z) -> (x,-z,y)` map
-  used for every packet body and collision-surface frame. These modules expose
-  mapped metadata only; H3 remains responsible for renderer-owned plane
-  assembly and visual plane-match proof.
+  single provenance join and selects either the explicitly named legacy
+  right-handed `(x,y,z) -> (x,-z,y)` compatibility map or the native Z-up
+  identity map for every packet body and collision-surface frame. These
+  modules expose mapped metadata only; H3 remains responsible for
+  renderer-owned plane assembly and visual plane-match proof.
 - `compound_scene_ingestion.c`: I-1's typed, app-local descriptor and atomic
   resolver. It binds the frozen handoff and room to existing renderer object/
   mesh identities, applies the registered basis to final owned geometry, and
   returns a separately digested derived result without mutating its base scene.
-  It intentionally has no request-file codec or normal render hook; those are
-  I-2 decisions.
+  The adjacent codec accepts the native v2 and explicitly named legacy Y-up
+  schemas, and the absent-by-default `scene.compound_scene_ingestion_path`
+  field connects that descriptor to the normal local headless render request.
 
 ## Boundaries
 

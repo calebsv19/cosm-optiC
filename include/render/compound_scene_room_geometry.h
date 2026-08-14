@@ -10,6 +10,8 @@
   "ray_tracing_compound_scene_room_geometry_v1"
 #define RAY_COMPOUND_SCENE_ROOM_VISIBILITY_POLICY                              \
   "five_opaque_z_max_camera_opening_v1"
+#define RAY_COMPOUND_SCENE_ROOM_Z_UP_VISIBILITY_POLICY                         \
+  "five_opaque_y_min_camera_opening_v2"
 
 typedef struct RayCompoundSceneRoomPlane {
   RayCompoundSceneStaticRoomRole role;

@@ -88,17 +88,17 @@ int main(int argc, char **argv) {
   if (!parse_tick(argv[5], &tick))
     return 2;
   RayCompoundSceneHandoff handoff;
-  RayCompoundSceneImportFailure handoff_failure;
+  RayCompoundSceneImportFailure handoff_failure = 0;
   RayCompoundSceneStaticRoom source_room;
-  RayCompoundSceneStaticRoomImportFailure room_failure;
+  RayCompoundSceneStaticRoomImportFailure room_failure = 0;
   RayCompoundSceneRoomBasis basis;
   RayCompoundSceneMappedRoom mapped_room;
-  RayCompoundSceneRoomBasisFailure basis_failure;
+  RayCompoundSceneRoomBasisFailure basis_failure = 0;
   RayCompoundSceneRoomGeometry room_geometry;
-  RayCompoundSceneRoomGeometryFailure room_geometry_failure;
+  RayCompoundSceneRoomGeometryFailure room_geometry_failure = 0;
   RayCompoundSceneBindingManifest manifest;
-  RayCompoundSceneEvaluatedSceneFailure evaluated_failure;
-  RayCompoundSceneAssemblyFailure assembly_failure;
+  RayCompoundSceneEvaluatedSceneFailure evaluated_failure = 0;
+  RayCompoundSceneAssemblyFailure assembly_failure = 0;
   RayEvaluatedSceneSnapshot base = {0};
   RayEvaluatedSceneSnapshot evaluated = {0};
   CoreMeshAssetRuntimeDocument meshes[2];
@@ -118,21 +118,32 @@ int main(int argc, char **argv) {
       core_mesh_asset_runtime_document_load_file(argv[3], &meshes[0]).code !=
           CORE_OK ||
       core_mesh_asset_runtime_document_load_file(argv[4], &meshes[1]).code !=
-          CORE_OK)
+          CORE_OK) {
+    fprintf(stderr, "compound visual proof source read failed handoff=%s room=%s\n",
+            ray_compound_scene_import_failure_name(handoff_failure),
+            ray_compound_scene_static_room_import_failure_name(room_failure));
     goto done;
-  ray_compound_scene_room_basis_init(&basis);
-  if (!ray_compound_scene_room_basis_bind(&handoff, &source_room, &basis,
+  }
+  if (!ray_compound_scene_room_basis_init_for_source(
+          &basis, handoff.coordinate_system) ||
+      !ray_compound_scene_room_basis_bind(&handoff, &source_room, &basis,
                                           &mapped_room, &basis_failure) ||
       !ray_compound_scene_room_geometry_build(&handoff, &source_room, &basis,
                                               &mapped_room, &room_geometry,
-                                              &room_geometry_failure))
+                                              &room_geometry_failure)) {
+    fprintf(stderr, "compound visual proof room basis failed basis=%d room=%d\n",
+            (int)basis_failure, (int)room_geometry_failure);
     goto done;
+  }
   ray_compound_scene_binding_manifest_init(&manifest, &handoff);
   populate_bindings(&manifest);
   if (!build_base(&base) ||
       !ray_compound_scene_evaluated_scene_apply_exact(
-          &handoff, &manifest, tick, &base, &evaluated, &evaluated_failure))
+          &handoff, &manifest, tick, &base, &evaluated, &evaluated_failure)) {
+    fprintf(stderr, "compound visual proof evaluated scene failed=%s\n",
+            ray_compound_scene_evaluated_scene_failure_name(evaluated_failure));
     goto done;
+  }
   request.handoff = &handoff;
   request.manifest = &manifest;
   request.snapshot = &evaluated;
@@ -167,8 +178,11 @@ int main(int argc, char **argv) {
         (RayCompoundSceneGeometryTarget){world[i], meshes[i].vertex_count};
   }
   if (!ray_compound_scene_assembly_build_exact(&request, &assembly,
-                                               &assembly_failure))
+                                               &assembly_failure)) {
+    fprintf(stderr, "compound visual proof assembly failed=%s\n",
+            ray_compound_scene_assembly_failure_name(assembly_failure));
     goto done;
+  }
   for (size_t i = 0; i < 2u; ++i) {
     RayCompoundSceneVec3 minimum = {0};
     RayCompoundSceneVec3 maximum = {0};
@@ -193,9 +207,11 @@ int main(int argc, char **argv) {
     assembly.objects[i].bounds_max = maximum;
   }
   printf("{\"schema\":\"ray_compound_scene_s9h3_visual_payload_v1\","
+         "\"coordinate_system\":\"%s\",\"basis_mapping\":\"%s\","
          "\"tick\":%llu,\"handoff_digest\":\"%016llx\","
          "\"room_geometry_digest\":\"%016llx\","
          "\"mapped_room_digest\":\"%016llx\",\"planes\":[",
+         handoff.coordinate_system, basis.mapping_id,
          (unsigned long long)tick, (unsigned long long)handoff.handoff_digest,
          (unsigned long long)room_geometry.geometry_digest,
          (unsigned long long)mapped_room.mapped_digest);
@@ -247,8 +263,12 @@ int main(int argc, char **argv) {
          "\"collision_proxy_rendered\":false,"
          "\"six_producer_surfaces_matched\":true,"
          "\"visible_plane_count\":5,"
-         "\"camera_opening_role\":\"z_max\","
-         "\"default_request_or_worker_integration\":false}}\n");
+         "\"camera_opening_role\":\"%s\","
+         "\"default_request_or_worker_integration\":false}}\n",
+         strcmp(room_geometry.visibility_policy,
+                RAY_COMPOUND_SCENE_ROOM_Z_UP_VISIBILITY_POLICY) == 0
+             ? "y_min"
+             : "z_max");
   result = 0;
 done:
   for (size_t i = 0; i < 2u; ++i) {

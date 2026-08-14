@@ -98,8 +98,10 @@ Rendering pipeline and ray-tracing engine.
 - `compound_scene_assembly.c` – S9-F's bounded RayTracing-owned scene-membership layer. It requires both packet bodies exactly once, validates unique simulated/static object identity, retains source/binding/tick and per-body geometry digests, and commits both caller-owned transformed-position buffers only after every body and static member succeeds. Static records intentionally carry renderer geometry/material identity but no solver provenance. This remains an app-local in-memory result with no default request, saved-scene, worker, or render-policy authority.
 - `compound_scene_room_geometry.c` – S9-H3 renderer-owned plane records
   derived exactly from the H2 mapped room. All six roles retain producer body,
-  contact, and surface provenance; five are visible and mapped `z_max` is the
-  explicit camera opening. It owns no simulation response or runtime mutation.
+  contact, and surface provenance; five are visible. The explicit camera
+  opening is mapped `z_max` for the legacy Y-up compatibility route and
+  `y_min` for native Z-up identity ingestion. It owns no simulation response
+  or runtime mutation.
 - S9-G serializes only the assembly metadata through the adjacent import codec.
   Static planes are tagged `renderer_set_dressing` or
   `simulation_collision_surface`; the latter requires a nonzero producer
