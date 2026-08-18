@@ -863,6 +863,301 @@ static int test_water_body_boundary_closed_route_and_fail_closed(void) {
     return 0;
 }
 
+static bool water_body_dynamic_perimeter_load(RuntimeWaterSurfaceFrame* frame,
+                                              char* diagnostics,
+                                              size_t diagnostics_size) {
+    bool found = false;
+    bool ok = RuntimeWaterSurfaceImport_LoadSourceAtFrame(
+        "tests/fixtures/water_body_boundary/manifest_dynamic_unified.json",
+        0,
+        frame,
+        &found,
+        diagnostics,
+        diagnostics_size);
+    if (!ok || !found || !frame->valid || frame->grid_w != 4u || frame->grid_d != 4u) {
+        return false;
+    }
+    for (uint32_t z = 0u; z < frame->grid_d; ++z) {
+        for (uint32_t x = 0u; x < frame->grid_w; ++x) {
+            const size_t index = (size_t)z * (size_t)frame->grid_w + (size_t)x;
+            frame->heights_y[index] =
+                (x == 0u || z == 0u || x + 1u == frame->grid_w ||
+                 z + 1u == frame->grid_d)
+                    ? 0.0f
+                    : (float)(0.50 + 0.10 * (double)z + 0.01 * (double)x);
+        }
+    }
+    frame->surface_min_y = 0.0;
+    frame->surface_max_y = 0.72;
+    frame->wet_columns = 4u;
+    frame->dry_columns = 12u;
+    return true;
+}
+
+static bool water_body_scene_contains_point(const RuntimeScene3D* scene, Vec3 expected) {
+    if (!scene) return false;
+    for (int i = 0; i < scene->triangleMesh.triangleCount; ++i) {
+        const RuntimeTriangle3D* triangle = &scene->triangleMesh.triangles[i];
+        const Vec3 points[3] = {triangle->p0, triangle->p1, triangle->p2};
+        for (int corner = 0; corner < 3; ++corner) {
+            if (fabs(points[corner].x - expected.x) <= 1e-9 &&
+                fabs(points[corner].y - expected.y) <= 1e-9 &&
+                fabs(points[corner].z - expected.z) <= 1e-6) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static void water_body_assert_dynamic_perimeter_points(
+    const char* label_prefix,
+    const RuntimeScene3D* scene,
+    const RuntimeWaterSurfaceFrame* frame) {
+    const RuntimeWaterBodyBoundaryV1* boundary = &frame->water_body_boundary;
+    const double origin_x = boundary->min_x + boundary->boundary_inset_m;
+    const double origin_z = boundary->min_z + boundary->boundary_inset_m;
+    const double spacing_x = (boundary->max_x - boundary->min_x -
+                              2.0 * boundary->boundary_inset_m) /
+                             (double)(frame->grid_w - 1u);
+    const double spacing_z = (boundary->max_z - boundary->min_z -
+                              2.0 * boundary->boundary_inset_m) /
+                             (double)(frame->grid_d - 1u);
+    for (uint32_t z = 0u; z < frame->grid_d; ++z) {
+        for (uint32_t x = 0u; x < frame->grid_w; ++x) {
+            char label[128];
+            uint32_t inboard_x = x;
+            uint32_t inboard_z = z;
+            Vec3 expected;
+            if (x != 0u && z != 0u && x + 1u != frame->grid_w &&
+                z + 1u != frame->grid_d) {
+                continue;
+            }
+            if (inboard_x == 0u) inboard_x = 1u;
+            if (inboard_z == 0u) inboard_z = 1u;
+            if (inboard_x + 1u == frame->grid_w) inboard_x = frame->grid_w - 2u;
+            if (inboard_z + 1u == frame->grid_d) inboard_z = frame->grid_d - 2u;
+            expected = vec3(origin_x + (double)x * spacing_x,
+                            origin_z + (double)z * spacing_z,
+                            frame->heights_y[(size_t)inboard_z *
+                                                 (size_t)frame->grid_w +
+                                             (size_t)inboard_x]);
+            snprintf(label, sizeof(label), "%s_x%u_z%u", label_prefix, x, z);
+            assert_true(label, water_body_scene_contains_point(scene, expected));
+        }
+    }
+}
+
+static int test_water_body_dynamic_perimeter_unified_prepare(void) {
+    RuntimeWaterSurfaceFrame frame;
+    RuntimeScene3D unified_scene;
+    RuntimeScene3D direct_scene;
+    RuntimeWaterBodyPrepare3DReport first_report = {0};
+    RuntimeWaterBodyPrepare3DReport second_report = {0};
+    RuntimeScene3DHeightfieldSurfaceDesc direct_desc = {0};
+    char diagnostics[256] = {0};
+    int direct_triangles = 0;
+    bool ok = false;
+
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    ok = water_body_dynamic_perimeter_load(&frame, diagnostics, sizeof(diagnostics));
+    assert_true("water_body_dynamic_perimeter_fixture_load", ok);
+    water_body_boundary_seed_dynamic_scene(&unified_scene, false);
+    if (ok && unified_scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&unified_scene,
+                                             &frame,
+                                             17,
+                                             &first_report,
+                                             diagnostics,
+                                             sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_unified_prepare_ok", ok);
+        assert_true("water_body_dynamic_perimeter_unified_topology",
+                    first_report.geometry.topology_valid &&
+                    first_report.geometry.connected_component_count == 1 &&
+                    first_report.geometry.boundary_edge_count == 0 &&
+                    first_report.geometry.nonmanifold_edge_count == 0 &&
+                    first_report.geometry.winding_consistent);
+        water_body_assert_dynamic_perimeter_points("water_body_dynamic_perimeter_unified",
+                                                   &unified_scene,
+                                                   &frame);
+    }
+    RuntimeScene3D_Free(&unified_scene);
+
+    RuntimeScene3D_Init(&direct_scene);
+    direct_desc.object_id = "direct_dynamic_perimeter";
+    direct_desc.scene_object_index = 17;
+    direct_desc.grid_w = frame.grid_w;
+    direct_desc.grid_d = frame.grid_d;
+    direct_desc.heights_y = frame.heights_y;
+    direct_desc.sample_origin_x = frame.water_body_boundary.min_x +
+                                  frame.water_body_boundary.boundary_inset_m;
+    direct_desc.sample_origin_z = frame.water_body_boundary.min_z +
+                                  frame.water_body_boundary.boundary_inset_m;
+    direct_desc.sample_spacing_x = (frame.water_body_boundary.max_x -
+                                    frame.water_body_boundary.min_x -
+                                    2.0 * frame.water_body_boundary.boundary_inset_m) /
+                                   (double)(frame.grid_w - 1u);
+    direct_desc.sample_spacing_z = (frame.water_body_boundary.max_z -
+                                    frame.water_body_boundary.min_z -
+                                    2.0 * frame.water_body_boundary.boundary_inset_m) /
+                                   (double)(frame.grid_d - 1u);
+    direct_desc.dry_height = frame.surface_min_y;
+    direct_desc.dry_height_epsilon = frame.water_body_boundary.dry_height_epsilon_m;
+    direct_desc.skip_dry_quads = true;
+    direct_desc.extend_dry_perimeter_from_interior = true;
+    direct_desc.close_volume_to_bottom = true;
+    direct_desc.closed_volume_bottom_height = frame.water_body_boundary.bottom_height_m;
+    direct_desc.map_y_height_to_scene_z = true;
+    ok = RuntimeScene3DBuilder_AppendHeightfieldSurface(&direct_scene,
+                                                        &direct_desc,
+                                                        &direct_triangles);
+    assert_true("water_body_dynamic_perimeter_direct_builder_ok", ok);
+    assert_true("water_body_dynamic_perimeter_direct_builder_triangles",
+                direct_triangles > 0);
+    water_body_assert_dynamic_perimeter_points("water_body_dynamic_perimeter_direct",
+                                               &direct_scene,
+                                               &frame);
+    RuntimeScene3D_Free(&direct_scene);
+
+    frame.frame_index = 1u;
+    frame.heights_y[5] = 0.91f;
+    frame.heights_y[6] = 0.83f;
+    frame.heights_y[9] = 0.77f;
+    frame.heights_y[10] = 0.69f;
+    frame.surface_max_y = 0.91;
+    water_body_boundary_seed_dynamic_scene(&unified_scene, false);
+    if (unified_scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&unified_scene,
+                                             &frame,
+                                             17,
+                                             &second_report,
+                                             diagnostics,
+                                             sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_second_frame_ok", ok);
+        assert_true("water_body_dynamic_perimeter_temporal_topology_stable",
+                    second_report.geometry.topology_valid &&
+                    first_report.geometry.topology_signature ==
+                        second_report.geometry.topology_signature &&
+                    first_report.geometry.total_triangle_count ==
+                        second_report.geometry.total_triangle_count);
+        water_body_assert_dynamic_perimeter_points("water_body_dynamic_perimeter_second",
+                                                   &unified_scene,
+                                                   &frame);
+    }
+    RuntimeScene3D_Free(&unified_scene);
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    return 0;
+}
+
+static int test_water_body_dynamic_perimeter_rejects_invalid_inputs(void) {
+    RuntimeWaterSurfaceFrame frame;
+    RuntimeScene3D scene;
+    RuntimeWaterBodyPrepare3DReport report = {0};
+    char diagnostics[256] = {0};
+    bool ok = false;
+
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    ok = water_body_dynamic_perimeter_load(&frame, diagnostics, sizeof(diagnostics));
+    assert_true("water_body_dynamic_perimeter_reject_fixture_load", ok);
+
+    water_body_boundary_seed_dynamic_scene(&scene, false);
+    if (scene.primitives) {
+        const int primitive_count = scene.primitiveCount;
+        frame.heights_y[5] = 0.0f;
+        frame.wet_columns = 3u;
+        frame.dry_columns = 13u;
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene, &frame, 17, &report,
+                                             diagnostics, sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_internal_hole_rejected", !ok);
+        assert_true("water_body_dynamic_perimeter_internal_hole_diag",
+                    strcmp(diagnostics,
+                           "water body dry sample is not an outer perimeter") == 0);
+        assert_true("water_body_dynamic_perimeter_internal_hole_no_mutation",
+                    scene.primitiveCount == primitive_count &&
+                    scene.triangleMesh.triangleCount == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    ok = water_body_dynamic_perimeter_load(&frame, diagnostics, sizeof(diagnostics));
+    snprintf(frame.water_body_boundary.dry_sample_policy,
+             sizeof(frame.water_body_boundary.dry_sample_policy), "%s", "unknown");
+    water_body_boundary_seed_dynamic_scene(&scene, false);
+    if (scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene, &frame, 17, &report,
+                                             diagnostics, sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_unknown_policy_rejected", !ok);
+        assert_true("water_body_dynamic_perimeter_unknown_policy_diag",
+                    strcmp(diagnostics, "water body dry sample policy unsupported") == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+
+    snprintf(frame.water_body_boundary.dry_sample_policy,
+             sizeof(frame.water_body_boundary.dry_sample_policy), "%s",
+             "extend_interior_to_boundary");
+    frame.grid_w = 2u;
+    frame.grid_d = 4u;
+    frame.sample_count = 8u;
+    frame.wet_columns = 0u;
+    frame.dry_columns = 8u;
+    water_body_boundary_seed_dynamic_scene(&scene, false);
+    if (scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene, &frame, 17, &report,
+                                             diagnostics, sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_inadequate_grid_rejected", !ok);
+        assert_true("water_body_dynamic_perimeter_inadequate_grid_diag",
+                    strcmp(diagnostics,
+                           "water body dynamic perimeter grid inadequate") == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    ok = water_body_dynamic_perimeter_load(&frame, diagnostics, sizeof(diagnostics));
+    frame.heights_y[5] = 2.0f;
+    water_body_boundary_seed_dynamic_scene(&scene, false);
+    if (scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene, &frame, 17, &report,
+                                             diagnostics, sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_out_of_container_rejected", !ok);
+        assert_true("water_body_dynamic_perimeter_out_of_container_diag",
+                    strcmp(diagnostics,
+                           "water body sample height outside validated container") == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+
+    frame.heights_y[5] = NAN;
+    water_body_boundary_seed_dynamic_scene(&scene, false);
+    if (scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene, &frame, 17, &report,
+                                             diagnostics, sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_nonfinite_rejected", !ok);
+        assert_true("water_body_dynamic_perimeter_nonfinite_diag",
+                    strcmp(diagnostics,
+                           "water body sample height outside validated container") == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    RuntimeWaterSurfaceFrame_Init(&frame);
+    ok = water_body_dynamic_perimeter_load(&frame, diagnostics, sizeof(diagnostics));
+    frame.wet_columns = 5u;
+    frame.dry_columns = 11u;
+    water_body_boundary_seed_dynamic_scene(&scene, false);
+    if (scene.primitives) {
+        ok = RuntimeWaterBodyPrepare3D_Append(&scene, &frame, 17, &report,
+                                             diagnostics, sizeof(diagnostics));
+        assert_true("water_body_dynamic_perimeter_classification_mismatch_rejected", !ok);
+        assert_true("water_body_dynamic_perimeter_classification_mismatch_diag",
+                    strcmp(diagnostics,
+                           "water body sample classification counts mismatch") == 0);
+    }
+    RuntimeScene3D_Free(&scene);
+    RuntimeWaterSurfaceFrame_Free(&frame);
+    return 0;
+}
+
 int run_test_water_surface_runtime_tests(void) {
     int before = test_support_failures();
     test_water_surface_runtime_appends_heightfield_surface();
@@ -875,5 +1170,7 @@ int run_test_water_surface_runtime_tests(void) {
     test_water_body_boundary_import_contract();
     test_water_body_boundary_dynamic_unified_compatibility();
     test_water_body_boundary_closed_route_and_fail_closed();
+    test_water_body_dynamic_perimeter_unified_prepare();
+    test_water_body_dynamic_perimeter_rejects_invalid_inputs();
     return test_support_failures() - before;
 }

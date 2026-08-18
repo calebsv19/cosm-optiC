@@ -1,4 +1,5 @@
 #include "render/runtime_water_body_prepare_3d.h"
+#include "render/runtime_heightfield_perimeter_resolver.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -91,6 +92,8 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
     RuntimeScene3D backup;
     float* resolved_heights = NULL;
     uint64_t sample_count = 0u;
+    bool dynamic_perimeter_policy = false;
+    bool legacy_dry_policy = false;
     bool appended = false;
 
     RuntimeScene3D_Init(&backup);
@@ -102,6 +105,10 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
         return false;
     }
     boundary = &water->water_body_boundary;
+    dynamic_perimeter_policy =
+        strcmp(boundary->dry_sample_policy, "extend_interior_to_boundary") == 0;
+    legacy_dry_policy =
+        strcmp(boundary->dry_sample_policy, "surface_min_epsilon_to_base") == 0;
     if (!boundary->present) {
         water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
                                 "water body boundary contract absent");
@@ -110,6 +117,19 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
     if (!water->material.valid) {
         water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
                                 "water body material parity unavailable");
+        return false;
+    }
+    if ((water->dynamic_volume_boundary &&
+         (strcmp(boundary->closure_mode, "dynamic_heightfield_volume") != 0 ||
+          strcmp(boundary->classification_metadata,
+                 "dynamic_perimeter_inherits_interior_height") != 0 ||
+          !dynamic_perimeter_policy)) ||
+        (!water->dynamic_volume_boundary &&
+         (strcmp(boundary->closure_mode, "heightfield_volume") != 0 ||
+          strcmp(boundary->classification_metadata, "legacy_height_sentinel") != 0 ||
+          !legacy_dry_policy))) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body dry sample policy unsupported");
         return false;
     }
     if (!water_body_prepare_has_object(scene, boundary->container_id)) {
@@ -140,6 +160,11 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
                                 "water body sample grid invalid");
         return false;
     }
+    if (dynamic_perimeter_policy && (water->grid_w < 3u || water->grid_d < 3u)) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body dynamic perimeter grid inadequate");
+        return false;
+    }
     /* legacy_height_sentinel classifies the heightfield exclusively as wet or
        dry-container. solid_columns is an overlapping PhysicsSim audit count;
        ordinary_geometry_occlusion keeps those occluders in scene geometry. */
@@ -147,6 +172,25 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
         water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
                                 "water body sample classification ambiguous");
         return false;
+    }
+    if (dynamic_perimeter_policy) {
+        for (uint64_t i = 0u; i < sample_count; ++i) {
+            const double input_height = water->heights_y[i];
+            const bool dry = water->dry_columns > 0u &&
+                             fabs(input_height - water->surface_min_y) <=
+                                 boundary->dry_height_epsilon_m;
+            size_t inboard_index = 0u;
+            if (dry && !RuntimeHeightfieldPerimeter_ResolveInboardIndex(
+                           water->grid_w,
+                           water->grid_d,
+                           (uint32_t)(i % water->grid_w),
+                           (uint32_t)(i / water->grid_w),
+                           &inboard_index)) {
+                water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                        "water body dry sample is not an outer perimeter");
+                return false;
+            }
+        }
     }
     resolved_heights = (float*)malloc(sizeof(*resolved_heights) * (size_t)sample_count);
     if (!resolved_heights) {
@@ -159,7 +203,25 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
         const bool dry = water->dry_columns > 0u &&
                          fabs(input_height - water->surface_min_y) <=
                              boundary->dry_height_epsilon_m;
-        const double resolved_height = dry ? boundary->base_surface_height_m : input_height;
+        double resolved_height = input_height;
+        if (dry && dynamic_perimeter_policy) {
+            const uint32_t x = (uint32_t)(i % water->grid_w);
+            const uint32_t z = (uint32_t)(i / water->grid_w);
+            size_t inboard_index = 0u;
+            if (!RuntimeHeightfieldPerimeter_ResolveInboardIndex(water->grid_w,
+                                                                  water->grid_d,
+                                                                  x,
+                                                                  z,
+                                                                  &inboard_index)) {
+                free(resolved_heights);
+                water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                        "water body dry sample is not an outer perimeter");
+                return false;
+            }
+            resolved_height = water->heights_y[inboard_index];
+        } else if (dry) {
+            resolved_height = boundary->base_surface_height_m;
+        }
         if (!isfinite(input_height) || !isfinite(resolved_height) ||
             !(resolved_height > boundary->bottom_height_m) ||
             resolved_height < boundary->min_y || resolved_height > boundary->max_y) {

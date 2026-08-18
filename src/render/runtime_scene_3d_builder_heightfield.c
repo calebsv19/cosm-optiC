@@ -1,4 +1,5 @@
 #include "render/runtime_scene_3d_builder_internal.h"
+#include "render/runtime_heightfield_perimeter_resolver.h"
 
 static bool runtime_scene_3d_builder_heightfield_sample_is_dry(
     const RuntimeScene3DHeightfieldSurfaceDesc* desc,
@@ -40,17 +41,18 @@ static double runtime_scene_3d_builder_heightfield_interior_perimeter_height(
     const RuntimeScene3DHeightfieldSurfaceDesc* desc,
     uint32_t x,
     uint32_t z) {
-    uint32_t interior_x = x;
-    uint32_t interior_z = z;
+    size_t interior_index = 0u;
     if (!desc || !desc->heights_y || desc->grid_w < 3u || desc->grid_d < 3u) {
         return desc ? desc->closed_perimeter_height : 0.0;
     }
-    if (interior_x == 0u) interior_x = 1u;
-    if (interior_z == 0u) interior_z = 1u;
-    if (interior_x + 1u == desc->grid_w) interior_x = desc->grid_w - 2u;
-    if (interior_z + 1u == desc->grid_d) interior_z = desc->grid_d - 2u;
-    return desc->heights_y[(size_t)interior_z * (size_t)desc->grid_w +
-                           (size_t)interior_x];
+    if (!RuntimeHeightfieldPerimeter_ResolveInboardIndex(desc->grid_w,
+                                                          desc->grid_d,
+                                                          x,
+                                                          z,
+                                                          &interior_index)) {
+        return desc->closed_perimeter_height;
+    }
+    return desc->heights_y[interior_index];
 }
 
 static bool runtime_scene_3d_builder_heightfield_quad_is_dry(
