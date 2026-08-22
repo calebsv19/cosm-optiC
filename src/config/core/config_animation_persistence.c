@@ -284,6 +284,8 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config, "fps", json_object_new_int(animSettings.fps));
     json_object_object_add(config, "frameDuration", json_object_new_double(animSettings.frameDuration));
     config_runtime_paths_normalize_data_roots();
+    config_runtime_paths_normalize_frame_dir();
+    (void)config_runtime_paths_reconcile_frame_output_root();
     json_object_object_add(config, "inputRoot", json_object_new_string(animSettings.inputRoot));
     json_object_object_add(config, "meshAssetRoot", json_object_new_string(animSettings.meshAssetRoot));
     ray_tracing_mesh_import_policy_normalize(&animSettings);
@@ -292,7 +294,6 @@ void SaveAnimationConfig(void) {
                            "meshImportCreaseAngleDegrees",
                            json_object_new_double(animSettings.meshImportCreaseAngleDegrees));
     json_object_object_add(config, "outputRoot", json_object_new_string(animSettings.outputRoot));
-    config_runtime_paths_normalize_frame_dir();
     json_object_object_add(config, "frameDir", json_object_new_string(animSettings.frameDir));
     config_runtime_paths_normalize_video_output_root();
     json_object_object_add(config, "videoOutputRoot", json_object_new_string(animSettings.videoOutputRoot));
@@ -588,6 +589,8 @@ void LoadAnimationConfig(void) {
         }
     }
     config_runtime_paths_normalize_frame_dir();
+    (void)config_runtime_paths_reconcile_frame_output_root();
+    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
     if (json_object_object_get_ex(config, "videoOutputRoot", &temp) &&
         json_object_is_type(temp, json_type_string)) {
         const char* root = json_object_get_string(temp);

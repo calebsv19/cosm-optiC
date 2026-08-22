@@ -250,6 +250,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/animation/timeline_value.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
+	$(BUILD_DIR)/config/core/config_output_identity.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
 	$(BUILD_DIR)/config/core/config_animation_runtime3d.o \
 	$(BUILD_DIR)/config/core/mesh_import_policy.o \
@@ -677,6 +678,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/app/render_export_batch.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \
+	$(BUILD_DIR)/config/core/config_output_identity.o \
 	$(BUILD_DIR)/config/core/config_runtime_paths.o \
 	$(BUILD_DIR)/config/core/config_animation_runtime3d.o \
 	$(BUILD_DIR)/config/core/config_animation_persistence.o \

@@ -7,6 +7,7 @@
 
 #include "app/animation.h"
 #include "config/config_manager.h"
+#include "config/core/config_runtime_paths.h"
 #include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu_scene_project_summary.h"
@@ -75,6 +76,9 @@ static void begin_video_root_edit(MenuRuntimeState *state) {
 static void apply_frame_dir(MenuRuntimeState *state, const char *path) {
     if (!state || !path || !path[0]) return;
     snprintf(animSettings.frameDir, sizeof(animSettings.frameDir), "%s", path);
+    (void)config_runtime_paths_reconcile_frame_output_root();
+    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
+    SaveAnimationConfig();
     menu_batch_panel_refresh(state);
     set_status(state, "Frames root set", (SDL_Color){120, 220, 180, 255}, 1800);
 }

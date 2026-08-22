@@ -63,6 +63,7 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-core-sim-runtime-frame-contract \
 	test-ray-tracing-runtime-host-lifecycle-contract \
 	test-renderer-cache-lifecycle-contract \
+	test-config-runtime-output-identity \
 	test-menu-pane-host-contract \
 	test-scene-editor-pane-host-contract \
 	test-scene-editor-viewport-nav-contract \
@@ -2657,6 +2658,18 @@ test-ray-tracing-runtime-host-lifecycle-contract: $(RAY_TRACING_RUNTIME_HOST_LIF
 
 test-renderer-cache-lifecycle-contract:
 	@PYTHONDONTWRITEBYTECODE=1 python3 $(TEST_DIR)/test_renderer_cache_lifecycle_contract.py
+
+CONFIG_RUNTIME_OUTPUT_IDENTITY_TEST_BIN := $(BUILD_DIR)/tests/config_runtime_output_identity_test
+
+$(CONFIG_RUNTIME_OUTPUT_IDENTITY_TEST_BIN): $(TEST_DIR)/config_runtime_output_identity_test.c src/config/core/config_output_identity.c
+	@mkdir -p $(dir $@)
+	$(CC) -std=c11 -Wall -Wextra -Wpedantic -Werror -g \
+		-Iinclude -Isrc \
+		-o $@ $(TEST_DIR)/config_runtime_output_identity_test.c \
+		src/config/core/config_output_identity.c
+
+test-config-runtime-output-identity: $(CONFIG_RUNTIME_OUTPUT_IDENTITY_TEST_BIN)
+	@$(CONFIG_RUNTIME_OUTPUT_IDENTITY_TEST_BIN)
 
 SCENE_EDITOR_PANE_HOST_TEST_BIN := $(BUILD_DIR)/tests/scene_editor_pane_host_contract_test
 SCENE_EDITOR_PANE_HOST_TEST_SRCS := \

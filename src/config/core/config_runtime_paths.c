@@ -7,8 +7,33 @@
 #include "app/data_paths.h"
 #include "config/config_file_io.h"
 #include "config/config_manager.h"
+#include "config/core/config_output_identity.h"
 
 #define FRAME_DIR_LEGACY_PREFIX "Animations/"
+
+bool config_runtime_paths_reconcile_frame_output_root(void) {
+    char reconciled_root[sizeof(animSettings.outputRoot)];
+
+    config_runtime_paths_normalize_data_roots();
+    config_runtime_paths_normalize_frame_dir();
+    if (!config_output_identity_reconcile_root(animSettings.outputRoot,
+                                               animSettings.frameDir,
+                                               reconciled_root,
+                                               sizeof(reconciled_root))) {
+        return false;
+    }
+    fprintf(stderr,
+            "[config] frame directory '%s' is outside output root '%s'; "
+            "rebinding output root to '%s'.\n",
+            animSettings.frameDir,
+            animSettings.outputRoot,
+            reconciled_root);
+    snprintf(animSettings.outputRoot,
+             sizeof(animSettings.outputRoot),
+             "%s",
+             reconciled_root);
+    return true;
+}
 
 void config_runtime_paths_normalize_frame_dir(void) {
     const char *frame_root = ray_tracing_default_frame_root();
