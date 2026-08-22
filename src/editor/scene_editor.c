@@ -4,6 +4,7 @@
 #include "editor/object_editor.h"   //  Required for object editing
 #include "editor/object_editor_motion.h"
 #include "editor/material_editor.h"
+#include "editor/material_editor_face_preview.h"
 #include "editor/object_editor_panels.h"
 #include "editor/camera_editor.h"   //  Required for camera adjustments
 #include "config/config_manager.h"  //  Required for loading/saving scene settings
@@ -902,6 +903,7 @@ void SceneEditorSessionEnd(SceneEditor* editor) {
     if (!editor) {
         return;
     }
+    MaterialEditorFacePreviewDetachRenderer(editor->renderer);
     SceneEditorMeshPreviewRenderReset(editor->renderer);
     editor->running = false;
     editor->window = NULL;
@@ -1000,6 +1002,7 @@ void DestroySceneEditor(SceneEditor* editor) {
     editor->running = false;
     ray_tracing_font_runtime_detach_renderer(editor->renderer);
     if (editor->renderer && editor->owns_renderer) {
+        MaterialEditorFacePreviewDetachRenderer(editor->renderer);
 #if USE_VULKAN
         ray_tracing_text_reset_renderer(editor->renderer);
         vk_renderer_wait_idle((VkRenderer*)editor->renderer);

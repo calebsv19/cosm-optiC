@@ -62,6 +62,7 @@ STABLE_TEST_TARGETS := \
 	test-runtime-triangle-bvh-3d \
 	test-ray-tracing-core-sim-runtime-frame-contract \
 	test-ray-tracing-runtime-host-lifecycle-contract \
+	test-renderer-cache-lifecycle-contract \
 	test-menu-pane-host-contract \
 	test-scene-editor-pane-host-contract \
 	test-scene-editor-viewport-nav-contract \
@@ -2653,6 +2654,9 @@ $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN): $(RAY_TRACING_RUNTIME_HOST_LIFEC
 
 test-ray-tracing-runtime-host-lifecycle-contract: $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN)
 	@$(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN) || (echo "ray tracing runtime host lifecycle contract test failed."; exit 1)
+
+test-renderer-cache-lifecycle-contract:
+	@PYTHONDONTWRITEBYTECODE=1 python3 $(TEST_DIR)/test_renderer_cache_lifecycle_contract.py
 
 SCENE_EDITOR_PANE_HOST_TEST_BIN := $(BUILD_DIR)/tests/scene_editor_pane_host_contract_test
 SCENE_EDITOR_PANE_HOST_TEST_SRCS := \

@@ -14,6 +14,7 @@
 #include "app/scene_loop_policy.h"
 #include "app/starter_scene_startup.h"
 #include "config/config_manager.h"
+#include "editor/material_editor_face_preview.h"
 #include "editor/scene_editor.h"
 #include "editor/material_editor_authored_texture_binding.h"
 #include "engine/Render/render_font.h"
@@ -254,6 +255,7 @@ static bool initialize_menu(SDL_Window** window,
     menu_state_reload_font(font);
     if (!*font) {
         printf("Font Loading Failed: %s\n", TTF_GetError());
+        MaterialEditorFacePreviewDetachRenderer(*renderer);
 #if USE_VULKAN
         vk_renderer_wait_idle((VkRenderer*)*renderer);
         vk_renderer_shutdown_surface((VkRenderer*)*renderer);
@@ -279,6 +281,7 @@ static void shutdown_menu(SDL_Window* window,
     setRenderContext(NULL, NULL, 0, 0);
 
     if (renderer) {
+        MaterialEditorFacePreviewDetachRenderer(renderer);
         ray_tracing_text_reset_renderer(renderer);
 #if USE_VULKAN
         vk_renderer_wait_idle((VkRenderer*)renderer);
