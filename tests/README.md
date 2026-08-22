@@ -313,6 +313,9 @@ rollback oracle for the EVN3 canonical pan and anchor fixtures; the integrated
 adapter coverage.
 The same `runtime_scene_editor` group also proves whole-object projected-origin
 stable-key ranking and capture-radius rejection through `core_screen_pick >= 0.1.0`.
+`test-scene-editor-mesh-pick-scroll-contract` pins coherent-LOD mesh hit testing
+ahead of that origin fallback and verifies the object list routes wheel/clamp
+math through vendored `kit_ui` with clipped, clickable visible rows.
 
 Scene-project worker snapshot lane:
 

@@ -311,10 +311,17 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
         return true;
     }
 
-    pick = SceneEditorDigestOverlayPickObjectIndex(&projector,
-                                                   &digest,
-                                                   command->event->button.x,
-                                                   command->event->button.y);
+    pick = SceneEditorMeshPreviewPickObjectIndex(&projector,
+                                                 EDITOR_MODE_OBJECT,
+                                                 -1,
+                                                 command->event->button.x,
+                                                 command->event->button.y);
+    if (pick < 0) {
+        pick = SceneEditorDigestOverlayPickObjectIndex(&projector,
+                                                       &digest,
+                                                       command->event->button.x,
+                                                       command->event->button.y);
+    }
     if (pick < 0) {
         pick = *env->digest_hover_object_index;
     }

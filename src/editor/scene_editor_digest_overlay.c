@@ -1,6 +1,7 @@
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
+#include "editor/scene_editor_mesh_preview_render.h"
 
 #include <math.h>
 #include <string.h>
@@ -358,7 +359,17 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
     SDL_RenderSetClipRect(renderer, &projector.viewport);
     if (active_mode == EDITOR_MODE_OBJECT &&
         scene_editor_digest_overlay_point_in_rect(mouse_x, mouse_y, &projector.viewport)) {
-        hover_object_index = SceneEditorDigestOverlayPickObjectIndex(&projector, &digest, mouse_x, mouse_y);
+        hover_object_index = SceneEditorMeshPreviewPickObjectIndex(&projector,
+                                                                   active_mode,
+                                                                   -1,
+                                                                   mouse_x,
+                                                                   mouse_y);
+        if (hover_object_index < 0) {
+            hover_object_index = SceneEditorDigestOverlayPickObjectIndex(&projector,
+                                                                         &digest,
+                                                                         mouse_x,
+                                                                         mouse_y);
+        }
     }
 
     SceneEditorDigestOverlayRenderObjectLayer(renderer,

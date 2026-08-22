@@ -18,6 +18,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_mesh_preview_store.h"
+#include "editor/scene_editor_object_list.h"
 #include "editor/scene_editor_tool_state.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/render_helper.h"
@@ -120,14 +121,13 @@ static const char* SceneEditorSurfaceShortObjectId(int scene_object_index,
     return (prefix && prefix[1]) ? prefix + 1 : id;
 }
 
-static int SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
+static int __attribute__((unused)) SceneEditorSurfaceRenderObjectList(SDL_Renderer* renderer,
                                               SDL_Rect bounds,
                                               int cursor_y,
                                               int bottom_y,
                                               int selected_index,
                                               SDL_Color title_color,
                                               SDL_Color body_color) {
-    const RayTracingRuntimeMeshAssetSet* mesh_assets = ray_tracing_runtime_mesh_assets_last();
     const int row_h = 24;
     const int gap = 4;
     int preview_mesh_instances = SceneEditorMeshPreviewStoreInstanceCount();
@@ -305,13 +305,13 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                     body_color,
                                                     false,
                                                     6);
-        cursor_y = SceneEditorSurfaceRenderObjectList(renderer,
-                                                      bounds,
-                                                      cursor_y,
-                                                      bottom_y,
-                                                      selected_index,
-                                                      title_color,
-                                                      body_color);
+        cursor_y = SceneEditorObjectListRender(renderer,
+                                               bounds,
+                                               cursor_y,
+                                               bottom_y,
+                                               selected_index,
+                                               title_color,
+                                               body_color);
         if (selected_index >= 0 && selected_index < sceneSettings.objectCount) {
             SceneObject* obj = &sceneSettings.sceneObjects[selected_index];
             const char* type = (obj->type[0] ? obj->type : "unknown");

@@ -64,6 +64,7 @@ STABLE_TEST_TARGETS := \
 	test-ray-tracing-runtime-host-lifecycle-contract \
 	test-renderer-cache-lifecycle-contract \
 	test-config-runtime-output-identity \
+	test-scene-editor-mesh-pick-scroll-contract \
 	test-menu-pane-host-contract \
 	test-scene-editor-pane-host-contract \
 	test-scene-editor-viewport-nav-contract \
@@ -2658,6 +2659,9 @@ test-ray-tracing-runtime-host-lifecycle-contract: $(RAY_TRACING_RUNTIME_HOST_LIF
 
 test-renderer-cache-lifecycle-contract:
 	@PYTHONDONTWRITEBYTECODE=1 python3 $(TEST_DIR)/test_renderer_cache_lifecycle_contract.py
+
+test-scene-editor-mesh-pick-scroll-contract:
+	@PYTHONDONTWRITEBYTECODE=1 python3 $(TEST_DIR)/test_scene_editor_mesh_pick_scroll_contract.py
 
 CONFIG_RUNTIME_OUTPUT_IDENTITY_TEST_BIN := $(BUILD_DIR)/tests/config_runtime_output_identity_test
 

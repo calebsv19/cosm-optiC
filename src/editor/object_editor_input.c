@@ -4,6 +4,7 @@
 #include "editor/object_editor_motion.h"
 #include "editor/object_editor_object_ops.h"
 #include "editor/scene_editor_tool_state.h"
+#include "editor/scene_editor_object_list.h"
 #include "geo/shape_adapter.h"
 #include "geo/shape_asset.h"
 #include "import/shape_import.h"
@@ -136,7 +137,8 @@ static void DeleteSelected(void) {
 }
 
 ObjectEditorHitRegion ObjectEditorHitRegionAtPoint(int mx, int my) {
-    if (IsClickingButtonMain(mx, my) || IsClickingButton(mx, my)) {
+    if (IsClickingButtonMain(mx, my) || IsClickingButton(mx, my) ||
+        SceneEditorObjectListContainsPoint(mx, my)) {
         return OBJECT_EDITOR_HIT_CONTROLS;
     }
     if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
@@ -174,6 +176,9 @@ void HandleObjectEditorEvents(SDL_Event* event) {
         case OBJECT_EDITOR_ACTION_MOUSE_WHEEL: {
             int mx, my;
             SDL_GetMouseState(&mx, &my);
+            if (SceneEditorObjectListHandleWheel(mx, my, (float)event->wheel.y)) {
+                break;
+            }
             int scrollDir = event->wheel.y > 0 ? -1 : 1;
             if (mx >= assetPanelRect.x && mx <= assetPanelRect.x + assetPanelRect.w &&
                 my >= assetPanelRect.y && my <= assetPanelRect.y + assetPanelRect.h && !assetsCollapsed) {
