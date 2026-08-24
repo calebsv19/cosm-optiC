@@ -331,14 +331,42 @@ static void menu_renderer_controls_build_slider_layout(TTF_Font* font,
                                           slider_x,
                                           slider_width,
                                           text_height);
-        menu_renderer_controls_add_slider(&layout,
-                                          &state->environmentBackgroundBrightnessSliderValue,
-                                          0,
-                                          400,
-                                          "BG Brightness",
-                                          slider_x,
-                                          slider_width,
-                                          text_height);
+        if (animation_config_environment_light_mode_clamp(
+                animSettings.environmentLightMode) == ENVIRONMENT_LIGHT_MODE_AMBIENT &&
+            !animSettings.environmentBackgroundBrightnessAuto) {
+            menu_renderer_controls_add_slider(&layout,
+                                              &state->environmentBackgroundBrightnessSliderValue,
+                                              0,
+                                              400,
+                                              "BG Brightness",
+                                              slider_x,
+                                              slider_width,
+                                              text_height);
+            menu_renderer_controls_add_slider(&layout,
+                                              &state->environmentBackgroundRedSliderValue,
+                                              0,
+                                              100,
+                                              "BG Red",
+                                              slider_x,
+                                              slider_width,
+                                              text_height);
+            menu_renderer_controls_add_slider(&layout,
+                                              &state->environmentBackgroundGreenSliderValue,
+                                              0,
+                                              100,
+                                              "BG Green",
+                                              slider_x,
+                                              slider_width,
+                                              text_height);
+            menu_renderer_controls_add_slider(&layout,
+                                              &state->environmentBackgroundBlueSliderValue,
+                                              0,
+                                              100,
+                                              "BG Blue",
+                                              slider_x,
+                                              slider_width,
+                                              text_height);
+        }
         menu_renderer_controls_add_slider(&layout,
                                           &state->lightIntensitySliderValue,
                                           0,
@@ -912,6 +940,7 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                ? "BG: Auto"
                                                : "BG: Manual",
                                            centerColumnMaxWidth);
+            slider_start_y += menu_renderer_controls_text_height(font) + 4;
         }
         menu_renderer_controls_build_slider_layout(font,
                                                    state,

@@ -30,6 +30,8 @@ extern Path bezierPath;  // Fix: Add missing Bézier path variable
 
 // Initializes SDL and necessary resources.
 int AnimationInit(void);
+void AnimationPreserveCurrentEnvironmentOnNextInit(void);
+void AnimationApplyPreservedEnvironmentAfterSceneRestore(void);
 void AnimationParseArgs(int argc, char* argv[]);
 void AnimationLoadRuntimeDefaults(void);
 int AnimationRunAppSession(void);

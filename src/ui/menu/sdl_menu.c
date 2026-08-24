@@ -428,8 +428,22 @@ static bool menu_process_event(SDL_Window* window,
                                           menu_state);
             return true;
         case SDL_MOUSEBUTTONUP:
+            if (menu_state->draggingSlider && menu_state->selectedSlider &&
+                (menu_state->selectedSlider == &menu_state->envSliderValue ||
+                 menu_state->selectedSlider == &menu_state->topFillStrengthSliderValue ||
+                 menu_state->selectedSlider ==
+                     &menu_state->environmentBackgroundBrightnessSliderValue ||
+                 menu_state->selectedSlider ==
+                     &menu_state->environmentBackgroundRedSliderValue ||
+                 menu_state->selectedSlider ==
+                     &menu_state->environmentBackgroundGreenSliderValue ||
+                 menu_state->selectedSlider ==
+                     &menu_state->environmentBackgroundBlueSliderValue)) {
+                SaveAnimationConfig();
+            }
             ray_tracing_menu_pane_host_end_splitter_drag(&menu_state->menuPaneHost);
             menu_state->draggingSlider = false;
+            menu_state->selectedSlider = NULL;
             menu_state->manifestScrollbarDragging = false;
             return true;
         case SDL_MOUSEWHEEL:

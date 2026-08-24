@@ -17,6 +17,7 @@
 #include "render/text_upload_policy.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_caustic_product.h"
+#include "ui/menu_environment_settings.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
@@ -127,6 +128,36 @@ static const char* menu_environment_light_button_label(void) {
         return "Env: Ambient";
     }
     return "Env: Off";
+}
+
+static Uint8 menu_environment_preview_channel(double value) {
+    if (!isfinite(value) || value <= 0.0) return 0;
+    if (value >= 1.0) return 255;
+    return (Uint8)lround(value * 255.0);
+}
+
+static void menu_render_draw_background_preview(SDL_Renderer* renderer,
+                                                const SDL_Rect* button_rect) {
+    MenuEnvironmentRuntimeReadback readback = {0};
+    SDL_Rect swatch;
+    if (!renderer || !button_rect || button_rect->w < 48 || button_rect->h < 18) return;
+    menu_environment_settings_readback(&readback);
+    swatch.w = 28;
+    swatch.h = button_rect->h - 12;
+    if (swatch.h > 18) swatch.h = 18;
+    swatch.x = button_rect->x + button_rect->w - swatch.w - 8;
+    swatch.y = button_rect->y + (button_rect->h - swatch.h) / 2;
+    SDL_SetRenderDrawColor(renderer,
+                           menu_environment_preview_channel(
+                               readback.backgroundPreviewColorR),
+                           menu_environment_preview_channel(
+                               readback.backgroundPreviewColorG),
+                           menu_environment_preview_channel(
+                               readback.backgroundPreviewColorB),
+                           255);
+    SDL_RenderFillRect(renderer, &swatch);
+    SDL_SetRenderDrawColor(renderer, 235, 235, 235, 255);
+    SDL_RenderDrawRect(renderer, &swatch);
 }
 
 static const char* menu_forward_falloff_button_label(void) {
@@ -472,10 +503,40 @@ void menu_render_frame(SDL_Renderer* renderer,
                                      &buttons.environmentBackgroundModeRect,
                                      animSettings.environmentBackgroundBrightnessAuto
                                          ? "BG: Auto"
-                                         : "BG: Manual",
+                                         : "BG: Custom",
                                      !animSettings.environmentBackgroundBrightnessAuto);
+        menu_render_draw_background_preview(renderer,
+                                            &buttons.environmentBackgroundModeRect);
     }
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
+        if (state->rendererControlsTab == MENU_RENDERER_CONTROLS_LIGHTING) {
+            MenuEnvironmentRuntimeReadback environment_readback = {0};
+            char fitted_readback[192];
+            const int readback_x = buttons.topFillRect.x;
+            const int readback_y = buttons.environmentBackgroundModeRect.y +
+                                   buttons.environmentBackgroundModeRect.h + 6;
+            const int readback_w = buttons.environmentBackgroundModeRect.x +
+                                   buttons.environmentBackgroundModeRect.w -
+                                   readback_x;
+            SDL_Color readback_color = has_shared_palette
+                                           ? palette.text_muted
+                                           : (SDL_Color){210, 210, 210, 255};
+            menu_environment_settings_readback(&environment_readback);
+            if (!environment_readback.runtimeApplied) {
+                readback_color = (SDL_Color){255, 196, 96, 255};
+            }
+            menu_render_fit_text_to_width(font,
+                                          environment_readback.summary,
+                                          readback_w,
+                                          fitted_readback,
+                                          sizeof(fitted_readback));
+            menu_render_draw_text_color(renderer,
+                                        font,
+                                        readback_x,
+                                        readback_y,
+                                        readback_color,
+                                        fitted_readback);
+        }
         menu_render_draw_slider_items(renderer,
                                       font,
                                       state,

@@ -90,6 +90,9 @@ typedef struct {
     int forwardDecaySliderValue;
     int topFillStrengthSliderValue;
     int environmentBackgroundBrightnessSliderValue;
+    int environmentBackgroundRedSliderValue;
+    int environmentBackgroundGreenSliderValue;
+    int environmentBackgroundBlueSliderValue;
     int bounceDepth3DSliderValue;
     int rouletteThreshold3DSliderValue;
     int secondaryDiffuseSamples3DSliderValue;

@@ -222,7 +222,7 @@ void menu_render_draw_slider_items(SDL_Renderer* renderer,
                        "%.3f", state->rouletteSliderValue / 1000.0);
         } else if (slider->value == &state->envSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", state->envSliderValue);
+                       "%.2f", state->envSliderValue / 255.0);
         } else if (slider->value == &state->cacheWeightSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.2f", state->cacheWeightSliderValue / 100.0);
@@ -248,6 +248,11 @@ void menu_render_draw_slider_items(SDL_Renderer* renderer,
                            "%.2f",
                            state->environmentBackgroundBrightnessSliderValue / 100.0);
             }
+        } else if (slider->value == &state->environmentBackgroundRedSliderValue ||
+                   slider->value == &state->environmentBackgroundGreenSliderValue ||
+                   slider->value == &state->environmentBackgroundBlueSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%.2f", *slider->value / 100.0);
         } else if (slider->value == &state->bounceDepth3DSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->bounceDepth3DSliderValue);

@@ -19,6 +19,7 @@
 #include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_caustic_product.h"
+#include "ui/menu_environment_settings.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -900,9 +901,11 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
     if (point_in_rect(&buttons.topFillRect, x, y)) {
-        animSettings.environmentLightMode =
+        const int next_mode =
             (animation_config_environment_light_mode_clamp(animSettings.environmentLightMode) + 1) %
             (ENVIRONMENT_LIGHT_MODE_AMBIENT + 1);
+        (void)menu_environment_settings_set_light_mode(next_mode);
+        SaveAnimationConfig();
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
                  "Env Light: %s",
@@ -918,10 +921,11 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
     if (point_in_rect(&buttons.environmentPresetRect, x, y)) {
         const char* preset_label = "Sky";
-        animSettings.environmentPreset =
+        const int next_preset =
             (animation_config_environment_preset_clamp(animSettings.environmentPreset) + 1) %
             (ENVIRONMENT_PRESET_WARM_SKY + 1);
-        animSettings.environmentBackgroundLightingAuthored = true;
+        (void)menu_environment_settings_set_preset(next_preset);
+        SaveAnimationConfig();
         if (animSettings.environmentPreset == ENVIRONMENT_PRESET_NEUTRAL) {
             preset_label = "Neutral";
         } else if (animSettings.environmentPreset == ENVIRONMENT_PRESET_WARM_SKY) {
@@ -937,17 +941,16 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
     if (point_in_rect(&buttons.environmentBackgroundModeRect, x, y)) {
-        animSettings.environmentBackgroundLightingAuthored = true;
-        animSettings.environmentBackgroundBrightnessAuto =
-            !animSettings.environmentBackgroundBrightnessAuto;
-        if (!animSettings.environmentBackgroundBrightnessAuto) {
-            animSettings.environmentBackgroundBrightness =
-                state->environmentBackgroundBrightnessSliderValue / 100.0;
-        }
+        const bool automatic = !animSettings.environmentBackgroundBrightnessAuto;
+        (void)menu_environment_settings_set_background_auto(
+            automatic,
+            state->environmentBackgroundBrightnessSliderValue / 100.0);
+        menu_state_sync_from_anim(state);
+        SaveAnimationConfig();
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
-                 "BG Brightness: %s",
-                 animSettings.environmentBackgroundBrightnessAuto ? "Auto" : "Manual");
+                 "Background: %s",
+                 animSettings.environmentBackgroundBrightnessAuto ? "Auto" : "Custom");
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){160, 210, 255, 255};
         state->statusExpireMs = SDL_GetTicks() + 1800;
@@ -1062,6 +1065,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
         menu_state_sync_from_anim(state);
         menu_state_apply_effective_render_recipe(state);
+        AnimationPreserveCurrentEnvironmentOnNextInit();
         printf("[Menu] Start pressed: spaceMode=%d integrator2D=%d integrator3D=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
                animSettings.spaceMode,
                animSettings.integratorMode,

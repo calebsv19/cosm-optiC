@@ -130,7 +130,7 @@ void RuntimeEnvironment3D_ResolveFromAnimationConfig(RuntimeEnvironment3D* envir
         runtime_environment_3d_clamp(config->topFillStrength, 0.0, 20.0);
     environment->ambientColor = vec3(1.0, 1.0, 1.0);
     environment->backgroundColor =
-        background_authored
+        background_authored && !config->environmentBackgroundBrightnessAuto
             ? runtime_environment_3d_color_clamped(config->environmentBackgroundColorR,
                                                    config->environmentBackgroundColorG,
                                                    config->environmentBackgroundColorB)
