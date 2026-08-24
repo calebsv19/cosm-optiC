@@ -1,7 +1,10 @@
 #include "render/runtime_native_3d_render_internal_host.h"
 
+#include <string.h>
+
 void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
                                            const RuntimeNative3DRenderStats* src) {
+    int mirror_depth = 0;
     if (!dst || !src) return;
     dst->hitPixelCount += src->hitPixelCount;
     dst->visiblePixelCount += src->visiblePixelCount;
@@ -497,6 +500,310 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->mirrorReflectionHitPixelCount += src->mirrorReflectionHitPixelCount;
     dst->mirrorEmitterReflectionPixelCount += src->mirrorEmitterReflectionPixelCount;
     dst->mirrorGeometryReflectionPixelCount += src->mirrorGeometryReflectionPixelCount;
+    if (src->mirrorFidelityRequestedSpecularDepth >
+        dst->mirrorFidelityRequestedSpecularDepth) {
+        dst->mirrorFidelityRequestedSpecularDepth =
+            src->mirrorFidelityRequestedSpecularDepth;
+    }
+    if (src->mirrorFidelityEffectiveSpecularDepth >
+        dst->mirrorFidelityEffectiveSpecularDepth) {
+        dst->mirrorFidelityEffectiveSpecularDepth =
+            src->mirrorFidelityEffectiveSpecularDepth;
+    }
+    if (src->mirrorFidelityRequestedRoughSampleCount >
+        dst->mirrorFidelityRequestedRoughSampleCount) {
+        dst->mirrorFidelityRequestedRoughSampleCount =
+            src->mirrorFidelityRequestedRoughSampleCount;
+    }
+    if (src->mirrorFidelityEffectiveRoughSampleCount >
+        dst->mirrorFidelityEffectiveRoughSampleCount) {
+        dst->mirrorFidelityEffectiveRoughSampleCount =
+            src->mirrorFidelityEffectiveRoughSampleCount;
+    }
+    if (src->mirrorFidelityRoughSampleReductionReason >
+        dst->mirrorFidelityRoughSampleReductionReason) {
+        dst->mirrorFidelityRoughSampleReductionReason =
+            src->mirrorFidelityRoughSampleReductionReason;
+    }
+    dst->mirrorFidelityVertexInterpolatedHitCount +=
+        src->mirrorFidelityVertexInterpolatedHitCount;
+    dst->mirrorFidelityFlatFallbackHitCount += src->mirrorFidelityFlatFallbackHitCount;
+    dst->mirrorFidelityLocalPathVertexEvaluatedCount +=
+        src->mirrorFidelityLocalPathVertexEvaluatedCount;
+    dst->mirrorFidelityLocalPathVertexRadianceR +=
+        src->mirrorFidelityLocalPathVertexRadianceR;
+    dst->mirrorFidelityLocalPathVertexRadianceG +=
+        src->mirrorFidelityLocalPathVertexRadianceG;
+    dst->mirrorFidelityLocalPathVertexRadianceB +=
+        src->mirrorFidelityLocalPathVertexRadianceB;
+    dst->mirrorFidelityRecursiveRadianceR += src->mirrorFidelityRecursiveRadianceR;
+    dst->mirrorFidelityRecursiveRadianceG += src->mirrorFidelityRecursiveRadianceG;
+    dst->mirrorFidelityRecursiveRadianceB += src->mirrorFidelityRecursiveRadianceB;
+    dst->mirrorFidelityEnvironmentMissContributionCount +=
+        src->mirrorFidelityEnvironmentMissContributionCount;
+    dst->mirrorFidelityEnvironmentMissRadianceR +=
+        src->mirrorFidelityEnvironmentMissRadianceR;
+    dst->mirrorFidelityEnvironmentMissRadianceG +=
+        src->mirrorFidelityEnvironmentMissRadianceG;
+    dst->mirrorFidelityEnvironmentMissRadianceB +=
+        src->mirrorFidelityEnvironmentMissRadianceB;
+    dst->mirrorFidelityRecursiveEnvironmentMissContributionCount +=
+        src->mirrorFidelityRecursiveEnvironmentMissContributionCount;
+    dst->mirrorFidelityRecursiveEnvironmentMissRadianceR +=
+        src->mirrorFidelityRecursiveEnvironmentMissRadianceR;
+    dst->mirrorFidelityRecursiveEnvironmentMissRadianceG +=
+        src->mirrorFidelityRecursiveEnvironmentMissRadianceG;
+    dst->mirrorFidelityRecursiveEnvironmentMissRadianceB +=
+        src->mirrorFidelityRecursiveEnvironmentMissRadianceB;
+    for (mirror_depth = 0;
+         mirror_depth < RUNTIME_NATIVE_3D_MIRROR_FIDELITY_DEPTH_CAPACITY;
+         ++mirror_depth) {
+        dst->mirrorFidelityDepthRayCount[mirror_depth] +=
+            src->mirrorFidelityDepthRayCount[mirror_depth];
+        dst->mirrorFidelityDepthGeometryHitCount[mirror_depth] +=
+            src->mirrorFidelityDepthGeometryHitCount[mirror_depth];
+        dst->mirrorFidelityDepthEmitterHitCount[mirror_depth] +=
+            src->mirrorFidelityDepthEmitterHitCount[mirror_depth];
+        dst->mirrorFidelityDepthContributingHitCount[mirror_depth] +=
+            src->mirrorFidelityDepthContributingHitCount[mirror_depth];
+        dst->mirrorFidelityDepthPolicyTerminationCount[mirror_depth] +=
+            src->mirrorFidelityDepthPolicyTerminationCount[mirror_depth];
+        dst->mirrorFidelityDepthRouletteTerminationCount[mirror_depth] +=
+            src->mirrorFidelityDepthRouletteTerminationCount[mirror_depth];
+        dst->mirrorFidelityDepthNoHitTerminationCount[mirror_depth] +=
+            src->mirrorFidelityDepthNoHitTerminationCount[mirror_depth];
+    }
+    if (src->mirrorFidelityProbeValid) {
+        const bool same_normal_class =
+            src->mirrorFidelityProbeHasVertexNormals ==
+            dst->mirrorFidelityProbeHasVertexNormals;
+        const bool lower_identity =
+            src->mirrorFidelityProbeTriangleId < dst->mirrorFidelityProbeTriangleId ||
+            (src->mirrorFidelityProbeTriangleId == dst->mirrorFidelityProbeTriangleId &&
+             strcmp(src->mirrorFidelityProbeObjectId,
+                    dst->mirrorFidelityProbeObjectId) < 0);
+        const bool replace_probe =
+            !dst->mirrorFidelityProbeValid ||
+            (src->mirrorFidelityProbeHasVertexNormals &&
+             !dst->mirrorFidelityProbeHasVertexNormals) ||
+            (same_normal_class && lower_identity);
+        if (replace_probe) {
+        dst->mirrorFidelityProbeValid = true;
+        dst->mirrorFidelityProbeHasVertexNormals =
+            src->mirrorFidelityProbeHasVertexNormals;
+        dst->mirrorFidelityProbeTriangleId = src->mirrorFidelityProbeTriangleId;
+        dst->mirrorFidelityProbeMaterialId = src->mirrorFidelityProbeMaterialId;
+        dst->mirrorFidelityProbePathDepth = src->mirrorFidelityProbePathDepth;
+        dst->mirrorFidelityProbeLocalRadianceR = src->mirrorFidelityProbeLocalRadianceR;
+        dst->mirrorFidelityProbeLocalRadianceG = src->mirrorFidelityProbeLocalRadianceG;
+        dst->mirrorFidelityProbeLocalRadianceB = src->mirrorFidelityProbeLocalRadianceB;
+        dst->mirrorFidelityProbeRecursiveRadianceR =
+            src->mirrorFidelityProbeRecursiveRadianceR;
+        dst->mirrorFidelityProbeRecursiveRadianceG =
+            src->mirrorFidelityProbeRecursiveRadianceG;
+        dst->mirrorFidelityProbeRecursiveRadianceB =
+            src->mirrorFidelityProbeRecursiveRadianceB;
+        memcpy(dst->mirrorFidelityProbeObjectId,
+               src->mirrorFidelityProbeObjectId,
+               sizeof(dst->mirrorFidelityProbeObjectId));
+        }
+    }
+    if (src->mirrorFidelityRadianceProbeValid) {
+        const bool replace_radiance_probe =
+            !dst->mirrorFidelityRadianceProbeValid ||
+            src->mirrorFidelityRadianceProbeSelectionChroma >
+                dst->mirrorFidelityRadianceProbeSelectionChroma ||
+            (src->mirrorFidelityRadianceProbeSelectionChroma ==
+                 dst->mirrorFidelityRadianceProbeSelectionChroma &&
+             (src->mirrorFidelityRadianceProbePixelY <
+                  dst->mirrorFidelityRadianceProbePixelY ||
+              (src->mirrorFidelityRadianceProbePixelY ==
+                   dst->mirrorFidelityRadianceProbePixelY &&
+               src->mirrorFidelityRadianceProbePixelX <
+                   dst->mirrorFidelityRadianceProbePixelX)));
+        if (replace_radiance_probe) {
+            dst->mirrorFidelityRadianceProbeValid = true;
+            dst->mirrorFidelityRadianceProbeHasVertexNormals =
+                src->mirrorFidelityRadianceProbeHasVertexNormals;
+            dst->mirrorFidelityRadianceProbePixelX =
+                src->mirrorFidelityRadianceProbePixelX;
+            dst->mirrorFidelityRadianceProbePixelY =
+                src->mirrorFidelityRadianceProbePixelY;
+            dst->mirrorFidelityRadianceProbeTriangleId =
+                src->mirrorFidelityRadianceProbeTriangleId;
+            dst->mirrorFidelityRadianceProbeMaterialId =
+                src->mirrorFidelityRadianceProbeMaterialId;
+            dst->mirrorFidelityRadianceProbePathDepth =
+                src->mirrorFidelityRadianceProbePathDepth;
+            dst->mirrorFidelityRadianceProbeSelectionChroma =
+                src->mirrorFidelityRadianceProbeSelectionChroma;
+            dst->mirrorFidelityRadianceProbeDominance =
+                src->mirrorFidelityRadianceProbeDominance;
+            dst->mirrorFidelityRadianceProbeBaseAttenuation =
+                src->mirrorFidelityRadianceProbeBaseAttenuation;
+#define COPY_MIRROR_RADIANCE_PROBE_FIELD(field) \
+            dst->field = src->field
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeDirectBeforeR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeDirectBeforeG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeDirectBeforeB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeDirectAfterR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeDirectAfterG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeDirectAfterB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalDiffuseBeforeR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalDiffuseBeforeG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalDiffuseBeforeB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalDiffuseAfterR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalDiffuseAfterG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalDiffuseAfterB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalSpecularBeforeR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalSpecularBeforeG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalSpecularBeforeB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalSpecularAfterR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalSpecularAfterG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeLocalSpecularAfterB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeAmbientBeforeR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeAmbientBeforeG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeAmbientBeforeB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeAmbientAfterR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeAmbientAfterG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeAmbientAfterB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeEmissionR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeEmissionG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeEmissionB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeTransmissionR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeTransmissionG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeTransmissionB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeStochasticDirectR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeStochasticDirectG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeStochasticDirectB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeStochasticBsdfR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeStochasticBsdfG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeStochasticBsdfB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeRecursiveDirectR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeRecursiveDirectG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeRecursiveDirectB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeRecursiveBsdfR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeRecursiveBsdfG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeRecursiveBsdfB);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeUnclassifiedR);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeUnclassifiedG);
+            COPY_MIRROR_RADIANCE_PROBE_FIELD(mirrorFidelityRadianceProbeUnclassifiedB);
+#undef COPY_MIRROR_RADIANCE_PROBE_FIELD
+            dst->mirrorFidelityRadianceProbeLocalRadianceR =
+                src->mirrorFidelityRadianceProbeLocalRadianceR;
+            dst->mirrorFidelityRadianceProbeLocalRadianceG =
+                src->mirrorFidelityRadianceProbeLocalRadianceG;
+            dst->mirrorFidelityRadianceProbeLocalRadianceB =
+                src->mirrorFidelityRadianceProbeLocalRadianceB;
+            dst->mirrorFidelityRadianceProbeRecursiveRadianceR =
+                src->mirrorFidelityRadianceProbeRecursiveRadianceR;
+            dst->mirrorFidelityRadianceProbeRecursiveRadianceG =
+                src->mirrorFidelityRadianceProbeRecursiveRadianceG;
+            dst->mirrorFidelityRadianceProbeRecursiveRadianceB =
+                src->mirrorFidelityRadianceProbeRecursiveRadianceB;
+            dst->mirrorFidelityRadianceProbeReflectionRadianceR =
+                src->mirrorFidelityRadianceProbeReflectionRadianceR;
+            dst->mirrorFidelityRadianceProbeReflectionRadianceG =
+                src->mirrorFidelityRadianceProbeReflectionRadianceG;
+            dst->mirrorFidelityRadianceProbeReflectionRadianceB =
+                src->mirrorFidelityRadianceProbeReflectionRadianceB;
+            dst->mirrorFidelityRadianceProbeComposedRadianceR =
+                src->mirrorFidelityRadianceProbeComposedRadianceR;
+            dst->mirrorFidelityRadianceProbeComposedRadianceG =
+                src->mirrorFidelityRadianceProbeComposedRadianceG;
+            dst->mirrorFidelityRadianceProbeComposedRadianceB =
+                src->mirrorFidelityRadianceProbeComposedRadianceB;
+            memcpy(dst->mirrorFidelityRadianceProbeObjectId,
+                   src->mirrorFidelityRadianceProbeObjectId,
+                   sizeof(dst->mirrorFidelityRadianceProbeObjectId));
+        }
+    }
+    if (src->mirrorFidelityNeutralProbeValid) {
+        const bool replace_neutral_probe =
+            !dst->mirrorFidelityNeutralProbeValid ||
+            src->mirrorFidelityNeutralProbeSelectionLuma >
+                dst->mirrorFidelityNeutralProbeSelectionLuma ||
+            (src->mirrorFidelityNeutralProbeSelectionLuma ==
+                 dst->mirrorFidelityNeutralProbeSelectionLuma &&
+             (src->mirrorFidelityNeutralProbePixelY <
+                  dst->mirrorFidelityNeutralProbePixelY ||
+              (src->mirrorFidelityNeutralProbePixelY ==
+                   dst->mirrorFidelityNeutralProbePixelY &&
+               src->mirrorFidelityNeutralProbePixelX <
+                   dst->mirrorFidelityNeutralProbePixelX)));
+        if (replace_neutral_probe) {
+            dst->mirrorFidelityNeutralProbeValid = true;
+            dst->mirrorFidelityNeutralProbePixelX = src->mirrorFidelityNeutralProbePixelX;
+            dst->mirrorFidelityNeutralProbePixelY = src->mirrorFidelityNeutralProbePixelY;
+            dst->mirrorFidelityNeutralProbeTriangleId =
+                src->mirrorFidelityNeutralProbeTriangleId;
+            dst->mirrorFidelityNeutralProbeMaterialId =
+                src->mirrorFidelityNeutralProbeMaterialId;
+            dst->mirrorFidelityNeutralProbeSelectionLuma =
+                src->mirrorFidelityNeutralProbeSelectionLuma;
+#define COPY_MIRROR_NEUTRAL_PROBE_FIELD(field) dst->field = src->field
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeDominance);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeBaseAttenuation);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeDirectBeforeR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeDirectBeforeG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeDirectBeforeB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeDirectAfterR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeDirectAfterG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeDirectAfterB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalDiffuseBeforeR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalDiffuseBeforeG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalDiffuseBeforeB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalDiffuseAfterR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalDiffuseAfterG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalDiffuseAfterB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalSpecularBeforeR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalSpecularBeforeG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalSpecularBeforeB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalSpecularAfterR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalSpecularAfterG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeLocalSpecularAfterB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeAmbientBeforeR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeAmbientBeforeG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeAmbientBeforeB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeAmbientAfterR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeAmbientAfterG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeAmbientAfterB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeStochasticDirectR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeStochasticDirectG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeStochasticDirectB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeStochasticBsdfR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeStochasticBsdfG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeStochasticBsdfB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeRecursiveDirectR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeRecursiveDirectG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeRecursiveDirectB);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeRecursiveBsdfR);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeRecursiveBsdfG);
+            COPY_MIRROR_NEUTRAL_PROBE_FIELD(mirrorFidelityNeutralProbeRecursiveBsdfB);
+#undef COPY_MIRROR_NEUTRAL_PROBE_FIELD
+            dst->mirrorFidelityNeutralProbeLocalRadianceR =
+                src->mirrorFidelityNeutralProbeLocalRadianceR;
+            dst->mirrorFidelityNeutralProbeLocalRadianceG =
+                src->mirrorFidelityNeutralProbeLocalRadianceG;
+            dst->mirrorFidelityNeutralProbeLocalRadianceB =
+                src->mirrorFidelityNeutralProbeLocalRadianceB;
+            dst->mirrorFidelityNeutralProbeReflectionRadianceR =
+                src->mirrorFidelityNeutralProbeReflectionRadianceR;
+            dst->mirrorFidelityNeutralProbeReflectionRadianceG =
+                src->mirrorFidelityNeutralProbeReflectionRadianceG;
+            dst->mirrorFidelityNeutralProbeReflectionRadianceB =
+                src->mirrorFidelityNeutralProbeReflectionRadianceB;
+            dst->mirrorFidelityNeutralProbeComposedRadianceR =
+                src->mirrorFidelityNeutralProbeComposedRadianceR;
+            dst->mirrorFidelityNeutralProbeComposedRadianceG =
+                src->mirrorFidelityNeutralProbeComposedRadianceG;
+            dst->mirrorFidelityNeutralProbeComposedRadianceB =
+                src->mirrorFidelityNeutralProbeComposedRadianceB;
+            memcpy(dst->mirrorFidelityNeutralProbeObjectId,
+                   src->mirrorFidelityNeutralProbeObjectId,
+                   sizeof(dst->mirrorFidelityNeutralProbeObjectId));
+        }
+    }
     dst->temporalCommittedSubpasses += src->temporalCommittedSubpasses;
     dst->temporalPixelsRendered += src->temporalPixelsRendered;
     dst->temporalPixelsSkipped += src->temporalPixelsSkipped;
@@ -779,6 +1086,7 @@ static int runtime_native_3d_render_stats_round_divide(int value, int divisor) {
 void runtime_native_3d_render_stats_normalize_temporal(
     RuntimeNative3DRenderStats* stats,
     int committed_subpasses) {
+    int mirror_depth = 0;
     if (!stats || committed_subpasses <= 1) return;
     stats->hitPixelCount =
         runtime_native_3d_render_stats_round_divide(stats->hitPixelCount, committed_subpasses);
@@ -805,6 +1113,63 @@ void runtime_native_3d_render_stats_normalize_temporal(
         stats->mirrorEmitterReflectionPixelCount, committed_subpasses);
     stats->mirrorGeometryReflectionPixelCount = runtime_native_3d_render_stats_round_divide(
         stats->mirrorGeometryReflectionPixelCount, committed_subpasses);
+    stats->mirrorFidelityVertexInterpolatedHitCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->mirrorFidelityVertexInterpolatedHitCount, committed_subpasses);
+    stats->mirrorFidelityFlatFallbackHitCount = runtime_native_3d_render_stats_round_divide(
+        stats->mirrorFidelityFlatFallbackHitCount, committed_subpasses);
+    stats->mirrorFidelityLocalPathVertexEvaluatedCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->mirrorFidelityLocalPathVertexEvaluatedCount, committed_subpasses);
+    stats->mirrorFidelityLocalPathVertexRadianceR /= (double)committed_subpasses;
+    stats->mirrorFidelityLocalPathVertexRadianceG /= (double)committed_subpasses;
+    stats->mirrorFidelityLocalPathVertexRadianceB /= (double)committed_subpasses;
+    stats->mirrorFidelityRecursiveRadianceR /= (double)committed_subpasses;
+    stats->mirrorFidelityRecursiveRadianceG /= (double)committed_subpasses;
+    stats->mirrorFidelityRecursiveRadianceB /= (double)committed_subpasses;
+    stats->mirrorFidelityEnvironmentMissContributionCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->mirrorFidelityEnvironmentMissContributionCount,
+            committed_subpasses);
+    stats->mirrorFidelityEnvironmentMissRadianceR /= (double)committed_subpasses;
+    stats->mirrorFidelityEnvironmentMissRadianceG /= (double)committed_subpasses;
+    stats->mirrorFidelityEnvironmentMissRadianceB /= (double)committed_subpasses;
+    stats->mirrorFidelityRecursiveEnvironmentMissContributionCount =
+        runtime_native_3d_render_stats_round_divide(
+            stats->mirrorFidelityRecursiveEnvironmentMissContributionCount,
+            committed_subpasses);
+    stats->mirrorFidelityRecursiveEnvironmentMissRadianceR /= (double)committed_subpasses;
+    stats->mirrorFidelityRecursiveEnvironmentMissRadianceG /= (double)committed_subpasses;
+    stats->mirrorFidelityRecursiveEnvironmentMissRadianceB /= (double)committed_subpasses;
+    for (mirror_depth = 0;
+         mirror_depth < RUNTIME_NATIVE_3D_MIRROR_FIDELITY_DEPTH_CAPACITY;
+         ++mirror_depth) {
+        stats->mirrorFidelityDepthRayCount[mirror_depth] =
+            runtime_native_3d_render_stats_round_divide(
+                stats->mirrorFidelityDepthRayCount[mirror_depth], committed_subpasses);
+        stats->mirrorFidelityDepthGeometryHitCount[mirror_depth] =
+            runtime_native_3d_render_stats_round_divide(
+                stats->mirrorFidelityDepthGeometryHitCount[mirror_depth], committed_subpasses);
+        stats->mirrorFidelityDepthEmitterHitCount[mirror_depth] =
+            runtime_native_3d_render_stats_round_divide(
+                stats->mirrorFidelityDepthEmitterHitCount[mirror_depth], committed_subpasses);
+        stats->mirrorFidelityDepthContributingHitCount[mirror_depth] =
+            runtime_native_3d_render_stats_round_divide(
+                stats->mirrorFidelityDepthContributingHitCount[mirror_depth],
+                committed_subpasses);
+        stats->mirrorFidelityDepthPolicyTerminationCount[mirror_depth] =
+            runtime_native_3d_render_stats_round_divide(
+                stats->mirrorFidelityDepthPolicyTerminationCount[mirror_depth],
+                committed_subpasses);
+        stats->mirrorFidelityDepthRouletteTerminationCount[mirror_depth] =
+            runtime_native_3d_render_stats_round_divide(
+                stats->mirrorFidelityDepthRouletteTerminationCount[mirror_depth],
+                committed_subpasses);
+        stats->mirrorFidelityDepthNoHitTerminationCount[mirror_depth] =
+            runtime_native_3d_render_stats_round_divide(
+                stats->mirrorFidelityDepthNoHitTerminationCount[mirror_depth],
+                committed_subpasses);
+    }
     stats->totalBounceRadiance /= (double)committed_subpasses;
     stats->causticVolumeCacheSampleLookupCount = runtime_native_3d_render_stats_round_divide(
         stats->causticVolumeCacheSampleLookupCount, committed_subpasses);

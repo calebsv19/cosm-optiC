@@ -10,6 +10,9 @@ typedef enum {
 } RuntimePathDepthPolicy3DLobe;
 
 typedef struct {
+    int requestedDiffuseDepth;
+    int requestedSpecularDepth;
+    int requestedTransmissionDepth;
     int diffuseDepth;
     int specularDepth;
     int transmissionDepth;

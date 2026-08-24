@@ -9,12 +9,16 @@
 #include "app/data_paths.h"
 #include "app/render_export_batch.h"
 #include "config/config_manager.h"
+#include "config/core/config_animation_runtime3d.h"
 #include "render/pipeline/ray_tracing2_native3d_overlay.h"
 #include "render/pipeline/ray_tracing2_preview_present.h"
 #include "render/ray_tracing_integrator_catalog.h"
+#include "render/runtime_native_3d_prepare_cache.h"
 #include "render/runtime_native_3d_resolution.h"
 #include "test_config_animation_internal.h"
 #include "test_support.h"
+#include "ui/menu_settings_lifecycle.h"
+#include "ui/menu_settings_readback.h"
 
 static int test_animation_integrator_split_roundtrip_and_default_3d(void) {
     size_t backup_size = 0;
@@ -1471,30 +1475,130 @@ static int test_animation_runtime_window_override_roundtrip_and_apply(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
 
+    assert_true("runtime_width_contract_clamps_min_and_even",
+                animation_config_runtime_window_width_clamp(199, 640) ==
+                    RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN &&
+                    animation_config_runtime_window_width_clamp(641, 640) == 642);
+    assert_true("runtime_width_contract_clamps_max_and_fallback",
+                animation_config_runtime_window_width_clamp(99999, 640) ==
+                    RAY_TRACING_RUNTIME_WINDOW_WIDTH_MAX &&
+                    animation_config_runtime_window_width_clamp(0, 640) == 640);
+    assert_true("runtime_height_contract_clamps_max_and_fallback",
+                animation_config_runtime_window_height_clamp(99999, 480) ==
+                    RAY_TRACING_RUNTIME_WINDOW_HEIGHT_MAX &&
+                    animation_config_runtime_window_height_clamp(0, 480) == 480);
+    assert_true("runtime_ray_contract_clamps_range_and_fallback",
+                animation_config_runtime_ray_count_clamp(0, 777) == 777 &&
+                    animation_config_runtime_ray_count_clamp(-1, 0) ==
+                        RAY_TRACING_RUNTIME_RAY_COUNT_DEFAULT &&
+                    animation_config_runtime_ray_count_clamp(99999, 0) ==
+                        RAY_TRACING_RUNTIME_RAY_COUNT_MAX);
+
     sceneSettings.windowWidth = 640;
     sceneSettings.windowHeight = 904;
+    sceneSettings.rays = 1840;
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     SaveAnimationConfig();
 
     animSettings.runtimeWindowWidth = 0;
     animSettings.runtimeWindowHeight = 0;
+    animSettings.runtimeRayCount = 0;
     sceneSettings.windowWidth = 1200;
     sceneSettings.windowHeight = 800;
+    sceneSettings.rays = 2000;
     LoadAnimationConfig();
 
     assert_true("runtime_window_override_roundtrip_width",
                 animSettings.runtimeWindowWidth == 640);
     assert_true("runtime_window_override_roundtrip_height",
                 animSettings.runtimeWindowHeight == 904);
+    assert_true("runtime_ray_count_roundtrip",
+                animSettings.runtimeRayCount == 1840);
 
     ApplyAnimationWindowSizeOverride();
     assert_true("runtime_window_override_apply_width",
                 sceneSettings.windowWidth == 640);
     assert_true("runtime_window_override_apply_height",
                 sceneSettings.windowHeight == 904);
+    assert_true("runtime_ray_count_apply",
+                sceneSettings.rays == 1840);
 
     sceneSettings = saved_scene;
     animSettings = saved_anim;
+    restore_runtime_animation_config(backup, backup_size);
+    return 0;
+}
+
+static int test_menu_settings_lifecycle_commits_slider_and_caustic_recipe(void) {
+    size_t backup_size = 0;
+    char* backup = read_text_file_alloc(kRuntimeAnimationConfigPath, &backup_size);
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    MenuRuntimeState state = {0};
+    RuntimeNative3DPreparedSceneCacheStats before = {0};
+    RuntimeNative3DPreparedSceneCacheStats after = {0};
+    MenuSettingsRuntimeReadback readback = {0};
+
+    state.causticSettings.mode = RUNTIME_CAUSTIC_MODE_ANALYTIC;
+    state.causticSettings.transportEngine =
+        RUNTIME_CAUSTIC_TRANSPORT_ENGINE_EXPLORATORY_LENS_TRANSPORT;
+    state.causticSettings.sampleBudget = 321;
+    state.causticSettings.maxPathDepth = 7;
+    state.causticSettings.debugSummaryEnabled = true;
+    animSettings.frameLimit = 77;
+    animSettings.runtimeWindowWidth = 640;
+    animSettings.runtimeWindowHeight = 480;
+    animSettings.runtimeRayCount = 800;
+    sceneSettings.windowWidth = 642;
+    sceneSettings.windowHeight = 482;
+    sceneSettings.rays = 1337;
+    RuntimeNative3DPreparedSceneCacheResetForTests();
+    RuntimeNative3DPreparedSceneCacheStatsSnapshot(&before);
+
+    menu_settings_runtime_readback(&readback);
+    assert_true("menu_lifecycle_readback_edit_pending_before_release",
+                readback.appliedState == MENU_SETTINGS_APPLIED_STATE_EDIT_PENDING &&
+                    !readback.configuredValuesMatchRuntime &&
+                    strstr(readback.summary, "edit pending") != NULL);
+
+    menu_settings_lifecycle_commit_slider_release(&state, &animSettings.frameLimit);
+    RuntimeNative3DPreparedSceneCacheStatsSnapshot(&after);
+    assert_true("menu_lifecycle_slider_invalidates_runtime_once",
+                after.generation == before.generation + 1u && !after.valid);
+    assert_true("menu_lifecycle_syncs_caustic_recipe_before_save",
+                animSettings.causticMode3D == RUNTIME_CAUSTIC_MODE_ANALYTIC &&
+                    animSettings.causticSampleBudget3D == 321 &&
+                    animSettings.causticMaxPathDepth3D == 7 &&
+                    animSettings.causticDebugSummaryEnabled3D);
+    menu_settings_runtime_readback(&readback);
+    assert_true("menu_lifecycle_readback_refresh_pending_after_release",
+                readback.appliedState ==
+                        MENU_SETTINGS_APPLIED_STATE_RENDER_REFRESH_PENDING &&
+                    readback.configuredValuesMatchRuntime &&
+                    readback.configuredWidth == 642 &&
+                    readback.configuredHeight == 482 &&
+                    readback.configuredRayCount == 1337 &&
+                    strstr(readback.summary, "render refresh pending") != NULL);
+
+    animSettings.frameLimit = 1;
+    animSettings.runtimeRayCount = 1;
+    LoadAnimationConfig();
+    assert_true("menu_lifecycle_slider_value_persisted",
+                animSettings.frameLimit == 77);
+    assert_true("menu_lifecycle_runtime_ray_budget_persisted",
+                animSettings.runtimeRayCount == 1337);
+    assert_true("menu_lifecycle_runtime_dimensions_persisted_from_shared_values",
+                animSettings.runtimeWindowWidth == 642 &&
+                    animSettings.runtimeWindowHeight == 482);
+    assert_true("menu_lifecycle_caustic_recipe_persisted",
+                animSettings.causticMode3D == RUNTIME_CAUSTIC_MODE_ANALYTIC &&
+                    animSettings.causticSampleBudget3D == 321 &&
+                    animSettings.causticMaxPathDepth3D == 7 &&
+                    animSettings.causticDebugSummaryEnabled3D);
+
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    RuntimeNative3DPreparedSceneCacheResetForTests();
     restore_runtime_animation_config(backup, backup_size);
     return 0;
 }
@@ -2148,6 +2252,7 @@ int run_test_config_animation_settings_export_suite(void) {
     test_animation_environment_brightness_byte_floor_roundtrip_and_legacy_migration();
     test_animation_light_intensity_missing_uses_authored_default();
     test_animation_runtime_window_override_roundtrip_and_apply();
+    test_menu_settings_lifecycle_commits_slider_and_caustic_recipe();
     test_animation_native_3d_render_scale_roundtrip_and_clamp();
     test_runtime_native_3d_resolution_scale_contract();
     test_animation_video_output_root_migrates_from_output_root();

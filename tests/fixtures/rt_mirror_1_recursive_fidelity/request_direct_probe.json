@@ -1,0 +1,40 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v1",
+  "run_id": "rt_mirror_1_direct_probe",
+  "scene": { "runtime_scene_path": "../rt_mirror_1_baseline/scene_runtime.json" },
+  "volume": { "enabled": false },
+  "render": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "width": 256,
+    "height": 192,
+    "normalized_t": 0.0,
+    "temporal_frames": 4,
+    "integrator_3d": "disney_v2",
+    "denoise_enabled": true
+  },
+  "inspection": {
+    "trace_route": "tlas_blas_parity",
+    "camera_position": { "x": -4.3, "y": -5.6, "z": 2.45 },
+    "camera_look_at": { "x": 0.0, "y": 0.45, "z": 0.35 },
+    "camera_zoom": 2.4,
+    "environment_light_mode": "ambient",
+    "ambient_strength": 0.18,
+    "top_fill_strength": 0.65,
+    "light_intensity": 8.0,
+    "light_radius": 0.16,
+    "forward_decay": 220.0,
+    "secondary_diffuse_samples_3d": 8,
+    "transmission_samples_3d": 4,
+    "object_audit_enabled": true,
+    "object_audit_max_dimension": 128
+  },
+  "output": {
+    "root": "../../../build/agent_runs/ray_tracing/rt_mirror_1_recursive_fidelity/direct",
+    "overwrite": true
+  },
+  "progress": {
+    "summary_path": "../../../build/agent_runs/ray_tracing/rt_mirror_1_recursive_fidelity/direct/render_summary.json",
+    "progress_path": "../../../build/agent_runs/ray_tracing/rt_mirror_1_recursive_fidelity/direct/render_progress.json"
+  }
+}

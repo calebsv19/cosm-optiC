@@ -1,0 +1,82 @@
+{
+  "asset_id": "smooth_reflection_organic_blob_unit",
+  "asset_type": "solid_mesh",
+  "authoring": {
+    "imported_mesh": {
+      "crease_angle_degrees": 180.0,
+      "default_surface_group_id": "smooth_surface",
+      "import_id": "smooth_reflection_organic_blob_unit_stl",
+      "normal_mode": "smooth",
+      "orientation_policy": "source_axes",
+      "preserve_source_normals": false,
+      "source_format": "stl",
+      "source_to_asset_scale": 1.0,
+      "source_unit_system": "meter",
+      "source_uri": "source/organic_blob.stl",
+      "topology_closed_volume_observed": true,
+      "topology_manifold_observed": true,
+      "weld_tolerance": 1e-07,
+      "weld_vertices": true
+    },
+    "source_mode": "imported_mesh"
+  },
+  "compile_hints": {
+    "expect_closed_volume": true,
+    "expect_manifold": true
+  },
+  "extensions": {
+    "smooth_mesh_reflection_fixture": {
+      "amplitude": 0.14,
+      "bounds": {
+        "max": [
+          1.0420500927449716,
+          1.0321770323372075,
+          1.039852150378079
+        ],
+        "min": [
+          -1.0436547340376265,
+          -1.040735708425717,
+          -1.0603852170639496
+        ]
+      },
+      "family": "organic_blob",
+      "frequency": 5,
+      "schema": "smooth_mesh_reflection_fixture_v1",
+      "seed": 17,
+      "stl_bytes": 64084,
+      "subdivisions": 3,
+      "tier": "unit",
+      "triangle_count": 1280,
+      "triangle_payload_sha256": "3a5b3a09640271d5c6dc8f0ef1079d86e60573b68d128c3bb8fa83cd6dc63ba8",
+      "vertex_count": 642
+    }
+  },
+  "pivot": {
+    "axis_u": {
+      "x": 1.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "axis_v": {
+      "x": 0.0,
+      "y": 1.0,
+      "z": 0.0
+    },
+    "normal": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 1.0
+    },
+    "origin": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    }
+  },
+  "schema_family": "codework_geometry",
+  "schema_variant": "mesh_asset_authoring_v1",
+  "schema_version": 1,
+  "surface_groups": [],
+  "unit_system": "meter",
+  "world_scale": 1.0
+}

@@ -623,49 +623,68 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                 NULL,
                 io_result);
         }
-        if (!secondary_material_emitter &&
-            (secondary_payload_resolved
-                 ? RuntimeDirectLight3D_ShadeHitWithPayload(scene,
-                                                            &trace.geometryHitInfo,
-                                                            &secondary_payload,
-                                                            sampling,
-                                                            &secondary_direct)
-                 : RuntimeDirectLight3D_ShadeHit(scene,
-                                                 &trace.geometryHitInfo,
-                                                 sampling,
-                                                 &secondary_direct))) {
-            const double contribution_r =
-                secondary_throughput_r * secondary_direct.radianceR * io_result->misWeightBsdf;
-            const double contribution_g =
-                secondary_throughput_g * secondary_direct.radianceG * io_result->misWeightBsdf;
-            const double contribution_b =
-                secondary_throughput_b * secondary_direct.radianceB * io_result->misWeightBsdf;
-            io_result->stochasticBsdfRadianceR +=
-                contribution_r;
-            io_result->stochasticBsdfRadianceG +=
-                contribution_g;
-            io_result->stochasticBsdfRadianceB +=
-                contribution_b;
-            runtime_disney_v2_3d_record_mis_vertex(io_result,
-                                                   1,
-                                                   io_result->lightSamplePdf,
-                                                   io_result->bsdfSamplePdf,
-                                                   io_result->misWeightLight,
-                                                   io_result->misWeightBsdf);
-            runtime_disney_v2_3d_record_light_sample_contribution(io_result,
-                                                                  1,
-                                                                  contribution_r,
-                                                                  contribution_g,
-                                                                  contribution_b);
-            runtime_disney_v2_3d_record_bsdf_sample_contribution(
-                io_result,
-                1,
-                contribution_r,
-                contribution_g,
-                contribution_b,
-                scene && scene->hasLight && scene->light.radius > 1e-9
-                    ? RUNTIME_DISNEY_V2_3D_EMITTER_FINITE_LIGHT
-                    : RUNTIME_DISNEY_V2_3D_EMITTER_NONE);
+        if (!secondary_material_emitter && scene && scene->hasLight) {
+            const double secondary_bsdf_pdf =
+                RuntimeDisneyV2_3D_EstimateDirectBsdfPdfForSceneLight(
+                    scene,
+                    &trace.geometryHitInfo,
+                    secondary_payload_resolved ? &secondary_principled : NULL,
+                    io_result->pathState.ray.direction,
+                    secondary_payload_resolved &&
+                        secondary_principled.transmissionWeight > 1e-9);
+            const RuntimeDisneyV2_3DMisBranch secondary_finite_branch =
+                runtime_disney_v2_3d_make_mis_branch(
+                    RuntimeDisneyV2_3D_EstimateFiniteLightPdfForHit(
+                        scene,
+                        &trace.geometryHitInfo),
+                    secondary_bsdf_pdf);
+            if ((secondary_payload_resolved
+                     ? RuntimeDirectLight3D_ShadeHitWithPayload(scene,
+                                                                &trace.geometryHitInfo,
+                                                                &secondary_payload,
+                                                                sampling,
+                                                                &secondary_direct)
+                     : RuntimeDirectLight3D_ShadeHit(scene,
+                                                     &trace.geometryHitInfo,
+                                                     sampling,
+                                                     &secondary_direct))) {
+                const double contribution_r =
+                    throughput_r * secondary_direct.radianceR *
+                    secondary_finite_branch.weightLight;
+                const double contribution_g =
+                    throughput_g * secondary_direct.radianceG *
+                    secondary_finite_branch.weightLight;
+                const double contribution_b =
+                    throughput_b * secondary_direct.radianceB *
+                    secondary_finite_branch.weightLight;
+                io_result->recursiveDirectRadianceR += contribution_r;
+                io_result->recursiveDirectRadianceG += contribution_g;
+                io_result->recursiveDirectRadianceB += contribution_b;
+                runtime_disney_v2_3d_record_mis_vertex(
+                    io_result,
+                    1,
+                    secondary_finite_branch.lightPdf,
+                    secondary_finite_branch.bsdfPdf,
+                    secondary_finite_branch.weightLight,
+                    secondary_finite_branch.weightBsdf);
+                runtime_disney_v2_3d_record_mis_branch_vertex(
+                    io_result,
+                    1,
+                    secondary_finite_branch,
+                    (RuntimeDisneyV2_3DMisBranch){0});
+                runtime_disney_v2_3d_record_light_sample_contribution(
+                    io_result,
+                    1,
+                    contribution_r,
+                    contribution_g,
+                    contribution_b);
+                if (runtime_disney_v2_3d_peak(
+                        contribution_r,
+                        contribution_g,
+                        contribution_b) > 1e-9) {
+                    io_result->secondaryContributingHitCount += 1;
+                }
+            }
         }
         if (!secondary_material_emitter) {
             RuntimeDisneyV2_3D_ApplyRecursivePathLoop(scene,

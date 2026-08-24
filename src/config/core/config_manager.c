@@ -118,6 +118,7 @@ AnimationConfig animSettings = {
     .menuPaneHealthWidth = MENU_PANE_HEALTH_WIDTH_DEFAULT,
     .runtimeWindowWidth = 0,
     .runtimeWindowHeight = 0,
+    .runtimeRayCount = RAY_TRACING_RUNTIME_RAY_COUNT_DEFAULT,
     .sceneSource = SCENE_SOURCE_CONFIG_2D,
     .useFluidScene = false,
     .fluidManifest = "",
@@ -130,13 +131,13 @@ AnimationConfig animSettings = {
 };
 
 SceneConfig sceneSettings = {
-    .windowWidth = 1200,
-    .windowHeight = 800,
+    .windowWidth = RAY_TRACING_RUNTIME_WINDOW_WIDTH_DEFAULT,
+    .windowHeight = RAY_TRACING_RUNTIME_WINDOW_HEIGHT_DEFAULT,
     .objectCount = 0,  // No objects initially
     .bezierPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
     .bezierPath3D = {0},
     .cameraPath = { .numPoints = 0, .mode = BEZIER_CUBIC },
-    .rays = 2000,
+    .rays = RAY_TRACING_RUNTIME_RAY_COUNT_DEFAULT,
     .camera = { .x = 0.0, .y = 0.0, .zoom = 1.0, .rotation = 0.0 },
     .cameraZ = 0.0,
     .cameraMargin = 80.0
@@ -919,7 +920,7 @@ void LoadSceneConfig(void) {
         printf("Loaded Rays Value: %d\n", sceneSettings.rays);
     } else {
         printf("WARNING: 'rays' key missing in config, using default value.\n");
-        sceneSettings.rays = 2000;  //  Default value if not found
+        sceneSettings.rays = RAY_TRACING_RUNTIME_RAY_COUNT_DEFAULT;
     }
     
     // Clamp material ids to valid range

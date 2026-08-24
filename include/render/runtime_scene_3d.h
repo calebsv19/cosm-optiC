@@ -221,6 +221,11 @@ void RuntimeEnvironment3D_ResolveFromAnimationConfig(RuntimeEnvironment3D* envir
                                                      const AnimationConfig* config);
 double RuntimeEnvironment3D_AmbientStrength(const RuntimeEnvironment3D* environment);
 double RuntimeEnvironment3D_BackgroundBrightness(const RuntimeEnvironment3D* environment);
+void RuntimeEnvironment3D_EvaluateBackgroundRGB(const RuntimeEnvironment3D* environment,
+                                                Vec3 direction,
+                                                double* out_r,
+                                                double* out_g,
+                                                double* out_b);
 
 void RuntimeTriangleMesh3D_Init(RuntimeTriangleMesh3D* mesh);
 void RuntimeTriangleMesh3D_Free(RuntimeTriangleMesh3D* mesh);

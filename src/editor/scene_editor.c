@@ -1,5 +1,6 @@
 // scene_editor.c  
 #include "editor/scene_editor.h"
+#include "app/ray_tracing_build_identity.h"
 #include "editor/bezier_editor.h"
 #include "editor/object_editor.h"   //  Required for object editing
 #include "editor/object_editor_motion.h"
@@ -714,6 +715,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
 }
 
 bool InitializeSceneEditor(SceneEditor* editor) {
+    char window_title[192] = {0};
     if (!editor) {
         return false;
     }
@@ -735,7 +737,9 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
 
     //  Create the window using stored scene settings
-    editor->window = SDL_CreateWindow("Scene Editor", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    ray_tracing_build_identity_format_window_title(
+        window_title, sizeof(window_title), "Scene Editor");
+    editor->window = SDL_CreateWindow(window_title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                                       sceneSettings.windowWidth, sceneSettings.windowHeight,
                                       SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE |
                                           SDL_WINDOW_ALLOW_HIGHDPI);

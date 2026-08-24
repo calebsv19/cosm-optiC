@@ -11,6 +11,7 @@
 #include "editor/object_editor_motion.h"
 #include "editor/object_editor_panels_internal.h"
 #include "editor/scene_editor_digest_overlay.h"
+#include "app/ray_tracing_build_identity.h"
 #include "import/runtime_scene_bridge.h"
 #include "motion/runtime_motion_track_3d.h"
 #include "render/ray_tracing_integrator_catalog.h"
@@ -21,6 +22,7 @@
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_caustic_product.h"
 #include "ui/menu_environment_settings.h"
+#include "ui/menu_settings_readback.h"
 #include "ui/menu_layout.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu_resume_panel.h"
@@ -391,6 +393,12 @@ static int test_menu_layout_builds_non_overlapping_primary_zones(void) {
 
     assert_true("menu_layout_left_panel_has_width", screen.leftPanelRect.w >= 350);
     assert_true("menu_layout_slider_panel_has_width", screen.sliderPanelRect.w >= 300);
+    assert_true("menu_layout_render_info_uses_full_health_width",
+                screen.renderInfoRect.x == screen.sliderPanelRect.x &&
+                    screen.renderInfoRect.w == screen.sliderPanelRect.w);
+    assert_true("menu_layout_render_info_separates_sliders_from_route",
+                test_rect_bottom(&screen.sliderPanelRect) <= screen.renderInfoRect.y &&
+                    test_rect_bottom(&screen.renderInfoRect) <= screen.routeStackRect.y);
     assert_true("menu_layout_center_panel_has_width", screen.centerBatchRect.w >= 300);
     assert_true("menu_layout_left_before_center",
                 screen.leftPanelRect.x + screen.leftPanelRect.w < screen.centerBatchRect.x);
@@ -569,8 +577,16 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
                 buttons.startRect.x >= screen.routeStackRect.x &&
                 test_rect_right(&buttons.previewRect) <= test_rect_right(&screen.routeStackRect) &&
                 test_rect_right(&buttons.startRect) <= test_rect_right(&screen.routeStackRect) &&
-                buttons.previewRect.y > buttons.sceneEditorRect.y &&
+                buttons.previewRect.y == buttons.sceneEditorRect.y &&
                 buttons.startRect.y > buttons.previewRect.y);
+    assert_true("menu_buttons_runtime_route_uses_two_column_rows",
+                buttons.spaceModeRect.y == buttons.sceneModeRect.y &&
+                    buttons.sceneEditorRect.y == buttons.previewRect.y &&
+                    test_rect_right(&buttons.spaceModeRect) < buttons.sceneModeRect.x &&
+                    test_rect_right(&buttons.sceneEditorRect) < buttons.previewRect.x &&
+                    buttons.startRect.x == buttons.spaceModeRect.x &&
+                    test_rect_right(&buttons.startRect) ==
+                        test_rect_right(&buttons.sceneModeRect));
     assert_true("menu_buttons_runtime_route_is_compact",
                 buttons.spaceModeRect.h <= 40 &&
                 buttons.startRect.h <= 40);
@@ -589,6 +605,71 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
                 buttons.saveRect.y >= screen.bottomActionRowRect.y &&
                 buttons.exitRect.y < test_rect_bottom(&screen.bottomActionRowRect) &&
                 buttons.saveRect.y < test_rect_bottom(&screen.bottomActionRowRect));
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_menu_right_pane_layout_scales_with_panel_geometry(void) {
+    const int heights[] = {700, 900, 1100};
+    const int health_widths[] = {250, 340, 480};
+    AnimationConfig saved_anim = animSettings;
+    int previous_slider_height = 0;
+    size_t i;
+
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.spaceMode = SPACE_MODE_3D;
+    for (i = 0u; i < sizeof(heights) / sizeof(heights[0]); ++i) {
+        MenuRuntimeState state;
+        MenuScreenLayout screen;
+        MenuButtonLayout buttons;
+        SliderLayout sliders;
+        memset(&state, 0, sizeof(state));
+        memset(&screen, 0, sizeof(screen));
+        memset(&buttons, 0, sizeof(buttons));
+        memset(&sliders, 0, sizeof(sliders));
+
+        menu_layout_build_base(NULL, &state, 1500, heights[i], &screen);
+        ray_tracing_menu_pane_host_set_targets(
+            &state.menuPaneHost, 390, health_widths[i]);
+        assert_true("menu_right_pane_rebuild_for_requested_width",
+                    ray_tracing_menu_pane_host_rebuild(
+                        &state.menuPaneHost,
+                        (SDL_Rect){30, 30, 1440, heights[i] - 172}));
+        menu_layout_build_base(NULL, &state, 1500, heights[i], &screen);
+        menu_render_build_button_layout(NULL, &state, &screen, &buttons);
+        menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
+
+        assert_true("menu_right_pane_slider_panel_fills_owned_width",
+                    sliders.panelRect.x == screen.sliderPanelRect.x &&
+                        sliders.panelRect.w == screen.sliderPanelRect.w);
+        assert_true("menu_right_pane_track_stays_inside_slider_panel",
+                    sliders.count > 0u &&
+                        sliders.items[0].trackRect.x >= screen.sliderPanelRect.x &&
+                        test_rect_right(&sliders.items[0].trackRect) <=
+                            test_rect_right(&screen.sliderPanelRect));
+        assert_true("menu_right_pane_regions_share_responsive_width",
+                    screen.sliderPanelRect.x == screen.renderInfoRect.x &&
+                        screen.renderInfoRect.x == screen.routeStackRect.x &&
+                        screen.sliderPanelRect.w == screen.renderInfoRect.w &&
+                        screen.renderInfoRect.w == screen.routeStackRect.w);
+        assert_true("menu_right_pane_regions_do_not_overlap",
+                    test_rect_bottom(&screen.sliderPanelRect) <=
+                        screen.renderInfoRect.y &&
+                        test_rect_bottom(&screen.renderInfoRect) <=
+                            screen.routeStackRect.y);
+        assert_true("menu_right_pane_route_grid_bottom_aligned",
+                    buttons.startRect.y > buttons.previewRect.y &&
+                        test_rect_bottom(&buttons.startRect) <=
+                            test_rect_bottom(&screen.routeStackRect) &&
+                        test_rect_bottom(&screen.routeStackRect) -
+                                test_rect_bottom(&buttons.startRect) <=
+                            12);
+        if (previous_slider_height > 0) {
+            assert_true("menu_right_pane_taller_window_grows_slider_region",
+                        screen.sliderPanelRect.h > previous_slider_height);
+        }
+        previous_slider_height = screen.sliderPanelRect.h;
+    }
     animSettings = saved_anim;
     return 0;
 }
@@ -1194,6 +1275,35 @@ static int test_menu_environment_settings_invalidate_and_read_back_runtime(void)
     return 0;
 }
 
+static int test_main_edit_build_identity_labels_windows_without_changing_standard(void) {
+    const char* saved_profile_value = getenv("RAY_TRACING_PACKAGE_PROFILE");
+    const char* saved_label_value = getenv("RAY_TRACING_BUILD_LABEL");
+    char* saved_profile = saved_profile_value ? strdup(saved_profile_value) : NULL;
+    char* saved_label = saved_label_value ? strdup(saved_label_value) : NULL;
+    char title[192] = {0};
+
+    setenv("RAY_TRACING_PACKAGE_PROFILE", "standard", 1);
+    setenv("RAY_TRACING_BUILD_LABEL", "optiC-0.14.0", 1);
+    ray_tracing_build_identity_format_window_title(
+        title, sizeof(title), "RayTracing Menu");
+    assert_true("standard_package_window_title_unchanged",
+                strcmp(title, "RayTracing Menu") == 0);
+
+    setenv("RAY_TRACING_PACKAGE_PROFILE", "main-edit", 1);
+    setenv("RAY_TRACING_BUILD_LABEL", "main-edit-0.14.0-382b6871e785", 1);
+    ray_tracing_build_identity_format_window_title(
+        title, sizeof(title), "RayTracing Menu");
+    assert_true("main_edit_package_window_title_is_visible",
+                strcmp(title,
+                       "RayTracing Menu - main-edit-0.14.0-382b6871e785") == 0);
+
+    restore_env_or_unset("RAY_TRACING_PACKAGE_PROFILE", saved_profile);
+    restore_env_or_unset("RAY_TRACING_BUILD_LABEL", saved_label);
+    free(saved_profile);
+    free(saved_label);
+    return 0;
+}
+
 static int test_menu_environment_override_survives_one_scene_restore(void) {
     AnimationConfig saved_anim = animSettings;
 
@@ -1208,6 +1318,12 @@ static int test_menu_environment_override_survives_one_scene_restore(void) {
     animSettings.environmentBackgroundColorG = 0.2;
     animSettings.environmentBackgroundColorB = 0.9;
     animSettings.topFillStrength = 1.7;
+    animSettings.lightIntensity = 6.5;
+    animSettings.lightRadius = 0.35;
+    animSettings.lightHeight = 12.0;
+    animSettings.forwardDecay = 420.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_LINEAR;
+    animSettings.lightDecaySoftness = 0.65;
     AnimationPreserveCurrentEnvironmentOnNextInit();
 
     animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
@@ -1219,6 +1335,12 @@ static int test_menu_environment_override_survives_one_scene_restore(void) {
     animSettings.environmentBackgroundColorG = 1.0;
     animSettings.environmentBackgroundColorB = 1.0;
     animSettings.topFillStrength = 1.0;
+    animSettings.lightIntensity = 0.4;
+    animSettings.lightRadius = 0.0;
+    animSettings.lightHeight = 2.0;
+    animSettings.forwardDecay = 100.0;
+    animSettings.forwardFalloffMode = FORWARD_FALLOFF_MODE_QUADRATIC;
+    animSettings.lightDecaySoftness = 1.0;
     AnimationApplyPreservedEnvironmentAfterSceneRestore();
 
     assert_true("menu_environment_start_override_restores_mode",
@@ -1231,6 +1353,13 @@ static int test_menu_environment_override_survives_one_scene_restore(void) {
                     fabs(animSettings.environmentBackgroundColorR - 0.1) <= 1e-9 &&
                     fabs(animSettings.environmentBackgroundColorG - 0.2) <= 1e-9 &&
                     fabs(animSettings.environmentBackgroundColorB - 0.9) <= 1e-9);
+    assert_true("menu_environment_start_override_restores_direct_light_values",
+                fabs(animSettings.lightIntensity - 6.5) <= 1e-9 &&
+                    fabs(animSettings.lightRadius - 0.35) <= 1e-9 &&
+                    fabs(animSettings.lightHeight - 12.0) <= 1e-9 &&
+                    fabs(animSettings.forwardDecay - 420.0) <= 1e-9 &&
+                    animSettings.forwardFalloffMode == FORWARD_FALLOFF_MODE_LINEAR &&
+                    fabs(animSettings.lightDecaySoftness - 0.65) <= 1e-9);
 
     animSettings.environmentBackgroundColorB = 0.4;
     AnimationApplyPreservedEnvironmentAfterSceneRestore();
@@ -1276,6 +1405,7 @@ static int test_menu_environment_settings_rebuild_cached_static_scene(void) {
     RuntimeNative3DPreparedSceneCacheStats pending = {0};
     RuntimeNative3DPreparedSceneCacheStats applied = {0};
     MenuEnvironmentRuntimeReadback readback = {0};
+    MenuSettingsRuntimeReadback settings_readback = {0};
     bool ok = false;
 
     RuntimeNative3DPreparedSceneCacheResetForTests();
@@ -1301,6 +1431,9 @@ static int test_menu_environment_settings_rebuild_cached_static_scene(void) {
     animSettings.environmentBackgroundColorR = 1.0;
     animSettings.environmentBackgroundColorG = 1.0;
     animSettings.environmentBackgroundColorB = 1.0;
+    animSettings.runtimeWindowWidth = sceneSettings.windowWidth;
+    animSettings.runtimeWindowHeight = sceneSettings.windowHeight;
+    animSettings.runtimeRayCount = sceneSettings.rays;
 
     ok = RuntimeNative3DPrepareFrame(&initial, 32, 32, 0.0, 0.0, -4.0);
     assert_true("menu_environment_cache_initial_prepare", ok);
@@ -1312,6 +1445,19 @@ static int test_menu_environment_settings_rebuild_cached_static_scene(void) {
     RuntimeNative3DPreparedSceneCacheStatsSnapshot(&cached);
     assert_true("menu_environment_cache_initial_generation_applied",
                 cached.valid && cached.cachedGeneration == cached.generation);
+    menu_settings_runtime_readback(&settings_readback);
+    assert_true("menu_settings_readback_initial_recipe_applied",
+                settings_readback.appliedState == MENU_SETTINGS_APPLIED_STATE_APPLIED &&
+                    settings_readback.configuredValuesMatchRuntime &&
+                    settings_readback.preparedSceneCurrent &&
+                    strstr(settings_readback.summary, "applied") != NULL);
+
+    sceneSettings.windowWidth += 2;
+    menu_settings_runtime_readback(&settings_readback);
+    assert_true("menu_settings_readback_detects_uncommitted_dimension_edit",
+                settings_readback.appliedState == MENU_SETTINGS_APPLIED_STATE_EDIT_PENDING &&
+                    !settings_readback.configuredValuesMatchRuntime);
+    sceneSettings.windowWidth = animSettings.runtimeWindowWidth;
 
     assert_true("menu_environment_cache_mode_change",
                 menu_environment_settings_set_light_mode(
@@ -1325,6 +1471,12 @@ static int test_menu_environment_settings_rebuild_cached_static_scene(void) {
     RuntimeNative3DPreparedSceneCacheStatsSnapshot(&pending);
     assert_true("menu_environment_cache_change_pending",
                 !pending.valid && pending.generation == cached.generation + 4u);
+    menu_settings_runtime_readback(&settings_readback);
+    assert_true("menu_settings_readback_detects_render_refresh_pending",
+                settings_readback.appliedState ==
+                        MENU_SETTINGS_APPLIED_STATE_RENDER_REFRESH_PENDING &&
+                    settings_readback.configuredValuesMatchRuntime &&
+                    !settings_readback.preparedSceneCurrent);
 
     ok = RuntimeNative3DPrepareFrame(&rebuilt, 32, 32, 0.0, 0.0, -4.0);
     assert_true("menu_environment_cache_rebuild", ok);
@@ -1349,10 +1501,15 @@ static int test_menu_environment_settings_rebuild_cached_static_scene(void) {
     }
     RuntimeNative3DPreparedSceneCacheStatsSnapshot(&applied);
     menu_environment_settings_readback(&readback);
+    menu_settings_runtime_readback(&settings_readback);
     assert_true("menu_environment_cache_rebuild_applied",
                 applied.valid && applied.cachedGeneration == applied.generation &&
                     readback.runtimeApplied &&
                     strstr(readback.summary, "applied") != NULL);
+    assert_true("menu_settings_readback_rebuild_applied",
+                settings_readback.appliedState == MENU_SETTINGS_APPLIED_STATE_APPLIED &&
+                    settings_readback.preparedSceneCurrent &&
+                    strstr(settings_readback.summary, "applied") != NULL);
 
     RuntimeNative3DPreparedFrame_Free(&initial);
     RuntimeNative3DPreparedFrame_Free(&rebuilt);
@@ -1371,6 +1528,9 @@ static int test_menu_slider_layout_routes_bounce_controls_by_space_mode(void) {
     bool found_legacy_roulette = false;
     bool found_3d_bounce = false;
     bool found_3d_roulette = false;
+    bool width_contract_ok = false;
+    bool height_contract_ok = false;
+    bool ray_contract_ok = false;
 
     memset(&state, 0, sizeof(state));
     memset(&screen, 0, sizeof(screen));
@@ -1381,6 +1541,21 @@ static int test_menu_slider_layout_routes_bounce_controls_by_space_mode(void) {
     menu_layout_build_base(NULL, &state, TEST_MENU_WIDTH, TEST_MENU_HEIGHT, &screen);
     menu_render_build_slider_layout(NULL, &state, &screen, &sliders);
     for (size_t i = 0; i < sliders.count; ++i) {
+        if (sliders.items[i].value == &sceneSettings.windowWidth) {
+            width_contract_ok =
+                sliders.items[i].min == RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN &&
+                sliders.items[i].max == RAY_TRACING_RUNTIME_WINDOW_WIDTH_MAX;
+        }
+        if (sliders.items[i].value == &sceneSettings.windowHeight) {
+            height_contract_ok =
+                sliders.items[i].min == RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN &&
+                sliders.items[i].max == RAY_TRACING_RUNTIME_WINDOW_HEIGHT_MAX;
+        }
+        if (sliders.items[i].value == &sceneSettings.rays) {
+            ray_contract_ok =
+                sliders.items[i].min == RAY_TRACING_RUNTIME_RAY_COUNT_MIN &&
+                sliders.items[i].max == RAY_TRACING_RUNTIME_RAY_COUNT_MAX;
+        }
         if (sliders.items[i].label &&
             strcmp(sliders.items[i].label, "Bounce Limit") == 0) {
             found_legacy_bounce = true;
@@ -1392,6 +1567,9 @@ static int test_menu_slider_layout_routes_bounce_controls_by_space_mode(void) {
     }
     assert_true("menu_slider_layout_2d_legacy_bounce_present", found_legacy_bounce);
     assert_true("menu_slider_layout_2d_legacy_roulette_present", found_legacy_roulette);
+    assert_true("menu_slider_layout_width_uses_config_contract", width_contract_ok);
+    assert_true("menu_slider_layout_height_uses_config_contract", height_contract_ok);
+    assert_true("menu_slider_layout_rays_uses_config_contract", ray_contract_ok);
 
     memset(&sliders, 0, sizeof(sliders));
     found_legacy_bounce = false;
@@ -2146,6 +2324,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_workspace_registers_and_switches_nested_modules();
     test_menu_layout_keeps_manifest_list_inside_left_panel();
     test_menu_button_layout_respects_owned_screen_zones();
+    test_menu_right_pane_layout_scales_with_panel_geometry();
     test_menu_button_layout_compacts_scene_mode_controls_in_3d();
     test_menu_resume_panel_layout_owns_frame_resume_controls();
     test_menu_resume_panel_clicks_preserve_frame_behavior();
@@ -2157,6 +2336,7 @@ int run_test_ui_menu_contract_tests(void) {
     test_menu_slider_layout_includes_environment_control();
     test_menu_environment_settings_invalidate_and_read_back_runtime();
     test_menu_environment_override_survives_one_scene_restore();
+    test_main_edit_build_identity_labels_windows_without_changing_standard();
     test_menu_environment_settings_rebuild_cached_static_scene();
     test_menu_slider_layout_routes_bounce_controls_by_space_mode();
     test_integrator_catalog_cycle_preserves_inactive_mode();

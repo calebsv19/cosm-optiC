@@ -1,0 +1,34 @@
+{
+  "schema": "rt_mirror_1_recursive_fidelity_before_state_v1",
+  "baseline_renderer_commit": "382b6871e7859ec276e2eee404edf83b27676e49",
+  "reference_platform": "darwin-arm64",
+  "inputs": {
+    "acceptance_requirements.json": "b9e3dca6117eb638e3ff22dea492bb7ad74199dd8faea77a8c8e66c051ada524",
+    "request_direct_probe.json": "9149bead1522e87a9408a99e54f1001bf9ade123f5be070d8976fe352ce9b53f",
+    "request_reflected_probe.json": "595d06ad521ad2f697456a5c997b23031648e4544d2460592ddaa6288f908382",
+    "../rt_mirror_1_baseline/scene_runtime.json": "463d323ead34b4743e16bef05ec5be179426217bb8940ce35e456cf4298ad828",
+    "../rt_mirror_1_baseline/assets/mesh_assets/rt_mirror_1_smooth_organic.runtime.json": "803a71c9eb292413f066f36f97d02f5319043ea9a8788191d34059cdd0e2e93f"
+  },
+  "frames": {
+    "direct_sha256": "777cc3d5f5545b7cbef4201e06e9fb569e4f001cc41baa5d5539eda3cf9c37e1",
+    "reflected_sha256": "f92a70b885b9e42a3ec72a90778089edfea3586182511d1503ea1d9d110e75fa"
+  },
+  "image_metrics": {
+    "direct_blue_pixels": 10672,
+    "direct_chroma_pixels": 13367,
+    "reflected_blue_pixels": 304,
+    "reflected_chroma_pixels": 674
+  },
+  "stable_summaries": {
+    "direct": {
+      "smooth_subject_primary_hit_pixels": 10740,
+      "mirror_reflection_hit_pixels": 13941,
+      "mirror_geometry_reflection_pixels": 13938
+    },
+    "reflected": {
+      "smooth_subject_primary_hit_pixels": 336,
+      "mirror_reflection_hit_pixels": 30425,
+      "mirror_geometry_reflection_pixels": 30425
+    }
+  }
+}

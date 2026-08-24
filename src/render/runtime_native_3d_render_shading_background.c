@@ -148,27 +148,17 @@ void runtime_native_3d_render_background_rgb(const RuntimeScene3D* scene,
                                              double* out_r,
                                              double* out_g,
                                              double* out_b) {
-    double mix_t = 0.0;
-    double strength = 0.0;
-    Vec3 color = vec3(0.0, 0.0, 0.0);
-
-    if (out_r) *out_r = 0.0;
-    if (out_g) *out_g = 0.0;
-    if (out_b) *out_b = 0.0;
-    if (!scene || !primary_ray || scene->environment.lightMode != ENVIRONMENT_LIGHT_MODE_AMBIENT) {
+    if (!scene || !primary_ray) {
+        if (out_r) *out_r = 0.0;
+        if (out_g) *out_g = 0.0;
+        if (out_b) *out_b = 0.0;
         return;
     }
-
-    strength = RuntimeEnvironment3D_BackgroundBrightness(&scene->environment);
-    if (!(strength > 0.0)) return;
-
-    mix_t = runtime_native_3d_render_clamp01((primary_ray->direction.z + 1.0) * 0.5);
-    color = vec3_add(vec3_scale(scene->environment.backgroundBottomColor, 1.0 - mix_t),
-                     vec3_scale(scene->environment.backgroundTopColor, mix_t));
-    color = vec3_scale(color, strength);
-    if (out_r) *out_r = color.x;
-    if (out_g) *out_g = color.y;
-    if (out_b) *out_b = color.z;
+    RuntimeEnvironment3D_EvaluateBackgroundRGB(&scene->environment,
+                                               primary_ray->direction,
+                                               out_r,
+                                               out_g,
+                                               out_b);
 }
 
 RuntimeVolume3DScatterResult runtime_native_3d_render_primary_scatter(

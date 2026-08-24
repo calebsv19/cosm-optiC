@@ -350,6 +350,10 @@ Headless request/render/material lanes:
 ```bash
 make -C ray_tracing test-ray-tracing-render-headless-preflight
 make -C ray_tracing test-ray-tracing-render-headless-image-export
+make -C ray_tracing test-ray-tracing-mirror-baseline-contract
+make -C ray_tracing capture-ray-tracing-mirror-recursive-fidelity-before-state
+make -C ray_tracing test-ray-tracing-mirror-recursive-fidelity-contract
+make -C ray_tracing test-ray-tracing-mirror-radiance-isolation
 make -C ray_tracing test-ray-tracing-render-headless-tlas-blas-repeated-instance-stress
 make -C ray_tracing test-ray-tracing-material-preview-headless
 make -C ray_tracing test-ray-tracing-caustic-probe-matrix
@@ -364,6 +368,24 @@ make -C ray_tracing test-ray-tracing-ppm10-product-ab-fixture
 make -C ray_tracing test-ray-tracing-animated-water-photon-caustics
 make -C ray_tracing test-ray-tracing-emissive-light-preview-matrix
 ```
+
+`test-ray-tracing-mirror-baseline-contract` is the unchanged-renderer
+`RT-MIRROR-1` before-state. It renders one retained `generated_smooth` imported
+mesh directly and through a mirror, verifies raw and resolved image hashes,
+repeats the raw render for byte determinism, and writes the ignored evidence
+report under `build/agent_runs/ray_tracing/rt_mirror_1_baseline/`.
+
+`capture-ray-tracing-mirror-recursive-fidelity-before-state` retains and
+verifies comparable-scale direct and reflected close-ups. The paired
+`test-ray-tracing-mirror-recursive-fidelity-contract` is the green reflected-
+object gate. It requires the expected reflected object/material/normal identity,
+bounded spatial coverage, raw linear chroma through tone mapping, and exact
+single-accounting of disjoint direct-light and BSDF transport terms. The old
+whole-frame reflected/direct blue-pixel ratio remains diagnostic only.
+`test-ray-tracing-mirror-radiance-isolation` is the green diagnostic companion:
+it adds a one-sample/no-denoise reflected cell, requires exact agreement between
+the probe's precomputed tone-map byte and the retained BMP, and reports the
+first-vertex, composed-linear, tone-mapped, and reconstructed stages separately.
 
 `test-ray-tracing-animated-water-photon-caustics` is the bounded native
 animated-fluid photon acceptance lane. It imports a deterministic 96-by-96

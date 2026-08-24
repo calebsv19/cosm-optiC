@@ -18,6 +18,7 @@
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_caustic_product.h"
 #include "ui/menu_environment_settings.h"
+#include "ui/menu_settings_readback.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/menu_panel_chrome.h"
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
@@ -168,6 +169,122 @@ static const char* menu_forward_falloff_button_label(void) {
         return "Falloff: None";
     }
     return "Falloff: Quadratic";
+}
+
+static const char* menu_render_compact_status_value(const char* label) {
+    const char* colon;
+    if (!label) return "Unknown";
+    colon = strchr(label, ':');
+    if (!colon) return label;
+    ++colon;
+    while (*colon == ' ') ++colon;
+    return colon[0] ? colon : label;
+}
+
+static void menu_render_draw_render_information(
+    SDL_Renderer* renderer,
+    TTF_Font* font,
+    const SDL_Rect* rect,
+    const MenuRuntimeState* state,
+    const RayTracingRuntimeRoute* route,
+    const RayTracingSceneDigestStatus* digest,
+    bool has_shared_palette,
+    const RayTracingThemePalette* palette) {
+    MenuSettingsRuntimeReadback readback = {0};
+    SDL_Color muted = has_shared_palette
+                          ? palette->text_muted
+                          : (SDL_Color){210, 210, 210, 255};
+    SDL_Color warning = {255, 196, 96, 255};
+    SDL_Color route_color = {255, 220, 140, 240};
+    SDL_Color line_colors[5];
+    char lines[5][192];
+    char fitted[192];
+    int line_height = 18;
+    int content_x;
+    int content_y;
+    int content_w;
+    bool high_cost;
+    size_t i;
+
+    if (!renderer || !font || !rect || !state || !route || !digest ||
+        rect->w <= 0 || rect->h <= MENU_PANEL_CHROME_TITLE_BAND) {
+        return;
+    }
+    if (has_shared_palette) route_color = palette->accent_primary;
+    if (!ray_tracing_text_line_height(renderer, font, &line_height) ||
+        line_height < 12) {
+        line_height = 18;
+    }
+    menu_panel_chrome_draw(renderer, font, rect, "Render Info", false);
+    menu_settings_runtime_readback(&readback);
+    high_cost = animSettings.transmissionSamples3D > 8 ||
+                animSettings.secondaryDiffuseSamples3D > 16 ||
+                animSettings.temporalFrames3D > 8 ||
+                state->causticSettings.sampleBudget > 10000;
+
+    snprintf(lines[0],
+             sizeof(lines[0]),
+             "Integrator %s | Caustics %s",
+             menu_render_compact_status_value(
+                 RayTracingModeBackend_IntegratorStatusLabel(route)),
+             RuntimeCausticMode3D_Label(state->causticSettings.mode));
+    snprintf(lines[1],
+             sizeof(lines[1]),
+             "%s T%d S%d F%d P%d",
+             high_cost ? "Cost warning" : "Samples",
+             animSettings.transmissionSamples3D,
+             animSettings.secondaryDiffuseSamples3D,
+             animSettings.temporalFrames3D,
+             state->causticSettings.sampleBudget);
+    snprintf(lines[2],
+             sizeof(lines[2]),
+             "Config %dx%d | %d rays",
+             readback.configuredWidth,
+             readback.configuredHeight,
+             readback.configuredRayCount);
+    snprintf(lines[3],
+             sizeof(lines[3]),
+             "Runtime %dx%d | %d rays | %s",
+             readback.runtimeWidth,
+             readback.runtimeHeight,
+             readback.runtimeRayCount,
+             menu_settings_applied_state_label(readback.appliedState));
+    if (!digest->valid) {
+        snprintf(lines[4],
+                 sizeof(lines[4]),
+                 "Route %s | scene digest pending",
+                 RayTracingModeBackend_Name(route));
+    } else {
+        snprintf(lines[4],
+                 sizeof(lines[4]),
+                 "Route %s | prim%d plane%d prism%d",
+                 RayTracingModeBackend_Name(route),
+                 digest->digestPrimitiveCount,
+                 digest->planePrimitiveCount,
+                 digest->rectPrismPrimitiveCount);
+    }
+    line_colors[0] = muted;
+    line_colors[1] = high_cost ? warning : muted;
+    line_colors[2] = muted;
+    line_colors[3] =
+        readback.appliedState == MENU_SETTINGS_APPLIED_STATE_APPLIED
+            ? muted
+            : warning;
+    line_colors[4] = route_color;
+
+    content_x = rect->x + MENU_PANEL_CHROME_INSET;
+    content_y = rect->y + MENU_PANEL_CHROME_TITLE_BAND + 4;
+    content_w = rect->w - MENU_PANEL_CHROME_INSET * 2;
+    for (i = 0u; i < 5u; ++i) {
+        menu_render_fit_text_to_width(
+            font, lines[i], content_w, fitted, sizeof(fitted));
+        menu_render_draw_text_color(renderer,
+                                    font,
+                                    content_x,
+                                    content_y + (int)i * line_height,
+                                    line_colors[i],
+                                    fitted);
+    }
 }
 
 void menu_render_frame(SDL_Renderer* renderer,
@@ -545,54 +662,14 @@ void menu_render_frame(SDL_Renderer* renderer,
     }
 
     menu_render_draw_sliders(renderer, font, state, &sliderLayout);
-    {
-        const bool high_cost =
-            animSettings.transmissionSamples3D > 8 ||
-            animSettings.secondaryDiffuseSamples3D > 16 ||
-            animSettings.temporalFrames3D > 8 ||
-            state->causticSettings.sampleBudget > 10000;
-        SDL_Color recipe_color = has_shared_palette
-                                     ? palette.text_muted
-                                     : (SDL_Color){210, 210, 210, 255};
-        SDL_Color cost_color = high_cost
-                                   ? (SDL_Color){255, 196, 96, 255}
-                                   : recipe_color;
-        const int summary_x = screenLayout.sliderPanelRect.x + 12;
-        const int summary_w = screenLayout.sliderPanelRect.w - 24;
-        const int recipe_y = screenLayout.sliderPanelRect.y +
-                             screenLayout.sliderPanelRect.h - 78;
-        const int cost_y = recipe_y + 18;
-        char summary[256];
-        char fitted[256];
-
-        snprintf(summary,
-                 sizeof(summary),
-                 "Recipe: %s | Focused Light: %s",
-                 RayTracingModeBackend_IntegratorStatusLabel(&route),
-                 RuntimeCausticMode3D_Label(state->causticSettings.mode));
-        menu_render_fit_text_to_width(font, summary, summary_w, fitted, sizeof(fitted));
-        menu_render_draw_text_color(renderer,
-                                    font,
-                                    summary_x,
-                                    recipe_y,
-                                    recipe_color,
-                                    fitted);
-        snprintf(summary,
-                 sizeof(summary),
-                 "%s T=%d S=%d F=%d Photon=%d",
-                 high_cost ? "Cost warning:" : "Cost:",
-                 animSettings.transmissionSamples3D,
-                 animSettings.secondaryDiffuseSamples3D,
-                 animSettings.temporalFrames3D,
-                 state->causticSettings.sampleBudget);
-        menu_render_fit_text_to_width(font, summary, summary_w, fitted, sizeof(fitted));
-        menu_render_draw_text_color(renderer,
-                                    font,
-                                    summary_x,
-                                    cost_y,
-                                    cost_color,
-                                    fitted);
-    }
+    menu_render_draw_render_information(renderer,
+                                        font,
+                                        &screenLayout.renderInfoRect,
+                                        state,
+                                        &route,
+                                        &digestStatus,
+                                        has_shared_palette,
+                                        &palette);
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_OUTPUT) {
         menu_batch_panel_render(renderer, font, state, &batchPanel);
     } else if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RUN) {
@@ -613,65 +690,6 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer, font, &buttons.spaceModeRect,
                                  menu_space_mode_button_label(),
                                  animSettings.spaceMode == SPACE_MODE_3D);
-    if (EditorModeRouter_IsControlled3D()) {
-        SDL_Color scaffoldHintColor = {255, 220, 140, 240};
-        SDL_Color digestHintColor = has_shared_palette
-                                        ? (SDL_Color){palette.text_muted.r,
-                                                      palette.text_muted.g,
-                                                      palette.text_muted.b,
-                                                      230}
-                                        : (SDL_Color){210, 210, 210, 230};
-        int hintX = screenLayout.sliderPanelRect.x + 12;
-        int hintMaxWidth = screenLayout.sliderPanelRect.w - 24;
-        int hintLine1Y = screenLayout.sliderPanelRect.y +
-                         screenLayout.sliderPanelRect.h - 40;
-        int hintLine2Y = hintLine1Y + 18;
-        char hintLine1[192];
-        char hintLine2[256];
-        char hintFit[256];
-
-        snprintf(hintLine1,
-                 sizeof(hintLine1),
-                 "%s | %s",
-                 EditorModeRouter_RuntimeHintLabel(),
-                 RayTracingModeBackend_IntegratorStatusLabel(&route));
-        menu_render_fit_text_to_width(font, hintLine1, hintMaxWidth, hintFit, sizeof(hintFit));
-        menu_render_draw_text_color(renderer,
-                                    font,
-                                    hintX,
-                                    hintLine1Y,
-                                    scaffoldHintColor,
-                                    hintFit);
-
-        if (!digestStatus.valid) {
-            snprintf(hintLine2, sizeof(hintLine2), "3D digest pending runtime payload");
-        } else if (digestStatus.hasSceneBounds) {
-            snprintf(hintLine2,
-                     sizeof(hintLine2),
-                     "3D digest prim=%d plane=%d prism=%d bx=%.1f..%.1f by=%.1f..%.1f",
-                     digestStatus.digestPrimitiveCount,
-                     digestStatus.planePrimitiveCount,
-                     digestStatus.rectPrismPrimitiveCount,
-                     digestStatus.boundsMinX,
-                     digestStatus.boundsMaxX,
-                     digestStatus.boundsMinY,
-                     digestStatus.boundsMaxY);
-        } else {
-            snprintf(hintLine2,
-                     sizeof(hintLine2),
-                     "3D digest prim=%d plane=%d prism=%d",
-                     digestStatus.digestPrimitiveCount,
-                     digestStatus.planePrimitiveCount,
-                     digestStatus.rectPrismPrimitiveCount);
-        }
-        menu_render_fit_text_to_width(font, hintLine2, hintMaxWidth, hintFit, sizeof(hintFit));
-        menu_render_draw_text_color(renderer,
-                                    font,
-                                    hintX,
-                                    hintLine2Y,
-                                    digestHintColor,
-                                    hintFit);
-    }
 
     menu_render_draw_button_rect(renderer, font, &buttons.saveRect, "Save", false);
     menu_render_draw_button_rect(renderer, font, &buttons.restoreRect, "Restore Defaults", false);

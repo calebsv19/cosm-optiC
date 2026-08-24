@@ -37,9 +37,6 @@
 #define BOTTOM_BUTTON_SPACING 10
 #define BOTTOM_BUTTON_WIDTH_START 200
 #define BOTTOM_BUTTON_HEIGHT_START 50
-#define ROUTE_BUTTON_WIDTH 184
-#define ROUTE_BUTTON_HEIGHT 38
-#define ROUTE_BUTTON_GAP 6
 #define BOTTOM_BUTTON_MARGIN_Y_START (MENU_HEIGHT -MENU_MARGIN_Y - BOTTOM_BUTTON_HEIGHT_START)
 #define BOTTOM_BUTTON_WIDTH_EXIT 180
 #define BOTTOM_BUTTON_HEIGHT_EXIT 40
@@ -577,8 +574,9 @@ void menu_render_build_button_layout(TTF_Font* font,
     int rightEdge = MENU_WIDTH - MENU_MARGIN_X;
     int footerRightLimit = MENU_WIDTH - MENU_MARGIN_X;
     int leftTopY = TOGGLE_BUTTON_MARGIN_Y;
-    int routeTopY = 0;
     int footerButtonY = BOTTOM_BUTTON_MARGIN_Y_EXIT;
+    MenuRuntimeRouteActionLayout route_actions = {0};
+    bool has_route_action_layout = false;
     const bool compact_scene_mode =
         animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D;
 
@@ -591,8 +589,8 @@ void menu_render_build_button_layout(TTF_Font* font,
         maxLeftWidth = screen_layout->leftPanelRect.w - 36;
         rightEdge = screen_layout->routeStackRect.x + screen_layout->routeStackRect.w - 10;
         leftTopY = screen_layout->leftPanelRect.y + MENU_PANEL_CHROME_TITLE_BAND + 12;
-        routeTopY = screen_layout->routeStackRect.y +
-                    MENU_PANEL_CHROME_TITLE_BAND + 8;
+        has_route_action_layout = menu_layout_build_runtime_route_actions(
+            &screen_layout->routeStackRect, &route_actions);
         footerButtonY = screen_layout->bottomActionRowRect.y +
                         (screen_layout->bottomActionRowRect.h - BOTTOM_BUTTON_HEIGHT_EXIT) / 2;
         footerRightLimit = screen_layout->bottomActionRowRect.x + screen_layout->bottomActionRowRect.w - 14;
@@ -960,21 +958,6 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                         centerMaxWidth);
     }
 
-    layout.startRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                        screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 4) : BOTTOM_BUTTON_MARGIN_Y_START,
-                                                        screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
-                                                        screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
-                                                        "Start", 0);
-    layout.previewRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                          screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 3) : BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
-                                                          screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
-                                                          screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
-                                                          "Preview", 0);
-    layout.sceneEditorRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                              screen_layout ? (routeTopY + (ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) * 2) : (layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8)),
-                                                              screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
-                                                              screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
-                                                              "Scene Editor", 0);
     int clampedEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
                                                              AnimationUseFluidScene());
     if (clampedEditorMode != animSettings.editorMode) {
@@ -984,16 +967,54 @@ void menu_render_build_button_layout(TTF_Font* font,
                                   (clampedEditorMode == EDITOR_MODE_OBJECT) ? "Editor: Scene" :
                                   (clampedEditorMode == EDITOR_MODE_CAMERA) ? "Editor: Camera" :
                                   "Editor: Material";
-    layout.sceneModeRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                            screen_layout ? (routeTopY + ROUTE_BUTTON_HEIGHT + ROUTE_BUTTON_GAP) : (layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
-                                                            screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
-                                                            screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
-                                                            editorModeLabel, 0);
-    layout.spaceModeRect = build_adaptive_button_rect_right(font, rightEdge,
-                                                            screen_layout ? routeTopY : (layout.sceneModeRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6)),
-                                                            screen_layout ? ROUTE_BUTTON_WIDTH : BOTTOM_BUTTON_WIDTH_START,
-                                                            screen_layout ? ROUTE_BUTTON_HEIGHT : BOTTOM_BUTTON_HEIGHT_START,
-                                                            menu_space_mode_button_label(), 0);
+    if (has_route_action_layout) {
+        layout.spaceModeRect = route_actions.spaceModeRect;
+        layout.sceneModeRect = route_actions.sceneModeRect;
+        layout.sceneEditorRect = route_actions.sceneEditorRect;
+        layout.previewRect = route_actions.previewRect;
+        layout.startRect = route_actions.startRect;
+    } else {
+        layout.startRect = build_adaptive_button_rect_right(
+            font,
+            rightEdge,
+            BOTTOM_BUTTON_MARGIN_Y_START,
+            BOTTOM_BUTTON_WIDTH_START,
+            BOTTOM_BUTTON_HEIGHT_START,
+            "Start",
+            0);
+        layout.previewRect = build_adaptive_button_rect_right(
+            font,
+            rightEdge,
+            BOTTOM_BUTTON_MARGIN_Y_PREVIEW,
+            BOTTOM_BUTTON_WIDTH_START,
+            BOTTOM_BUTTON_HEIGHT_START,
+            "Preview",
+            0);
+        layout.sceneEditorRect = build_adaptive_button_rect_right(
+            font,
+            rightEdge,
+            layout.startRect.y - (BOTTOM_BUTTON_HEIGHT_START + 8),
+            BOTTOM_BUTTON_WIDTH_START,
+            BOTTOM_BUTTON_HEIGHT_START,
+            "Scene Editor",
+            0);
+        layout.sceneModeRect = build_adaptive_button_rect_right(
+            font,
+            rightEdge,
+            layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
+            BOTTOM_BUTTON_WIDTH_START,
+            BOTTOM_BUTTON_HEIGHT_START,
+            editorModeLabel,
+            0);
+        layout.spaceModeRect = build_adaptive_button_rect_right(
+            font,
+            rightEdge,
+            layout.sceneModeRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
+            BOTTOM_BUTTON_WIDTH_START,
+            BOTTOM_BUTTON_HEIGHT_START,
+            menu_space_mode_button_label(),
+            0);
+    }
     layout.exitRect = build_adaptive_button_rect(font,
                                                  screen_layout ? (screen_layout->bottomActionRowRect.x + 14) : BOTTOM_BUTTON_MARGIN_X_EXIT,
                                                  footerButtonY,

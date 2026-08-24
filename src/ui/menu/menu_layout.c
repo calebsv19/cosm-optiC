@@ -4,25 +4,90 @@
 #include <string.h>
 
 #include "config/config_manager.h"
+#include "ui/menu_panel_chrome.h"
 #include "ui/sdl_menu_render.h"
 
 #define MENU_WIDTH 1200
 #define MENU_HEIGHT 900
 #define MENU_MARGIN_X 30
 #define MENU_MARGIN_Y 30
-#define MENU_ROUTE_STACK_BUTTON_HEIGHT 38
-#define MENU_ROUTE_STACK_BUTTON_COUNT 5
-#define MENU_ROUTE_STACK_GAP 6
-#define MENU_ROUTE_STACK_TITLE_HEIGHT 28
+#define MENU_ROUTE_STACK_ROW_HEIGHT_MIN 30
+#define MENU_ROUTE_STACK_ROW_HEIGHT_MAX 42
+#define MENU_ROUTE_STACK_ROW_COUNT 3
+#define MENU_ROUTE_STACK_GAP 5
+#define MENU_ROUTE_STACK_CONTENT_INSET 10
 #define MENU_BOTTOM_ACTION_HEIGHT 64
 #define MENU_MANIFEST_PANEL_MIN_HEIGHT 140
 #define MENU_MANIFEST_PANEL_MAX_HEIGHT 340
 #define MENU_MANIFEST_PANEL_GAP 6
 #define MENU_LEFT_PANEL_CONTENT_INSET 18
 #define MENU_PANEL_BOTTOM_GAP 18
+#define MENU_RENDER_INFO_GAP 6
+#define MENU_RENDER_INFO_MIN_HEIGHT 96
+#define MENU_EFFECTIVE_SLIDER_MIN_HEIGHT 220
 
 static int min_int(int a, int b) {
     return (a < b) ? a : b;
+}
+
+static int max_int(int a, int b) {
+    return (a > b) ? a : b;
+}
+
+bool menu_layout_build_runtime_route_actions(
+    const SDL_Rect* route_stack_rect,
+    MenuRuntimeRouteActionLayout* out_layout) {
+    SDL_Rect content;
+    int column_width;
+    int row_height;
+    int start_y;
+    if (!route_stack_rect || !out_layout || route_stack_rect->w <= 0 ||
+        route_stack_rect->h <= MENU_PANEL_CHROME_TITLE_BAND) {
+        return false;
+    }
+    memset(out_layout, 0, sizeof(*out_layout));
+    content.x = route_stack_rect->x + MENU_ROUTE_STACK_CONTENT_INSET;
+    content.y = route_stack_rect->y + MENU_PANEL_CHROME_TITLE_BAND +
+                MENU_ROUTE_STACK_CONTENT_INSET;
+    content.w = route_stack_rect->w - MENU_ROUTE_STACK_CONTENT_INSET * 2;
+    content.h = route_stack_rect->h - MENU_PANEL_CHROME_TITLE_BAND -
+                MENU_ROUTE_STACK_CONTENT_INSET * 2;
+    if (content.w < 2 || content.h < MENU_ROUTE_STACK_ROW_COUNT) return false;
+
+    row_height = (content.h - MENU_ROUTE_STACK_GAP *
+                                  (MENU_ROUTE_STACK_ROW_COUNT - 1)) /
+                 MENU_ROUTE_STACK_ROW_COUNT;
+    if (row_height < 24) return false;
+    column_width = (content.w - MENU_ROUTE_STACK_GAP) / 2;
+    if (column_width < 1) return false;
+    start_y = content.y + content.h -
+              (row_height * MENU_ROUTE_STACK_ROW_COUNT +
+               MENU_ROUTE_STACK_GAP * (MENU_ROUTE_STACK_ROW_COUNT - 1));
+
+    out_layout->spaceModeRect =
+        (SDL_Rect){content.x, start_y, column_width, row_height};
+    out_layout->sceneModeRect =
+        (SDL_Rect){content.x + column_width + MENU_ROUTE_STACK_GAP,
+                   start_y,
+                   content.w - column_width - MENU_ROUTE_STACK_GAP,
+                   row_height};
+    out_layout->sceneEditorRect =
+        (SDL_Rect){content.x,
+                   start_y + row_height + MENU_ROUTE_STACK_GAP,
+                   column_width,
+                   row_height};
+    out_layout->previewRect =
+        (SDL_Rect){out_layout->sceneModeRect.x,
+                   out_layout->sceneEditorRect.y,
+                   out_layout->sceneModeRect.w,
+                   row_height};
+    out_layout->startRect =
+        (SDL_Rect){content.x,
+                   out_layout->sceneEditorRect.y + row_height +
+                       MENU_ROUTE_STACK_GAP,
+                   content.w,
+                   row_height};
+    return true;
 }
 
 void menu_layout_build_base(TTF_Font* font,
@@ -34,9 +99,23 @@ void menu_layout_build_base(TTF_Font* font,
     const int menu_width = (window_width > 0) ? window_width : MENU_WIDTH;
     const int menu_height = (window_height > 0) ? window_height : MENU_HEIGHT;
     const int bottom_row_y = menu_height - MENU_MARGIN_Y - MENU_BOTTOM_ACTION_HEIGHT;
-    const int route_stack_h = MENU_ROUTE_STACK_TITLE_HEIGHT +
-                              MENU_ROUTE_STACK_BUTTON_HEIGHT * MENU_ROUTE_STACK_BUTTON_COUNT +
-                              MENU_ROUTE_STACK_GAP * (MENU_ROUTE_STACK_BUTTON_COUNT - 1) + 20;
+    int text_line_height = font ? TTF_FontLineSkip(font) : 18;
+    int route_row_height;
+    int render_info_preferred_height;
+    if (text_line_height < 12) text_line_height = 12;
+    route_row_height = text_line_height + 12;
+    if (route_row_height < MENU_ROUTE_STACK_ROW_HEIGHT_MIN) {
+        route_row_height = MENU_ROUTE_STACK_ROW_HEIGHT_MIN;
+    }
+    if (route_row_height > MENU_ROUTE_STACK_ROW_HEIGHT_MAX) {
+        route_row_height = MENU_ROUTE_STACK_ROW_HEIGHT_MAX;
+    }
+    render_info_preferred_height = MENU_PANEL_CHROME_TITLE_BAND + 8 +
+                                   text_line_height * 5;
+    const int route_stack_h = MENU_PANEL_CHROME_TITLE_BAND +
+                              route_row_height * MENU_ROUTE_STACK_ROW_COUNT +
+                              MENU_ROUTE_STACK_GAP * (MENU_ROUTE_STACK_ROW_COUNT - 1) +
+                              MENU_ROUTE_STACK_CONTENT_INSET * 2;
     const int pane_bottom = bottom_row_y - MENU_PANEL_BOTTOM_GAP;
     const SDL_Rect pane_bounds = {
         MENU_MARGIN_X,
@@ -50,10 +129,10 @@ void menu_layout_build_base(TTF_Font* font,
     SDL_Rect health_rect = {866, MENU_MARGIN_Y, 304, pane_bounds.h};
     int route_stack_y;
     int slider_bottom;
+    int render_info_height;
+    int effective_height;
     int center_left;
     MenuWorkspaceLayout workspace_layout;
-
-    (void)font;
 
     if (state) {
         if (!state->menuPaneHost.initialized) {
@@ -75,6 +154,18 @@ void menu_layout_build_base(TTF_Font* font,
     center_left = workspace_rect.x;
     route_stack_y = health_rect.y + health_rect.h - route_stack_h;
     slider_bottom = route_stack_y - MENU_PANEL_BOTTOM_GAP;
+    effective_height = slider_bottom - health_rect.y;
+    render_info_height = render_info_preferred_height;
+    if (effective_height < MENU_EFFECTIVE_SLIDER_MIN_HEIGHT +
+                               MENU_RENDER_INFO_GAP + render_info_height) {
+        render_info_height = max_int(
+            MENU_RENDER_INFO_MIN_HEIGHT,
+            effective_height - MENU_EFFECTIVE_SLIDER_MIN_HEIGHT -
+                MENU_RENDER_INFO_GAP);
+    }
+    if (render_info_height > effective_height - MENU_RENDER_INFO_GAP) {
+        render_info_height = max_int(0, effective_height - MENU_RENDER_INFO_GAP);
+    }
 
     menu_workspace_build_layout(workspace_rect, &workspace_layout);
 
@@ -91,7 +182,13 @@ void menu_layout_build_base(TTF_Font* font,
         health_rect.x,
         health_rect.y,
         health_rect.w,
-        slider_bottom - health_rect.y
+        effective_height - render_info_height - MENU_RENDER_INFO_GAP
+    };
+    layout.renderInfoRect = (SDL_Rect){
+        health_rect.x,
+        slider_bottom - render_info_height,
+        health_rect.w,
+        render_info_height
     };
     layout.routeStackRect = (SDL_Rect){
         health_rect.x,

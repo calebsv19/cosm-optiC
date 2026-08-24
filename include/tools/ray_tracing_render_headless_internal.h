@@ -447,6 +447,9 @@ void ray_tracing_headless_write_render_trace_cost_ledger(
 void ray_tracing_headless_write_render_stats_summary(
     FILE *file,
     const RayTracingHeadlessPreflight *preflight);
+void ray_tracing_headless_write_mirror_recursive_fidelity_summary(
+    FILE *file,
+    const RayTracingHeadlessPreflight *preflight);
 void ray_tracing_headless_write_dynamic_geometry_acceleration_summary(
     FILE *file,
     const RayTracingHeadlessPreflight *preflight);

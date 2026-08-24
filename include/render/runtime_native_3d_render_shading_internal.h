@@ -30,7 +30,15 @@ void runtime_native_3d_render_record_disney_v2_emissive_area_stats(
     const RuntimeDisneyV2_3DResult* result);
 void runtime_native_3d_render_record_disney_v2_mirror_stats(
     RuntimeNative3DRenderStats* stats,
-    const RuntimeDisneyV2_3DResult* result);
+    const RuntimeDisneyV2_3DResult* result,
+    int pixel_x,
+    int pixel_y,
+    double ambient_before_r,
+    double ambient_before_g,
+    double ambient_before_b,
+    double ambient_after_r,
+    double ambient_after_g,
+    double ambient_after_b);
 void runtime_native_3d_render_apply_surface_caustic_cache(
     RuntimeCausticSurfaceCache3D* surface_cache,
     const HitInfo3D* hit,

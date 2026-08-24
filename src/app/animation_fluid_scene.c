@@ -664,6 +664,12 @@ typedef struct AnimationEnvironmentMenuOverride {
     double backgroundColorG;
     double backgroundColorB;
     double topFillStrength;
+    double directLightIntensity;
+    double directLightRadius;
+    double directLightHeight;
+    double forwardFalloffDistance;
+    int forwardFalloffMode;
+    double falloffSoftness;
 } AnimationEnvironmentMenuOverride;
 
 static AnimationEnvironmentMenuOverride s_environmentMenuOverride;
@@ -683,6 +689,12 @@ void AnimationPreserveCurrentEnvironmentOnNextInit(void) {
     s_environmentMenuOverride.backgroundColorG = animSettings.environmentBackgroundColorG;
     s_environmentMenuOverride.backgroundColorB = animSettings.environmentBackgroundColorB;
     s_environmentMenuOverride.topFillStrength = animSettings.topFillStrength;
+    s_environmentMenuOverride.directLightIntensity = animSettings.lightIntensity;
+    s_environmentMenuOverride.directLightRadius = animSettings.lightRadius;
+    s_environmentMenuOverride.directLightHeight = animSettings.lightHeight;
+    s_environmentMenuOverride.forwardFalloffDistance = animSettings.forwardDecay;
+    s_environmentMenuOverride.forwardFalloffMode = animSettings.forwardFalloffMode;
+    s_environmentMenuOverride.falloffSoftness = animSettings.lightDecaySoftness;
 }
 
 void AnimationApplyPreservedEnvironmentAfterSceneRestore(void) {
@@ -700,5 +712,11 @@ void AnimationApplyPreservedEnvironmentAfterSceneRestore(void) {
     animSettings.environmentBackgroundColorG = s_environmentMenuOverride.backgroundColorG;
     animSettings.environmentBackgroundColorB = s_environmentMenuOverride.backgroundColorB;
     animSettings.topFillStrength = s_environmentMenuOverride.topFillStrength;
+    animSettings.lightIntensity = s_environmentMenuOverride.directLightIntensity;
+    animSettings.lightRadius = s_environmentMenuOverride.directLightRadius;
+    animSettings.lightHeight = s_environmentMenuOverride.directLightHeight;
+    animSettings.forwardDecay = s_environmentMenuOverride.forwardFalloffDistance;
+    animSettings.forwardFalloffMode = s_environmentMenuOverride.forwardFalloffMode;
+    animSettings.lightDecaySoftness = s_environmentMenuOverride.falloffSoftness;
     s_environmentMenuOverride.pending = false;
 }

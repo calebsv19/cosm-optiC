@@ -1,5 +1,9 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
+#include "app/ray_tracing_request_utils.h"
+#include "render/integrators/hybrid/integrator_tonemap.h"
+#include "render/runtime_disney_v2_3d.h"
+
 #include <stdio.h>
 
 static double ray_tracing_headless_render_stats_rgb_sum(double r, double g, double b) {
@@ -22,6 +26,361 @@ static void ray_tracing_headless_render_stats_write_region_counts(FILE* file,
             counts ? counts[2] : 0,
             counts ? counts[3] : 0,
             trailing_comma ? "," : "");
+}
+
+static const char* ray_tracing_headless_mirror_rough_reduction_reason(int reason) {
+    switch (reason) {
+        case RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_TRIANGLE_CAP_512:
+            return "triangle_count_over_512";
+        case RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_TRIANGLE_CAP_100000:
+            return "triangle_count_over_100000";
+        case RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_NONE:
+        default:
+            return "none";
+    }
+}
+
+void ray_tracing_headless_write_mirror_recursive_fidelity_summary(
+    FILE* file,
+    const RayTracingHeadlessPreflight* preflight) {
+    const RuntimeNative3DRenderStats* stats = preflight ? &preflight->stats : NULL;
+    int max_depth = stats ? stats->mirrorFidelityEffectiveSpecularDepth : 0;
+    int depth = 0;
+
+    if (max_depth < 1) max_depth = 1;
+    if (max_depth >= RUNTIME_NATIVE_3D_MIRROR_FIDELITY_DEPTH_CAPACITY) {
+        max_depth = RUNTIME_NATIVE_3D_MIRROR_FIDELITY_DEPTH_CAPACITY - 1;
+    }
+    fprintf(file, "  \"mirror_recursive_fidelity\": {\n");
+    fprintf(file,
+            "    \"requested_specular_depth\": %d,\n",
+            stats ? stats->mirrorFidelityRequestedSpecularDepth : 0);
+    fprintf(file,
+            "    \"effective_specular_depth\": %d,\n",
+            stats ? stats->mirrorFidelityEffectiveSpecularDepth : 0);
+    fprintf(file, "    \"rough_reflection_samples\": {\n");
+    fprintf(file,
+            "      \"requested\": %d,\n",
+            stats ? stats->mirrorFidelityRequestedRoughSampleCount : 0);
+    fprintf(file,
+            "      \"effective\": %d,\n",
+            stats ? stats->mirrorFidelityEffectiveRoughSampleCount : 0);
+    fprintf(file, "      \"reduction_reason\": ");
+    RayTracingJsonWriteString(
+        file,
+        ray_tracing_headless_mirror_rough_reduction_reason(
+            stats ? stats->mirrorFidelityRoughSampleReductionReason : 0));
+    fprintf(file, "\n    },\n");
+    fprintf(file, "    \"reflected_normals\": {\n");
+    fprintf(file,
+            "      \"vertex_interpolated_hits\": %d,\n",
+            stats ? stats->mirrorFidelityVertexInterpolatedHitCount : 0);
+    fprintf(file,
+            "      \"flat_fallback_hits\": %d\n",
+            stats ? stats->mirrorFidelityFlatFallbackHitCount : 0);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"reflected_path_vertex\": {\n");
+    fprintf(file,
+            "      \"evaluated_pixels\": %d,\n",
+            stats ? stats->mirrorFidelityLocalPathVertexEvaluatedCount : 0);
+    fprintf(file,
+            "      \"local_radiance_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityLocalPathVertexRadianceR : 0.0,
+            stats ? stats->mirrorFidelityLocalPathVertexRadianceG : 0.0,
+            stats ? stats->mirrorFidelityLocalPathVertexRadianceB : 0.0);
+    fprintf(file,
+            "      \"recursive_radiance_rgb\": [%.9f, %.9f, %.9f]\n",
+            stats ? stats->mirrorFidelityRecursiveRadianceR : 0.0,
+            stats ? stats->mirrorFidelityRecursiveRadianceG : 0.0,
+            stats ? stats->mirrorFidelityRecursiveRadianceB : 0.0);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"environment_miss_radiance\": {\n");
+    fprintf(file,
+            "      \"first_reflection_contributing_pixels\": %d,\n",
+            stats ? stats->mirrorFidelityEnvironmentMissContributionCount : 0);
+    fprintf(file,
+            "      \"first_reflection_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityEnvironmentMissRadianceR : 0.0,
+            stats ? stats->mirrorFidelityEnvironmentMissRadianceG : 0.0,
+            stats ? stats->mirrorFidelityEnvironmentMissRadianceB : 0.0);
+    fprintf(file,
+            "      \"recursive_contributing_paths\": %d,\n",
+            stats ? stats->mirrorFidelityRecursiveEnvironmentMissContributionCount : 0);
+    fprintf(file,
+            "      \"recursive_rgb\": [%.9f, %.9f, %.9f]\n",
+            stats ? stats->mirrorFidelityRecursiveEnvironmentMissRadianceR : 0.0,
+            stats ? stats->mirrorFidelityRecursiveEnvironmentMissRadianceG : 0.0,
+            stats ? stats->mirrorFidelityRecursiveEnvironmentMissRadianceB : 0.0);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"reflected_probe\": {\n");
+    fprintf(file, "      \"object_id\": ");
+    RayTracingJsonWriteString(
+        file,
+        stats && stats->mirrorFidelityProbeValid ? stats->mirrorFidelityProbeObjectId : "");
+    fprintf(file, ",\n");
+    fprintf(file,
+            "      \"triangle_id\": %d,\n",
+            stats && stats->mirrorFidelityProbeValid
+                ? stats->mirrorFidelityProbeTriangleId
+                : -1);
+    fprintf(file,
+            "      \"material_id\": %d,\n",
+            stats && stats->mirrorFidelityProbeValid
+                ? stats->mirrorFidelityProbeMaterialId
+                : -1);
+    fprintf(file, "      \"normal_provenance\": ");
+    RayTracingJsonWriteString(
+        file,
+        stats && stats->mirrorFidelityProbeValid
+            ? (stats->mirrorFidelityProbeHasVertexNormals ? "vertex_interpolated"
+                                                          : "flat_fallback")
+            : "unknown");
+    fprintf(file, ",\n");
+    fprintf(file,
+            "      \"path_depth\": %d,\n",
+            stats && stats->mirrorFidelityProbeValid
+                ? stats->mirrorFidelityProbePathDepth
+                : 0);
+    fprintf(file,
+            "      \"local_radiance_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityProbeLocalRadianceR : 0.0,
+            stats ? stats->mirrorFidelityProbeLocalRadianceG : 0.0,
+            stats ? stats->mirrorFidelityProbeLocalRadianceB : 0.0);
+    fprintf(file,
+            "      \"recursive_radiance_rgb\": [%.9f, %.9f, %.9f]\n",
+            stats ? stats->mirrorFidelityProbeRecursiveRadianceR : 0.0,
+            stats ? stats->mirrorFidelityProbeRecursiveRadianceG : 0.0,
+            stats ? stats->mirrorFidelityProbeRecursiveRadianceB : 0.0);
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"radiance_isolation_probe\": {\n");
+    fprintf(file, "      \"valid\": %s,\n",
+            stats && stats->mirrorFidelityRadianceProbeValid ? "true" : "false");
+    fprintf(file, "      \"selection\": \"highest_first_vertex_linear_chroma\",\n");
+    fprintf(file, "      \"object_id\": ");
+    RayTracingJsonWriteString(
+        file,
+        stats && stats->mirrorFidelityRadianceProbeValid
+            ? stats->mirrorFidelityRadianceProbeObjectId
+            : "");
+    fprintf(file, ",\n");
+    fprintf(file,
+            "      \"pixel\": { \"x\": %d, \"y\": %d },\n",
+            stats ? stats->mirrorFidelityRadianceProbePixelX : -1,
+            stats ? stats->mirrorFidelityRadianceProbePixelY : -1);
+    fprintf(file,
+            "      \"triangle_id\": %d,\n",
+            stats && stats->mirrorFidelityRadianceProbeValid
+                ? stats->mirrorFidelityRadianceProbeTriangleId
+                : -1);
+    fprintf(file,
+            "      \"material_id\": %d,\n",
+            stats && stats->mirrorFidelityRadianceProbeValid
+                ? stats->mirrorFidelityRadianceProbeMaterialId
+                : -1);
+    fprintf(file,
+            "      \"path_depth\": %d,\n",
+            stats ? stats->mirrorFidelityRadianceProbePathDepth : 0);
+    fprintf(file, "      \"normal_provenance\": ");
+    RayTracingJsonWriteString(
+        file,
+        stats && stats->mirrorFidelityRadianceProbeValid
+            ? (stats->mirrorFidelityRadianceProbeHasVertexNormals
+                   ? "vertex_interpolated"
+                   : "flat_fallback")
+            : "unknown");
+    fprintf(file, ",\n");
+    fprintf(file, "      \"host_mirror_energy_composition\": {\n");
+    fprintf(file,
+            "        \"dominance\": %.9f, \"base_attenuation\": %.9f,\n",
+            stats ? stats->mirrorFidelityRadianceProbeDominance : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeBaseAttenuation : 0.0);
+#define WRITE_MIRROR_PROBE_RGB(name, field) \
+    fprintf(file, \
+            "        \"%s\": [%.9f, %.9f, %.9f],\n", \
+            name, \
+            stats ? stats->field##R : 0.0, \
+            stats ? stats->field##G : 0.0, \
+            stats ? stats->field##B : 0.0)
+    WRITE_MIRROR_PROBE_RGB("direct_lighting_input_before_attenuation",
+                           mirrorFidelityRadianceProbeDirectBefore);
+    WRITE_MIRROR_PROBE_RGB("direct_lighting_input_after_attenuation",
+                           mirrorFidelityRadianceProbeDirectAfter);
+    WRITE_MIRROR_PROBE_RGB("local_diffuse_before_attenuation",
+                           mirrorFidelityRadianceProbeLocalDiffuseBefore);
+    WRITE_MIRROR_PROBE_RGB("local_diffuse_after_attenuation",
+                           mirrorFidelityRadianceProbeLocalDiffuseAfter);
+    WRITE_MIRROR_PROBE_RGB("local_specular_before_attenuation",
+                           mirrorFidelityRadianceProbeLocalSpecularBefore);
+    WRITE_MIRROR_PROBE_RGB("local_specular_after_attenuation",
+                           mirrorFidelityRadianceProbeLocalSpecularAfter);
+    WRITE_MIRROR_PROBE_RGB("ambient_before_attenuation",
+                           mirrorFidelityRadianceProbeAmbientBefore);
+    WRITE_MIRROR_PROBE_RGB("ambient_after_attenuation",
+                           mirrorFidelityRadianceProbeAmbientAfter);
+    WRITE_MIRROR_PROBE_RGB("emission", mirrorFidelityRadianceProbeEmission);
+    WRITE_MIRROR_PROBE_RGB("transmission", mirrorFidelityRadianceProbeTransmission);
+    WRITE_MIRROR_PROBE_RGB("stochastic_direct", mirrorFidelityRadianceProbeStochasticDirect);
+    WRITE_MIRROR_PROBE_RGB("stochastic_bsdf", mirrorFidelityRadianceProbeStochasticBsdf);
+    WRITE_MIRROR_PROBE_RGB("recursive_direct", mirrorFidelityRadianceProbeRecursiveDirect);
+    WRITE_MIRROR_PROBE_RGB("recursive_bsdf", mirrorFidelityRadianceProbeRecursiveBsdf);
+#undef WRITE_MIRROR_PROBE_RGB
+    fprintf(file,
+            "        \"unclassified_post_shade_rgb\": [%.9f, %.9f, %.9f]\n",
+            stats ? stats->mirrorFidelityRadianceProbeUnclassifiedR : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeUnclassifiedG : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeUnclassifiedB : 0.0);
+    fprintf(file, "      },\n");
+    fprintf(file,
+            "      \"first_vertex_linear_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityRadianceProbeLocalRadianceR : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeLocalRadianceG : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeLocalRadianceB : 0.0);
+    fprintf(file,
+            "      \"deeper_recursive_linear_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityRadianceProbeRecursiveRadianceR : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeRecursiveRadianceG : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeRecursiveRadianceB : 0.0);
+    fprintf(file,
+            "      \"reflection_after_bsdf_linear_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityRadianceProbeReflectionRadianceR : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeReflectionRadianceG : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeReflectionRadianceB : 0.0);
+    fprintf(file,
+            "      \"composed_pre_tonemap_linear_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityRadianceProbeComposedRadianceR : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeComposedRadianceG : 0.0,
+            stats ? stats->mirrorFidelityRadianceProbeComposedRadianceB : 0.0);
+    fprintf(file,
+            "      \"composed_tonemap_rgb8\": [%u, %u, %u]\n",
+            (unsigned)TonemapCurveToByteWithFloor(
+                (float)(stats ? stats->mirrorFidelityRadianceProbeComposedRadianceR : 0.0),
+                0u),
+            (unsigned)TonemapCurveToByteWithFloor(
+                (float)(stats ? stats->mirrorFidelityRadianceProbeComposedRadianceG : 0.0),
+                0u),
+            (unsigned)TonemapCurveToByteWithFloor(
+                (float)(stats ? stats->mirrorFidelityRadianceProbeComposedRadianceB : 0.0),
+                0u));
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"low_chroma_high_luma_subject_probe\": {\n");
+    fprintf(file,
+            "      \"valid\": %s,\n",
+            stats && stats->mirrorFidelityNeutralProbeValid ? "true" : "false");
+    fprintf(file,
+            "      \"selection\": \"highest_tonemapped_channel_floor_with_chroma_below_25\",\n");
+    fprintf(file, "      \"object_id\": ");
+    RayTracingJsonWriteString(
+        file,
+        stats && stats->mirrorFidelityNeutralProbeValid
+            ? stats->mirrorFidelityNeutralProbeObjectId
+            : "");
+    fprintf(file, ",\n");
+    fprintf(file,
+            "      \"pixel\": { \"x\": %d, \"y\": %d },\n",
+            stats ? stats->mirrorFidelityNeutralProbePixelX : -1,
+            stats ? stats->mirrorFidelityNeutralProbePixelY : -1);
+    fprintf(file,
+            "      \"triangle_id\": %d,\n",
+            stats && stats->mirrorFidelityNeutralProbeValid
+                ? stats->mirrorFidelityNeutralProbeTriangleId
+                : -1);
+    fprintf(file,
+            "      \"material_id\": %d,\n",
+            stats && stats->mirrorFidelityNeutralProbeValid
+                ? stats->mirrorFidelityNeutralProbeMaterialId
+                : -1);
+    fprintf(file,
+            "      \"selection_channel_floor_rgb8\": %.0f,\n",
+            stats ? stats->mirrorFidelityNeutralProbeSelectionLuma : 0.0);
+    fprintf(file, "      \"host_mirror_energy_composition\": {\n");
+    fprintf(file,
+            "        \"dominance\": %.9f, \"base_attenuation\": %.9f,\n",
+            stats ? stats->mirrorFidelityNeutralProbeDominance : 0.0,
+            stats ? stats->mirrorFidelityNeutralProbeBaseAttenuation : 0.0);
+#define WRITE_MIRROR_NEUTRAL_RGB(name, field) \
+    fprintf(file, \
+            "        \"%s\": [%.9f, %.9f, %.9f]%s\n", \
+            name, \
+            stats ? stats->field##R : 0.0, \
+            stats ? stats->field##G : 0.0, \
+            stats ? stats->field##B : 0.0, \
+            comma)
+    {
+        const char* comma = ",";
+        WRITE_MIRROR_NEUTRAL_RGB("direct_lighting_input_before_attenuation",
+                                 mirrorFidelityNeutralProbeDirectBefore);
+        WRITE_MIRROR_NEUTRAL_RGB("direct_lighting_input_after_attenuation",
+                                 mirrorFidelityNeutralProbeDirectAfter);
+        WRITE_MIRROR_NEUTRAL_RGB("local_diffuse_before_attenuation",
+                                 mirrorFidelityNeutralProbeLocalDiffuseBefore);
+        WRITE_MIRROR_NEUTRAL_RGB("local_diffuse_after_attenuation",
+                                 mirrorFidelityNeutralProbeLocalDiffuseAfter);
+        WRITE_MIRROR_NEUTRAL_RGB("local_specular_before_attenuation",
+                                 mirrorFidelityNeutralProbeLocalSpecularBefore);
+        WRITE_MIRROR_NEUTRAL_RGB("local_specular_after_attenuation",
+                                 mirrorFidelityNeutralProbeLocalSpecularAfter);
+        WRITE_MIRROR_NEUTRAL_RGB("ambient_before_attenuation",
+                                 mirrorFidelityNeutralProbeAmbientBefore);
+        WRITE_MIRROR_NEUTRAL_RGB("ambient_after_attenuation",
+                                 mirrorFidelityNeutralProbeAmbientAfter);
+        WRITE_MIRROR_NEUTRAL_RGB("stochastic_direct",
+                                 mirrorFidelityNeutralProbeStochasticDirect);
+        WRITE_MIRROR_NEUTRAL_RGB("stochastic_bsdf",
+                                 mirrorFidelityNeutralProbeStochasticBsdf);
+        WRITE_MIRROR_NEUTRAL_RGB("recursive_direct",
+                                 mirrorFidelityNeutralProbeRecursiveDirect);
+        comma = "";
+        WRITE_MIRROR_NEUTRAL_RGB("recursive_bsdf",
+                                 mirrorFidelityNeutralProbeRecursiveBsdf);
+    }
+#undef WRITE_MIRROR_NEUTRAL_RGB
+    fprintf(file, "      },\n");
+    fprintf(file,
+            "      \"first_vertex_linear_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityNeutralProbeLocalRadianceR : 0.0,
+            stats ? stats->mirrorFidelityNeutralProbeLocalRadianceG : 0.0,
+            stats ? stats->mirrorFidelityNeutralProbeLocalRadianceB : 0.0);
+    fprintf(file,
+            "      \"reflection_after_bsdf_linear_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityNeutralProbeReflectionRadianceR : 0.0,
+            stats ? stats->mirrorFidelityNeutralProbeReflectionRadianceG : 0.0,
+            stats ? stats->mirrorFidelityNeutralProbeReflectionRadianceB : 0.0);
+    fprintf(file,
+            "      \"composed_pre_tonemap_linear_rgb\": [%.9f, %.9f, %.9f],\n",
+            stats ? stats->mirrorFidelityNeutralProbeComposedRadianceR : 0.0,
+            stats ? stats->mirrorFidelityNeutralProbeComposedRadianceG : 0.0,
+            stats ? stats->mirrorFidelityNeutralProbeComposedRadianceB : 0.0);
+    fprintf(file,
+            "      \"composed_tonemap_rgb8\": [%u, %u, %u]\n",
+            (unsigned)TonemapCurveToByteWithFloor(
+                (float)(stats ? stats->mirrorFidelityNeutralProbeComposedRadianceR : 0.0),
+                0u),
+            (unsigned)TonemapCurveToByteWithFloor(
+                (float)(stats ? stats->mirrorFidelityNeutralProbeComposedRadianceG : 0.0),
+                0u),
+            (unsigned)TonemapCurveToByteWithFloor(
+                (float)(stats ? stats->mirrorFidelityNeutralProbeComposedRadianceB : 0.0),
+                0u));
+    fprintf(file, "    },\n");
+    fprintf(file, "    \"path_depths\": [\n");
+    for (depth = 1; depth <= max_depth; ++depth) {
+        fprintf(file,
+                "      { \"depth\": %d, \"reflection_rays\": %d, "
+                "\"geometry_hits\": %d, \"emitter_hits\": %d, "
+                "\"contributing_hits\": %d, \"termination_reasons\": { "
+                "\"policy\": %d, \"roulette\": %d, \"no_hit\": %d } }%s\n",
+                depth,
+                stats ? stats->mirrorFidelityDepthRayCount[depth] : 0,
+                stats ? stats->mirrorFidelityDepthGeometryHitCount[depth] : 0,
+                stats ? stats->mirrorFidelityDepthEmitterHitCount[depth] : 0,
+                stats ? stats->mirrorFidelityDepthContributingHitCount[depth] : 0,
+                stats ? stats->mirrorFidelityDepthPolicyTerminationCount[depth] : 0,
+                stats ? stats->mirrorFidelityDepthRouletteTerminationCount[depth] : 0,
+                stats ? stats->mirrorFidelityDepthNoHitTerminationCount[depth] : 0,
+                depth < max_depth ? "," : "");
+    }
+    fprintf(file, "    ]\n");
+    fprintf(file, "  },\n");
 }
 
 void ray_tracing_headless_write_render_stats_summary(
