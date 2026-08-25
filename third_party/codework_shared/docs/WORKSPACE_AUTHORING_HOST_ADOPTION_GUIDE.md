@@ -87,7 +87,7 @@ Use `drawing_program` as a second concrete reference for a completed first-host 
    - `/Users/calebsv/Desktop/CodeWork/drawing_program/src/io/session/drawing_program_snapshot.c`
    - `/Users/calebsv/Desktop/CodeWork/drawing_program/src/io/session/drawing_program_snapshot_ui_settings.c`
 
-Use `line_drawing` / `sCulpt` as another completed production-style attach when the host uses app-local SDL/Vulkan drawing and a mature pane/editor shell:
+Use `line_drawing` / `Sculpt` as another completed production-style attach when the host uses app-local SDL/Vulkan drawing and a mature pane/editor shell:
 1. Host adapter + accepted-state ownership:
    - `/Users/calebsv/Desktop/CodeWork/line_drawing/src/UI/workspace_authoring/line_drawing_workspace_authoring_host.c`
    - `/Users/calebsv/Desktop/CodeWork/line_drawing/src/UI/workspace_authoring/line_drawing_workspace_authoring_overlay.c`
