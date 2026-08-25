@@ -29,7 +29,11 @@ release-bundle-audit: package-desktop-self-test
 	@test "$$(cat "$(RELEASE_DIR)/bundle_short_version.txt")" = "$(RELEASE_VERSION)" || (echo "bundle short version mismatch: expected $(RELEASE_VERSION), got $$(cat "$(RELEASE_DIR)/bundle_short_version.txt")"; exit 1)
 	@/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$(PACKAGE_CONTENTS_DIR)/Info.plist" > "$(RELEASE_DIR)/bundle_version.txt"
 	@test "$$(cat "$(RELEASE_DIR)/bundle_version.txt")" = "$(RELEASE_VERSION)" || (echo "bundle version mismatch: expected $(RELEASE_VERSION), got $$(cat "$(RELEASE_DIR)/bundle_version.txt")"; exit 1)
-	@env -i HOME="$(HOME)" PATH="$(PATH)" "$(PACKAGE_MACOS_DIR)/raytracing-launcher" --print-config > "$(RELEASE_DIR)/print_config.txt"
+	@audit_runtime_root="$$(mktemp -d "$${TMPDIR:-/tmp}/raytracing-release-audit.XXXXXX")"; \
+	trap 'rm -rf "$$audit_runtime_root"' EXIT HUP INT TERM; \
+	env -i HOME="$(HOME)" PATH="$(PATH)" \
+		RAY_TRACING_APP_SUPPORT_DIR="$$audit_runtime_root" \
+		"$(PACKAGE_MACOS_DIR)/raytracing-launcher" --print-config > "$(RELEASE_DIR)/print_config.txt"
 	@runtime_dir="$$(/usr/bin/grep '^RAY_TRACING_RUNTIME_DIR=' "$(RELEASE_DIR)/print_config.txt" | /usr/bin/cut -d= -f2-)"; \
 	if [ -z "$$runtime_dir" ]; then echo "runtime dir missing from print-config"; exit 1; fi; \
 	case "$$runtime_dir" in *"/Contents/Resources"*) echo "runtime dir incorrectly points into app bundle: $$runtime_dir"; exit 1;; esac; \

@@ -1614,7 +1614,10 @@ run-ide-theme: $(APP_TARGET)
 run-daw-theme: $(APP_TARGET)
 	RAY_TRACING_USE_SHARED_THEME_FONT=1 RAY_TRACING_USE_SHARED_THEME=1 RAY_TRACING_USE_SHARED_FONT=1 RAY_TRACING_THEME_PRESET=daw_default RAY_TRACING_FONT_PRESET=daw_default ./$(APP_TARGET)
 
-run-headless-smoke: all test-stable
+run-headless-smoke: \
+	test-ray-tracing-render-headless-preflight \
+	test-ray-tracing-job-runner-smoke \
+	test-ray-tracing-worker-version-contract
 	@echo "ray_tracing headless smoke passed (non-interactive)"
 
 visual-harness: $(APP_TARGET)
