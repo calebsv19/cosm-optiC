@@ -49,6 +49,19 @@ typedef struct CoreMeshPreviewPoint {
     CoreObjectVec3 position;
 } CoreMeshPreviewPoint;
 
+// Renderer-neutral coherent indexed surface derived from one runtime mesh.
+// Hosts choose the triangle budget and retain ownership of projection,
+// shading, GPU upload, interaction policy, and cache lifetime.
+typedef struct CoreMeshPreviewLodMesh {
+    CoreObjectVec3 *vertices;
+    uint32_t *indices;
+    size_t vertex_count;
+    size_t triangle_count;
+    size_t source_vertex_count;
+    size_t source_triangle_count;
+    int cluster_resolution;
+} CoreMeshPreviewLodMesh;
+
 typedef struct CoreMeshPreviewRuntimePayload {
     char asset_id[64];
     char source_asset_id[64];
@@ -144,6 +157,13 @@ void core_mesh_preview_runtime_metadata_init(CoreMeshPreviewRuntimeMetadata *met
 CoreResult core_mesh_preview_runtime_metadata_validate(
     const CoreMeshPreviewRuntimeMetadata *metadata);
 void core_mesh_preview_file_probe_init(CoreMeshPreviewFileProbe *probe);
+
+void core_mesh_preview_lod_mesh_init(CoreMeshPreviewLodMesh *mesh);
+void core_mesh_preview_lod_mesh_free(CoreMeshPreviewLodMesh *mesh);
+CoreResult core_mesh_preview_build_lod_mesh(
+    const CoreMeshAssetRuntimeDocument *document,
+    size_t target_triangles,
+    CoreMeshPreviewLodMesh *out_mesh);
 
 CoreResult core_mesh_preview_path_from_runtime(const char *runtime_path,
                                                char *out_path,

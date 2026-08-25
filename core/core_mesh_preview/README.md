@@ -12,6 +12,8 @@ Shared runtime mesh-preview contract for viewport-safe mesh visualization.
   generation with bounded budgets where drawable samples are emitted
 - File-backed preview save/load helpers, runtime-file build/save helpers,
   metadata-only loading, and preview-file probing
+- Renderer-neutral coherent indexed LOD construction from canonical runtime
+  meshes with host-selected triangle budgets
 - Backward-compatible read support for the first
   `line_drawing_mesh_runtime_preview_v1` sidecars
 
@@ -21,7 +23,7 @@ Shared runtime mesh-preview contract for viewport-safe mesh visualization.
 - No GPU buffers, BVHs, solver proxies, collision meshes, SDFs, or retopology
 - No mutation of source runtime mesh documents
 
-## Current Contract (v0.4.0)
+## Current Contract (v0.5.0)
 - Supported schema variant:
   - `core_mesh_preview_runtime_v1`
 - Supported preview modes:
@@ -53,8 +55,20 @@ Shared runtime mesh-preview contract for viewport-safe mesh visualization.
 - Metadata/probe helpers:
   - `core_mesh_preview_load_metadata_only(...)`
   - `core_mesh_preview_probe_file(...)`
+- Coherent indexed LOD helpers:
+  - `core_mesh_preview_build_lod_mesh(...)`
+  - `core_mesh_preview_lod_mesh_init(...)`
+  - `core_mesh_preview_lod_mesh_free(...)`
 
 ## Status
+- v0.5.0 promotes LineDrawing's proven vertex-cluster LOD builder into an
+  additive renderer-neutral API. Hosts choose triangle budgets and retain all
+  projection, shading, renderer-cache, interaction, and quality-settle policy.
+- RayTracing is the second proving host: its scene editor consumes the coherent
+  LOD through app-native Vulkan triangle/line meshes, direct
+  Bounds/Wire/Solid/Material controls, and app-owned picking and frame-slot
+  caches. Final render geometry, material/light/camera policy, and BVHs remain
+  outside this module.
 - v0.4.0 adds the S3 file/performance path for hosts that only have runtime
   mesh file paths: runtime-file build/save helpers, metadata-only JSON sidecar
   loading that does not allocate drawable arrays, file probing with size and
@@ -85,9 +99,9 @@ Shared runtime mesh-preview contract for viewport-safe mesh visualization.
 - S3 added runtime-file generation/probe APIs and metadata-only reads. Compact
   binary payloads remain a later decision after JSON sidecar budgets and tier
   shape settle.
-- LineDrawing remains the first proving host. RayTracing and PhysicsSim
-  adoption should wait until the contract hardening and tiered modes are in
-  place, with final-render BVHs and solver/collision truth kept out of this
-  core module.
+- LineDrawing remains the first proving host and RayTracing now proves a second
+  renderer-native consumer. PhysicsSim adoption should remain deferred until a
+  concrete overlay slice is selected, with final-render BVHs and
+  solver/collision truth kept out of this core module.
 - Private execution plan:
   `docs/private_program_docs/shared/active/2026-06-14_core_mesh_preview_upgrade_plan.md`

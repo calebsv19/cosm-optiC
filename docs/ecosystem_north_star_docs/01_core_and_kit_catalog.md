@@ -95,6 +95,12 @@ This is not an implementation guide.
 **Responsibilities:**
 - Compile `scene_authoring_v1` payloads into `scene_runtime_v1`
 - Emit deterministic runtime envelope order and compile metadata
+- Bind compiler/normalization versions and SHA-256 authoring/dependency inputs
+- Publish create-only authoring/runtime/receipt bundles, including an optional
+  app-owned package entrypoint, through one atomic directory rename
+- Derive and materialize content-addressed dependency payload paths inside the
+  atomic publication transaction
+- Verify package-entrypoint and dependency-payload bytes, digests, and no-follow containment
 - Validate canonical primitive payloads for known primitive object kinds
 - Preserve unknown extension namespaces while stripping authoring-only lanes from runtime contract
 
@@ -102,6 +108,28 @@ This is not an implementation guide.
 - No app UI/editor behavior
 - No renderer/solver policy ownership
 - No app-specific override semantics
+- No dependency discovery, dependency-kind interpretation, or
+  simulation/render promotion policy
+
+---
+
+### core_scene_view (BOOTSTRAP)
+**Role:** Shared renderer-free scene-view packet vocabulary and readback
+contract.
+**Responsibilities:**
+- Scene-view schema family and packet variant constants
+- Preview quality, degraded reason, display flag, and pick-id vocabulary
+- Compact JSON readback validation for packet metadata
+- Shared readback structs for producer/consumer fixture parity
+- Compact summary derivation from validated packet readback metadata
+
+**Boundary:**
+- Owns packet meaning only
+- Does not own rendering, viewport input, picking policy, material sampling,
+  editor mutation, or app face/object mapping
+- Does not create, delete, move, resize, or rewrite scene objects
+- Producers and consumers keep app-local rendering/editor behavior until more
+  hosts prove the contract
 
 ---
 
@@ -128,7 +156,7 @@ This is not an implementation guide.
 - Staged `mesh_asset_instance` scene-reference helpers
 - Authored-source compile responsibility validation
 - Bounded ASCII and binary STL imported-mesh to runtime-mesh compile proof
-  with a `250000` triangle proof-scale ceiling
+  with a `1000000` triangle proof-scale ceiling
 - File-backed runtime mesh output for bounded imported-mesh proofs
 - Runtime mesh emission contract flags
 - Surface-group preservation contract
@@ -150,6 +178,8 @@ This is not an implementation guide.
 - Bounded feature-edge preview generation from `mesh_asset_runtime_v1`
 - Runtime mesh preview metadata for source counts, local bounds, source asset
   ids, preview mode, and sampled drawable edge payloads
+- Renderer-neutral coherent indexed LOD construction with caller-selected
+  triangle budgets
 - File-backed preview save/load helpers
 
 **Boundary:**
@@ -157,6 +187,9 @@ This is not an implementation guide.
 - Does not own UI selection, hitboxes, camera projection, renderer state,
   scene placement, mesh repair, retopo, GPU buffers, BVHs, solver proxies,
   collision meshes, or SDF generation
+- Proven consumers: LineDrawing retains its CPU depth-raster/cache policy;
+  RayTracing retains its native Vulkan editor rendering, mode controls,
+  picking, overlays, final geometry, and BVH authority.
 
 ---
 
@@ -166,10 +199,16 @@ This is not an implementation guide.
 - Unit-to-world/world-to-unit transforms
 - Import fit/scale normalization
 - Author-window span conversion
+- Canonical right-handed Z-up meter-frame meaning
+- Validated legacy right-handed Y-up conversion for vectors, orientation
+  matrices, quaternions, planes, AABBs, and axis-aligned half extents
 
 **Boundary:**
 - Defines *where/how to place*
+- Owns app-neutral coordinate-frame meaning and rigid conversion only
 - Does not parse scene bundles or own asset formats
+- Does not own projection, cameras, renderer/solver interpretation,
+  persistence, or application frame-selection policy
 
 ---
 
@@ -184,6 +223,40 @@ This is not an implementation guide.
 - Owns pure 2D viewport state and transform math only
 - No SDL/input event ownership
 - No map projection semantics, scene import placement, or renderer backend coupling
+
+---
+
+### core_viewport3d (BOOTSTRAP)
+**Role:** Shared renderer-neutral 3D editor viewport navigation contract.
+**Responsibilities:**
+- Double-precision effective viewport-center target and scale state
+- Canonical radian orientation and camera right/screen-down/forward basis
+- Camera-basis pan, anchor-preserving zoom, orbit, frame, reset, and resize transitions
+- Projected-extents fit-scale resolution with host-selected padding
+- Invalid-input rejection without output mutation
+
+**Boundary:**
+- Depends only on `core_base`; uses a domain-specific double vector ABI
+- No SDL/input, projector matrices, selection/bounds resolution, picking,
+  rendering, authoring, persistence, geometry, or BVH ownership
+- RayTracing and LineDrawing remain responsible for thin runtime adapters
+
+---
+
+### core_screen_pick (BOOTSTRAP)
+**Role:** Shared renderer-neutral projected-origin selection index.
+**Responsibilities:**
+- Uniform hashed-grid storage for viewport-local logical-pixel candidates
+- Deterministic nearest and bounded ranked queries
+- Default 28-pixel capture radius with distance, frontmost-depth, and stable-key ordering
+- Transactional rebuilds that preserve the prior valid index on invalid input or allocation failure
+
+**Boundary:**
+- Depends only on `core_base`; callers own projection and candidate eligibility
+- No SDL/input, camera, visibility/occlusion, scene identity, selection state,
+  handles/gizmos, topology/face picking, dragging, rendering, or authoring ownership
+- LineDrawing, RayTracing, and PhysicsSim retain thin adapters and their existing
+  higher-priority interaction arbitration
 
 ---
 
@@ -216,16 +289,19 @@ This is not an implementation guide.
 ---
 
 ### core_authored_texture (BOOTSTRAP)
-**Role:** Shared authored-texture manifest contract owner for cross-app texture export/runtime handoff.
+**Role:** Shared authored-texture manifest and indexed-atlas contract owner for cross-app texture export/runtime handoff.
 **Responsibilities:**
 - Authored-texture schema-version vocabulary
 - Binding-kind and emitted-output-kind vocabulary
 - Supported primitive and face-role vocabulary
 - Primitive-specific face completeness rules
 - JSON-free manifest-contract validation helpers
+- Exact indexed source-slot and palette-entry validation
+- Fixed-size atlas-cell rectangle, identifier, output-kind, bounds, overlap,
+  lookup, and revision semantics
 
 **Boundary:**
-- Owns authored-texture manifest meaning only
+- Owns authored-texture manifest and generic indexed-interchange meaning only
 - No JSON parsing or file/image IO
 - No scene-envelope ownership (`core_scene` owns scene/object semantics)
 - No renderer/editor/runtime UI behavior
@@ -305,15 +381,20 @@ This is not an implementation guide.
 ---
 
 ### core_headless_job (BOOTSTRAP)
-**Role:** Shared outer headless job-envelope/report contract for cross-program worker bundles.
+**Role:** Shared outer job, workflow, event, result, artifact, and
+worker-capability semantic contract for cross-program compute.
 **Responsibilities:**
-- Shared schema-family/schema-variant vocabulary for bundle/report roots
-- Typed outer-envelope, payload-ref, outputs, metadata, artifact, and report structs
-- JSON-free validation helpers for required identity/schema/path/output fields
+- Backward-compatible bundle/report vocabulary and typed records
+- Platform-v1 job, append-only event, terminal result, content/provenance
+  artifact, ordered workflow, and worker-capability vocabulary
+- Closed job-state, event-kind, outcome, and transition semantics
+- JSON-free validation for identity, relative paths, UTC timestamps, SHA-256,
+  workflow order, attempt/claim/lease references, and capability records
 
 **Boundary:**
-- Owns only outer worker-job semantic meaning
-- No JSON parsing/writing, filesystem creation, or scheduler dispatch
+- Owns only cross-program execution-contract meaning
+- No JSON parsing/writing, filesystem creation, coordinator persistence,
+  transport, or scheduler dispatch
 - No program-specific scene payload semantics
 
 ---
@@ -415,6 +496,46 @@ This is not an implementation guide.
 - Generic math primitives only
 - Scene contracts stay in `core_scene`
 - Import/world placement policy stays in `core_space`
+
+---
+
+### core_collision2d (BOOTSTRAP)
+**Role:** Shared UI-free 2D collision contract.
+**Responsibilities:**
+- Double-precision 2D vectors and AABBs
+- Circle, axis-aligned box, and convex polygon descriptors
+- Polygon geometry helpers
+- Contact manifold records
+- Primitive contact generation for circle/circle, axis-aligned box/box, and
+  convex polygon/polygon
+
+**Boundary:**
+- Owns app-neutral collision shape/query semantics only
+- Does not own rigid-body integration, impulse solving, mass/inertia, or
+  fixed-step cadence
+- Does not own room/floor/wall convenience contacts, named fixtures, summary
+  strings, CLI routes, visual review artifacts, workers, packages, or runtime
+  default policy
+
+---
+
+### core_rigid2d (BOOTSTRAP)
+**Role:** Shared UI-free 2D rigid-body contract layered on `core_collision2d`.
+**Responsibilities:**
+- Material records and rigid-body state descriptors
+- Shape-based mass and inertia helpers
+- Dynamic/static body initialization and validation
+- Minimal host-called body integration
+- Deterministic normal, angular, and friction contact solver primitives
+- Standalone typed parity harness over the first Ball Bounce rigid-body and
+  solver oracle values
+
+**Boundary:**
+- Owns rigid-body state and contact response primitives only
+- Depends on `core_collision2d` for vectors, shapes, and manifolds
+- Does not own fixed-step accumulation, broadphase/contact discovery, worlds,
+  scenarios, summary strings, CLI routes, visual review artifacts, workers,
+  packages, or runtime default policy
 
 ---
 
@@ -609,6 +730,18 @@ This is not an implementation guide.
 - Owns app-neutral input-frame cumulative totals helpers.
 - Does not own program input policy, routing behavior, or render behavior.
 
+### kit_viewport3d (BOOTSTRAP)
+**Role:** Optional renderer-neutral 3D editor viewport presentation helpers.
+**Notes:**
+- Owns semantic object-outline palette roles and CPU buffer composition for
+  silhouettes, relative depth discontinuities, and object-owner boundaries.
+- Accepts borrowed float or double depth buffers and optional object-owner
+  buffers; supports filled-surface and outline-only composition.
+- Does not own `core_viewport3d` navigation state, projection, rasterization,
+  renderer/GPU resources, cache lifetime, picking, scene state, input, or
+  app overlay visibility policy.
+- RayTracing and LineDrawing are the first source-level proving hosts.
+
 ### kit_graph (ACTIVE)
 **Role:** Shared graph visualization kit.
 **Notes:**
@@ -631,6 +764,65 @@ This is not an implementation guide.
 ---
 
 ## Shared Infrastructure (Non-core / Non-kit)
+
+### vk_runtime (ACTIVE FOUNDATION)
+**Role:** SDL-independent Vulkan device/runtime foundation.
+**Responsibilities (S1-S4 plus platform portability):**
+- Vulkan loader and API negotiation
+- Portability enumeration and validation/debug policy
+- Headless or staged presentation physical-device, queue-family, feature,
+  extension, memory, driver, and subgroup discovery
+- Explainable graphics/compute/transfer/present queue-role selection
+- Headless or surface-bound logical-device creation
+- Deterministic `codework_gpu_capability_report_v1` JSON
+- Canonical `VERSION`-derived library and report identity
+- Typed runtime and per-device rejection diagnostics
+- One-shot host-visible storage-buffer allocation and mapping
+- Sequential storage-buffer descriptor and compute-pipeline creation
+- Command recording, bounded fence wait, readback, and reverse teardown
+- Versioned shader identity and deterministic CPU/GPU parity evidence
+- Explicit coherent staging and device-local buffer roles
+- Persistent buffer, descriptor/pipeline, command-pool/buffer, and fence state
+- Dependent dispatch chains with explicit compute memory barriers
+- Final-only readback, bounded timeout recovery, and resource accounting
+- Persistent timestamp query pairs on timestamp-capable compute queues
+- Valid-bit wrap handling and conversion through device timestamp period
+- Separated CPU, host-copy, submit/wait, GPU, transfer, and wall timing
+- Seven-size deterministic parity sweep and explicit crossover evidence
+- Deterministic export and explicit consumption of source-bound precompiled
+  SPIR-V for compiler-free proof hosts
+- Prebuilt-bundle identity, safe-path, and tamper validation before dispatch
+- Compiler-free Linux llvmpipe S2-S4 portability evidence
+
+**Boundary:**
+- Vulkan-specific non-core infrastructure
+- No SDL surface creation, swapchains, presentation, render pipelines, or UI;
+  caller-provided Vulkan surfaces are accepted only for present suitability
+- No application workload semantics, CPU-oracle ownership, or fallback policy
+- No images, semaphores, cross-queue transfers, allocator suballocation,
+  application workload policy, or renderer presentation
+- No portable speedup guarantee; timing profiles remain device/driver specific
+- `vk_renderer 1.3.0` remains the presentation owner and consumes this
+  lifecycle through compatibility wrappers; no application rollout yet
+
+### vk_renderer (ACTIVE PRESENTATION INFRASTRUCTURE)
+**Role:** SDL/Vulkan presentation backend beneath `kit_render`.
+**Responsibilities:**
+- SDL window-surface creation and ownership handoff into `vk_runtime`
+- Swapchain, render-pass, framebuffer, graphics pipeline, and synchronization
+  lifecycle
+- Primitive, texture, mesh, and line drawing plus capture/readback
+- Compatibility mirrors for existing public Vulkan handles and entry points
+- Out-of-date/suboptimal recovery through bounded swapchain recreation
+
+**Boundary:**
+- Uses `vk_runtime 0.6.0` for instance/device/queue lifecycle
+- Does not own headless compute policy, application drawing semantics, or CPU
+  fallback/oracle policy
+- Local `1.3.0` proof is not program adoption; each consumer still requires a
+  separate shared-subtree and build-link update
+
+---
 
 ### sys_shims (BOOTSTRAP)
 **Role:** Local shim layer for system include compatibility and controlled extensions.

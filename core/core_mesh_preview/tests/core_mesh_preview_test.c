@@ -64,6 +64,96 @@ static int write_legacy_preview_file(const char *path) {
     return fclose(f) != 0;
 }
 
+static int make_grid(CoreMeshAssetRuntimeDocument *doc, size_t side) {
+    const size_t vertex_count = side * side;
+    const size_t triangle_count = (side - 1u) * (side - 1u) * 2u;
+    CoreResult result;
+    if (!doc || side < 3u) return 1;
+    core_mesh_asset_runtime_document_init(doc);
+    result = core_mesh_asset_runtime_contract_set_asset_id(&doc->contract, "asset_grid");
+    if (result.code != CORE_OK) return expect_ok(result, "set grid asset");
+    result = core_mesh_asset_runtime_contract_set_source_asset_id(&doc->contract, "source_grid");
+    if (result.code != CORE_OK) return expect_ok(result, "set grid source");
+    doc->contract.asset_type = CORE_MESH_ASSET_TYPE_SOLID_MESH;
+    doc->contract.local_bounds.min = (CoreObjectVec3){0.0, 0.0, 0.0};
+    doc->contract.local_bounds.max =
+        (CoreObjectVec3){(double)(side - 1u), (double)(side - 1u), 0.0};
+    result = core_mesh_asset_runtime_document_set_vertex_count(doc, vertex_count);
+    if (result.code != CORE_OK) return expect_ok(result, "set grid vertices");
+    result = core_mesh_asset_runtime_document_set_triangle_count(doc, triangle_count);
+    if (result.code != CORE_OK) return expect_ok(result, "set grid triangles");
+    result = core_mesh_asset_runtime_document_set_surface_group_count(doc, 1u);
+    if (result.code != CORE_OK) return expect_ok(result, "set grid groups");
+    snprintf(doc->surface_groups[0].group_id,
+             sizeof(doc->surface_groups[0].group_id),
+             "surface");
+    doc->surface_groups[0].triangle_count = triangle_count;
+    for (size_t y = 0u; y < side; ++y) {
+        for (size_t x = 0u; x < side; ++x) {
+            doc->vertices[y * side + x].position =
+                (CoreObjectVec3){(double)x, (double)y, 0.0};
+        }
+    }
+    {
+        size_t triangle = 0u;
+        for (size_t y = 0u; y + 1u < side; ++y) {
+            for (size_t x = 0u; x + 1u < side; ++x) {
+                const size_t a = y * side + x;
+                const size_t b = a + 1u;
+                const size_t c = a + side;
+                const size_t d = c + 1u;
+                doc->triangles[triangle++] =
+                    (CoreMeshAssetRuntimeTriangle){a, b, d, "surface"};
+                doc->triangles[triangle++] =
+                    (CoreMeshAssetRuntimeTriangle){a, d, c, "surface"};
+            }
+        }
+    }
+    return expect_ok(core_mesh_asset_runtime_document_validate(doc), "validate grid");
+}
+
+static int test_coherent_lod_mesh(void) {
+    CoreMeshAssetRuntimeDocument grid;
+    CoreMeshAssetRuntimeDocument tetra;
+    CoreMeshPreviewLodMesh lod;
+    int failed = 0;
+    core_mesh_preview_lod_mesh_init(&lod);
+    failed |= make_grid(&grid, 33u);
+    if (!failed) {
+        failed |= expect_ok(core_mesh_preview_build_lod_mesh(&grid, 180u, &lod),
+                            "build clustered LOD");
+        if (lod.triangle_count == 0u || lod.triangle_count > 180u ||
+            lod.triangle_count >= lod.source_triangle_count ||
+            lod.vertex_count <= 3u || lod.cluster_resolution < 2) {
+            fprintf(stderr, "clustered LOD did not honor coherent budget contract\n");
+            failed = 1;
+        }
+        for (size_t i = 0u; i < lod.triangle_count * 3u; ++i) {
+            if (lod.indices[i] >= lod.vertex_count) {
+                fprintf(stderr, "clustered LOD emitted an invalid index\n");
+                failed = 1;
+                break;
+            }
+        }
+    }
+    core_mesh_preview_lod_mesh_free(&lod);
+    core_mesh_asset_runtime_document_free(&grid);
+
+    failed |= make_tetra(&tetra);
+    if (!failed) {
+        failed |= expect_ok(core_mesh_preview_build_lod_mesh(&tetra, 100u, &lod),
+                            "build exact LOD");
+        if (lod.cluster_resolution != 0 || lod.vertex_count != tetra.vertex_count ||
+            lod.triangle_count != tetra.triangle_count) {
+            fprintf(stderr, "small runtime mesh was not preserved exactly\n");
+            failed = 1;
+        }
+    }
+    core_mesh_preview_lod_mesh_free(&lod);
+    core_mesh_asset_runtime_document_free(&tetra);
+    return failed;
+}
+
 int main(void) {
     CoreMeshAssetRuntimeDocument doc;
     CoreMeshPreviewRuntimePayload payload;
@@ -75,6 +165,8 @@ int main(void) {
     char legacy_preview_path[256];
     const char *runtime_path = "/tmp/core_mesh_preview_test.runtime.json";
     int failed = 0;
+
+    failed |= test_coherent_lod_mesh();
 
     core_mesh_preview_runtime_payload_init(&payload);
     core_mesh_preview_runtime_payload_init(&loaded);
