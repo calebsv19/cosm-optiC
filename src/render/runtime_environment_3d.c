@@ -130,7 +130,7 @@ void RuntimeEnvironment3D_ResolveFromAnimationConfig(RuntimeEnvironment3D* envir
         runtime_environment_3d_clamp(config->topFillStrength, 0.0, 20.0);
     environment->ambientColor = vec3(1.0, 1.0, 1.0);
     environment->backgroundColor =
-        background_authored
+        background_authored && !config->environmentBackgroundBrightnessAuto
             ? runtime_environment_3d_color_clamped(config->environmentBackgroundColorR,
                                                    config->environmentBackgroundColorG,
                                                    config->environmentBackgroundColorB)
@@ -151,4 +151,33 @@ double RuntimeEnvironment3D_AmbientStrength(const RuntimeEnvironment3D* environm
 double RuntimeEnvironment3D_BackgroundBrightness(const RuntimeEnvironment3D* environment) {
     if (!environment || environment->lightMode != ENVIRONMENT_LIGHT_MODE_AMBIENT) return 0.0;
     return runtime_environment_3d_clamp(environment->backgroundIntensity, 0.0, 4.0);
+}
+
+void RuntimeEnvironment3D_EvaluateBackgroundRGB(const RuntimeEnvironment3D* environment,
+                                                Vec3 direction,
+                                                double* out_r,
+                                                double* out_g,
+                                                double* out_b) {
+    double mix_t = 0.0;
+    double strength = 0.0;
+    Vec3 color = vec3(0.0, 0.0, 0.0);
+
+    if (out_r) *out_r = 0.0;
+    if (out_g) *out_g = 0.0;
+    if (out_b) *out_b = 0.0;
+    if (!environment || environment->lightMode != ENVIRONMENT_LIGHT_MODE_AMBIENT) {
+        return;
+    }
+
+    strength = RuntimeEnvironment3D_BackgroundBrightness(environment);
+    if (!(strength > 0.0)) return;
+
+    direction = vec3_normalize(direction);
+    mix_t = runtime_environment_3d_clamp((direction.z + 1.0) * 0.5, 0.0, 1.0);
+    color = vec3_add(vec3_scale(environment->backgroundBottomColor, 1.0 - mix_t),
+                     vec3_scale(environment->backgroundTopColor, mix_t));
+    color = vec3_scale(color, strength);
+    if (out_r) *out_r = color.x;
+    if (out_g) *out_g = color.y;
+    if (out_b) *out_b = color.z;
 }

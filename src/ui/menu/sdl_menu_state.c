@@ -23,6 +23,7 @@
 #include "render/runtime_volume_3d_debug.h"
 #include "ui/scene_source_catalog.h"
 #include "ui/scene_source_ui_labels.h"
+#include "ui/menu_environment_settings.h"
 #include "ui/volume_source_catalog.h"
 #include "ui/volume_source_ui_labels.h"
 
@@ -536,6 +537,28 @@ static void sync_environment_background_slider_from_settings(MenuRuntimeState* s
         (int)lround(brightness * 100.0);
 }
 
+static void sync_environment_background_color_sliders_from_settings(MenuRuntimeState* state) {
+    if (!state) return;
+    if (!(state->draggingSlider &&
+          state->selectedSlider == &state->environmentBackgroundRedSliderValue)) {
+        state->environmentBackgroundRedSliderValue =
+            (int)lround(clamp_double(animSettings.environmentBackgroundColorR, 0.0, 1.0) *
+                        100.0);
+    }
+    if (!(state->draggingSlider &&
+          state->selectedSlider == &state->environmentBackgroundGreenSliderValue)) {
+        state->environmentBackgroundGreenSliderValue =
+            (int)lround(clamp_double(animSettings.environmentBackgroundColorG, 0.0, 1.0) *
+                        100.0);
+    }
+    if (!(state->draggingSlider &&
+          state->selectedSlider == &state->environmentBackgroundBlueSliderValue)) {
+        state->environmentBackgroundBlueSliderValue =
+            (int)lround(clamp_double(animSettings.environmentBackgroundColorB, 0.0, 1.0) *
+                        100.0);
+    }
+}
+
 static void sync_secondary_diffuse_samples_3d_slider_from_settings(MenuRuntimeState* state) {
     if (!state) return;
     if (state->draggingSlider &&
@@ -607,6 +630,7 @@ void menu_state_sync_from_anim(MenuRuntimeState* state) {
     sync_forward_decay_slider_from_settings(state);
     sync_top_fill_strength_slider_from_settings(state);
     sync_environment_background_slider_from_settings(state);
+    sync_environment_background_color_sliders_from_settings(state);
     sync_bounce_depth_3d_slider_from_settings(state);
     sync_roulette_threshold_3d_slider_from_settings(state);
     sync_secondary_diffuse_samples_3d_slider_from_settings(state);
@@ -677,7 +701,8 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
     } else if (target == &state->envSliderValue) {
         if (state->envSliderValue < 0) state->envSliderValue = 0;
         if (state->envSliderValue > 255) state->envSliderValue = 255;
-        animSettings.environmentBrightness = (double)state->envSliderValue;
+        (void)menu_environment_settings_set_ambient_brightness(
+            (double)state->envSliderValue);
     } else if (target == &state->cacheWeightSliderValue) {
         if (state->cacheWeightSliderValue < 0) state->cacheWeightSliderValue = 0;
         if (state->cacheWeightSliderValue > 100) state->cacheWeightSliderValue = 100;
@@ -701,7 +726,8 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
     } else if (target == &state->topFillStrengthSliderValue) {
         if (state->topFillStrengthSliderValue < 0) state->topFillStrengthSliderValue = 0;
         if (state->topFillStrengthSliderValue > 2000) state->topFillStrengthSliderValue = 2000;
-        animSettings.topFillStrength = state->topFillStrengthSliderValue / 100.0;
+        (void)menu_environment_settings_set_top_fill_strength(
+            state->topFillStrengthSliderValue / 100.0);
     } else if (target == &state->environmentBackgroundBrightnessSliderValue) {
         if (state->environmentBackgroundBrightnessSliderValue < 0) {
             state->environmentBackgroundBrightnessSliderValue = 0;
@@ -709,9 +735,17 @@ void menu_state_apply_special_slider_rules(MenuRuntimeState* state, int* target)
         if (state->environmentBackgroundBrightnessSliderValue > 400) {
             state->environmentBackgroundBrightnessSliderValue = 400;
         }
-        animSettings.environmentBackgroundBrightnessAuto = false;
-        animSettings.environmentBackgroundBrightness =
-            state->environmentBackgroundBrightnessSliderValue / 100.0;
+        (void)menu_environment_settings_set_background_brightness(
+            state->environmentBackgroundBrightnessSliderValue / 100.0);
+    } else if (target == &state->environmentBackgroundRedSliderValue ||
+               target == &state->environmentBackgroundGreenSliderValue ||
+               target == &state->environmentBackgroundBlueSliderValue) {
+        if (*target < 0) *target = 0;
+        if (*target > 100) *target = 100;
+        (void)menu_environment_settings_set_background_color(
+            state->environmentBackgroundRedSliderValue / 100.0,
+            state->environmentBackgroundGreenSliderValue / 100.0,
+            state->environmentBackgroundBlueSliderValue / 100.0);
     } else if (target == &state->bounceDepth3DSliderValue) {
         state->bounceDepth3DSliderValue =
             clamp_bounce_depth_3d_menu(state->bounceDepth3DSliderValue);
@@ -787,6 +821,9 @@ void menu_state_init(MenuRuntimeState* state) {
     state->forwardDecaySliderValue = 2000;
     state->topFillStrengthSliderValue = 100;
     state->environmentBackgroundBrightnessSliderValue = 0;
+    state->environmentBackgroundRedSliderValue = 100;
+    state->environmentBackgroundGreenSliderValue = 100;
+    state->environmentBackgroundBlueSliderValue = 100;
     state->bounceDepth3DSliderValue = RUNTIME_3D_BOUNCE_DEPTH_DEFAULT;
     state->rouletteThreshold3DSliderValue =
         (int)lround(RUNTIME_3D_ROULETTE_THRESHOLD_DEFAULT * 1000.0);
@@ -1015,4 +1052,5 @@ void menu_state_reset_defaults(MenuRuntimeState* state) {
         state->oldWindowWidth = sceneSettings.windowWidth;
         state->oldWindowHeight = sceneSettings.windowHeight;
     }
+    menu_environment_settings_mark_runtime_dirty("menu_reset_defaults");
 }

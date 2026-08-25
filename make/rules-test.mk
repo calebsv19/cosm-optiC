@@ -2758,6 +2758,18 @@ test-ray-tracing-render-headless-compound-scene-ingestion: $(RAY_TRACING_RENDER_
 test-ray-tracing-render-headless-image-export: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_image_export.sh
 
+test-ray-tracing-mirror-baseline-contract: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_rt_mirror_1_baseline_contract.py
+
+capture-ray-tracing-mirror-recursive-fidelity-before-state: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_rt_mirror_1_recursive_fidelity_contract.py --mode before-state
+
+test-ray-tracing-mirror-recursive-fidelity-contract: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_rt_mirror_1_recursive_fidelity_contract.py --mode acceptance
+
+test-ray-tracing-mirror-radiance-isolation: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/run_rt_mirror_1_recursive_fidelity_contract.py --mode radiance-isolation
+
 test-ray-tracing-render-headless-mesh-asset-spheres: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_render_headless_mesh_asset_spheres.sh
 

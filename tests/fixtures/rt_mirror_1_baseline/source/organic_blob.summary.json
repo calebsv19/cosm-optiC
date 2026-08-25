@@ -1,0 +1,25 @@
+{
+  "amplitude": 0.14,
+  "bounds": {
+    "max": [
+      1.0420500927449716,
+      1.0321770323372075,
+      1.039852150378079
+    ],
+    "min": [
+      -1.0436547340376265,
+      -1.040735708425717,
+      -1.0603852170639496
+    ]
+  },
+  "family": "organic_blob",
+  "frequency": 5,
+  "schema": "smooth_mesh_reflection_fixture_v1",
+  "seed": 17,
+  "stl_bytes": 64084,
+  "subdivisions": 3,
+  "tier": "unit",
+  "triangle_count": 1280,
+  "triangle_payload_sha256": "3a5b3a09640271d5c6dc8f0ef1079d86e60573b68d128c3bb8fa83cd6dc63ba8",
+  "vertex_count": 642
+}

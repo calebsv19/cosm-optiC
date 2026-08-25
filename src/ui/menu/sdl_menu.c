@@ -10,6 +10,7 @@
 
 #include "app/animation.h"
 #include "app/data_paths.h"
+#include "app/ray_tracing_build_identity.h"
 #include "app/scene_loop_diag.h"
 #include "app/scene_loop_policy.h"
 #include "app/starter_scene_startup.h"
@@ -29,6 +30,7 @@
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.h"
 #include "ui/sdl_menu_input.h"
 #include "ui/sdl_menu_render.h"
+#include "ui/menu_settings_lifecycle.h"
 #include "ui/sdl_menu_state.h"
 
 #if defined(__linux__)
@@ -120,6 +122,7 @@ static bool initialize_menu(SDL_Window** window,
     char program_root[PATH_MAX] = {0};
     char runtime_config_path[PATH_MAX] = {0};
     char starter_scene_error[256] = {0};
+    char window_title[192] = {0};
     struct stat runtime_config_info;
     bool has_persisted_animation_config = false;
     bool open_starter_scene_editor = false;
@@ -140,7 +143,9 @@ static bool initialize_menu(SDL_Window** window,
         return false;
     }
 
-    *window = SDL_CreateWindow("RayTracing Menu",
+    ray_tracing_build_identity_format_window_title(
+        window_title, sizeof(window_title), "RayTracing Menu");
+    *window = SDL_CreateWindow(window_title,
                                SDL_WINDOWPOS_CENTERED,
                                SDL_WINDOWPOS_CENTERED,
                                MENU_WIDTH,
@@ -428,8 +433,17 @@ static bool menu_process_event(SDL_Window* window,
                                           menu_state);
             return true;
         case SDL_MOUSEBUTTONUP:
+            if (menu_state->draggingSlider && menu_state->selectedSlider) {
+                menu_settings_lifecycle_commit_slider_release(
+                    menu_state, menu_state->selectedSlider);
+            } else if (ray_tracing_menu_pane_host_splitter_drag_active(
+                           &menu_state->menuPaneHost)) {
+                menu_settings_lifecycle_commit(
+                    menu_state, "menu_pane_splitter_release", false);
+            }
             ray_tracing_menu_pane_host_end_splitter_drag(&menu_state->menuPaneHost);
             menu_state->draggingSlider = false;
+            menu_state->selectedSlider = NULL;
             menu_state->manifestScrollbarDragging = false;
             return true;
         case SDL_MOUSEWHEEL:

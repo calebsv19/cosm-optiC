@@ -51,6 +51,15 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             RuntimeDisneyV2_3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
+            double pre_ambient_r = 0.0;
+            double pre_ambient_g = 0.0;
+            double pre_ambient_b = 0.0;
+            double ambient_r = 0.0;
+            double ambient_g = 0.0;
+            double ambient_b = 0.0;
+            double ambient_before_r = 0.0;
+            double ambient_before_g = 0.0;
+            double ambient_before_b = 0.0;
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
@@ -130,6 +139,9 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                        &result.radiance,
                                                        &result.visible,
                                                        &scatter);
+            pre_ambient_r = result.radianceR;
+            pre_ambient_g = result.radianceG;
+            pre_ambient_b = result.radianceB;
             if (!result.primaryTransmissionContinued ||
                 result.primaryTransmissionPhysicalSurfaceCount <= 0) {
                 runtime_native_3d_render_apply_ambient_hit_lighting(scene,
@@ -139,6 +151,22 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                     &result.radianceB,
                                                                     &result.radiance,
                                                                     &result.visible);
+            }
+            ambient_r = result.radianceR - pre_ambient_r;
+            ambient_g = result.radianceG - pre_ambient_g;
+            ambient_b = result.radianceB - pre_ambient_b;
+            ambient_before_r = ambient_r;
+            ambient_before_g = ambient_g;
+            ambient_before_b = ambient_b;
+            if (result.mirrorDominance > 0.05) {
+                ambient_r *= result.mirrorBaseAttenuation;
+                ambient_g *= result.mirrorBaseAttenuation;
+                ambient_b *= result.mirrorBaseAttenuation;
+                result.radianceR = pre_ambient_r + ambient_r;
+                result.radianceG = pre_ambient_g + ambient_g;
+                result.radianceB = pre_ambient_b + ambient_b;
+                result.radiance = fmax(fmax(result.radianceR, result.radianceG),
+                                       result.radianceB);
             }
             runtime_native_3d_render_apply_surface_caustic_cache(surface_cache,
                                                                  &result.hitInfo,
@@ -182,7 +210,17 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             stats.secondaryHitCount += result.secondaryHitCount;
             stats.secondaryContributingHitCount += result.secondaryContributingHitCount;
             runtime_native_3d_render_record_disney_v2_emissive_area_stats(&stats, &result);
-            runtime_native_3d_render_record_disney_v2_mirror_stats(&stats, &result);
+            runtime_native_3d_render_record_disney_v2_mirror_stats(
+                &stats,
+                &result,
+                x,
+                y,
+                ambient_before_r,
+                ambient_before_g,
+                ambient_before_b,
+                ambient_r,
+                ambient_g,
+                ambient_b);
             if (result.radiance > stats.maxRadiance) {
                 stats.maxRadiance = result.radiance;
             }

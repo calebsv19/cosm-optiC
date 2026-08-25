@@ -140,6 +140,7 @@ RAY_TRACING_TEST_WEAK bool ts_apply_init_config(const TimerHUDInitConfig* config
 
 // Animation/render pipeline symbols used by ray_tracing2 in tests.
 RAY_TRACING_TEST_WEAK bool AnimationUseFluidScene(void) { return false; }
+RAY_TRACING_TEST_WEAK void AnimationPreserveCurrentEnvironmentOnNextInit(void) {}
 int frameCounter = 0;
 int loopCount = 0;
 double currentTime = 0.0;

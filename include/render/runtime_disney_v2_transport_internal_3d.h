@@ -6,6 +6,7 @@
 #include "render/runtime_disney_v2_transport_3d.h"
 #include "render/runtime_disney_v2_estimator_3d.h"
 #include "render/runtime_disney_v2_transmission_3d.h"
+#include "render/runtime_direct_light_3d.h"
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_path_depth_policy_3d.h"
 #include "render/runtime_ray_3d.h"
@@ -62,6 +63,12 @@ void runtime_disney_v2_transport_3d_record_bsdf_sample_contribution(
     double g,
     double b,
     RuntimeDisneyV2_3DEmitterKind emitter_kind);
+void runtime_disney_v2_transport_3d_record_light_sample_contribution(
+    RuntimeDisneyV2_3DResult* io_result,
+    int vertex_index,
+    double r,
+    double g,
+    double b);
 uint32_t runtime_disney_v2_transport_3d_hash_u32(uint32_t x);
 uint32_t runtime_disney_v2_transport_3d_seed_from_hit(
     const HitInfo3D* hit,

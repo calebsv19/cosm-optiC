@@ -20,9 +20,15 @@ void runtime_disney_v2_3d_apply_transmittance(
     io_result->specularReflectionRadianceR *= transmittance->r;
     io_result->specularReflectionRadianceG *= transmittance->g;
     io_result->specularReflectionRadianceB *= transmittance->b;
+    io_result->specularReflectionEnvironmentRadianceR *= transmittance->r;
+    io_result->specularReflectionEnvironmentRadianceG *= transmittance->g;
+    io_result->specularReflectionEnvironmentRadianceB *= transmittance->b;
     io_result->specularReflectionRecursiveRadianceR *= transmittance->r;
     io_result->specularReflectionRecursiveRadianceG *= transmittance->g;
     io_result->specularReflectionRecursiveRadianceB *= transmittance->b;
+    io_result->specularReflectionRecursiveEnvironmentRadianceR *= transmittance->r;
+    io_result->specularReflectionRecursiveEnvironmentRadianceG *= transmittance->g;
+    io_result->specularReflectionRecursiveEnvironmentRadianceB *= transmittance->b;
     io_result->specularReflectionRoughContributionR *= transmittance->r;
     io_result->specularReflectionRoughContributionG *= transmittance->g;
     io_result->specularReflectionRoughContributionB *= transmittance->b;
@@ -41,6 +47,9 @@ void runtime_disney_v2_3d_apply_transmittance(
     io_result->stochasticBsdfRadianceR *= transmittance->r;
     io_result->stochasticBsdfRadianceG *= transmittance->g;
     io_result->stochasticBsdfRadianceB *= transmittance->b;
+    io_result->recursiveDirectRadianceR *= transmittance->r;
+    io_result->recursiveDirectRadianceG *= transmittance->g;
+    io_result->recursiveDirectRadianceB *= transmittance->b;
     io_result->recursiveBsdfRadianceR *= transmittance->r;
     io_result->recursiveBsdfRadianceG *= transmittance->g;
     io_result->recursiveBsdfRadianceB *= transmittance->b;
@@ -119,6 +128,7 @@ void runtime_disney_v2_3d_refresh_peaks(RuntimeDisneyV2_3DResult* result) {
                         result->primaryTransmissionRadianceR +
                         result->stochasticDirectRadianceR +
                         result->stochasticBsdfRadianceR +
+                        result->recursiveDirectRadianceR +
                         result->recursiveBsdfRadianceR;
     result->radianceG = result->diffuseRadianceG +
                         result->specularRadianceG +
@@ -127,6 +137,7 @@ void runtime_disney_v2_3d_refresh_peaks(RuntimeDisneyV2_3DResult* result) {
                         result->primaryTransmissionRadianceG +
                         result->stochasticDirectRadianceG +
                         result->stochasticBsdfRadianceG +
+                        result->recursiveDirectRadianceG +
                         result->recursiveBsdfRadianceG;
     result->radianceB = result->diffuseRadianceB +
                         result->specularRadianceB +
@@ -135,6 +146,7 @@ void runtime_disney_v2_3d_refresh_peaks(RuntimeDisneyV2_3DResult* result) {
                         result->primaryTransmissionRadianceB +
                         result->stochasticDirectRadianceB +
                         result->stochasticBsdfRadianceB +
+                        result->recursiveDirectRadianceB +
                         result->recursiveBsdfRadianceB;
     result->stochasticDirectRadiance =
         runtime_disney_v2_3d_peak(result->stochasticDirectRadianceR,
@@ -144,6 +156,10 @@ void runtime_disney_v2_3d_refresh_peaks(RuntimeDisneyV2_3DResult* result) {
         runtime_disney_v2_3d_peak(result->stochasticBsdfRadianceR,
                                   result->stochasticBsdfRadianceG,
                                   result->stochasticBsdfRadianceB);
+    result->recursiveDirectRadiance =
+        runtime_disney_v2_3d_peak(result->recursiveDirectRadianceR,
+                                  result->recursiveDirectRadianceG,
+                                  result->recursiveDirectRadianceB);
     result->recursiveBsdfRadiance =
         runtime_disney_v2_3d_peak(result->recursiveBsdfRadianceR,
                                   result->recursiveBsdfRadianceG,

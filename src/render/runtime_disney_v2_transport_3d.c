@@ -63,7 +63,70 @@ static RuntimeDisneyV2_3DPathState* runtime_disney_v2_transport_3d_append_state(
     return slot;
 }
 
-bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
+static bool runtime_disney_v2_transport_3d_accumulate_environment_miss(
+    const RuntimeScene3D* scene,
+    const RuntimeDisneyV2_3DPathState* state,
+    const RuntimePrincipledBSDF3D* principled,
+    int vertex_index,
+    RuntimeDisneyV2_3DResult* io_result) {
+    double environment_r = 0.0;
+    double environment_g = 0.0;
+    double environment_b = 0.0;
+    double contribution_r = 0.0;
+    double contribution_g = 0.0;
+    double contribution_b = 0.0;
+
+    if (!scene || !state || !io_result) return false;
+    RuntimeEnvironment3D_EvaluateBackgroundRGB(&scene->environment,
+                                               state->ray.direction,
+                                               &environment_r,
+                                               &environment_g,
+                                               &environment_b);
+    contribution_r = state->throughputR * environment_r;
+    contribution_g = state->throughputG * environment_g;
+    contribution_b = state->throughputB * environment_b;
+    if (!(runtime_disney_v2_transport_3d_peak(contribution_r,
+                                              contribution_g,
+                                              contribution_b) > 1e-9)) {
+        (void)runtime_disney_v2_transport_3d_append_state(
+            io_result,
+            state,
+            principled,
+            RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_NO_HIT,
+            0.0,
+            0.0,
+            0.0);
+        return false;
+    }
+
+    io_result->recursiveBsdfRadianceR += contribution_r;
+    io_result->recursiveBsdfRadianceG += contribution_g;
+    io_result->recursiveBsdfRadianceB += contribution_b;
+    io_result->specularReflectionRecursiveEnvironmentMissContributionCount += 1;
+    io_result->specularReflectionRecursiveEnvironmentRadianceR += contribution_r;
+    io_result->specularReflectionRecursiveEnvironmentRadianceG += contribution_g;
+    io_result->specularReflectionRecursiveEnvironmentRadianceB += contribution_b;
+    io_result->recursiveLoopContributingHitCount += 1;
+    io_result->secondaryContributingHitCount += 1;
+    runtime_disney_v2_transport_3d_record_bsdf_sample_contribution(
+        io_result,
+        vertex_index,
+        contribution_r,
+        contribution_g,
+        contribution_b,
+        RUNTIME_DISNEY_V2_3D_EMITTER_NONE);
+    (void)runtime_disney_v2_transport_3d_append_state(
+        io_result,
+        state,
+        principled,
+        RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_NO_HIT,
+        contribution_r,
+        contribution_g,
+        contribution_b);
+    return true;
+}
+
+static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
     const RuntimeScene3D* scene,
     const HitInfo3D* start_hit,
     const RuntimeNative3DSamplingContext* sampling,
@@ -72,6 +135,7 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
     double parent_throughput_r,
     double parent_throughput_g,
     double parent_throughput_b,
+    bool skip_start_vertex_direct,
     RuntimeDisneyV2_3DResult* io_result) {
     HitInfo3D current_hit = {0};
     double throughput_r = parent_throughput_r;
@@ -110,6 +174,7 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
         RuntimePrincipledBSDF3D principled = {0};
         RuntimeDisneyV2Transport3DVertexSample vertex_sample = {0};
         RuntimeEmissiveDirect3DResult emissive_area_direct = {0};
+        RuntimeDirectLight3DResult finite_direct = {0};
         double area_throughput_r = throughput_r;
         double area_throughput_g = throughput_g;
         double area_throughput_b = throughput_b;
@@ -225,6 +290,40 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
             vertex_sample.finiteLightMis,
             vertex_sample.emissiveAreaMis);
 
+        if (!(skip_start_vertex_direct && depth == start_depth) &&
+            scene->hasLight &&
+            (payload_resolved
+                 ? RuntimeDirectLight3D_ShadeHitWithPayload(scene,
+                                                            &current_hit,
+                                                            &payload,
+                                                            sampling,
+                                                            &finite_direct)
+                 : RuntimeDirectLight3D_ShadeHit(scene,
+                                                 &current_hit,
+                                                 sampling,
+                                                 &finite_direct))) {
+            const double direct_r = area_throughput_r * finite_direct.radianceR *
+                                    vertex_sample.finiteLightMis.weightLight;
+            const double direct_g = area_throughput_g * finite_direct.radianceG *
+                                    vertex_sample.finiteLightMis.weightLight;
+            const double direct_b = area_throughput_b * finite_direct.radianceB *
+                                    vertex_sample.finiteLightMis.weightLight;
+            io_result->recursiveDirectRadianceR += direct_r;
+            io_result->recursiveDirectRadianceG += direct_g;
+            io_result->recursiveDirectRadianceB += direct_b;
+            runtime_disney_v2_transport_3d_record_light_sample_contribution(
+                io_result,
+                vertex_index,
+                direct_r,
+                direct_g,
+                direct_b);
+            if (runtime_disney_v2_transport_3d_peak(direct_r, direct_g, direct_b) > 1e-9) {
+                io_result->recursiveLoopContributingHitCount += 1;
+                io_result->secondaryContributingHitCount += 1;
+                contributed = true;
+            }
+        }
+
         if (has_emissive_area_direct &&
             RuntimeDisneyV2_3D_AccumulateEmissiveAreaLightSample(
                 &emissive_area_direct,
@@ -249,14 +348,12 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
                                                    kRuntimeDisneyV2Transport3DEpsilon,
                                                    kRuntimeDisneyV2Transport3DMaxDistance,
                                                    &trace)) {
-            (void)runtime_disney_v2_transport_3d_append_state(
-                io_result,
+            contributed |= runtime_disney_v2_transport_3d_accumulate_environment_miss(
+                scene,
                 &state,
                 &principled,
-                RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_NO_HIT,
-                0.0,
-                0.0,
-                0.0);
+                vertex_index,
+                io_result);
             runtime_disney_v2_transport_3d_note_termination(
                 io_result,
                 RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_NO_HIT);
@@ -360,6 +457,19 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
             }
         }
 
+        if (!trace.geometryHit) {
+            contributed |= runtime_disney_v2_transport_3d_accumulate_environment_miss(
+                scene,
+                &state,
+                &principled,
+                vertex_index,
+                io_result);
+            runtime_disney_v2_transport_3d_note_termination(
+                io_result,
+                RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_NO_HIT);
+            break;
+        }
+
         (void)runtime_disney_v2_transport_3d_append_state(
             io_result,
             &state,
@@ -368,12 +478,6 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
             0.0,
             0.0,
             0.0);
-        if (!trace.geometryHit) {
-            runtime_disney_v2_transport_3d_note_termination(
-                io_result,
-                RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_NO_HIT);
-            break;
-        }
 
         incoming_dir = state.ray.direction;
         current_hit = trace.geometryHitInfo;
@@ -382,6 +486,30 @@ bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
     }
 
     return contributed;
+}
+
+bool RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* start_hit,
+    const RuntimeNative3DSamplingContext* sampling,
+    Vec3 incoming_dir,
+    int start_depth,
+    double parent_throughput_r,
+    double parent_throughput_g,
+    double parent_throughput_b,
+    RuntimeDisneyV2_3DResult* io_result) {
+    return runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
+        scene,
+        start_hit,
+        sampling,
+        incoming_dir,
+        start_depth,
+        parent_throughput_r,
+        parent_throughput_g,
+        parent_throughput_b,
+        /* The caller already owns direct lighting at the first reached vertex. */
+        true,
+        io_result);
 }
 
 bool RuntimeDisneyV2_3D_ApplyRecursivePathLoop(
@@ -521,16 +649,39 @@ static void runtime_disney_v2_transport_3d_merge_reflection_loop(
         loop_result->recursiveLoopRouletteTerminationCount;
     io_result->specularReflectionRecursiveNoHitTerminationCount +=
         loop_result->recursiveLoopNoHitTerminationCount;
+    io_result->specularReflectionRecursiveEnvironmentMissContributionCount +=
+        loop_result->specularReflectionRecursiveEnvironmentMissContributionCount;
+    io_result->specularReflectionRecursiveEnvironmentRadianceR +=
+        loop_result->specularReflectionRecursiveEnvironmentRadianceR;
+    io_result->specularReflectionRecursiveEnvironmentRadianceG +=
+        loop_result->specularReflectionRecursiveEnvironmentRadianceG;
+    io_result->specularReflectionRecursiveEnvironmentRadianceB +=
+        loop_result->specularReflectionRecursiveEnvironmentRadianceB;
 
-    io_result->specularReflectionRecursiveRadianceR += loop_result->recursiveBsdfRadianceR;
-    io_result->specularReflectionRecursiveRadianceG += loop_result->recursiveBsdfRadianceG;
-    io_result->specularReflectionRecursiveRadianceB += loop_result->recursiveBsdfRadianceB;
-    io_result->specularReflectionRadianceR += loop_result->recursiveBsdfRadianceR;
-    io_result->specularReflectionRadianceG += loop_result->recursiveBsdfRadianceG;
-    io_result->specularReflectionRadianceB += loop_result->recursiveBsdfRadianceB;
-    io_result->recursiveBsdfRadianceR += loop_result->recursiveBsdfRadianceR;
-    io_result->recursiveBsdfRadianceG += loop_result->recursiveBsdfRadianceG;
-    io_result->recursiveBsdfRadianceB += loop_result->recursiveBsdfRadianceB;
+    io_result->specularReflectionRecursiveRadianceR +=
+        loop_result->recursiveDirectRadianceR + loop_result->recursiveBsdfRadianceR;
+    io_result->specularReflectionRecursiveRadianceG +=
+        loop_result->recursiveDirectRadianceG + loop_result->recursiveBsdfRadianceG;
+    io_result->specularReflectionRecursiveRadianceB +=
+        loop_result->recursiveDirectRadianceB + loop_result->recursiveBsdfRadianceB;
+    io_result->specularReflectionRadianceR +=
+        loop_result->recursiveDirectRadianceR + loop_result->recursiveBsdfRadianceR;
+    io_result->specularReflectionRadianceG +=
+        loop_result->recursiveDirectRadianceG + loop_result->recursiveBsdfRadianceG;
+    io_result->specularReflectionRadianceB +=
+        loop_result->recursiveDirectRadianceB + loop_result->recursiveBsdfRadianceB;
+    io_result->specularRadianceR +=
+        loop_result->recursiveDirectRadianceR + loop_result->recursiveBsdfRadianceR;
+    io_result->specularRadianceG +=
+        loop_result->recursiveDirectRadianceG + loop_result->recursiveBsdfRadianceG;
+    io_result->specularRadianceB +=
+        loop_result->recursiveDirectRadianceB + loop_result->recursiveBsdfRadianceB;
+    /*
+     * The loop is owned by the deterministic specular-reflection branch.  Its
+     * radiance is retained in the dedicated recursive diagnostic above and is
+     * composed once through specularReflectionRadiance/specularRadiance.  It
+     * must not also enter the host vertex's independent recursive direct/BSDF buckets.
+     */
 
     io_result->emissiveAreaRadianceR += loop_result->emissiveAreaRadianceR;
     io_result->emissiveAreaRadianceG += loop_result->emissiveAreaRadianceG;
@@ -601,9 +752,12 @@ static void runtime_disney_v2_transport_3d_merge_reflection_loop(
     }
 
     if (rough_sample_used) {
-        io_result->specularReflectionRoughContributionR += loop_result->recursiveBsdfRadianceR;
-        io_result->specularReflectionRoughContributionG += loop_result->recursiveBsdfRadianceG;
-        io_result->specularReflectionRoughContributionB += loop_result->recursiveBsdfRadianceB;
+        io_result->specularReflectionRoughContributionR +=
+            loop_result->recursiveDirectRadianceR + loop_result->recursiveBsdfRadianceR;
+        io_result->specularReflectionRoughContributionG +=
+            loop_result->recursiveDirectRadianceG + loop_result->recursiveBsdfRadianceG;
+        io_result->specularReflectionRoughContributionB +=
+            loop_result->recursiveDirectRadianceB + loop_result->recursiveBsdfRadianceB;
     }
 }
 
@@ -644,15 +798,18 @@ static bool runtime_disney_v2_transport_3d_apply_reflection_loop(
                                                                     parent_g,
                                                                     parent_b,
                                                                     io_result);
-    (void)RuntimeDisneyV2_3D_ApplyRecursivePathLoopFromDirection(scene,
-                                                                  &selected->hitInfo,
-                                                                  sampling,
-                                                                  selected->ray.direction,
-                                                                  2,
-                                                                  parent_r,
-                                                                  parent_g,
-                                                                  parent_b,
-                                                                  &loop_result);
+    (void)runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
+        scene,
+        &selected->hitInfo,
+        sampling,
+        selected->ray.direction,
+        2,
+        parent_r,
+        parent_g,
+        parent_b,
+        /* Its direct response was already evaluated as the first reflected vertex. */
+        true,
+        &loop_result);
     runtime_disney_v2_transport_3d_merge_reflection_loop(io_result,
                                                          &loop_result,
                                                          rough_sample_used);
@@ -675,6 +832,7 @@ bool RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(
     RuntimeLightEmitterTrace3DResult rough_trace = {0};
     Ray3D rough_ray = {0};
     double roughness = 0.0;
+    int rough_requested_sample_count = 0;
     int rough_sample_count = 0;
     int rough_hit_count = 0;
     bool applied = false;
@@ -689,8 +847,22 @@ bool RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(
     roughness = runtime_disney_v2_transport_3d_clamp(io_result->payload.bsdf.roughness,
                                                      0.0,
                                                      1.0);
+    rough_requested_sample_count =
+        RuntimeDisneyV2_3D_RoughReflectionEstimatorSampleCount(roughness);
     rough_sample_count =
         runtime_disney_v2_transport_3d_resolve_rough_reflection_sample_count(scene, roughness);
+    if (rough_requested_sample_count > io_result->specularReflectionRoughRequestedSampleCount) {
+        io_result->specularReflectionRoughRequestedSampleCount = rough_requested_sample_count;
+    }
+    if (rough_sample_count > io_result->specularReflectionRoughEffectiveSampleCount) {
+        io_result->specularReflectionRoughEffectiveSampleCount = rough_sample_count;
+    }
+    if (rough_sample_count < rough_requested_sample_count) {
+        io_result->specularReflectionRoughSampleReductionReason =
+            scene->triangleMesh.triangleCount > 100000
+                ? RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_TRIANGLE_CAP_100000
+                : RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_TRIANGLE_CAP_512;
+    }
     if (rough_sample_count > 0) {
         int sample_index = 0;
         io_result->specularReflectionRoughSampleCount += rough_sample_count;

@@ -184,6 +184,7 @@ int AnimationInit(void) {
         fprintf(stderr,
                 "[startup] active scene source could not be applied; selection preserved for editor/menu recovery.\n");
     }
+    AnimationApplyPreservedEnvironmentAfterSceneRestore();
     ApplyAnimationWindowSizeOverride();
     UpdateObjects();
     WINDOW_WIDTH = sceneSettings.windowWidth;       

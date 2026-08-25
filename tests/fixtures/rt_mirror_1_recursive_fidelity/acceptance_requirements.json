@@ -1,0 +1,59 @@
+{
+  "schema": "rt_mirror_1_recursive_fidelity_acceptance_v2",
+  "inputs": {
+    "request_direct_probe.json": "d7dd0fe11c61aca7042c3123cce7e293896665814ac38cee4c6edc1197e29945",
+    "request_reflected_probe.json": "aca6ce73499a03e0ae97c7310cb94a8fe38e4a12ae6830bbb2025920a71c43e4",
+    "request_reflected_raw_probe.json": "b605dba30d039316f13925f4ad33406edd9a87be8ea9fd287e7daa9bf20b1f3d",
+    "../rt_mirror_1_baseline/scene_runtime.json": "463d323ead34b4743e16bef05ec5be179426217bb8940ce35e456cf4298ad828",
+    "../rt_mirror_1_baseline/assets/mesh_assets/rt_mirror_1_smooth_organic.runtime.json": "803a71c9eb292413f066f36f97d02f5319043ea9a8788191d34059cdd0e2e93f"
+  },
+  "reflected_signal": {
+    "pixel_definition": {
+      "blue_over_red_min": 1.15,
+      "blue_over_green_min": 1.05,
+      "channel_range_min": 25
+    },
+    "blue_pixels_min": 4000,
+    "chroma_pixels_min": 8000,
+    "blue_bounds_width_min": 110,
+    "blue_bounds_height_min": 145
+  },
+  "raw_chroma": {
+    "first_vertex_blue_over_red_min": 1.15,
+    "composed_blue_over_red_min": 1.15,
+    "final_blue_over_red_min": 1.15,
+    "composed_linear_chroma_min": 1.0
+  },
+  "energy_accounting": {
+    "composition_delta_abs_max": 0.000001,
+    "neutral_composition_delta_abs_max": 0.000001,
+    "tonemap_byte_delta_abs_max": 0
+  },
+  "required_summary_contract": {
+    "root": "mirror_recursive_fidelity",
+    "fields": [
+      "requested_specular_depth",
+      "effective_specular_depth",
+      "rough_reflection_samples.requested",
+      "rough_reflection_samples.effective",
+      "rough_reflection_samples.reduction_reason",
+      "reflected_normals.vertex_interpolated_hits",
+      "reflected_normals.flat_fallback_hits",
+      "reflected_probe.object_id",
+      "reflected_probe.triangle_id",
+      "reflected_probe.material_id",
+      "reflected_probe.normal_provenance",
+      "reflected_probe.path_depth",
+      "radiance_isolation_probe.host_mirror_energy_composition.recursive_direct",
+      "radiance_isolation_probe.host_mirror_energy_composition.recursive_bsdf",
+      "low_chroma_high_luma_subject_probe.host_mirror_energy_composition.recursive_direct",
+      "path_depths"
+    ]
+  },
+  "required_probe_identity": {
+    "object_id": "smooth_subject",
+    "material_id": 2,
+    "normal_provenance": "vertex_interpolated",
+    "path_depth_min": 1
+  }
+}

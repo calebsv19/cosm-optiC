@@ -19,6 +19,8 @@
 #include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_caustic_product.h"
+#include "ui/menu_environment_settings.h"
+#include "ui/menu_settings_lifecycle.h"
 #include "ui/menu_resume_panel.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/shared_theme_font_adapter.h"
@@ -360,6 +362,7 @@ void menu_input_handle_key(SDL_Event* event,
             state->editingBounce = false;
             state->editingFrame = false;
             state->inputBuffer[0] = '\0';
+            menu_settings_lifecycle_commit(state, "menu_numeric_edit", false);
             break;
         case SDLK_ESCAPE:
             if (path_edit_active(state)) {
@@ -375,16 +378,24 @@ void menu_input_handle_key(SDL_Event* event,
         case SDLK_i:
             animSettings.interactiveMode = true;
             animSettings.deepRenderMode = false;
+            menu_settings_lifecycle_commit(state, "menu_interactive_shortcut", false);
             break;
         case SDLK_d:
             animSettings.deepRenderMode = true;
             animSettings.interactiveMode = false;
+            menu_settings_lifecycle_commit(state, "menu_deep_render_shortcut", false);
             break;
         case SDLK_b:
-            if (animSettings.deepRenderMode) animSettings.bounceMode = !animSettings.bounceMode;
+            if (animSettings.deepRenderMode) {
+                animSettings.bounceMode = !animSettings.bounceMode;
+                menu_settings_lifecycle_commit(state, "menu_bounce_shortcut", false);
+            }
             break;
         case SDLK_m:
-            if (animSettings.deepRenderMode) animSettings.autoMP4 = !animSettings.autoMP4;
+            if (animSettings.deepRenderMode) {
+                animSettings.autoMP4 = !animSettings.autoMP4;
+                menu_settings_lifecycle_commit(state, "menu_auto_mp4_shortcut", false);
+            }
             break;
         case SDLK_p:
             if (animSettings.deepRenderMode) {
@@ -395,6 +406,7 @@ void menu_input_handle_key(SDL_Event* event,
             menu_state_reset_defaults(state);
             (void)refreshActiveFontFromAnimationConfig();
             menu_state_reload_font(font);
+            menu_settings_lifecycle_commit(state, "menu_reset_defaults", false);
             break;
         default:
             break;
@@ -752,6 +764,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             animSettings.meshImportNormalMode = RAY_TRACING_MESH_IMPORT_NORMAL_MODE_NONE;
         }
         ray_tracing_mesh_import_policy_normalize(&animSettings);
+        menu_settings_lifecycle_commit(state, "menu_mesh_normal_policy", true);
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
                  "Mesh defaults: %s (next compile only)",
@@ -765,28 +778,33 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     if (point_in_rect(&buttons.interactiveRect, x, y)) {
         animSettings.interactiveMode = true;
         animSettings.deepRenderMode = false;
+        menu_settings_lifecycle_commit(state, "menu_interactive_mode", false);
         return;
     }
 
     if (point_in_rect(&buttons.deepRenderRect, x, y)) {
         animSettings.deepRenderMode = true;
         animSettings.interactiveMode = false;
+        menu_settings_lifecycle_commit(state, "menu_deep_render_mode", false);
         return;
     }
 
     if (animSettings.deepRenderMode) {
         if (point_in_rect(&buttons.bounceRect, x, y)) {
             animSettings.bounceMode = !animSettings.bounceMode;
+            menu_settings_lifecycle_commit(state, "menu_bounce_mode", false);
             return;
         }
 
         if (point_in_rect(&buttons.asyncDeepRenderRect, x, y)) {
             animSettings.asyncDeepRender = !animSettings.asyncDeepRender;
+            menu_settings_lifecycle_commit(state, "menu_async_render", false);
             return;
         }
 
         if (point_in_rect(&buttons.autoMp4Rect, x, y)) {
             animSettings.autoMP4 = !animSettings.autoMP4;
+            menu_settings_lifecycle_commit(state, "menu_auto_mp4", false);
             return;
         }
 
@@ -804,6 +822,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                                       (animSettings.editorMode == EDITOR_MODE_CAMERA) ? "Camera" :
                                       "Material";
             printf("Scene Editor Mode Toggled: %s\n", newModeText);
+            menu_settings_lifecycle_commit(state, "menu_editor_mode", false);
             return;
         }
     }
@@ -836,6 +855,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         state->statusColor = (SDL_Color){255, 220, 140, 255};
         state->statusExpireMs = SDL_GetTicks() + 2200;
         printf("Space Mode Toggled: %s\n", menu_space_mode_button_label());
+        menu_settings_lifecycle_commit(state, "menu_space_mode", true);
         return;
     }
 
@@ -843,6 +863,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         menu_caustic_product_select(
             &state->causticSettings,
             menu_caustic_product_next_mode(&state->causticSettings));
+        menu_settings_lifecycle_commit(state, "menu_caustic_mode", true);
         return;
     }
     if (point_in_rect(&buttons.causticEngineRect, x, y)) {
@@ -852,40 +873,48 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                     RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP
                 ? RUNTIME_CAUSTIC_PRODUCT_MODE_REFERENCE_TRANSPORT
                 : RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP);
+        menu_settings_lifecycle_commit(state, "menu_caustic_engine", true);
         return;
     }
     if (point_in_rect(&buttons.causticSurfaceRect, x, y)) {
         state->causticSettings.surfaceCacheEnabled =
             !state->causticSettings.surfaceCacheEnabled;
+        menu_settings_lifecycle_commit(state, "menu_caustic_surface_cache", true);
         return;
     }
     if (point_in_rect(&buttons.causticVolumeRect, x, y)) {
         state->causticSettings.volumeCacheEnabled =
             !state->causticSettings.volumeCacheEnabled;
+        menu_settings_lifecycle_commit(state, "menu_caustic_volume_cache", true);
         return;
     }
     if (point_in_rect(&buttons.causticDebugSummaryRect, x, y)) {
         state->causticSettings.debugSummaryEnabled =
             !state->causticSettings.debugSummaryEnabled;
+        menu_settings_lifecycle_commit(state, "menu_caustic_debug_summary", false);
         return;
     }
     if (point_in_rect(&buttons.causticDebugExportRect, x, y)) {
         state->causticSettings.debugExportEnabled =
             !state->causticSettings.debugExportEnabled;
+        menu_settings_lifecycle_commit(state, "menu_caustic_debug_export", false);
         return;
     }
 
     if (point_in_rect(&buttons.falloffRect, x, y)) {
         animSettings.forwardFalloffMode = (animSettings.forwardFalloffMode + 1) % 3;
+        menu_settings_lifecycle_commit(state, "menu_falloff_mode", true);
         return;
     }
 
     if (point_in_rect(&buttons.tileRect, x, y)) {
         animSettings.useTiledRenderer = !animSettings.useTiledRenderer;
+        menu_settings_lifecycle_commit(state, "menu_tiled_renderer", true);
         return;
     }
     if (point_in_rect(&buttons.tilePreviewRect, x, y)) {
         animSettings.tilePreviewEnabled = !animSettings.tilePreviewEnabled;
+        menu_settings_lifecycle_commit(state, "menu_tile_preview", true);
         return;
     }
     if (point_in_rect(&buttons.denoiseRect, x, y)) {
@@ -897,12 +926,15 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){160, 210, 255, 255};
         state->statusExpireMs = SDL_GetTicks() + 1800;
+        menu_settings_lifecycle_commit(state, "menu_disney_denoise", true);
         return;
     }
     if (point_in_rect(&buttons.topFillRect, x, y)) {
-        animSettings.environmentLightMode =
+        const int next_mode =
             (animation_config_environment_light_mode_clamp(animSettings.environmentLightMode) + 1) %
             (ENVIRONMENT_LIGHT_MODE_AMBIENT + 1);
+        (void)menu_environment_settings_set_light_mode(next_mode);
+        SaveAnimationConfig();
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
                  "Env Light: %s",
@@ -914,14 +946,16 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){160, 210, 255, 255};
         state->statusExpireMs = SDL_GetTicks() + 1800;
+        menu_settings_lifecycle_commit(state, "menu_upscale_mode", true);
         return;
     }
     if (point_in_rect(&buttons.environmentPresetRect, x, y)) {
         const char* preset_label = "Sky";
-        animSettings.environmentPreset =
+        const int next_preset =
             (animation_config_environment_preset_clamp(animSettings.environmentPreset) + 1) %
             (ENVIRONMENT_PRESET_WARM_SKY + 1);
-        animSettings.environmentBackgroundLightingAuthored = true;
+        (void)menu_environment_settings_set_preset(next_preset);
+        SaveAnimationConfig();
         if (animSettings.environmentPreset == ENVIRONMENT_PRESET_NEUTRAL) {
             preset_label = "Neutral";
         } else if (animSettings.environmentPreset == ENVIRONMENT_PRESET_WARM_SKY) {
@@ -937,17 +971,16 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
     if (point_in_rect(&buttons.environmentBackgroundModeRect, x, y)) {
-        animSettings.environmentBackgroundLightingAuthored = true;
-        animSettings.environmentBackgroundBrightnessAuto =
-            !animSettings.environmentBackgroundBrightnessAuto;
-        if (!animSettings.environmentBackgroundBrightnessAuto) {
-            animSettings.environmentBackgroundBrightness =
-                state->environmentBackgroundBrightnessSliderValue / 100.0;
-        }
+        const bool automatic = !animSettings.environmentBackgroundBrightnessAuto;
+        (void)menu_environment_settings_set_background_auto(
+            automatic,
+            state->environmentBackgroundBrightnessSliderValue / 100.0);
+        menu_state_sync_from_anim(state);
+        SaveAnimationConfig();
         snprintf(state->statusLabel,
                  sizeof(state->statusLabel),
-                 "BG Brightness: %s",
-                 animSettings.environmentBackgroundBrightnessAuto ? "Auto" : "Manual");
+                 "Background: %s",
+                 animSettings.environmentBackgroundBrightnessAuto ? "Auto" : "Custom");
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){160, 210, 255, 255};
         state->statusExpireMs = SDL_GetTicks() + 1800;
@@ -987,23 +1020,27 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
         idx = (idx + 1) % count;
         animSettings.lightHeight = options[idx];
+        menu_settings_lifecycle_commit(state, "menu_light_height", true);
         return;
     }
 
     if (point_in_rect(&buttons.integratorRect, x, y)) {
         RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
         menu_state_sync_from_anim(state);
+        menu_settings_lifecycle_commit(state, "menu_integrator", true);
         return;
     }
 
     if (buttons.showPathToggles) {
         if (point_in_rect(&buttons.pathRouletteRect, x, y)) {
             animSettings.pathRussianRoulette = !animSettings.pathRussianRoulette;
+            menu_settings_lifecycle_commit(state, "menu_path_roulette", true);
             return;
         }
         if (point_in_rect(&buttons.pathBsdfRect, x, y)) {
             animSettings.bsdfModel = (animSettings.bsdfModel == 0) ? 1 : 0;
             menu_state_sync_from_anim(state);
+            menu_settings_lifecycle_commit(state, "menu_bsdf_model", true);
             return;
         }
     }
@@ -1027,6 +1064,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         menu_state_reset_defaults(state);
         (void)refreshActiveFontFromAnimationConfig();
         menu_state_reload_font(font);
+        menu_settings_lifecycle_commit(state, "menu_restore_defaults", false);
         strncpy(state->statusLabel, "Restored", sizeof(state->statusLabel) - 1);
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
         state->statusColor = (SDL_Color){200, 180, 120, 255};
@@ -1062,6 +1100,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
         menu_state_sync_from_anim(state);
         menu_state_apply_effective_render_recipe(state);
+        AnimationPreserveCurrentEnvironmentOnNextInit();
         printf("[Menu] Start pressed: spaceMode=%d integrator2D=%d integrator3D=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
                animSettings.spaceMode,
                animSettings.integratorMode,

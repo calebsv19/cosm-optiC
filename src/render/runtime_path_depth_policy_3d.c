@@ -21,6 +21,9 @@ static double runtime_path_depth_policy_3d_clamp_double(double value,
 RuntimePathDepthPolicy3D RuntimePathDepthPolicy3D_Resolve(void) {
     RuntimePathDepthPolicy3D policy = {0};
 
+    policy.requestedDiffuseDepth = animSettings.bounceDepth3D;
+    policy.requestedSpecularDepth = animSettings.specularDepth3D;
+    policy.requestedTransmissionDepth = animSettings.transmissionDepth3D;
     policy.diffuseDepth = runtime_path_depth_policy_3d_clamp(animSettings.bounceDepth3D,
                                                              RUNTIME_3D_BOUNCE_DEPTH_MIN,
                                                              RUNTIME_3D_BOUNCE_DEPTH_MAX);

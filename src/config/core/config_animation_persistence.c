@@ -243,8 +243,12 @@ int animation_config_scale_text_point_size(const AnimationConfig* cfg,
 }
 
 static double DefaultForwardFalloffDistance(void) {
-    double w = (sceneSettings.windowWidth > 0) ? sceneSettings.windowWidth : 1200.0;
-    double h = (sceneSettings.windowHeight > 0) ? sceneSettings.windowHeight : 800.0;
+    double w = (sceneSettings.windowWidth > 0)
+                   ? sceneSettings.windowWidth
+                   : (double)RAY_TRACING_RUNTIME_WINDOW_WIDTH_DEFAULT;
+    double h = (sceneSettings.windowHeight > 0)
+                   ? sceneSettings.windowHeight
+                   : (double)RAY_TRACING_RUNTIME_WINDOW_HEIGHT_DEFAULT;
     return hypot(w, h);
 }
 
@@ -263,9 +267,14 @@ void SaveAnimationConfig(void) {
     animation_config_sync_scene_source_legacy_fields(&animSettings);
     animation_config_sync_volume_source_fields(&animSettings);
     animSettings.runtimeWindowWidth =
-        animation_config_runtime_window_dimension_clamp(sceneSettings.windowWidth, 1200);
+        animation_config_runtime_window_width_clamp(
+            sceneSettings.windowWidth, RAY_TRACING_RUNTIME_WINDOW_WIDTH_DEFAULT);
     animSettings.runtimeWindowHeight =
-        animation_config_runtime_window_dimension_clamp(sceneSettings.windowHeight, 800);
+        animation_config_runtime_window_height_clamp(
+            sceneSettings.windowHeight, RAY_TRACING_RUNTIME_WINDOW_HEIGHT_DEFAULT);
+    animSettings.runtimeRayCount =
+        animation_config_runtime_ray_count_clamp(
+            sceneSettings.rays, RAY_TRACING_RUNTIME_RAY_COUNT_DEFAULT);
 
     json_object_object_add(config, "interactiveMode", json_object_new_boolean(animSettings.interactiveMode));
     json_object_object_add(config, "deepRenderMode", json_object_new_boolean(animSettings.deepRenderMode));
@@ -422,6 +431,9 @@ void SaveAnimationConfig(void) {
     json_object_object_add(config,
                            "runtimeWindowHeight",
                            json_object_new_int(animSettings.runtimeWindowHeight));
+    json_object_object_add(config,
+                           "runtimeRayCount",
+                           json_object_new_int(animSettings.runtimeRayCount));
     json_object_object_add(config, "sceneSource",
                            json_object_new_int(animation_config_scene_source_clamp(animSettings.sceneSource)));
     json_object_object_add(config, "useFluidScene", json_object_new_boolean(animSettings.useFluidScene));
@@ -881,6 +893,11 @@ void LoadAnimationConfig(void) {
     } else {
         animSettings.runtimeWindowHeight = 0;
     }
+    if (json_object_object_get_ex(config, "runtimeRayCount", &temp)) {
+        animSettings.runtimeRayCount = json_object_get_int(temp);
+    } else {
+        animSettings.runtimeRayCount = sceneSettings.rays;
+    }
     if (json_object_object_get_ex(config, "sceneSource", &temp)) {
         animSettings.sceneSource = animation_config_scene_source_clamp(json_object_get_int(temp));
         has_scene_source = true;
@@ -1029,11 +1046,14 @@ void LoadAnimationConfig(void) {
     }
     animation_config_normalize_runtime3d_fields(&animSettings);
     animSettings.runtimeWindowWidth =
-        animation_config_runtime_window_dimension_clamp(animSettings.runtimeWindowWidth,
-                                                        sceneSettings.windowWidth);
+        animation_config_runtime_window_width_clamp(animSettings.runtimeWindowWidth,
+                                                    sceneSettings.windowWidth);
     animSettings.runtimeWindowHeight =
-        animation_config_runtime_window_dimension_clamp(animSettings.runtimeWindowHeight,
-                                                        sceneSettings.windowHeight);
+        animation_config_runtime_window_height_clamp(animSettings.runtimeWindowHeight,
+                                                     sceneSettings.windowHeight);
+    animSettings.runtimeRayCount =
+        animation_config_runtime_ray_count_clamp(animSettings.runtimeRayCount,
+                                                 sceneSettings.rays);
     root_corrected |= config_runtime_paths_validate_root(animSettings.inputRoot,
                                                          sizeof(animSettings.inputRoot),
                                                          ray_tracing_default_input_root(),

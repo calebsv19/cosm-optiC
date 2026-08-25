@@ -652,3 +652,71 @@ bool AnimationRestoreActiveSceneSource(bool persist_on_failure) {
     }
     return ok;
 }
+typedef struct AnimationEnvironmentMenuOverride {
+    bool pending;
+    int lightMode;
+    double ambientBrightness;
+    int preset;
+    bool backgroundLightingAuthored;
+    bool backgroundBrightnessAuto;
+    double backgroundBrightness;
+    double backgroundColorR;
+    double backgroundColorG;
+    double backgroundColorB;
+    double topFillStrength;
+    double directLightIntensity;
+    double directLightRadius;
+    double directLightHeight;
+    double forwardFalloffDistance;
+    int forwardFalloffMode;
+    double falloffSoftness;
+} AnimationEnvironmentMenuOverride;
+
+static AnimationEnvironmentMenuOverride s_environmentMenuOverride;
+
+void AnimationPreserveCurrentEnvironmentOnNextInit(void) {
+    s_environmentMenuOverride.pending = true;
+    s_environmentMenuOverride.lightMode = animSettings.environmentLightMode;
+    s_environmentMenuOverride.ambientBrightness = animSettings.environmentBrightness;
+    s_environmentMenuOverride.preset = animSettings.environmentPreset;
+    s_environmentMenuOverride.backgroundLightingAuthored =
+        animSettings.environmentBackgroundLightingAuthored;
+    s_environmentMenuOverride.backgroundBrightnessAuto =
+        animSettings.environmentBackgroundBrightnessAuto;
+    s_environmentMenuOverride.backgroundBrightness =
+        animSettings.environmentBackgroundBrightness;
+    s_environmentMenuOverride.backgroundColorR = animSettings.environmentBackgroundColorR;
+    s_environmentMenuOverride.backgroundColorG = animSettings.environmentBackgroundColorG;
+    s_environmentMenuOverride.backgroundColorB = animSettings.environmentBackgroundColorB;
+    s_environmentMenuOverride.topFillStrength = animSettings.topFillStrength;
+    s_environmentMenuOverride.directLightIntensity = animSettings.lightIntensity;
+    s_environmentMenuOverride.directLightRadius = animSettings.lightRadius;
+    s_environmentMenuOverride.directLightHeight = animSettings.lightHeight;
+    s_environmentMenuOverride.forwardFalloffDistance = animSettings.forwardDecay;
+    s_environmentMenuOverride.forwardFalloffMode = animSettings.forwardFalloffMode;
+    s_environmentMenuOverride.falloffSoftness = animSettings.lightDecaySoftness;
+}
+
+void AnimationApplyPreservedEnvironmentAfterSceneRestore(void) {
+    if (!s_environmentMenuOverride.pending) return;
+    animSettings.environmentLightMode = s_environmentMenuOverride.lightMode;
+    animSettings.environmentBrightness = s_environmentMenuOverride.ambientBrightness;
+    animSettings.environmentPreset = s_environmentMenuOverride.preset;
+    animSettings.environmentBackgroundLightingAuthored =
+        s_environmentMenuOverride.backgroundLightingAuthored;
+    animSettings.environmentBackgroundBrightnessAuto =
+        s_environmentMenuOverride.backgroundBrightnessAuto;
+    animSettings.environmentBackgroundBrightness =
+        s_environmentMenuOverride.backgroundBrightness;
+    animSettings.environmentBackgroundColorR = s_environmentMenuOverride.backgroundColorR;
+    animSettings.environmentBackgroundColorG = s_environmentMenuOverride.backgroundColorG;
+    animSettings.environmentBackgroundColorB = s_environmentMenuOverride.backgroundColorB;
+    animSettings.topFillStrength = s_environmentMenuOverride.topFillStrength;
+    animSettings.lightIntensity = s_environmentMenuOverride.directLightIntensity;
+    animSettings.lightRadius = s_environmentMenuOverride.directLightRadius;
+    animSettings.lightHeight = s_environmentMenuOverride.directLightHeight;
+    animSettings.forwardDecay = s_environmentMenuOverride.forwardFalloffDistance;
+    animSettings.forwardFalloffMode = s_environmentMenuOverride.forwardFalloffMode;
+    animSettings.lightDecaySoftness = s_environmentMenuOverride.falloffSoftness;
+    s_environmentMenuOverride.pending = false;
+}

@@ -134,6 +134,27 @@ void runtime_disney_v2_transport_3d_record_bsdf_sample_contribution(
     }
 }
 
+void runtime_disney_v2_transport_3d_record_light_sample_contribution(
+    RuntimeDisneyV2_3DResult* io_result,
+    int vertex_index,
+    double r,
+    double g,
+    double b) {
+    if (!io_result || vertex_index < 0 ||
+        vertex_index >= RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY) {
+        return;
+    }
+    io_result->lightSampleContributionR[vertex_index] += r;
+    io_result->lightSampleContributionG[vertex_index] += g;
+    io_result->lightSampleContributionB[vertex_index] += b;
+    io_result->lightSampleContributionTotalR += r;
+    io_result->lightSampleContributionTotalG += g;
+    io_result->lightSampleContributionTotalB += b;
+    if (runtime_disney_v2_transport_3d_luma(r, g, b) > 1e-9) {
+        io_result->lightSampleContributionCount += 1;
+    }
+}
+
 uint32_t runtime_disney_v2_transport_3d_hash_u32(uint32_t x) {
     x ^= x >> 16;
     x *= 0x7feb352dU;

@@ -942,6 +942,9 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
     io_result->stochasticBsdfRadianceR *= front_body_weight;
     io_result->stochasticBsdfRadianceG *= front_body_weight;
     io_result->stochasticBsdfRadianceB *= front_body_weight;
+    io_result->recursiveDirectRadianceR *= front_body_weight;
+    io_result->recursiveDirectRadianceG *= front_body_weight;
+    io_result->recursiveDirectRadianceB *= front_body_weight;
     io_result->recursiveBsdfRadianceR *= front_body_weight;
     io_result->recursiveBsdfRadianceG *= front_body_weight;
     io_result->recursiveBsdfRadianceB *= front_body_weight;

@@ -1,0 +1,56 @@
+{
+  "schema": "rt_mirror_1_baseline_expected_v1",
+  "baseline_renderer_commit": "382b6871e7859ec276e2eee404edf83b27676e49",
+  "reference_platform": "darwin-arm64",
+  "inputs": {
+    "assets/mesh_assets/rt_mirror_1_smooth_organic.runtime.json": "803a71c9eb292413f066f36f97d02f5319043ea9a8788191d34059cdd0e2e93f",
+    "request_raw.json": "d57046f24565df8d25cf34ef93830302790a6300ed45e0d4d66f0c13a31d47b1",
+    "request_resolved.json": "4209904da5ecac820fce74331698cf992c0f04d7d9e9d02a97a6a409f9bc162a",
+    "scene_runtime.json": "463d323ead34b4743e16bef05ec5be179426217bb8940ce35e456cf4298ad828",
+    "source/organic_blob.authoring.json": "05da07ea04553837423bb108e347615357e86138715213c6b118e86cb843b6bb",
+    "source/organic_blob.stl": "88b41242e9e8b83947149e753d610eda9a168834e482f4f491d69b4ababa5148",
+    "source/organic_blob.summary.json": "1f697f8a4b0bb14910445b4a2ed759238512ec58977e94d7356fae7e0ffe37e0"
+  },
+  "frames": {
+    "raw_sha256": "6d7b75c1ab70556f6ba81809b58370563574ad04b40c389b01df39444b91ec2d",
+    "resolved_sha256": "ef99dad809116c8cdc5f03b453d83cf7c14b19dbb0d6e2995b84ea207a84fefa",
+    "raw_and_resolved_must_differ": true
+  },
+  "geometry": {
+    "mesh_vertex_count": 642,
+    "mesh_triangle_count": 1280,
+    "mesh_normal_count": 642,
+    "mesh_normal_provenance": "generated_smooth",
+    "scene_triangle_count": 1308
+  },
+  "render_contract": {
+    "integrator_3d": "disney_v2",
+    "route_family": "native_3d",
+    "route_native_3d": true,
+    "width": 256,
+    "height": 192,
+    "camera_zoom": 1.6,
+    "temporal_frames": 12,
+    "secondary_diffuse_samples_3d": 8,
+    "transmission_samples_3d": 4,
+    "bounce_depth_default": 3,
+    "specular_depth_default": 3,
+    "transmission_depth_default": 8,
+    "smooth_subject_primary_hit_pixels": 4804,
+    "mirror_reflection_hit_pixels": 15680,
+    "mirror_geometry_reflection_pixels": 15678,
+    "route_flat_fallback_calls": 0,
+    "route_overflow_fallback_calls": 0,
+    "route_trace_overflows": 0,
+    "raw_denoise_applied": false,
+    "resolved_denoise_applied": true,
+    "resolved_preserved_mirror_glossy_pixel_count": 26773
+  },
+  "sampling_identity": {
+    "start_frame": 0,
+    "frame_count": 1,
+    "normalized_t": 0.0,
+    "explicit_seed_field": false,
+    "note": "The request schema exposes no explicit seed; deterministic identity is the retained request plus frame and normalized-time window."
+  }
+}

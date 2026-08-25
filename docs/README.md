@@ -111,9 +111,11 @@ Current public focus:
 - `docs/memory_check_audit.md`: default-off fisiCs memory-check audit
   command, report interpretation, and latest clean RayTracing BVH harness
   summary.
-- `docs/smooth_mesh_reflection_quality.md`: imported STL tessellation versus
-  smooth-normal policy, deterministic fixture ladder, reflection matrix, and
-  large-mesh acceptance gates.
+- `docs/smooth_mesh_reflection_quality.md`: `RT-MIRROR-1` proof-first recursive
+  mirror fidelity plan, imported STL tessellation versus smooth-normal policy,
+  deterministic direct/reflected and nested-mirror fixtures, explicit
+  reflection-quality budgeting, reconstruction gates, and large-mesh
+  acceptance.
 
 Live visualizer website publication is a separate pipeline:
 - stage a `visualizer-run/v1` drop under

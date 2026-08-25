@@ -245,11 +245,6 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
                                                                                     depth,
                                                                                     &sample.pdf,
                                                                                     &sample.cosTheta);
-        if (scene && scene->hasLight && fabs(vec3_dot(light_dir, normal)) > 1e-6) {
-            sample.direction = light_dir;
-            sample.cosTheta =
-                runtime_disney_v2_transport_3d_clamp01(fabs(vec3_dot(normal, sample.direction)));
-        }
         sample.pdf = fmax(sample.pdf, 1e-6);
         sample.throughputR = runtime_disney_v2_transport_3d_clamp(
             (principled ? principled->specularF0R : 0.04) *
@@ -277,12 +272,6 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
                                                                                    depth,
                                                                                    &sample.pdf,
                                                                                    &sample.cosTheta);
-        if (scene && scene->hasLight && fabs(vec3_dot(light_dir, normal)) > 1e-6) {
-            sample.direction = light_dir;
-            sample.cosTheta =
-                runtime_disney_v2_transport_3d_clamp01(fabs(vec3_dot(normal, sample.direction)));
-            sample.pdf = fmax(sample.cosTheta / M_PI, 1e-9);
-        }
         sample.throughputR = runtime_disney_v2_transport_3d_clamp(
             (principled ? principled->baseColorR : 1.0) *
                 fmax(diffuse_probability, 1e-6) * sample.cosTheta /

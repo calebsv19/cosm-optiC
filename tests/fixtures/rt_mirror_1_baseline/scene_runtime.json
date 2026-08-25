@@ -1,0 +1,221 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "rt_mirror_1_direct_reflected_smooth_baseline",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "mirror_floor",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "xy",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.0, "z": -1.05 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 7.5,
+        "height": 6.5,
+        "frame": {
+          "origin": { "x": 0.0, "y": 0.0, "z": -1.05 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "normal": { "x": 0.0, "y": 0.0, "z": 1.0 }
+        }
+      },
+      "geometry_ref": { "kind": "shape_asset", "id": "shape_mirror_floor" },
+      "material_ref": { "id": "mat_mirror" },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "smooth_subject",
+      "object_type": "mesh_asset_instance",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 0.45, "z": 0.35 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 18.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "rt_mirror_1_smooth_organic",
+        "variant": "runtime_default"
+      },
+      "material_ref": { "id": "mat_subject" },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "rear_wall",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 0.0, "y": 2.7, "z": 1.15 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 7.5,
+        "height": 4.4,
+        "frame": {
+          "origin": { "x": 0.0, "y": 2.7, "z": 1.15 },
+          "axis_u": { "x": 1.0, "y": 0.0, "z": 0.0 },
+          "axis_v": { "x": 0.0, "y": 0.0, "z": 1.0 },
+          "normal": { "x": 0.0, "y": -1.0, "z": 0.0 }
+        }
+      },
+      "geometry_ref": { "kind": "shape_asset", "id": "shape_rear_wall" },
+      "material_ref": { "id": "mat_wall" },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "red_marker",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": -1.85, "y": 1.25, "z": -0.25 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "rect_prism_primitive",
+        "width": 0.5,
+        "height": 0.5,
+        "depth": 1.1
+      },
+      "material_ref": { "id": "mat_red" },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    },
+    {
+      "object_id": "green_marker",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": { "x": 1.85, "y": 1.25, "z": -0.25 },
+        "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
+        "scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+      },
+      "primitive": {
+        "kind": "rect_prism_primitive",
+        "width": 0.5,
+        "height": 0.5,
+        "depth": 1.1
+      },
+      "material_ref": { "id": "mat_green" },
+      "flags": { "visible": true, "locked": false, "selectable": true }
+    }
+  ],
+  "materials": [
+    {
+      "id": "mat_mirror",
+      "name": "Mirror",
+      "base_color": { "r": 0.88, "g": 0.90, "b": 0.94 },
+      "roughness": 0.01,
+      "metallic": 0.0
+    },
+    {
+      "id": "mat_subject",
+      "name": "Smooth blue metal",
+      "base_color": { "r": 0.10, "g": 0.42, "b": 0.88 },
+      "roughness": 0.22,
+      "metallic": 1.0
+    },
+    {
+      "id": "mat_wall",
+      "name": "Neutral wall",
+      "base_color": { "r": 0.36, "g": 0.38, "b": 0.43 },
+      "roughness": 0.72,
+      "metallic": 0.0
+    },
+    {
+      "id": "mat_red",
+      "name": "Red marker",
+      "base_color": { "r": 0.88, "g": 0.10, "b": 0.08 },
+      "roughness": 0.48,
+      "metallic": 0.0
+    },
+    {
+      "id": "mat_green",
+      "name": "Green marker",
+      "base_color": { "r": 0.10, "g": 0.82, "b": 0.26 },
+      "roughness": 0.48,
+      "metallic": 0.0
+    }
+  ],
+  "lights": [
+    {
+      "light_id": "baseline_key",
+      "kind": "point",
+      "position": { "x": -2.7, "y": -3.6, "z": 5.0 },
+      "intensity": 8.0,
+      "radius": 0.16
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "baseline_camera",
+      "kind": "perspective",
+      "position": { "x": -4.3, "y": -5.6, "z": 2.45 },
+      "target": { "x": 0.0, "y": 0.35, "z": -0.2 }
+    }
+  ],
+  "extensions": {
+    "ray_tracing": {
+      "authoring": {
+        "light_settings": { "intensity": 8.0, "radius": 0.16 },
+        "environment": {
+          "light_mode": 2,
+          "ambient_strength": 0.18,
+          "top_fill_strength": 0.65
+        },
+        "object_materials": [
+          {
+            "object_id": "mirror_floor",
+            "material_id": 1,
+            "object_color": 14738930,
+            "roughness": 0.01,
+            "reflectivity": 0.98
+          },
+          {
+            "object_id": "smooth_subject",
+            "material_id": 2,
+            "object_color": 1727200,
+            "roughness": 0.22,
+            "reflectivity": 0.72
+          },
+          {
+            "object_id": "rear_wall",
+            "material_id": 0,
+            "object_color": 6053989,
+            "roughness": 0.72,
+            "reflectivity": 0.03
+          },
+          {
+            "object_id": "red_marker",
+            "material_id": 0,
+            "object_color": 14752020,
+            "roughness": 0.48,
+            "reflectivity": 0.05
+          },
+          {
+            "object_id": "green_marker",
+            "material_id": 0,
+            "object_color": 1752620,
+            "roughness": 0.48,
+            "reflectivity": 0.05
+          }
+        ]
+      }
+    }
+  }
+}

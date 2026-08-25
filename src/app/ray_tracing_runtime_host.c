@@ -1,4 +1,5 @@
 #include "app/ray_tracing_runtime_host.h"
+#include "app/ray_tracing_build_identity.h"
 
 #include "app/animation.h"
 #include "editor/material_editor_face_preview.h"
@@ -127,7 +128,10 @@ static int ray_tracing_runtime_host_init_sdl(void) {
 }
 
 static int ray_tracing_runtime_host_create_window(int window_width, int window_height) {
-    window = SDL_CreateWindow("Raytracing Animation",
+    char window_title[192] = {0};
+    ray_tracing_build_identity_format_window_title(
+        window_title, sizeof(window_title), "Raytracing Animation");
+    window = SDL_CreateWindow(window_title,
                               SDL_WINDOWPOS_CENTERED,
                               SDL_WINDOWPOS_CENTERED,
                               window_width,

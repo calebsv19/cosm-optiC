@@ -5,12 +5,37 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 APP_CONTENTS_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 RES_DIR="$APP_CONTENTS_DIR/Resources"
 TOOLS_DIR="$RES_DIR/bin"
-APP_SUPPORT_DIR_DEFAULT="${HOME}/Library/Application Support/RayTracing"
+INFO_PLIST="$APP_CONTENTS_DIR/Info.plist"
+
+plist_value_or_default() {
+    key="$1"
+    fallback="$2"
+    value=""
+    if [ -f "$INFO_PLIST" ] && [ -x /usr/libexec/PlistBuddy ]; then
+        value="$(/usr/libexec/PlistBuddy -c "Print :$key" "$INFO_PLIST" 2>/dev/null || true)"
+    fi
+    if [ -n "$value" ]; then
+        printf '%s' "$value"
+    else
+        printf '%s' "$fallback"
+    fi
+}
+
+PACKAGE_PROFILE="$(plist_value_or_default OpticPackageProfile standard)"
+RUNTIME_NAMESPACE="$(plist_value_or_default OpticRuntimeNamespace RayTracing)"
+LOG_NAMESPACE="$(plist_value_or_default OpticLogNamespace RayTracing)"
+BUILD_LABEL="$(plist_value_or_default OpticBuildLabel optiC)"
+BUILD_IDENTITY_FILE="$RES_DIR/build_identity.json"
+if [ ! -f "$BUILD_IDENTITY_FILE" ]; then
+    BUILD_IDENTITY_FILE=""
+fi
+APP_SUPPORT_DIR_DEFAULT="${HOME}/Library/Application Support/$RUNTIME_NAMESPACE"
 APP_SUPPORT_DIR="${RAY_TRACING_APP_SUPPORT_DIR:-$APP_SUPPORT_DIR_DEFAULT}"
 RUNTIME_DIR_DEFAULT="$APP_SUPPORT_DIR/runtime"
 RUNTIME_DIR="${RAY_TRACING_RUNTIME_DIR:-$RUNTIME_DIR_DEFAULT}"
-LOG_DIR="${HOME}/Library/Logs/RayTracing"
-LOG_FILE="$LOG_DIR/launcher.log"
+LOG_DIR_DEFAULT="${HOME}/Library/Logs/$LOG_NAMESPACE"
+LOG_DIR="${RAY_TRACING_LOG_DIR:-$LOG_DIR_DEFAULT}"
+LOG_FILE="${RAY_TRACING_LOG_FILE:-$LOG_DIR/launcher.log}"
 MOLTENVK_DYLIB="$APP_CONTENTS_DIR/Frameworks/libMoltenVK.dylib"
 VK_RUNTIME_DIR=""
 VK_ICD_FILE=""
@@ -159,6 +184,9 @@ export RAY_TRACING_USE_SHARED_THEME_FONT="${RAY_TRACING_USE_SHARED_THEME_FONT:-1
 export RAY_TRACING_USE_SHARED_FONT="${RAY_TRACING_USE_SHARED_FONT:-1}"
 export RAY_TRACING_FONT_PRESET="${RAY_TRACING_FONT_PRESET:-ide}"
 export RAY_TRACING_RENDER_METRICS_DATASET_PATH="${RAY_TRACING_RENDER_METRICS_DATASET_PATH:-$RUNTIME_DIR/data/runtime/render_metrics.dataset.json}"
+export RAY_TRACING_PACKAGE_PROFILE="${RAY_TRACING_PACKAGE_PROFILE:-$PACKAGE_PROFILE}"
+export RAY_TRACING_BUILD_LABEL="${RAY_TRACING_BUILD_LABEL:-$BUILD_LABEL}"
+export RAY_TRACING_BUILD_IDENTITY_FILE="${RAY_TRACING_BUILD_IDENTITY_FILE:-$BUILD_IDENTITY_FILE}"
 if [ -x "$TOOLS_DIR/ffmpeg" ] && [ -z "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
     export RAY_TRACING_FFMPEG_BIN="$TOOLS_DIR/ffmpeg"
 fi
@@ -194,6 +222,9 @@ fi
 if [ "${1:-}" = "--print-config" ]; then
     echo "APP_CONTENTS_DIR=$APP_CONTENTS_DIR"
     echo "RES_DIR=$RES_DIR"
+    echo "RAY_TRACING_PACKAGE_PROFILE=$RAY_TRACING_PACKAGE_PROFILE"
+    echo "RAY_TRACING_BUILD_LABEL=$RAY_TRACING_BUILD_LABEL"
+    echo "RAY_TRACING_BUILD_IDENTITY_FILE=$RAY_TRACING_BUILD_IDENTITY_FILE"
     echo "LOG_FILE=$LOG_FILE"
     echo "RAY_TRACING_RUNTIME_DIR=$RUNTIME_DIR"
     echo "TIMERHUD_OUTPUT_ROOT=$TIMERHUD_OUTPUT_ROOT"
@@ -250,6 +281,9 @@ if [ "${1:-}" = "--self-test" ]; then
     [ -f "$MOLTENVK_DYLIB" ] || { echo "missing: bundled MoltenVK dylib" >&2; exit 1; }
     [ -d "$RUNTIME_DIR" ] || { echo "missing: runtime state dir ($RUNTIME_DIR)" >&2; exit 1; }
     echo "self-test: ok"
+    echo "RAY_TRACING_PACKAGE_PROFILE=$RAY_TRACING_PACKAGE_PROFILE"
+    echo "RAY_TRACING_BUILD_LABEL=$RAY_TRACING_BUILD_LABEL"
+    echo "RAY_TRACING_BUILD_IDENTITY_FILE=$RAY_TRACING_BUILD_IDENTITY_FILE"
     echo "LOG_FILE=$LOG_FILE"
     echo "RAY_TRACING_RUNTIME_DIR=$RUNTIME_DIR"
     echo "TIMERHUD_OUTPUT_ROOT=$TIMERHUD_OUTPUT_ROOT"

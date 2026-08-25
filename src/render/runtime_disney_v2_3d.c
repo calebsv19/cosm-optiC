@@ -1,5 +1,18 @@
 #include "render/runtime_disney_v2_internal_3d.h"
 
+static bool runtime_disney_v2_3d_shade_hit_with_payload(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimeNative3DSamplingContext* sampling,
+    Vec3 view_dir,
+    int trace_pixel_x,
+    int trace_pixel_y,
+    int trace_pixel_width,
+    int trace_pixel_height,
+    bool continue_transport,
+    RuntimeDisneyV2_3DResult* out_result);
+
 double runtime_disney_v2_3d_clamp(double value,
                                          double min_value,
                                          double max_value) {
@@ -45,9 +58,18 @@ static void runtime_disney_v2_3d_apply_mirror_composition(
 
     if (!io_result) return;
 
-    before_r = io_result->directRadianceR + io_result->diffuseRadianceR;
-    before_g = io_result->directRadianceG + io_result->diffuseRadianceG;
-    before_b = io_result->directRadianceB + io_result->diffuseRadianceB;
+    io_result->mirrorDirectRadianceBeforeAttenuationR = io_result->directRadianceR;
+    io_result->mirrorDirectRadianceBeforeAttenuationG = io_result->directRadianceG;
+    io_result->mirrorDirectRadianceBeforeAttenuationB = io_result->directRadianceB;
+    io_result->mirrorLocalDiffuseRadianceBeforeAttenuationR = io_result->diffuseRadianceR;
+    io_result->mirrorLocalDiffuseRadianceBeforeAttenuationG = io_result->diffuseRadianceG;
+    io_result->mirrorLocalDiffuseRadianceBeforeAttenuationB = io_result->diffuseRadianceB;
+    io_result->mirrorLocalSpecularRadianceBeforeAttenuationR = io_result->specularRadianceR;
+    io_result->mirrorLocalSpecularRadianceBeforeAttenuationG = io_result->specularRadianceG;
+    io_result->mirrorLocalSpecularRadianceBeforeAttenuationB = io_result->specularRadianceB;
+    before_r = io_result->diffuseRadianceR + io_result->specularRadianceR;
+    before_g = io_result->diffuseRadianceG + io_result->specularRadianceG;
+    before_b = io_result->diffuseRadianceB + io_result->specularRadianceB;
     io_result->mirrorDominance = policy.dominance;
     io_result->mirrorBaseAttenuation = policy.baseAttenuation;
     io_result->mirrorBaseRadianceBeforeAttenuation =
@@ -60,12 +82,25 @@ static void runtime_disney_v2_3d_apply_mirror_composition(
         io_result->diffuseRadianceR *= policy.baseAttenuation;
         io_result->diffuseRadianceG *= policy.baseAttenuation;
         io_result->diffuseRadianceB *= policy.baseAttenuation;
+        io_result->specularRadianceR *= policy.baseAttenuation;
+        io_result->specularRadianceG *= policy.baseAttenuation;
+        io_result->specularRadianceB *= policy.baseAttenuation;
     }
 
+    io_result->mirrorDirectRadianceAfterAttenuationR = io_result->directRadianceR;
+    io_result->mirrorDirectRadianceAfterAttenuationG = io_result->directRadianceG;
+    io_result->mirrorDirectRadianceAfterAttenuationB = io_result->directRadianceB;
+    io_result->mirrorLocalDiffuseRadianceAfterAttenuationR = io_result->diffuseRadianceR;
+    io_result->mirrorLocalDiffuseRadianceAfterAttenuationG = io_result->diffuseRadianceG;
+    io_result->mirrorLocalDiffuseRadianceAfterAttenuationB = io_result->diffuseRadianceB;
+    io_result->mirrorLocalSpecularRadianceAfterAttenuationR = io_result->specularRadianceR;
+    io_result->mirrorLocalSpecularRadianceAfterAttenuationG = io_result->specularRadianceG;
+    io_result->mirrorLocalSpecularRadianceAfterAttenuationB = io_result->specularRadianceB;
+
     io_result->mirrorBaseRadianceAfterAttenuation =
-        runtime_disney_v2_3d_peak(io_result->directRadianceR + io_result->diffuseRadianceR,
-                                  io_result->directRadianceG + io_result->diffuseRadianceG,
-                                  io_result->directRadianceB + io_result->diffuseRadianceB);
+        runtime_disney_v2_3d_peak(io_result->diffuseRadianceR + io_result->specularRadianceR,
+                                  io_result->diffuseRadianceG + io_result->specularRadianceG,
+                                  io_result->diffuseRadianceB + io_result->specularRadianceB);
 }
 
 static void runtime_disney_v2_3d_apply_specular_reflection(
@@ -76,7 +111,7 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
     RuntimeDisneyV2_3DResult* io_result) {
     RuntimeSpecularReflection3DResult reflection = {0};
     RuntimeMaterialPayload3D reflected_payload = {0};
-    RuntimeDirectLight3DResult reflected_direct = {0};
+    RuntimeDisneyV2_3DResult reflected_vertex = {0};
     double reflected_r = 0.0;
     double reflected_g = 0.0;
     double reflected_b = 0.0;
@@ -108,31 +143,65 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
                reflection.hitInfo.triangleIndex != hit->triangleIndex) {
         io_result->specularReflectionHitCount += 1;
         io_result->specularReflectionGeometryHitCount += 1;
+        io_result->specularReflectionProbeValid = true;
+        io_result->specularReflectionProbePathDepth = 1;
+        io_result->specularReflectionProbeHitInfo = reflection.hitInfo;
+        if (reflection.hitInfo.triangleIndex < scene->triangleMesh.triangleCount) {
+            io_result->specularReflectionProbeHasVertexNormals =
+                scene->triangleMesh.triangles[reflection.hitInfo.triangleIndex].hasVertexNormals;
+        }
         (void)RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(scene,
                                                                   hit,
                                                                   &reflection,
                                                                   sampling,
                                                                   io_result);
         if (RuntimeMaterialPayload3D_ResolveFromHit(&reflection.hitInfo, &reflected_payload) &&
-            reflected_payload.valid &&
-            RuntimeDirectLight3D_ShadeHitWithPayload(scene,
-                                                     &reflection.hitInfo,
-                                                     &reflected_payload,
-                                                     sampling,
-                                                     &reflected_direct)) {
-            reflected_r = reflected_direct.radianceR;
-            reflected_g = reflected_direct.radianceG;
-            reflected_b = reflected_direct.radianceB;
+            reflected_payload.valid) {
+            io_result->specularReflectionProbePayload = reflected_payload;
+            if (runtime_disney_v2_3d_shade_hit_with_payload(
+                    scene,
+                    &reflection.hitInfo,
+                    &reflected_payload,
+                    sampling,
+                    vec3_scale(reflection.ray.direction, -1.0),
+                    io_result->tracePixelContextResolved ? io_result->tracePixelX : -1,
+                    io_result->tracePixelContextResolved ? io_result->tracePixelY : -1,
+                    io_result->tracePixelContextResolved ? io_result->tracePixelWidth : 0,
+                    io_result->tracePixelContextResolved ? io_result->tracePixelHeight : 0,
+                    false,
+                    &reflected_vertex)) {
+                io_result->specularReflectionLocalPathVertexEvaluated = true;
+                reflected_r = reflected_vertex.radianceR;
+                reflected_g = reflected_vertex.radianceG;
+                reflected_b = reflected_vertex.radianceB;
+            }
         }
     } else if (reflection.traced) {
         io_result->specularReflectionNoHitCount += 1;
+        RuntimeEnvironment3D_EvaluateBackgroundRGB(&scene->environment,
+                                                   reflection.ray.direction,
+                                                   &reflected_r,
+                                                   &reflected_g,
+                                                   &reflected_b);
     }
 
     reflected_r *= reflection.weight * reflection.tintR;
     reflected_g *= reflection.weight * reflection.tintG;
     reflected_b *= reflection.weight * reflection.tintB;
+    if (io_result->specularReflectionLocalPathVertexEvaluated) {
+        io_result->specularReflectionLocalPathVertexRadianceR = reflected_r;
+        io_result->specularReflectionLocalPathVertexRadianceG = reflected_g;
+        io_result->specularReflectionLocalPathVertexRadianceB = reflected_b;
+    }
     if (runtime_disney_v2_3d_peak(reflected_r, reflected_g, reflected_b) <= 1e-9) {
         return;
+    }
+
+    if (reflection.traced && !reflection.geometryHit && !reflection.emitterWins) {
+        io_result->specularReflectionEnvironmentMissContributionCount += 1;
+        io_result->specularReflectionEnvironmentRadianceR += reflected_r;
+        io_result->specularReflectionEnvironmentRadianceG += reflected_g;
+        io_result->specularReflectionEnvironmentRadianceB += reflected_b;
     }
 
     io_result->specularReflectionContributingHitCount += 1;
@@ -154,6 +223,7 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     int trace_pixel_y,
     int trace_pixel_width,
     int trace_pixel_height,
+    bool continue_transport,
     RuntimeDisneyV2_3DResult* out_result) {
     RuntimeDisneyV2_3DResult result = {0};
     RuntimeDirectLight3DResult direct = {0};
@@ -299,8 +369,12 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
 
     if (!result.hairScatteringApplied) {
         runtime_disney_v2_3d_apply_mirror_composition(&result.payload, &result);
-        runtime_disney_v2_3d_apply_specular_reflection(scene, hit, sampling, view_dir, &result);
-        runtime_disney_v2_3d_apply_stochastic_transport(scene, hit, sampling, view_dir, &result);
+        if (continue_transport) {
+            runtime_disney_v2_3d_apply_specular_reflection(
+                scene, hit, sampling, view_dir, &result);
+            runtime_disney_v2_3d_apply_stochastic_transport(
+                scene, hit, sampling, view_dir, &result);
+        }
     }
     runtime_disney_v2_3d_refresh_peaks(&result);
     *out_result = result;
@@ -338,6 +412,7 @@ bool RuntimeDisneyV2_3D_ShadeHitWithTraceContext(const RuntimeScene3D* scene,
                                                        pixel_y,
                                                        width,
                                                        height,
+                                                       true,
                                                        out_result);
 }
 
@@ -399,6 +474,7 @@ bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(
                                                      pixel_y,
                                                      width,
                                                      height,
+                                                     true,
                                                      &result)) {
         result.primaryRay = primary_hit->primaryRay;
         *out_result = result;

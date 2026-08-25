@@ -110,15 +110,40 @@ static int ClampInt(int value, int min_value, int max_value) {
     return value;
 }
 
-int animation_config_runtime_window_dimension_clamp(int value, int fallback) {
+static int ClampRuntimeWindowDimension(int value, int fallback, int maximum) {
     if (value <= 0) {
         value = fallback;
     }
-    if (value < 200) {
-        value = 200;
+    if (value < RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN) {
+        value = RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN;
     }
     if (value % 2 != 0) {
         value += 1;
+    }
+    if (value > maximum) {
+        value = maximum;
+    }
+    return value;
+}
+
+int animation_config_runtime_window_width_clamp(int value, int fallback) {
+    return ClampRuntimeWindowDimension(
+        value, fallback, RAY_TRACING_RUNTIME_WINDOW_WIDTH_MAX);
+}
+
+int animation_config_runtime_window_height_clamp(int value, int fallback) {
+    return ClampRuntimeWindowDimension(
+        value, fallback, RAY_TRACING_RUNTIME_WINDOW_HEIGHT_MAX);
+}
+
+int animation_config_runtime_ray_count_clamp(int value, int fallback) {
+    if (value <= 0) value = fallback;
+    if (value <= 0) value = RAY_TRACING_RUNTIME_RAY_COUNT_DEFAULT;
+    if (value < RAY_TRACING_RUNTIME_RAY_COUNT_MIN) {
+        value = RAY_TRACING_RUNTIME_RAY_COUNT_MIN;
+    }
+    if (value > RAY_TRACING_RUNTIME_RAY_COUNT_MAX) {
+        value = RAY_TRACING_RUNTIME_RAY_COUNT_MAX;
     }
     return value;
 }
@@ -174,13 +199,15 @@ void ApplyAnimationWindowSizeOverride(void) {
     if (animation_config_scene_source_is_fluid(animSettings.sceneSource)) {
         return;
     }
-    if (animSettings.runtimeWindowWidth <= 0 || animSettings.runtimeWindowHeight <= 0) {
-        return;
-    }
-    sceneSettings.windowWidth =
-        animation_config_runtime_window_dimension_clamp(animSettings.runtimeWindowWidth,
+    if (animSettings.runtimeWindowWidth > 0 && animSettings.runtimeWindowHeight > 0) {
+        sceneSettings.windowWidth =
+            animation_config_runtime_window_width_clamp(animSettings.runtimeWindowWidth,
                                                         sceneSettings.windowWidth);
-    sceneSettings.windowHeight =
-        animation_config_runtime_window_dimension_clamp(animSettings.runtimeWindowHeight,
-                                                        sceneSettings.windowHeight);
+        sceneSettings.windowHeight =
+            animation_config_runtime_window_height_clamp(animSettings.runtimeWindowHeight,
+                                                         sceneSettings.windowHeight);
+    }
+    sceneSettings.rays =
+        animation_config_runtime_ray_count_clamp(animSettings.runtimeRayCount,
+                                                 sceneSettings.rays);
 }

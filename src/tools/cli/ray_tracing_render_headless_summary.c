@@ -801,6 +801,7 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    }\n");
     fprintf(file, "  },\n");
     ray_tracing_headless_write_render_stats_summary(file, preflight);
+    ray_tracing_headless_write_mirror_recursive_fidelity_summary(file, preflight);
     fprintf(file, "  \"procedural_surface_runtime\": {\n");
     fprintf(file, "    \"loaded\": %s,\n",
             preflight->mesh_asset_timing_stats.procedural_surface_assets > 0

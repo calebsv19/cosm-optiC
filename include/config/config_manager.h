@@ -127,6 +127,15 @@ typedef enum {
 #define MENU_PANE_SCENE_WIDTH_DEFAULT 390
 #define MENU_PANE_HEALTH_WIDTH_DEFAULT 340
 
+#define RAY_TRACING_RUNTIME_WINDOW_WIDTH_DEFAULT 1200
+#define RAY_TRACING_RUNTIME_WINDOW_HEIGHT_DEFAULT 800
+#define RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN 200
+#define RAY_TRACING_RUNTIME_WINDOW_WIDTH_MAX 4000
+#define RAY_TRACING_RUNTIME_WINDOW_HEIGHT_MAX 2400
+#define RAY_TRACING_RUNTIME_RAY_COUNT_DEFAULT 2000
+#define RAY_TRACING_RUNTIME_RAY_COUNT_MIN 1
+#define RAY_TRACING_RUNTIME_RAY_COUNT_MAX 10000
+
 #define RAY_TRACING_DEFAULT_LIGHT_INTENSITY 0.4
 
 // **Animation Config Struct**
@@ -218,6 +227,7 @@ typedef struct {
     int menuPaneHealthWidth;
     int runtimeWindowWidth;
     int runtimeWindowHeight;
+    int runtimeRayCount;
     // Integrator mode: 0 = forward, 1 = hybrid (camera-path GI), 2 = direct light (Disney path paused).
     int cameraIntegratorMode;
 

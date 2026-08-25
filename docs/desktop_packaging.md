@@ -69,11 +69,72 @@ Future release-artifact hygiene:
   - `make -C ray_tracing package-desktop-open`
   - `make -C ray_tracing package-desktop-remove`
   - `make -C ray_tracing package-desktop-refresh`
+- isolated main-edit development app:
+  - `make -C ray_tracing package-desktop-main-edit`
+  - `make -C ray_tracing package-desktop-main-edit-self-test`
+  - `make -C ray_tracing package-desktop-main-edit-refresh`
+  - `make -C ray_tracing package-desktop-main-edit-open`
 - private Linux desktop package proof:
   - `make -C ray_tracing package-linux-desktop-contract`
   - `make -C ray_tracing package-linux-desktop`
   - `make -C ray_tracing package-linux-desktop-self-test`
   - `make -C ray_tracing package-linux-desktop-determinism-test`
+
+## Main-Edit Development App
+
+The reusable editing worktree has a dedicated local-development package lane.
+It does not replace the canonical Desktop `optiC.app` and does not create a
+public or Registry release.
+
+| Surface | Main-edit value |
+| --- | --- |
+| Worktree package | `dist/dev/main-edit/optiC Main Edit.app` |
+| Optional Desktop copy | `~/Desktop/optiC Main Edit.app` |
+| Bundle identifier | `com.cosm.optic.main-edit` |
+| Runtime namespace | `~/Library/Application Support/RayTracing-Main-Edit/` |
+| Log namespace | `~/Library/Logs/RayTracing-Main-Edit/` |
+| Build identity | `Contents/Resources/build_identity.json` |
+
+`package-desktop-main-edit` embeds the current program `VERSION` without
+editing it. The development identity separately records the source branch,
+commit, dirty flag, complete tracked/untracked source fingerprint, target
+architecture, toolchain, packaged-binary digest, and build time. The package
+is removed and the build fails if the source fingerprint changes while the
+package is being constructed.
+
+`package-desktop-main-edit-self-test` uses an isolated fake home under
+`build/package-main-edit-self-test/`. It verifies bundle metadata, the embedded
+source and binary identity, launcher runtime/log separation, package contents,
+and the local ad-hoc signature. It does not write the real Desktop app or open
+a GUI.
+
+The refresh target copies only `optiC Main Edit.app`. It does not use
+`RAY_TRACING_ALLOW_WORKTREE_DESKTOP_REFRESH` and cannot overwrite
+`~/Desktop/optiC.app`. The open target is the explicit GUI boundary.
+
+### Repeatable edit-worktree cycle
+
+1. Create or refresh the named main-edit worktree from the accepted `main`
+   commit only after the prior edit branch is clean and adopted.
+2. Implement bounded feature sets in main-edit and commit them there.
+3. Run focused source tests, then `package-desktop-main-edit-self-test`.
+4. When visual behavior is in scope, refresh and open the isolated app, retain
+   screenshots/readback, and verify the embedded build identity.
+5. Merge the accepted commits into `main` without using the package as a
+   substitute for source review.
+6. Make an explicit program-version decision for the adopted set. Bug fixes
+   and small UI corrections normally recommend a patch; new modes and
+   user-visible workflows normally recommend a minor bump. Do not automate a
+   blind `VERSION` edit as part of worktree merging.
+7. Build or publish the canonical `optiC.app` only through a separately
+   authorized release lane.
+8. Remove and recreate the main-edit worktree name only after verifying that
+   it is clean, its commits are reachable from `main`, and no untracked work
+   would be lost.
+
+The worktree path is reusable; its branch and build identity are intentionally
+new for each cycle. Never reset, clean, or force-remove an active dirty
+main-edit worktree to make the name available.
 
 Linux desktop package target:
 

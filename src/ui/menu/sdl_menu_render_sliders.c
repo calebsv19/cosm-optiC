@@ -40,6 +40,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
     int panelHeight = 0;
     int visibleBottom;
     int scrollOffset;
+    bool pane_owned = false;
 
     if (font) {
         int measured_h = 0;
@@ -51,22 +52,29 @@ void menu_render_build_slider_layout(TTF_Font* font,
     }
     if (textHeight < 12) textHeight = 12;
     if (screen_layout) {
+        pane_owned = true;
         sliderX = screen_layout->sliderPanelRect.x + 12;
         rightLimit = screen_layout->sliderPanelRect.x + screen_layout->sliderPanelRect.w - 10;
         panelTop = screen_layout->sliderPanelRect.y;
         panelHeight = screen_layout->sliderPanelRect.h;
     }
     sliderWidth = rightLimit - sliderX - valueReserve;
-    if (sliderWidth < 130) {
+    if (!pane_owned && sliderWidth < 130) {
         sliderWidth = 130;
         sliderX = rightLimit - valueReserve - sliderWidth;
     }
-    if (sliderX < SLIDER_MARGIN_X) sliderX = SLIDER_MARGIN_X;
+    if (pane_owned && sliderWidth < 72) sliderWidth = 72;
+    if (!pane_owned && sliderX < SLIDER_MARGIN_X) sliderX = SLIDER_MARGIN_X;
     layout.trackHeight = max_int(SLIDER_HEIGHT, textHeight / 3);
     layout.knobWidth = max_int(8, (textHeight * 3) / 8);
     layout.knobHeight = layout.trackHeight + 4;
     if (panelHeight < 120) panelHeight = 120;
-    layout.panelRect = (SDL_Rect){sliderX - 12, panelTop, rightLimit - (sliderX - 12), panelHeight};
+    layout.panelRect = pane_owned
+                           ? screen_layout->sliderPanelRect
+                           : (SDL_Rect){sliderX - 12,
+                                        panelTop,
+                                        rightLimit - (sliderX - 12),
+                                        panelHeight};
     layout.nextY = panelTop + MENU_PANEL_CHROME_TITLE_BAND + 8;
 
     menu_state_sync_from_anim(state);
@@ -95,9 +103,18 @@ void menu_render_build_slider_layout(TTF_Font* font,
     ADD_SLIDER(&animSettings.frameLimit, 1, 5000, "Frame Limit");
     ADD_SLIDER(&animSettings.framesForTravel, 1, 5000, "Path Points");
     ADD_SLIDER(&animSettings.fps, 1, 240, "FPS");
-    ADD_SLIDER(&sceneSettings.rays, 0, 10000, "Num Rays");
-    ADD_SLIDER(&sceneSettings.windowWidth, 200, 4000, "Width");
-    ADD_SLIDER(&sceneSettings.windowHeight, 200, 2400, "Height");
+    ADD_SLIDER(&sceneSettings.rays,
+               RAY_TRACING_RUNTIME_RAY_COUNT_MIN,
+               RAY_TRACING_RUNTIME_RAY_COUNT_MAX,
+               "Num Rays");
+    ADD_SLIDER(&sceneSettings.windowWidth,
+               RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN,
+               RAY_TRACING_RUNTIME_WINDOW_WIDTH_MAX,
+               "Width");
+    ADD_SLIDER(&sceneSettings.windowHeight,
+               RAY_TRACING_RUNTIME_WINDOW_DIMENSION_MIN,
+               RAY_TRACING_RUNTIME_WINDOW_HEIGHT_MAX,
+               "Height");
     if (!is_3d) {
         ADD_SLIDER(&state->rouletteSliderValue, 1, 2000, "Roulette Threshold");
     }
@@ -222,7 +239,7 @@ void menu_render_draw_slider_items(SDL_Renderer* renderer,
                        "%.3f", state->rouletteSliderValue / 1000.0);
         } else if (slider->value == &state->envSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", state->envSliderValue);
+                       "%.2f", state->envSliderValue / 255.0);
         } else if (slider->value == &state->cacheWeightSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%.2f", state->cacheWeightSliderValue / 100.0);
@@ -248,6 +265,11 @@ void menu_render_draw_slider_items(SDL_Renderer* renderer,
                            "%.2f",
                            state->environmentBackgroundBrightnessSliderValue / 100.0);
             }
+        } else if (slider->value == &state->environmentBackgroundRedSliderValue ||
+                   slider->value == &state->environmentBackgroundGreenSliderValue ||
+                   slider->value == &state->environmentBackgroundBlueSliderValue) {
+            RenderText(renderer, font, slider->valueX, slider->valueY,
+                       "%.2f", *slider->value / 100.0);
         } else if (slider->value == &state->bounceDepth3DSliderValue) {
             RenderText(renderer, font, slider->valueX, slider->valueY,
                        "%d", state->bounceDepth3DSliderValue);

@@ -52,6 +52,12 @@ typedef enum {
     RUNTIME_DISNEY_V2_3D_EMITTER_EMISSIVE_MATERIAL = 2
 } RuntimeDisneyV2_3DEmitterKind;
 
+typedef enum {
+    RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_NONE = 0,
+    RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_TRIANGLE_CAP_512 = 1,
+    RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_TRIANGLE_CAP_100000 = 2
+} RuntimeDisneyV2_3DRoughSampleReductionReason;
+
 typedef struct {
     double lightPdf;
     double bsdfPdf;
@@ -99,6 +105,24 @@ typedef struct {
     double mirrorBaseAttenuation;
     double mirrorBaseRadianceBeforeAttenuation;
     double mirrorBaseRadianceAfterAttenuation;
+    double mirrorDirectRadianceBeforeAttenuationR;
+    double mirrorDirectRadianceBeforeAttenuationG;
+    double mirrorDirectRadianceBeforeAttenuationB;
+    double mirrorDirectRadianceAfterAttenuationR;
+    double mirrorDirectRadianceAfterAttenuationG;
+    double mirrorDirectRadianceAfterAttenuationB;
+    double mirrorLocalDiffuseRadianceBeforeAttenuationR;
+    double mirrorLocalDiffuseRadianceBeforeAttenuationG;
+    double mirrorLocalDiffuseRadianceBeforeAttenuationB;
+    double mirrorLocalDiffuseRadianceAfterAttenuationR;
+    double mirrorLocalDiffuseRadianceAfterAttenuationG;
+    double mirrorLocalDiffuseRadianceAfterAttenuationB;
+    double mirrorLocalSpecularRadianceBeforeAttenuationR;
+    double mirrorLocalSpecularRadianceBeforeAttenuationG;
+    double mirrorLocalSpecularRadianceBeforeAttenuationB;
+    double mirrorLocalSpecularRadianceAfterAttenuationR;
+    double mirrorLocalSpecularRadianceAfterAttenuationG;
+    double mirrorLocalSpecularRadianceAfterAttenuationB;
     double specularReflectionRadiance;
     double specularReflectionRadianceR;
     double specularReflectionRadianceG;
@@ -108,7 +132,20 @@ typedef struct {
     int specularReflectionGeometryHitCount;
     int specularReflectionEmitterHitCount;
     int specularReflectionNoHitCount;
+    int specularReflectionEnvironmentMissContributionCount;
+    double specularReflectionEnvironmentRadianceR;
+    double specularReflectionEnvironmentRadianceG;
+    double specularReflectionEnvironmentRadianceB;
     int specularReflectionContributingHitCount;
+    bool specularReflectionProbeValid;
+    bool specularReflectionProbeHasVertexNormals;
+    int specularReflectionProbePathDepth;
+    HitInfo3D specularReflectionProbeHitInfo;
+    RuntimeMaterialPayload3D specularReflectionProbePayload;
+    bool specularReflectionLocalPathVertexEvaluated;
+    double specularReflectionLocalPathVertexRadianceR;
+    double specularReflectionLocalPathVertexRadianceG;
+    double specularReflectionLocalPathVertexRadianceB;
     double specularReflectionRecursiveRadiance;
     double specularReflectionRecursiveRadianceR;
     double specularReflectionRecursiveRadianceG;
@@ -126,7 +163,14 @@ typedef struct {
     int specularReflectionRecursivePolicyTerminationCount;
     int specularReflectionRecursiveRouletteTerminationCount;
     int specularReflectionRecursiveNoHitTerminationCount;
+    int specularReflectionRecursiveEnvironmentMissContributionCount;
+    double specularReflectionRecursiveEnvironmentRadianceR;
+    double specularReflectionRecursiveEnvironmentRadianceG;
+    double specularReflectionRecursiveEnvironmentRadianceB;
     int specularReflectionRoughSampleCount;
+    int specularReflectionRoughRequestedSampleCount;
+    int specularReflectionRoughEffectiveSampleCount;
+    RuntimeDisneyV2_3DRoughSampleReductionReason specularReflectionRoughSampleReductionReason;
     int specularReflectionRoughHitCount;
     int specularReflectionRoughNoHitCount;
     int specularReflectionRoughContributingSampleCount;
@@ -211,6 +255,10 @@ typedef struct {
     double stochasticBsdfRadianceR;
     double stochasticBsdfRadianceG;
     double stochasticBsdfRadianceB;
+    double recursiveDirectRadiance;
+    double recursiveDirectRadianceR;
+    double recursiveDirectRadianceG;
+    double recursiveDirectRadianceB;
     double recursiveBsdfRadiance;
     double recursiveBsdfRadianceR;
     double recursiveBsdfRadianceG;

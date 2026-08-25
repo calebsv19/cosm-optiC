@@ -1,12 +1,20 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-07-14
+Last updated: 2026-08-23
 
 ## Direction
 
 Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped native `3D` RGB ladder as the current product truth, not as a future experiment.
 
 ## Near-Term Intent
+
+`RT-MIRROR-1` is the active proof-first renderer fix plan. Preserve a
+deterministic direct-versus-reflected and nested-mirror baseline before changing
+behavior, then unify Disney-v2 reflected hits with the full path-vertex surface
+evaluator, replace hidden triangle-count rough-reflection sample cliffs with an
+explicit quality budget, and add reflection-aware reconstruction. The detailed
+contract, phases, verification ladder, and completion gates live in
+`docs/smooth_mesh_reflection_quality.md`.
 
 1. Choose the next post-`I6` renderer lane cleanly.
    - The shipped native `3D` ladder is already closed through `Disney`.
