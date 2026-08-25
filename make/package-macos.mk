@@ -103,7 +103,11 @@ package-desktop-smoke: package-desktop
 	@echo "package-desktop-smoke passed."
 
 package-desktop-self-test: package-desktop-smoke
-	@"$(PACKAGE_MACOS_DIR)/raytracing-launcher" --self-test || (echo "package-desktop self-test failed."; exit 1)
+	@self_test_root="$$(mktemp -d "$${TMPDIR:-/tmp}/raytracing-package-self-test.XXXXXX")"; \
+	trap 'rm -rf "$$self_test_root"' EXIT HUP INT TERM; \
+	RAY_TRACING_APP_SUPPORT_DIR="$$self_test_root" \
+		"$(PACKAGE_MACOS_DIR)/raytracing-launcher" --self-test || \
+		(echo "package-desktop self-test failed."; exit 1)
 	@echo "package-desktop-self-test passed."
 
 package-desktop-copy-desktop: package-desktop
