@@ -502,6 +502,18 @@ static void UpdateCameraPosition(double t) {
 }
 
 
+static void AnimationSyncWindowSize(void) {
+    int width = 0;
+    int height = 0;
+    if (!window) return;
+    SDL_GetWindowSize(window, &width, &height);
+    if (width <= 0 || height <= 0) return;
+    sceneSettings.windowWidth = width;
+    sceneSettings.windowHeight = height;
+    WINDOW_WIDTH = width;
+    WINDOW_HEIGHT = height;
+}
+
 void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running) {
     TimerHUDSession* timer_hud = timer_hud_session();
     if (quitRequested) {
@@ -511,6 +523,7 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
     if (timer_hud) {
         ts_session_frame_start(timer_hud);
     }
+    AnimationSyncWindowSize();
     setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
     render_set_clear_color(renderer, 0, 0, 0, 255);
     if (!render_begin_frame()) {

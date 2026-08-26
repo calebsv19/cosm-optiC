@@ -839,8 +839,17 @@ Current shared profile:
   selected/hover priority, silhouette, relative depth-edge, and object-owner
   boundary composition; RayTracing retains CPU rasterization, Vulkan texture
   upload/cache, projection, picking, and overlay visibility policy.
+- the isolated committed `codex/ray-tracing-main-edit` presentation candidate
+  links managed `vk_runtime 0.6.0` beneath `vk_renderer 1.3.3` through the
+  app-local shared-device bridge. Shared code owns Vulkan lifecycle mechanics;
+  RayTracing retains host ownership, scene/BVH/integrator policy, tile
+  scheduling, UI behavior, and export semantics.
 
 Gaps:
+- `Stabilize`: keep the Vulkan candidate isolated until canonical-main
+  promotion is separately authorized. Preserve validation-clean handle
+  identity, readback, resize/recreation, capture, Retina, and package proof;
+  do not infer compute adoption or release state from presentation linkage.
 - `Partial`: the `core_viewport3d` bridge, focused tests, package self-test,
   Desktop refresh, and managed-subtree refresh pass. Keep the local navigation
   math as rollback oracle until hands-on proof and the four remaining native

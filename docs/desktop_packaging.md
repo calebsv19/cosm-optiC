@@ -108,6 +108,30 @@ source and binary identity, launcher runtime/log separation, package contents,
 and the local ad-hoc signature. It does not write the real Desktop app or open
 a GUI.
 
+### Vulkan runtime candidate verification
+
+The current Main Edit candidate carries managed `vk_runtime 0.6.0` beneath
+`vk_renderer 1.3.3` while preserving the RayTracing `vk_shared_device`
+compatibility adapter. It is a presentation-only adoption: scene/integrator/BVH
+ownership, deep-render policy, compute workloads, and release state remain
+RayTracing-owned or unchanged.
+
+Run these focused checks from the checkout parent before relying on a refreshed
+Main Edit app:
+
+```text
+make -C ray_tracing test-ray-tracing-vulkan-host-lifecycle-contract
+make -C ray_tracing test-ray-tracing-runtime-host-lifecycle-contract
+make -C ray_tracing test-ray-tracing-vulkan-runtime-lifecycle-contract
+make -C ray_tracing package-desktop-main-edit-self-test
+```
+
+The runtime lifecycle contract uses a hidden resizable high-DPI Vulkan window
+and verifies validation, runtime/renderer handle identity, initial frame
+readback, actual resize/recreation, and capture. A refreshed Main Edit app is
+still local development evidence only; it must not replace `~/Desktop/optiC.app`
+or be described as a release, publication, or canonical-source promotion.
+
 The refresh target copies only `optiC Main Edit.app`. It does not use
 `RAY_TRACING_ALLOW_WORKTREE_DESKTOP_REFRESH` and cannot overwrite
 `~/Desktop/optiC.app`. The open target is the explicit GUI boundary.

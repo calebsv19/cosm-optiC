@@ -91,6 +91,8 @@ int main(void) {
     CHECK(profile.enabled, "shipped starter profile is enabled after scene promotion");
     CHECK(strcmp(profile.templateDirectory, "config/samples/optic_build_week_showcase") == 0,
           "shipped starter profile selects the self-contained showcase");
+    CHECK(!profile.openSceneEditor,
+          "shipped starter profile opens the normal menu");
 
     profile.enabled = false;
     memset(&context, 0, sizeof(context));

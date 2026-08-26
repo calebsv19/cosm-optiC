@@ -3,6 +3,7 @@ SRC := $(shell find $(SRC_DIR) -name '*.c' \
 	! -path '$(SRC_DIR)/render/integrators/camera_path_integrator_old_version.c' \
 	! -path '$(SRC_DIR)/render/TimerHUD_legacy_backup/*')
 VK_RENDERER_SRCS := $(shell find $(VK_RENDERER_DIR)/src -name '*.c')
+VK_RUNTIME_SRCS := $(shell find $(VK_RUNTIME_DIR)/src -name '*.c')
 OBJ := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRC))
 OBJ := $(filter-out $(BUILD_DIR)/render/integrators/camera_path_integrator_old_version.o,$(OBJ))
 OBJ := $(filter-out $(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o,$(OBJ))
@@ -26,7 +27,13 @@ CORE_SCENE_SRCS := $(CORE_SCENE_DIR)/src/core_scene.c
 CORE_SCENE_VIEW_SRCS := $(CORE_SCENE_VIEW_DIR)/src/core_scene_view.c
 CORE_VIEWPORT3D_SRCS := $(CORE_VIEWPORT3D_DIR)/src/core_viewport3d.c
 CORE_AUTHORED_TEXTURE_SRCS := $(CORE_AUTHORED_TEXTURE_DIR)/src/core_authored_texture.c
-CORE_SCENE_COMPILE_SRCS := $(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c
+CORE_SCENE_COMPILE_SRCS := \
+	$(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile.c \
+	$(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile_digest.c \
+	$(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile_dependencies.c \
+	$(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile_bundle.c \
+	$(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile_payload.c \
+	$(CORE_SCENE_COMPILE_DIR)/src/core_scene_compile_verify.c
 CORE_MESH_ASSET_SRCS := \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_authoring_document.c \

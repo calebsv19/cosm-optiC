@@ -2649,16 +2649,43 @@ test-ray-tracing-core-sim-runtime-frame-contract: $(RAY_TRACING_CORE_SIM_RUNTIME
 RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_runtime_host_lifecycle_contract_test
 RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS := \
 	$(TEST_DIR)/ray_tracing_runtime_host_lifecycle_contract_test.c \
-	$(SRC_DIR)/app/ray_tracing_runtime_host.c
+	$(SRC_DIR)/app/ray_tracing_runtime_host.c \
+	$(SRC_DIR)/app/ray_tracing_build_identity.c
 
 $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN): $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -DUSE_VULKAN=0 \
-		$(SDL_CFLAGS) $(TIMER_HUD_INCLUDE) -I$(INC_DIR) -I$(SRC_DIR) -I$(VK_RENDERER_DIR)/include \
+		$(SDL_CFLAGS) $(TIMER_HUD_INCLUDE) -I$(INC_DIR) -I$(SRC_DIR) -I$(VK_RENDERER_DIR)/include -I$(VK_RUNTIME_DIR)/include \
 		-o $@ $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS) -lm
 
 test-ray-tracing-runtime-host-lifecycle-contract: $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN)
 	@$(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN) || (echo "ray tracing runtime host lifecycle contract test failed."; exit 1)
+
+RAY_TRACING_VULKAN_RUNTIME_LIFECYCLE_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_vulkan_runtime_lifecycle_contract_test
+RAY_TRACING_VULKAN_RUNTIME_LIFECYCLE_TEST_SRCS := \
+	$(TEST_DIR)/ray_tracing_vulkan_runtime_lifecycle_contract_test.c \
+	$(SRC_DIR)/render/backend/vk_shared_device.c \
+	$(VK_RENDERER_SRCS) \
+	$(VK_RUNTIME_SRCS)
+RAY_TRACING_VULKAN_VALIDATION_LAYER_DIR := $(firstword \
+	$(wildcard /opt/homebrew/opt/vulkan-validationlayers/share/vulkan/explicit_layer.d) \
+	$(wildcard /usr/local/opt/vulkan-validationlayers/share/vulkan/explicit_layer.d))
+RAY_TRACING_VULKAN_VALIDATION_LIBRARY_DIR := $(patsubst %/share/vulkan/explicit_layer.d,%/lib,$(RAY_TRACING_VULKAN_VALIDATION_LAYER_DIR))
+RAY_TRACING_VULKAN_VALIDATION_ENV := $(if $(RAY_TRACING_VULKAN_VALIDATION_LAYER_DIR),VK_LAYER_PATH=$(RAY_TRACING_VULKAN_VALIDATION_LAYER_DIR))
+ifeq ($(UNAME_S),Darwin)
+RAY_TRACING_VULKAN_VALIDATION_ENV += $(if $(RAY_TRACING_VULKAN_VALIDATION_LIBRARY_DIR),DYLD_LIBRARY_PATH=$(RAY_TRACING_VULKAN_VALIDATION_LIBRARY_DIR))
+endif
+
+$(RAY_TRACING_VULKAN_RUNTIME_LIFECYCLE_TEST_BIN): $(RAY_TRACING_VULKAN_RUNTIME_LIFECYCLE_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) \
+		$(RAY_TRACING_VULKAN_RUNTIME_LIFECYCLE_TEST_SRCS) -o $@ $(LDFLAGS)
+
+test-ray-tracing-vulkan-runtime-lifecycle-contract: $(RAY_TRACING_VULKAN_RUNTIME_LIFECYCLE_TEST_BIN)
+	@$(RAY_TRACING_VULKAN_VALIDATION_ENV) $(RAY_TRACING_VULKAN_RUNTIME_LIFECYCLE_TEST_BIN) || (echo "ray tracing Vulkan runtime lifecycle contract test failed."; exit 1)
+
+test-ray-tracing-vulkan-host-lifecycle-contract:
+	@PYTHONDONTWRITEBYTECODE=1 python3 $(TEST_DIR)/test_vulkan_host_lifecycle_contract.py
 
 test-renderer-cache-lifecycle-contract:
 	@PYTHONDONTWRITEBYTECODE=1 python3 $(TEST_DIR)/test_renderer_cache_lifecycle_contract.py

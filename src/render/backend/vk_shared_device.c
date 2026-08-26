@@ -8,6 +8,18 @@ static VkRendererDevice g_device;
 static bool g_device_ready = false;
 static bool g_device_lost = false;
 
+static bool vk_shared_device_runtime_mirrors_valid(const VkRendererDevice* device) {
+    return device &&
+           device->runtime.instance != VK_NULL_HANDLE &&
+           device->runtime.physical_device != VK_NULL_HANDLE &&
+           device->runtime.device != VK_NULL_HANDLE &&
+           device->instance == device->runtime.instance &&
+           device->physical_device == device->runtime.physical_device &&
+           device->device == device->runtime.device &&
+           device->graphics_queue == device->runtime.graphics_queue &&
+           device->present_queue == device->runtime.present_queue;
+}
+
 bool vk_shared_device_init(SDL_Window* window, const VkRendererConfig* config) {
     if (g_device_ready && g_device_lost) {
         vk_renderer_device_shutdown(&g_device);
@@ -21,6 +33,13 @@ bool vk_shared_device_init(SDL_Window* window, const VkRendererConfig* config) {
     VkResult result = vk_renderer_device_init(&g_device, window, config);
     if (result != VK_SUCCESS) {
         fprintf(stderr, "[vulkan] shared device init failed: %d\n", result);
+        memset(&g_device, 0, sizeof(g_device));
+        g_device_ready = false;
+        return false;
+    }
+    if (!vk_shared_device_runtime_mirrors_valid(&g_device)) {
+        fprintf(stderr, "[vulkan] runtime-backed shared device mirrors are invalid.\n");
+        vk_renderer_device_shutdown(&g_device);
         memset(&g_device, 0, sizeof(g_device));
         g_device_ready = false;
         return false;

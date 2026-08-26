@@ -7,6 +7,6 @@
   "runtime_scene": "scene_runtime.json",
   "preferred_space_mode": 1,
   "preferred_editor_mode": 1,
-  "open_scene_editor": true,
-  "notes": "Fresh packaged installs seed this self-contained showcase into an editable working scene and open it in the 3D Object editor. Existing saved scene selections are preserved."
+  "open_scene_editor": false,
+  "notes": "Fresh packaged installs seed this self-contained showcase into an editable working scene and open the normal menu. Existing saved scene selections are preserved."
 }

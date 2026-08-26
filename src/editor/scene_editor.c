@@ -664,6 +664,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     editor->renderer = renderer;
     editor->owns_window = false;
     editor->owns_renderer = false;
+    editor->owns_shared_device = false;
     editor->running = true;
     g_viewport_nav_state.orbit_active = false;
     g_viewport_nav_state.last_mouse_x = 0;
@@ -757,6 +758,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     cfg.clear_color[2] = 0.0f;
     cfg.clear_color[3] = 1.0f;
 
+    editor->owns_shared_device = (vk_shared_device_get() == NULL);
     if (!vk_shared_device_init(editor->window, &cfg)) {
         fprintf(stderr, "vk_shared_device_init failed.\n");
         SDL_DestroyWindow(editor->window);
@@ -767,16 +769,20 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     VkRendererDevice* shared_device = vk_shared_device_get();
     if (!shared_device) {
         fprintf(stderr, "vk_shared_device_get failed.\n");
+        if (editor->owns_shared_device) vk_shared_device_shutdown();
         SDL_DestroyWindow(editor->window);
         editor->window = NULL;
+        editor->owns_shared_device = false;
         return false;
     }
 
     VkResult init = vk_renderer_init_with_device(&g_scene_renderer_storage, shared_device, editor->window, &cfg);
     if (init != VK_SUCCESS) {
         fprintf(stderr, "vk_renderer_init failed: %d\n", init);
+        if (editor->owns_shared_device) vk_shared_device_shutdown();
         SDL_DestroyWindow(editor->window);
         editor->window = NULL;
+        editor->owns_shared_device = false;
         return false;
     }
     editor->renderer = (SDL_Renderer*)&g_scene_renderer_storage;
@@ -821,6 +827,12 @@ bool InitializeSceneEditor(SceneEditor* editor) {
         editor->window = NULL;
         editor->owns_window = false;
         editor->owns_renderer = false;
+#if USE_VULKAN
+        if (editor->owns_shared_device) {
+            vk_shared_device_shutdown();
+        }
+#endif
+        editor->owns_shared_device = false;
         return false;
     }
     setRenderContext(editor->renderer, editor->window,
@@ -1020,9 +1032,15 @@ void DestroySceneEditor(SceneEditor* editor) {
     if (editor->window && editor->owns_window) {
         SDL_DestroyWindow(editor->window);
     }
+#if USE_VULKAN
+    if (editor->owns_shared_device) {
+        vk_shared_device_shutdown();
+    }
+#endif
     editor->window = NULL;
     editor->owns_window = false;
     editor->owns_renderer = false;
+    editor->owns_shared_device = false;
     scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
     ray_tracing_font_runtime_shutdown();

@@ -142,6 +142,10 @@ $(BUILD_DIR)/vk_renderer/%.o: $(VK_RENDERER_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/vk_runtime/%.o: $(VK_RUNTIME_DIR)/src/%.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/core_base/%.o: $(CORE_BASE_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@

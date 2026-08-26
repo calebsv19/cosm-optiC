@@ -1,6 +1,6 @@
 # Shared Libraries Current State (CodeWork)
 
-Last updated: 2026-08-20
+Last updated: 2026-08-26
 Scope: active build wiring and integration across `ball_bounce_sim`, `behavior_sim`, `codework_compute_runtime`, `connected_mechanics_sim`, `datalab`, `daw`, `drawing_program`, `dungeon`, `fisiCs`, `gravity_orbit_sim`, `growth_sim`, `ide`, `line_drawing`, `map_forge`, `mem_console`, `physics_sim`, `ray_tracing`, `video_editor`, `workspace_sandbox`.
 
 ## Core Library Versions (current)
@@ -52,7 +52,7 @@ Scope: active build wiring and integration across `ball_bounce_sim`, `behavior_s
 
 ## Non-Core GPU Runtime Versions
 - `vk_runtime`: `0.6.0` (committed shared source)
-- `vk_renderer`: `1.3.2` (committed shared source)
+- `vk_renderer`: `1.3.3` (committed shared source)
 
 ## New Bootstrap Modules
 - `vk_runtime`: shared SDL-independent Vulkan runtime foundation (`v0.6.0`) for
@@ -97,7 +97,7 @@ Scope: active build wiring and integration across `ball_bounce_sim`, `behavior_s
   NVIDIA ICD/access and missing-validation blockers are closed and must not be
   treated as current host state without new evidence.
 
-  `vk_renderer 1.3.2` is now committed on top of the runtime's additive
+  `vk_renderer 1.3.3` is now committed on top of the runtime's additive
   staged instance/surface/device lifecycle. Existing public renderer entry
   points and Vulkan handles remain compatibility wrappers/mirrors. A
   validation-enabled hidden-window proof passes nontrivial readback, capture,
@@ -125,10 +125,12 @@ Scope: active build wiring and integration across `ball_bounce_sim`, `behavior_s
   `vk_runtime 0.6.0` / `vk_renderer 1.3.2`, plus MapForge, Memory Console,
   PhysicsSim, LineDrawing, DAW, Gravity Orbit Sim, GrowthSim, IDE, Dungeon,
   Video Editor/Capture, DataLab, BehaviorSim, Drawing Program, and Connected
-  Mechanics Sim on `vk_runtime 0.6.0` / `vk_renderer 1.3.1`. RayTracing
-  remains an active native `vk_renderer 1.1.2` host without `vk_runtime`
-  lifecycle adoption. This inventory describes presentation ownership only,
-  not runtime compute usage or release state.
+  Mechanics Sim on `vk_runtime 0.6.0` / `vk_renderer 1.3.1`. RayTracing now
+  has an isolated committed `codex/ray-tracing-main-edit` presentation
+  candidate on `vk_runtime 0.6.0` / `vk_renderer 1.3.3`; its app-local
+  shared-device bridge retains host ownership and rendering policy. This is
+  not yet canonical-main adoption or release truth. This inventory describes
+  presentation ownership only, not runtime compute usage or release state.
 
   The current physical-Linux status supersedes the July blocker narrative
   retained above: strict checksum-bound run

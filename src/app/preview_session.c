@@ -137,6 +137,22 @@ static void PreviewSessionRestoreHostWindow(SDL_Window* host_window) {
     SDL_FlushEvents(SDL_TEXTINPUT, SDL_TEXTEDITING);
 }
 
+static void PreviewSessionSyncWindowSize(SDL_Window* preview_window,
+                                         PreviewWorkspace* preview_workspace) {
+    int width = 0;
+    int height = 0;
+    if (!preview_window) return;
+    SDL_GetWindowSize(preview_window, &width, &height);
+    if (width <= 0 || height <= 0) return;
+    if (sceneSettings.windowWidth == width && sceneSettings.windowHeight == height) return;
+
+    sceneSettings.windowWidth = width;
+    sceneSettings.windowHeight = height;
+    if (preview_workspace && preview_workspace->valid) {
+        (void)PreviewWorkspaceResize(preview_workspace, width, height);
+    }
+}
+
 static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Renderer* host_renderer) {
     bool didInit = false;
     bool didFontRuntimeInit = false;
@@ -153,6 +169,9 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     TimelineRange preview_range = {0};
     PreviewRetainedSceneQuality preview_quality =
         PREVIEW_RETAINED_SCENE_QUALITY_WIREFRAME;
+#if USE_VULKAN
+    bool owns_shared_device = false;
+#endif
 
     if (standalone) {
         if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -199,6 +218,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             preview_cfg.clear_color[1] = 0.0f;
             preview_cfg.clear_color[2] = 0.0f;
             preview_cfg.clear_color[3] = 1.0f;
+            owns_shared_device = (vk_shared_device_get() == NULL);
             if (!vk_shared_device_init(preview_window, &preview_cfg)) {
                 fprintf(stderr, "vk_shared_device_init failed (preview).\n");
                 SDL_DestroyWindow(preview_window);
@@ -208,6 +228,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             shared_device = vk_shared_device_get();
             if (!shared_device) {
                 fprintf(stderr, "vk_shared_device_get failed (preview).\n");
+                if (owns_shared_device) vk_shared_device_shutdown();
                 SDL_DestroyWindow(preview_window);
                 if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
                 if (didInit) SDL_Quit();
@@ -215,6 +236,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             }
             preview_vk = (VkRenderer*)malloc(sizeof(VkRenderer));
             if (!preview_vk) {
+                if (owns_shared_device) vk_shared_device_shutdown();
                 SDL_DestroyWindow(preview_window);
                 if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
                 if (didInit) SDL_Quit();
@@ -224,6 +246,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             if (preview_init != VK_SUCCESS) {
                 fprintf(stderr, "vk_renderer_init failed (preview): %d\n", preview_init);
                 free(preview_vk);
+                if (owns_shared_device) vk_shared_device_shutdown();
                 SDL_DestroyWindow(preview_window);
                 if (didFontRuntimeInit) ray_tracing_font_runtime_shutdown();
                 if (didInit) SDL_Quit();
@@ -304,6 +327,12 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         double dt;
 
         while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_WINDOWEVENT &&
+                event.window.windowID == preview_window_id &&
+                (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
+                 event.window.event == SDL_WINDOWEVENT_RESIZED)) {
+                PreviewSessionSyncWindowSize(preview_window, &preview_workspace);
+            }
             if ((event.type == SDL_WINDOWEVENT &&
                  event.window.windowID == preview_window_id &&
                  event.window.event == SDL_WINDOWEVENT_CLOSE) ||
@@ -583,6 +612,9 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
 #endif
         if (preview_window) {
             SDL_DestroyWindow(preview_window);
+        }
+        if (owns_shared_device) {
+            vk_shared_device_shutdown();
         }
         PreviewSessionRestoreHostWindow(host_window);
     } else {

@@ -24,6 +24,7 @@ typedef struct {
     bool running;
     bool owns_window;
     bool owns_renderer;
+    bool owns_shared_device;
     int currentMode;  // See EDITOR_MODE_* in editor_mode_router.h
 } SceneEditor;
 

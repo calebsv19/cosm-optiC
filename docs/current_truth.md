@@ -1,6 +1,6 @@
 # optiC Current Truth
 
-Last updated: 2026-08-13
+Last updated: 2026-08-26
 
 ## 2026-08-13 Native Z-Up Compound Scene Ingestion
 
@@ -156,6 +156,36 @@ Last updated: 2026-08-13
 - Headless workers remain display-neutral. Agent/remote render requests carry
   explicit pixel `width` and `height`; they do not infer Retina state from the
   worker host.
+
+## Main-Edit Vulkan Runtime Adoption (Candidate)
+
+- The isolated `main-edit` worktree refreshes its managed
+  `third_party/codework_shared` subtree to `vk_runtime 0.6.0` and
+  `vk_renderer 1.3.3`. Its build links both modules while preserving the
+  existing `vk_shared_device` and `vk_renderer` compatibility surface.
+- `vk_shared_device` remains the RayTracing process-global presentation adapter.
+  At initialization it rejects a renderer device unless its compatibility
+  handles mirror the underlying `VkRuntime` instance, physical device, logical
+  device, graphics queue, and present queue. RayTracing still owns renderer
+  policy, scene/BVH/integrator work, tile scheduling, and export semantics.
+- Standalone Scene Editor and Preview Session instances acquire that shared
+  device only when no owner exists and release it only when they acquired it.
+  Animation refreshes the active logical size before rebinding its render
+  context, so drawable resize/recreation retains the existing presentation
+  behavior.
+- The focused lifecycle contract proves validation-clean initialization,
+  runtime/renderer handle identity, initial draw/readback, resize and
+  recreation, capture, and HiDPI drawable scaling. The static host contract
+  keeps the application hosts on the shared-device compatibility path.
+- Local Main Edit evidence is intentionally separate from release truth: the
+  isolated app opened its normal menu, presented a live native-`3D` animation,
+  and durably wrote sequential `frame_0000.bmp` through `frame_0003.bmp` at the
+  active 1100x892 Vulkan drawable extent. The candidate is checkpointed only
+  on the isolated `codex/ray-tracing-main-edit` branch; it is neither
+  canonical-main adoption nor a shipped/package release claim.
+- Runtime compute, residency, timing workloads, CPU ray-tracing algorithms,
+  worker execution, version changes, and release/promotion actions remain out
+  of scope for this presentation adoption.
 
 ## Shared Complex-Mesh Preview Adoption
 
