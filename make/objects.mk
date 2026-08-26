@@ -284,6 +284,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(CORE_THEME_OBJS) \
 	$(CORE_FONT_OBJS) \
 	$(patsubst $(VK_RENDERER_DIR)/src/%.c,$(BUILD_DIR)/vk_renderer/%.o,$(VK_RENDERER_SRCS)) \
+	$(VK_RUNTIME_OBJS) \
 	$(KIT_VIZ_OBJS) \
 	$(KIT_RUNTIME_DIAG_OBJS)
 
