@@ -346,7 +346,7 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                    &state.ray,
                                                    kRuntimeDisneyV2Transport3DEpsilon,
-                                                   kRuntimeDisneyV2Transport3DMaxDistance,
+                                                   RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE,
                                                    &trace)) {
             contributed |= runtime_disney_v2_transport_3d_accumulate_environment_miss(
                 scene,
@@ -882,7 +882,7 @@ bool RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(
             if (RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                       &rough_ray,
                                                       kRuntimeDisneyV2Transport3DEpsilon,
-                                                      kRuntimeDisneyV2Transport3DMaxDistance,
+                                                      RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE,
                                                       &rough_trace) &&
                 rough_trace.geometryHit &&
                 rough_trace.geometryHitInfo.triangleIndex >= 0 &&

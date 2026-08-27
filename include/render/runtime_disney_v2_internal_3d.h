@@ -22,7 +22,6 @@
 #include "render/runtime_specular_reflection_3d.h"
 
 #define RUNTIME_DISNEY_V2_3D_EPSILON 1e-4
-#define RUNTIME_DISNEY_V2_3D_MAX_DISTANCE 48.0
 
 double runtime_disney_v2_3d_clamp(double value, double min_value, double max_value);
 double runtime_disney_v2_3d_clamp01(double value);

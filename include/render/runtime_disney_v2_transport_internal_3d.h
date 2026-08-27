@@ -13,7 +13,6 @@
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
 #define kRuntimeDisneyV2Transport3DEpsilon 1e-4
-#define kRuntimeDisneyV2Transport3DMaxDistance 48.0
 #define kRuntimeDisneyV2Transport3DNegligibleLuma 1e-9
 #define kRuntimeDisneyV2EmissiveAreaRecursiveCandidateCap 16
 #define kRuntimeDisneyV2EmissiveAreaRecursiveTriangleCap 8192

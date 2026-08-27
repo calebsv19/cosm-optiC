@@ -562,7 +562,7 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
     if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                &io_result->pathState.ray,
                                                RUNTIME_DISNEY_V2_3D_EPSILON,
-                                               RUNTIME_DISNEY_V2_3D_MAX_DISTANCE,
+                                               RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE,
                                                &trace)) {
         return;
     }

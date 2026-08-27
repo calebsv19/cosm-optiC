@@ -2729,6 +2729,66 @@ static int test_runtime_disney_v2_3d_one_bounce_geometry_contributes(void) {
     return 0;
 }
 
+static int test_runtime_disney_v2_3d_room_scale_reflection_has_no_legacy_cutoff(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    RuntimeScene3D scene;
+    RuntimePrimaryHit3DResult primary = {0};
+    RuntimeMaterialPayload3D mirror =
+        runtime_disney_v2_test_payload(1.0, 1.0, 1.0, 0.98, 0.0, 0.0, 1.0, 0.0, 0.0);
+    RuntimeNative3DSamplingContext sampling = {
+        .sampleSequence = 7U,
+        .temporalSubpassIndex = 0U,
+        .temporalSubpassCount = 1U,
+    };
+    RuntimeDisneyV2_3DResult result = {0};
+    bool ok = false;
+
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    animSettings.bounceDepth3D = 2;
+    animSettings.specularDepth3D = 2;
+    animSettings.transmissionDepth3D = 2;
+    animSettings.rouletteThreshold3D = 0.0;
+    runtime_disney_v2_test_init_one_bounce_scene(&scene);
+    assert_true("runtime_disney_v2_room_scale_scene_alloc",
+                scene.primitives != NULL && scene.triangleMesh.triangles != NULL);
+    if (!scene.primitives || !scene.triangleMesh.triangles) {
+        RuntimeScene3D_Free(&scene);
+        sceneSettings = saved_scene;
+        animSettings = saved_anim;
+        return 0;
+    }
+
+    /* The reflected receiver is deliberately beyond the retired 48-unit cap. */
+    scene.triangleMesh.triangles[1].p0 = vec3(-1000.0, 96.0, -1000.0);
+    scene.triangleMesh.triangles[1].p1 = vec3(0.0, 96.0, 1000.0);
+    scene.triangleMesh.triangles[1].p2 = vec3(1000.0, 96.0, -1000.0);
+    scene.triangleMesh.triangles[1].normal = vec3(0.0, -1.0, 0.0);
+    ok = RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh);
+    assert_true("runtime_disney_v2_room_scale_bvh", ok);
+    primary = runtime_disney_v2_test_primary_hit(&scene);
+
+    ok = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene,
+                                                       &primary,
+                                                       &mirror,
+                                                       &sampling,
+                                                       &result);
+    assert_true("runtime_disney_v2_room_scale_shade", ok);
+    assert_true("runtime_disney_v2_room_scale_secondary_ray", result.secondaryRayCount >= 1);
+    assert_true("runtime_disney_v2_room_scale_reflection_hits_geometry",
+                result.pathState.hit);
+    assert_true("runtime_disney_v2_room_scale_reflection_hits_receiver",
+                result.pathState.hitInfo.sceneObjectIndex == 1);
+    assert_true("runtime_disney_v2_room_scale_reflection_exceeds_legacy_range",
+                result.pathState.hitInfo.t > 48.0);
+
+    RuntimeScene3D_Free(&scene);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
 static int test_runtime_disney_v2_3d_secondary_material_vertex_modulates_contribution(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -5238,6 +5298,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_disney_v2_3d_material_diagnostics_order_lobes();
     test_runtime_disney_v2_3d_sampling_context_moves_bsdf_path_state();
     test_runtime_disney_v2_3d_one_bounce_geometry_contributes();
+    test_runtime_disney_v2_3d_room_scale_reflection_has_no_legacy_cutoff();
     test_runtime_disney_v2_3d_secondary_material_vertex_modulates_contribution();
     test_runtime_disney_v2_3d_recursive_lobe_resamples_secondary_material();
     test_runtime_disney_v2_3d_reflection_recurses_reflected_geometry();

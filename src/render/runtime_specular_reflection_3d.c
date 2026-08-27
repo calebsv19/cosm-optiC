@@ -7,7 +7,6 @@
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
 static const double kRuntimeSpecularReflection3DEpsilon = 1e-4;
-static const double kRuntimeSpecularReflection3DMaxDistance = 1.0e6;
 static const double kRuntimeSpecularReflection3DMinWeight = 1e-4;
 
 static double runtime_specular_reflection_3d_clamp(double value,
@@ -110,7 +109,7 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
     if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                &result.ray,
                                                kRuntimeSpecularReflection3DEpsilon,
-                                               kRuntimeSpecularReflection3DMaxDistance,
+                                               RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE,
                                                &trace)) {
         *out_result = result;
         return true;

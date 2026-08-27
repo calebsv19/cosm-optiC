@@ -6,6 +6,15 @@
 
 #include "render/runtime_scene_3d.h"
 
+/*
+ * Finite numeric stand-in for an unbounded scene ray.  Transport code must
+ * not substitute view- or room-scale distances here: reflected and
+ * transmitted geometry can legitimately lie well beyond the camera's local
+ * framing.  Keeping the sentinel finite also preserves stable BVH interval
+ * arithmetic and transformed-instance remapping.
+ */
+#define RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE 1.0e6
+
 typedef struct {
     Vec3 origin;
     Vec3 direction;
