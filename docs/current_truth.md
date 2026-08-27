@@ -1,6 +1,21 @@
 # optiC Current Truth
 
-Last updated: 2026-08-13
+Last updated: 2026-08-27
+
+## 2026-08-27 Persistent Main Edit Pilot
+
+- RayTracing is the reference pilot for the CodeWork Persistent Main-Edit
+  Worktree Contract (`MEW1`).
+- Canonical source and the functional Main Edit lane are distinct Git
+  worktrees. The Main Edit lane has a separate `optiC Main Edit.app`, bundle
+  identifier, runtime/log namespaces, development distribution root, and
+  embedded source/binary identity.
+- Main Edit package, self-test, and visual proof do not grant source adoption,
+  version, public package, Registry, publication, deployment, or activation
+  authority.
+- `docs/main_edit_worktree.md` is the operator runbook. Its status snapshot is
+  evidence only; agents must re-read both worktrees before any edit,
+  integration, or recycle operation.
 
 ## 2026-08-13 Native Z-Up Compound Scene Ingestion
 
