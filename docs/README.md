@@ -105,6 +105,9 @@ Current public focus:
 - `docs/render_review_sets/README.md`: local repo-doc review sets from detached
   renders. These are not the live visualizer website lane.
 - `docs/desktop_packaging.md`: `.app` packaging commands, launcher diagnostics, and release-readiness workflow.
+- `docs/main_edit_worktree.md`: canonical/Main Edit lane roles, isolated
+  development-app identity, and safe checkpoint, integration, and recycle
+  gates.
 - `docs/build_week_judge_guide.md`: no-rebuild installation, supported platform,
   packaged showcase flow, self-test, and source-level judge test for the OpenAI
   Build Week submission.

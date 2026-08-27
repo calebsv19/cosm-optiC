@@ -86,6 +86,10 @@ The reusable editing worktree has a dedicated local-development package lane.
 It does not replace the canonical Desktop `optiC.app` and does not create a
 public or Registry release.
 
+The complete RayTracing lane-role, integration, and safe-recycle runbook is in
+`docs/main_edit_worktree.md`. This section owns app construction and identity;
+the runbook owns worktree operation.
+
 | Surface | Main-edit value |
 | --- | --- |
 | Worktree package | `dist/dev/main-edit/optiC Main Edit.app` |
@@ -156,9 +160,10 @@ The refresh target copies only `optiC Main Edit.app`. It does not use
    it is clean, its commits are reachable from `main`, and no untracked work
    would be lost.
 
-The worktree path is reusable; its branch and build identity are intentionally
-new for each cycle. Never reset, clean, or force-remove an active dirty
-main-edit worktree to make the name available.
+The worktree path is reusable. The branch may be retained across cycles or
+recreated after a fully recorded adoption, but each package build identity is
+new. Never reset, clean, or force-remove an active dirty main-edit worktree to
+make the name available.
 
 Linux desktop package target:
 
