@@ -1210,9 +1210,9 @@ static int test_tlas_excludes_dynamic_water_cache_owned_primitive(void) {
         RuntimeScene3D_Free(&scene);
         return 0;
     }
-    scene.primitiveCount = 2;
+    scene.primitiveCount = 1;
     scene.primitiveCapacity = 2;
-    scene.triangleMesh.triangleCount = 3;
+    scene.triangleMesh.triangleCount = 1;
     scene.triangleMesh.triangleCapacity = 3;
     scene.scope.triangleMeshEnabled = true;
 
@@ -1227,7 +1227,7 @@ static int test_tlas_excludes_dynamic_water_cache_owned_primitive(void) {
     scene.primitives[1].source.sceneObjectIndex = 61;
     snprintf(scene.primitives[1].source.objectId,
              sizeof(scene.primitives[1].source.objectId),
-             "aquarium_unified_water_body");
+             "water_surface");
 
     scene.triangleMesh.triangles[0].p0 = vec3(-1.0, -1.0, 0.0);
     scene.triangleMesh.triangles[0].p1 = vec3(1.0, -1.0, 0.0);
@@ -1251,6 +1251,16 @@ static int test_tlas_excludes_dynamic_water_cache_owned_primitive(void) {
     scene.triangleMesh.triangles[2].primitiveIndex = 1;
     scene.triangleMesh.triangles[2].sceneObjectIndex = 61;
     scene.triangleMesh.triangles[2].localTriangleIndex = 1;
+
+    assert_true("mrt3_dynamic_water_base_tlas_rebuild",
+                RuntimeSceneAcceleration3D_RebuildTLASFromScene(&scene));
+    scene.primitiveCount = 2;
+    scene.triangleMesh.triangleCount = 3;
+    assert_true("mrt3_dynamic_water_extension_bind",
+                RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(&scene));
+    snprintf(scene.primitives[1].source.objectId,
+             sizeof(scene.primitives[1].source.objectId),
+             "aquarium_unified_water_body");
 
     water_input.water_surface_source_found = true;
     water_input.water_surface_loaded = true;

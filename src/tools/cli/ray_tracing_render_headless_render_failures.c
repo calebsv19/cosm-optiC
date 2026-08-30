@@ -17,7 +17,9 @@ int ray_tracing_headless_note_render_frame_failed(
     preflight->render_frames_ms += ray_tracing_elapsed_ms_since(stage_started_at);
     snprintf(preflight->diagnostics,
              sizeof(preflight->diagnostics),
-             "failed to render frame");
+             "failed to render frame: prepare=%.320s acceleration=%.320s",
+             RuntimeNative3DPrepareFrameLastDiagnostics(),
+             RuntimeSceneAcceleration3D_LastDiagnostics());
     RuntimeTriangleBVH3D_SnapshotTraceStats(&preflight->bvh_trace_stats);
     RuntimeNative3DPreparedSceneCacheStatsSnapshot(
         &preflight->prepared_scene_cache_stats);

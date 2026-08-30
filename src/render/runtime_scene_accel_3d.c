@@ -372,20 +372,26 @@ static uint64_t runtime_scene_accel_3d_geometry_signature(const RuntimeScene3D* 
 }
 
 static bool runtime_scene_accel_3d_has_compatible_dynamic_water_extension(
-    const RuntimeScene3D* scene) {
+    const RuntimeScene3D* scene,
+    const char** out_reason) {
     const RuntimePrimitive3D* water_primitive = NULL;
     const RuntimeTriangle3D* first_water_triangle = NULL;
     const RuntimeTriangle3D* last_water_triangle = NULL;
+    uint64_t prepared_prefix_signature = 0u;
+    uint64_t curve_signature = 0u;
+    if (out_reason) *out_reason = "compatible";
     if (!scene || scene->primitiveCount != gRuntimeSceneAcceleration3DPreparedPrimitiveCount + 1 ||
         scene->triangleMesh.triangleCount <= gRuntimeSceneAcceleration3DPreparedTriangleCount ||
         scene->curveInstanceCount !=
             gRuntimeSceneAcceleration3DPreparedCurveInstanceCount ||
         RuntimeSceneCurve3D_GeometrySignature(scene) !=
             gRuntimeSceneAcceleration3DPreparedCurveSignature) {
+        if (out_reason) *out_reason = "extension_shape";
         return false;
     }
     water_primitive = &scene->primitives[gRuntimeSceneAcceleration3DPreparedPrimitiveCount];
     if (strcmp(water_primitive->source.objectId, "water_surface") != 0) {
+        if (out_reason) *out_reason = "water_object_id";
         return false;
     }
     first_water_triangle =
@@ -396,13 +402,24 @@ static bool runtime_scene_accel_3d_has_compatible_dynamic_water_extension(
             gRuntimeSceneAcceleration3DPreparedPrimitiveCount ||
         last_water_triangle->primitiveIndex !=
             gRuntimeSceneAcceleration3DPreparedPrimitiveCount) {
+        if (out_reason) *out_reason = "water_triangle_ownership";
         return false;
     }
-    return runtime_scene_accel_3d_geometry_signature_prefix(
-               scene,
-               gRuntimeSceneAcceleration3DPreparedPrimitiveCount,
-               gRuntimeSceneAcceleration3DPreparedTriangleCount) ==
-           gRuntimeSceneAcceleration3DPreparedGeometrySignature;
+    prepared_prefix_signature = runtime_scene_accel_3d_geometry_signature_prefix(
+        scene,
+        gRuntimeSceneAcceleration3DPreparedPrimitiveCount,
+        gRuntimeSceneAcceleration3DPreparedTriangleCount);
+    curve_signature = RuntimeSceneCurve3D_GeometrySignature(scene);
+    prepared_prefix_signature = runtime_scene_accel_3d_hash_bytes(
+        prepared_prefix_signature,
+        &curve_signature,
+        sizeof(curve_signature));
+    if (prepared_prefix_signature !=
+        gRuntimeSceneAcceleration3DPreparedGeometrySignature) {
+        if (out_reason) *out_reason = "prepared_prefix_signature";
+        return false;
+    }
+    return true;
 }
 
 bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene) {
@@ -519,6 +536,7 @@ bool RuntimeSceneAcceleration3D_RebuildPreparedFromSceneAndMeshAssets(
 bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D* scene) {
     struct timespec bind_start = {0};
     bool compatible_dynamic_water_extension = false;
+    const char* dynamic_water_compatibility_reason = "not_checked";
     (void)clock_gettime(CLOCK_MONOTONIC, &bind_start);
     if (!scene) {
         runtime_scene_accel_3d_set_diag("TLAS bind skipped: scene missing");
@@ -536,15 +554,26 @@ bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D
         return false;
     }
     compatible_dynamic_water_extension =
-        runtime_scene_accel_3d_has_compatible_dynamic_water_extension(scene);
+        runtime_scene_accel_3d_has_compatible_dynamic_water_extension(
+            scene,
+            &dynamic_water_compatibility_reason);
     if (!compatible_dynamic_water_extension &&
         (scene->primitiveCount != gRuntimeSceneAcceleration3DPreparedPrimitiveCount ||
         scene->triangleMesh.triangleCount !=
             gRuntimeSceneAcceleration3DPreparedTriangleCount ||
         scene->curveInstanceCount !=
             gRuntimeSceneAcceleration3DPreparedCurveInstanceCount)) {
-        runtime_scene_accel_3d_set_diag(
-            "TLAS bind skipped: prepared scene geometry counts differ");
+        snprintf(gRuntimeSceneAcceleration3DLastDiagnostics,
+                 sizeof(gRuntimeSceneAcceleration3DLastDiagnostics),
+                 "TLAS bind skipped: prepared scene geometry counts differ "
+                 "scene=(%d,%d,%d) prepared=(%d,%d,%d) water_extension=%s",
+                 scene->primitiveCount,
+                 scene->triangleMesh.triangleCount,
+                 scene->curveInstanceCount,
+                 gRuntimeSceneAcceleration3DPreparedPrimitiveCount,
+                 gRuntimeSceneAcceleration3DPreparedTriangleCount,
+                 gRuntimeSceneAcceleration3DPreparedCurveInstanceCount,
+                 dynamic_water_compatibility_reason);
         gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBindMs +=
             runtime_scene_accel_3d_elapsed_ms_since(&bind_start);
         return false;
