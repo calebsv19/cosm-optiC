@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_TRIANGLE_BVH_3D_H
 #define RENDER_RUNTIME_TRIANGLE_BVH_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -90,14 +92,14 @@ void RuntimeTriangleBVH3D_SetTraversalStackLimitForTests(int max_stack_depth);
 
 bool RuntimeTriangleBVH3D_TraceFirstHit(const RuntimeTriangleMesh3D* mesh,
                                         const Ray3D* ray,
-                                        [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-                                        [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                        FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+                                        FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
                                         HitInfo3D* out_hit);
 RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
     const RuntimeTriangleMesh3D* mesh,
     const Ray3D* ray,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
     HitInfo3D* out_hit);
 
 #endif

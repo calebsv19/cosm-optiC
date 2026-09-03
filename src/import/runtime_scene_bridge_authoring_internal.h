@@ -1,6 +1,8 @@
 #ifndef RUNTIME_SCENE_BRIDGE_AUTHORING_INTERNAL_H
 #define RUNTIME_SCENE_BRIDGE_AUTHORING_INTERNAL_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 #include <json-c/json.h>
 
@@ -8,7 +10,7 @@
 
 double runtime_scene_bridge_authoring_zero_length(void);
 double runtime_scene_bridge_authoring_scale_scene_length(
-    double scene_length [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double scene_length FISICS_DIM(length) FISICS_UNIT(meter),
     double world_scale);
 bool runtime_scene_bridge_parse_position_or_transform_position(json_object *obj,
                                                                double *out_x,

@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_volume_3d_scatter.h"
 
 #include "render/runtime_caustic_photon_direct_consumer_3d.h"
@@ -28,22 +30,22 @@ static double gRuntimeVolume3DScatterTintG = 1.0;
 static double gRuntimeVolume3DScatterTintB = 1.0;
 
 static double runtime_volume_3d_scatter_zero_length(void) {
-    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     return zero;
 }
 
 static double runtime_volume_3d_scatter_unit_length(void) {
-    double unit_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1.0;
+    double unit_length FISICS_DIM(length) FISICS_UNIT(meter) = 1.0;
     return unit_length;
 }
 
 static double runtime_volume_3d_scatter_length_epsilon(void) {
-    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-9;
+    double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-9;
     return epsilon;
 }
 
 static double runtime_volume_3d_scatter_minimum_step(void) {
-    double minimum_step [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double minimum_step FISICS_DIM(length) FISICS_UNIT(meter) =
         kRuntimeVolume3DScatterMinimumStep;
     return minimum_step;
 }
@@ -127,7 +129,7 @@ static Vec3 runtime_volume_3d_scatter_resolve_light_position(
     double v = 0.5;
     double disk_x = 0.0;
     double disk_y = 0.0;
-    double radius [[fisics::dim(length)]] [[fisics::unit(meter)]] = runtime_volume_3d_scatter_zero_length();
+    double radius FISICS_DIM(length) FISICS_UNIT(meter) = runtime_volume_3d_scatter_zero_length();
     uint32_t base_seed = 0u;
     double epsilon = runtime_volume_3d_scatter_length_epsilon();
 
@@ -212,8 +214,8 @@ static double runtime_volume_3d_scatter_phase_henyey_greenstein(double cos_theta
 }
 
 static double runtime_volume_3d_scatter_light_attenuation(const RuntimeLight3D* light,
-                                                          double light_distance [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
-    double falloff [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                                                          double light_distance FISICS_DIM(length) FISICS_UNIT(meter)) {
+    double falloff FISICS_DIM(length) FISICS_UNIT(meter) =
         runtime_volume_3d_scatter_unit_length();
     double normalized = 0.0;
     double zero_length = runtime_volume_3d_scatter_zero_length();
@@ -240,8 +242,8 @@ static double runtime_volume_3d_scatter_light_attenuation(const RuntimeLight3D* 
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter),
     const RuntimeNative3DSamplingContext* sampling) {
     return RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
         scene, ray, t_min, t_max, sampling, NULL);
@@ -250,14 +252,14 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter),
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeCausticVolumeCache3D* caustic_cache) {
     RuntimeVolume3DScatterResult result = {0};
-    double t_enter [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_min;
-    double t_exit [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_max;
-    double step [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double t_enter FISICS_DIM(length) FISICS_UNIT(meter) = t_min;
+    double t_exit FISICS_DIM(length) FISICS_UNIT(meter) = t_max;
+    double step FISICS_DIM(length) FISICS_UNIT(meter) =
         runtime_volume_3d_scatter_zero_length();
     double camera_transmittance = 1.0;
     double zero_length = runtime_volume_3d_scatter_zero_length();
@@ -293,14 +295,14 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     if (!(step > zero_length)) {
         step = runtime_volume_3d_scatter_unit_length();
     }
-    for (double t [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_enter;
+    for (double t FISICS_DIM(length) FISICS_UNIT(meter) = t_enter;
          t < t_exit;
          t += step) {
-        const double next_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double next_t FISICS_DIM(length) FISICS_UNIT(meter) =
             fmin(t + step, t_exit);
-        const double segment_length [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double segment_length FISICS_DIM(length) FISICS_UNIT(meter) =
             next_t - t;
-        const double sample_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double sample_t FISICS_DIM(length) FISICS_UNIT(meter) =
             0.5 * (t + next_t);
         const Vec3 sample_position =
             vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));
@@ -317,7 +319,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                                                                      &sample_position,
                                                                      sampling);
                 Vec3 to_light = vec3_sub(light_position, sample_position);
-                const double light_distance [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+                const double light_distance FISICS_DIM(length) FISICS_UNIT(meter) =
                     vec3_length(to_light);
                 const double attenuation =
                     runtime_volume_3d_scatter_light_attenuation(&scene->light, light_distance);
@@ -573,12 +575,12 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter)) {
     RuntimeVolume3DScatterResult result = {0};
-    double t_enter [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_min;
-    double t_exit [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_max;
-    double step [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double t_enter FISICS_DIM(length) FISICS_UNIT(meter) = t_min;
+    double t_exit FISICS_DIM(length) FISICS_UNIT(meter) = t_max;
+    double step FISICS_DIM(length) FISICS_UNIT(meter) =
         runtime_volume_3d_scatter_zero_length();
     double density_integral = 0.0;
     double zero_length = runtime_volume_3d_scatter_zero_length();
@@ -603,14 +605,14 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
         step = runtime_volume_3d_scatter_unit_length();
     }
 
-    for (double t [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_enter;
+    for (double t FISICS_DIM(length) FISICS_UNIT(meter) = t_enter;
          t < t_exit;
          t += step) {
-        const double next_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double next_t FISICS_DIM(length) FISICS_UNIT(meter) =
             fmin(t + step, t_exit);
-        const double segment_length [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double segment_length FISICS_DIM(length) FISICS_UNIT(meter) =
             next_t - t;
-        const double sample_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double sample_t FISICS_DIM(length) FISICS_UNIT(meter) =
             0.5 * (t + next_t);
         const Vec3 sample_position =
             vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));

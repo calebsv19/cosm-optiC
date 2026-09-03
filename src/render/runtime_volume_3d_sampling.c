@@ -1,34 +1,36 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_volume_3d_sampling.h"
 
 #include <math.h>
 
 static double runtime_volume_3d_sampling_zero_length(void) {
-    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     return zero;
 }
 
 static double runtime_volume_3d_sampling_length_epsilon(void) {
-    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-9;
+    double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-9;
     return epsilon;
 }
 
 static double runtime_volume_3d_sampling_world_to_local(
-    double world_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double world_origin [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double voxel_size [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double world_value FISICS_DIM(length) FISICS_UNIT(meter),
+    double world_origin FISICS_DIM(length) FISICS_UNIT(meter),
+    double voxel_size FISICS_DIM(length) FISICS_UNIT(meter)) {
     double local = (world_value - world_origin) / voxel_size;
     return local;
 }
 
 static bool runtime_volume_3d_sampling_intersect_axis(
-    double origin [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double origin FISICS_DIM(length) FISICS_UNIT(meter),
     double direction,
-    double slab_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double slab_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double slab_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double slab_max FISICS_DIM(length) FISICS_UNIT(meter),
                                                       double* io_t_enter,
                                                       double* io_t_exit) {
-    double t0 [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-    double t1 [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double t0 FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+    double t1 FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     double epsilon = runtime_volume_3d_sampling_length_epsilon();
 
     if (!io_t_enter || !io_t_exit) return false;
@@ -86,12 +88,12 @@ bool RuntimeVolume3D_HasSampleableDensity(const RuntimeVolumeAttachment3D* attac
 
 bool RuntimeVolume3D_ClipRayToBounds(const RuntimeVolumeAttachment3D* attachment,
                                      const Ray3D* ray,
-                                     double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                     double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                     double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+                                     double t_max FISICS_DIM(length) FISICS_UNIT(meter),
                                      double* out_t_enter,
                                      double* out_t_exit) {
-    double t_enter [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_min;
-    double t_exit [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_max;
+    double t_enter FISICS_DIM(length) FISICS_UNIT(meter) = t_min;
+    double t_exit FISICS_DIM(length) FISICS_UNIT(meter) = t_max;
 
     if (!attachment || !ray || !out_t_enter || !out_t_exit) return false;
     if (!RuntimeVolume3D_HasSampleableDensity(attachment)) return false;

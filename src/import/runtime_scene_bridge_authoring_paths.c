@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "import/runtime_scene_bridge_internal.h"
 #include "render/runtime_light_radiometry_3d.h"
 
@@ -8,14 +10,14 @@
 #include <string.h>
 
 double runtime_scene_bridge_authoring_zero_length(void) {
-    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     return zero;
 }
 
 double runtime_scene_bridge_authoring_scale_scene_length(
-    double scene_length [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double scene_length FISICS_DIM(length) FISICS_UNIT(meter),
     double world_scale) {
-    double authored_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = scene_length;
+    double authored_length FISICS_DIM(length) FISICS_UNIT(meter) = scene_length;
     return authored_length * world_scale;
 }
 
@@ -23,15 +25,15 @@ static void runtime_scene_bridge_scale_path_world_units(Path *path, double world
     int i = 0;
     if (!path) return;
     for (i = 0; i < path->numPoints && i < MAX_BEZIER_POINTS; ++i) {
-        double point_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->points[i].x;
-        double point_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->points[i].y;
+        double point_x FISICS_DIM(length) FISICS_UNIT(meter) = path->points[i].x;
+        double point_y FISICS_DIM(length) FISICS_UNIT(meter) = path->points[i].y;
         path->points[i].x = runtime_scene_bridge_authoring_scale_scene_length(point_x, world_scale);
         path->points[i].y = runtime_scene_bridge_authoring_scale_scene_length(point_y, world_scale);
         if (i < MAX_BEZIER_POINTS - 1) {
-            double h0x [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][0].vx;
-            double h0y [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][0].vy;
-            double h1x [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][1].vx;
-            double h1y [[fisics::dim(length)]] [[fisics::unit(meter)]] = path->handles[i][1].vy;
+            double h0x FISICS_DIM(length) FISICS_UNIT(meter) = path->handles[i][0].vx;
+            double h0y FISICS_DIM(length) FISICS_UNIT(meter) = path->handles[i][0].vy;
+            double h1x FISICS_DIM(length) FISICS_UNIT(meter) = path->handles[i][1].vx;
+            double h1y FISICS_DIM(length) FISICS_UNIT(meter) = path->handles[i][1].vy;
             path->handles[i][0].vx =
                 runtime_scene_bridge_authoring_scale_scene_length(h0x, world_scale);
             path->handles[i][0].vy =
@@ -132,9 +134,9 @@ bool runtime_scene_bridge_parse_focus_target(json_object *obj,
                                              double *out_y,
                                              double *out_z) {
     json_object *target = NULL;
-    double x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-    double y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-    double z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double x FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+    double y FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+    double z FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     if (!obj || !out_x || !out_y || !out_z) return false;
     if (!json_object_object_get_ex(obj, "camera_focus_target", &target) ||
         !json_object_is_type(target, json_type_object)) {
@@ -159,9 +161,9 @@ bool runtime_scene_bridge_parse_focus_target(json_object *obj,
 void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
                                                   double world_scale) {
     json_object *light0 = NULL;
-    double lx [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-    double ly [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-    double lz [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double lx FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+    double ly FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+    double lz FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     double zero_length = runtime_scene_bridge_authoring_zero_length();
     if (!lights_array || !json_object_is_type(lights_array, json_type_array) ||
         json_object_array_length(lights_array) == 0u) {
@@ -200,9 +202,9 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
          ++i) {
         json_object *light_obj = json_object_array_get_idx(lights_array, i);
         RuntimeLightSource3D source;
-        double x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-        double y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-        double z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double x FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+        double y FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+        double z FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
         double authored_radius = 0.0;
         double r = 1.0;
         double g = 1.0;
@@ -387,9 +389,9 @@ void runtime_scene_bridge_apply_light_seed_scaled(json_object *lights_array,
 void runtime_scene_bridge_apply_camera_seed_scaled(json_object *cameras_array,
                                                    double world_scale) {
     json_object *camera0 = NULL;
-    double cx [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-    double cy [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-    double cz [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double cx FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+    double cy FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+    double cz FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     double yaw = 0.0;
     double pitch = 0.0;
     bool has_yaw = false;

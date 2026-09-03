@@ -1,5 +1,7 @@
 CLANG_CC ?= cc
-FISICS_BIN ?= ../fisiCs/fisics
+CODEWORK_WORKSPACE_ROOT := $(abspath $(shell git rev-parse --path-format=absolute --git-common-dir)/../..)
+FISICS_BIN ?= $(CODEWORK_WORKSPACE_ROOT)/fisiCs/fisics
+FISICS_INCLUDE_DIR ?= $(CODEWORK_WORKSPACE_ROOT)/fisiCs/include
 FISICS_OVERLAY ?= physics-units
 FISICS_ENV ?= FISICS_MAX_PROCS=0
 BUILD_TOOLCHAIN ?= clang

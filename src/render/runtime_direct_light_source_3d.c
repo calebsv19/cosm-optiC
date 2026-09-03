@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_direct_light_internal_3d.h"
 #include "render/runtime_light_radiometry_3d.h"
 
@@ -75,10 +77,10 @@ static void runtime_direct_light_3d_map_square_to_disk(double u,
 
 static double runtime_direct_light_3d_attenuation(
     const RuntimeLight3D* light,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance) {
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double zero_length = 0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double unit_length = 1.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double falloff = unit_length;
+    FISICS_DIM(length) FISICS_UNIT(meter) double light_distance) {
+    FISICS_DIM(length) FISICS_UNIT(meter) double zero_length = 0.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double unit_length = 1.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double falloff = unit_length;
     double normalized = 0.0;
     if (!light) return 0.0;
 
@@ -112,7 +114,7 @@ static bool runtime_direct_light_3d_clear_visible_decision_probe_enabled(void) {
 }
 
 static Vec3 runtime_direct_light_3d_default_tangent(Vec3 normal) {
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon = 1e-9;
     Vec3 guide = fabs(normal.z) < 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
     Vec3 tangent = vec3_cross(guide, normal);
     if (vec3_length(tangent) <= length_epsilon) {
@@ -124,7 +126,7 @@ static Vec3 runtime_direct_light_3d_default_tangent(Vec3 normal) {
 static void runtime_direct_light_3d_build_basis(Vec3 normal,
                                                 Vec3* out_tangent,
                                                 Vec3* out_bitangent) {
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon = 1e-9;
     Vec3 tangent = runtime_direct_light_3d_default_tangent(normal);
     Vec3 bitangent = vec3_normalize(vec3_cross(normal, tangent));
 
@@ -175,7 +177,7 @@ static uint32_t runtime_direct_light_3d_seed_from_light_hit(
 }
 
 static int runtime_direct_light_3d_area_light_sample_count(const RuntimeLight3D* light) {
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon = 1e-9;
     if (!light || !(light->radius > length_epsilon)) {
         return 1;
     }
@@ -355,7 +357,7 @@ static Vec3 runtime_direct_light_3d_sample_light_position(const RuntimeLight3D* 
     RuntimeDirectLight3DDiskSample sample = {0.0, 0.0};
     int population_index = 0;
     double radius = 0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon = 1e-9;
 
     if (!light || !(light->radius > length_epsilon)) {
         return light ? light->position : vec3(0.0, 0.0, 0.0);
@@ -657,8 +659,8 @@ void runtime_direct_light_3d_accumulate_source(
     bool* io_any_light_sample_visible) {
     RuntimeLight3D light = {0};
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance = 0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon = 1e-9;
+    FISICS_DIM(length) FISICS_UNIT(meter) double light_distance = 0.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon = 1e-9;
     double attenuation = 0.0;
     double ndotl = 0.0;
     double source_r = 0.0;
@@ -743,7 +745,7 @@ void runtime_direct_light_3d_accumulate_source(
                                                                                        i,
                                                                                        sampling);
             Vec3 sample_to_light = vec3_sub(sample_position, hit->position);
-            [[fisics::dim(length)]] [[fisics::unit(meter)]] double sample_distance =
+            FISICS_DIM(length) FISICS_UNIT(meter) double sample_distance =
                 vec3_length(sample_to_light);
             double sample_attenuation = 0.0;
             double sample_ndotl = 0.0;

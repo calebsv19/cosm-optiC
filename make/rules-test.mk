@@ -168,9 +168,9 @@ $(PROCEDURAL_SOLID_TEST_BIN): \
 	$(INC_DIR)/procedural/procedural_solid_mesh.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
 		-I$(CORE_BASE_DIR)/include \
@@ -185,9 +185,9 @@ $(PROCEDURAL_SOLID_PSG11_TEST_BIN): \
 	$(INC_DIR)/procedural/procedural_solid_source_accel.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
 		-I$(CORE_BASE_DIR)/include \
@@ -201,9 +201,9 @@ $(PROCEDURAL_SOLID_PSG12_TEST_BIN): \
 	$(INC_DIR)/procedural/procedural_solid_quality.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-Ithird_party/codework_shared/core/core_mesh_asset/include \
 		-Ithird_party/codework_shared/core/core_io/include \
 		-Ithird_party/codework_shared/core/core_object/include \
@@ -220,9 +220,9 @@ $(PROCEDURAL_SOLID_AUTHORING_TEST_BIN): \
 	$(INC_DIR)/procedural/procedural_solid_remesh.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
 		-I$(CORE_BASE_DIR)/include \
@@ -247,7 +247,7 @@ $(PROCEDURAL_SURFACE_RECIPE_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_RECIPE_TEST_SRCS) $(JSON_LIBS) -lm
 
 test-procedural-surface-recipe-contract: \
@@ -270,7 +270,7 @@ $(PROCEDURAL_SURFACE_FIELD_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_FIELD_TEST_SRCS) $(JSON_LIBS) -lm
 
 test-procedural-surface-field-contract: \
@@ -297,7 +297,7 @@ $(PROCEDURAL_SURFACE_PLANE_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_PLANE_TEST_SRCS) $(JSON_LIBS) -lm
 
 test-procedural-surface-plane-contract: \
@@ -329,10 +329,10 @@ $(PROCEDURAL_SURFACE_PRISM_TEST_BIN): \
 	$(INC_DIR)/procedural/procedural_solid_mesh.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
 		-I$(CORE_BASE_DIR)/include \
@@ -362,10 +362,10 @@ $(PROCEDURAL_SURFACE_MATERIAL_TEST_BIN): \
 	$(INC_DIR)/procedural/procedural_surface_material_runtime_adapter.h
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
+		-g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_MATERIAL_TEST_SRCS) $(JSON_LIBS) -lm
 
 test-procedural-surface-material-contract: \
@@ -385,7 +385,7 @@ $(PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_DERIVED_ASSET_TEST_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -415,7 +415,7 @@ $(PROCEDURAL_SURFACE_GRAPH_TEST_BIN): \
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_GRAPH_TEST_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -440,7 +440,7 @@ $(PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_BIN): \
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_FIELD_GRAPH_TEST_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -452,7 +452,7 @@ PROCEDURAL_SURFACE_FEATURE_FIELD_TEST_BIN := $(BUILD_DIR)/tests/procedural_surfa
 $(PROCEDURAL_SURFACE_FEATURE_FIELD_TEST_BIN): $(TEST_DIR)/test_procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/app/ray_tracing_sha256.c $(INC_DIR)/procedural/procedural_surface_feature_field.h
 
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include -o $@ $(TEST_DIR)/test_procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/app/ray_tracing_sha256.c $(CORE_IO_DIR)/src/core_io.c $(CORE_BASE_DIR)/src/core_base.c $(JSON_LIBS) -lm
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include -o $@ $(TEST_DIR)/test_procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/app/ray_tracing_sha256.c $(CORE_IO_DIR)/src/core_io.c $(CORE_BASE_DIR)/src/core_base.c $(JSON_LIBS) -lm
 
 test-procedural-surface-feature-field-contract: $(PROCEDURAL_SURFACE_FEATURE_FIELD_TEST_BIN)
 	@$<
@@ -460,13 +460,13 @@ test-procedural-surface-feature-field-contract: $(PROCEDURAL_SURFACE_FEATURE_FIE
 PROCEDURAL_SURFACE_FEATURE_CURVE_TEST_BIN := $(BUILD_DIR)/tests/procedural_surface_feature_curve_test
 $(PROCEDURAL_SURFACE_FEATURE_CURVE_TEST_BIN): $(TEST_DIR)/test_procedural_surface_feature_curve.c $(SRC_DIR)/procedural/procedural_surface_feature_curve.c $(SRC_DIR)/app/ray_tracing_sha256.c $(INC_DIR)/procedural/procedural_surface_feature_curve.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -o $@ $(TEST_DIR)/test_procedural_surface_feature_curve.c $(SRC_DIR)/procedural/procedural_surface_feature_curve.c $(SRC_DIR)/app/ray_tracing_sha256.c $(JSON_LIBS) -lm
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -o $@ $(TEST_DIR)/test_procedural_surface_feature_curve.c $(SRC_DIR)/procedural/procedural_surface_feature_curve.c $(SRC_DIR)/app/ray_tracing_sha256.c $(JSON_LIBS) -lm
 test-procedural-surface-feature-curve-contract: $(PROCEDURAL_SURFACE_FEATURE_CURVE_TEST_BIN)
 	@$<
 PROCEDURAL_SURFACE_FEATURE_SELECTION_TEST_BIN := $(BUILD_DIR)/tests/procedural_surface_feature_selection_test
 $(PROCEDURAL_SURFACE_FEATURE_SELECTION_TEST_BIN): $(TEST_DIR)/test_procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_imported_surface_region.c $(SRC_DIR)/procedural/procedural_solid_mesh.c $(SRC_DIR)/procedural/procedural_solid_graph.c $(SRC_DIR)/procedural/procedural_solid_graph_json.c $(SRC_DIR)/procedural/procedural_solid_graph_eval.c $(SRC_DIR)/procedural/procedural_solid_source_accel.c $(SRC_DIR)/app/ray_tracing_sha256.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -o $@ $(TEST_DIR)/test_procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_imported_surface_region.c $(SRC_DIR)/procedural/procedural_solid_mesh.c $(SRC_DIR)/procedural/procedural_solid_graph.c $(SRC_DIR)/procedural/procedural_solid_graph_json.c $(SRC_DIR)/procedural/procedural_solid_graph_eval.c $(SRC_DIR)/procedural/procedural_solid_source_accel.c $(SRC_DIR)/app/ray_tracing_sha256.c $(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c $(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c $(CORE_IO_DIR)/src/core_io.c $(CORE_BASE_DIR)/src/core_base.c $(CORE_OBJECT_DIR)/src/core_object.c $(CORE_UNITS_DIR)/src/core_units.c $(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c $(JSON_LIBS) -lm
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include -I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include -o $@ $(TEST_DIR)/test_procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_selection.c $(SRC_DIR)/procedural/procedural_surface_feature_field.c $(SRC_DIR)/procedural/procedural_imported_surface_region.c $(SRC_DIR)/procedural/procedural_solid_mesh.c $(SRC_DIR)/procedural/procedural_solid_graph.c $(SRC_DIR)/procedural/procedural_solid_graph_json.c $(SRC_DIR)/procedural/procedural_solid_graph_eval.c $(SRC_DIR)/procedural/procedural_solid_source_accel.c $(SRC_DIR)/app/ray_tracing_sha256.c $(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c $(CORE_MESH_ASSET_DIR)/src/core_mesh_asset_runtime_document.c $(CORE_IO_DIR)/src/core_io.c $(CORE_BASE_DIR)/src/core_base.c $(CORE_OBJECT_DIR)/src/core_object.c $(CORE_UNITS_DIR)/src/core_units.c $(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c $(JSON_LIBS) -lm
 test-procedural-surface-feature-selection-contract: $(PROCEDURAL_SURFACE_FEATURE_SELECTION_TEST_BIN)
 	@$<
 
@@ -496,7 +496,7 @@ $(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN): $(PROCEDURAL_SURFACE_FEATURE_S
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
 		-I$(CORE_BASE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -o $@ \
@@ -523,7 +523,7 @@ PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SRCS := \
 	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
 $(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN): $(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include -o $@ \
 		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_SRCS) $(JSON_LIBS) -lm
@@ -553,7 +553,7 @@ $(PROCEDURAL_SURFACE_AUTHORING_TEST_BIN): \
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(PROCEDURAL_SURFACE_AUTHORING_TEST_SRCS) \
 		$(JSON_LIBS) -lm
@@ -576,7 +576,7 @@ $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TEST_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -599,7 +599,7 @@ $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_TOOL_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -725,7 +725,7 @@ $(PROCEDURAL_SURFACE_BINDING_TEST_BIN): \
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_BINDING_TEST_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -754,7 +754,7 @@ $(PROCEDURAL_SURFACE_TERRAIN_TEST_BIN): \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
 		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_TERRAIN_TEST_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -783,7 +783,7 @@ $(PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_BIN): \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
 		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_SELECTED_FACE_SHELL_TEST_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -816,7 +816,7 @@ $(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_BIN): \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
 		-DPROCEDURAL_SURFACE_FIELD_PRESET_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_field_presets\" \
 		-DPROCEDURAL_SURFACE_FIXTURE_ROOT=\"$(CURDIR)/tests/fixtures/procedural_surface_rock_prism_psg0\" \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(PROCEDURAL_SURFACE_FEATURE_RELIEF_SHELL_TEST_SRCS) \
 		$(JSON_LIBS) -lm
@@ -854,7 +854,7 @@ $(PROCEDURAL_SURFACE_SHELL_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-Ithird_party/codework_shared/core/core_mesh_asset/include \
 		-Ithird_party/codework_shared/core/core_object/include \
 		-Ithird_party/codework_shared/core/core_io/include \
@@ -888,7 +888,7 @@ $(PROCEDURAL_SURFACE_SHELL_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-Ithird_party/codework_shared/core/core_mesh_asset/include \
 		-Ithird_party/codework_shared/core/core_object/include \
 		-Ithird_party/codework_shared/core/core_io/include \
@@ -920,7 +920,7 @@ $(PROCEDURAL_SOLID_ASSET_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-Ithird_party/codework_shared/core/core_mesh_asset/include \
 		-Ithird_party/codework_shared/core/core_object/include \
 		-Ithird_party/codework_shared/core/core_io/include \
@@ -951,7 +951,7 @@ $(PROCEDURAL_SOLID_AGENT_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1001,7 +1001,7 @@ $(PROCEDURAL_SOLID_MATERIAL_AGENT_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1034,7 +1034,7 @@ $(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(PROCEDURAL_SOLID_AUTHORED_MATERIAL_AGENT_TOOL_SRCS) \
 		$(JSON_LIBS) -lm
@@ -1068,7 +1068,7 @@ $(PROCEDURAL_SOLID_MATERIAL_GRAPH_AGENT_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1094,7 +1094,7 @@ $(PROCEDURAL_SOLID_MATERIAL_DEBUG_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1113,7 +1113,7 @@ $(PROCEDURAL_SOLID_MATERIAL_GRAPH_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1146,7 +1146,7 @@ $(PROCEDURAL_SOLID_AUTHORED_BINDING_AGENT_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1186,7 +1186,7 @@ $(PROCEDURAL_SURFACE_AGENT_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(PROCEDURAL_SURFACE_AGENT_TOOL_SRCS) \
 		$(JSON_LIBS) -lm
@@ -1210,7 +1210,7 @@ $(PROCEDURAL_SURFACE_GRAPH_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(PROCEDURAL_SURFACE_GRAPH_TOOL_SRCS) \
 		$(JSON_LIBS) -lm
 
@@ -1244,7 +1244,7 @@ $(PROCEDURAL_SURFACE_PREVIEW_ASSET_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
 		-I$(CORE_BASE_DIR)/include \
@@ -1297,7 +1297,7 @@ $(PROCEDURAL_SURFACE_FIELD_PRESET_ASSET_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_IO_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
 		-I$(CORE_BASE_DIR)/include \
@@ -1482,8 +1482,8 @@ STARTER_SCENE_PROFILE_TEST_SRCS := \
 
 $(STARTER_SCENE_PROFILE_TEST_BIN): $(STARTER_SCENE_PROFILE_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(STARTER_SCENE_PROFILE_TEST_SRCS) $(JSON_LIBS)
 
 test-starter-scene-profile-contract: $(STARTER_SCENE_PROFILE_TEST_BIN)
@@ -1503,7 +1503,7 @@ $(RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(RAY_TRACING_DURABLE_FRAME_RECOVERY_TEST_SRCS) $(JSON_LIBS)
 
 test-ray-tracing-durable-frame-recovery: \
@@ -1523,7 +1523,7 @@ $(RAY_TRACING_RECOVERY_AUTHORITY_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(RAY_TRACING_RECOVERY_AUTHORITY_TEST_SRCS) $(JSON_LIBS)
 
 test-ray-tracing-recovery-authority: \
@@ -1544,7 +1544,7 @@ $(RAY_TRACING_WORKER_PROTOCOL_TEST_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(RAY_TRACING_WORKER_PROTOCOL_TEST_SRCS) $(JSON_LIBS)
 
 test-ray-tracing-worker-protocol: $(RAY_TRACING_WORKER_PROTOCOL_TEST_BIN)
@@ -1562,8 +1562,8 @@ SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_SRCS := \
 
 $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN): $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		$(SDL_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(KIT_VIEWPORT3D_DIR)/include \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		$(SDL_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(KIT_VIEWPORT3D_DIR)/include \
 		-o $@ $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_SRCS) $(SDL_LIBS) -lm
 
 test-scene-editor-mesh-preview-outline: $(SCENE_EDITOR_MESH_PREVIEW_OUTLINE_TEST_BIN)
@@ -1578,8 +1578,8 @@ SCENE_EDITOR_MESH_PREVIEW_SHADING_TEST_SRCS := \
 $(SCENE_EDITOR_MESH_PREVIEW_SHADING_TEST_BIN): \
 	$(SCENE_EDITOR_MESH_PREVIEW_SHADING_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		$(SDL_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_PREVIEW_DIR)/include \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		$(SDL_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_MESH_PREVIEW_DIR)/include \
 		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(SCENE_EDITOR_MESH_PREVIEW_SHADING_TEST_SRCS) $(SDL_LIBS) -lm
@@ -1597,8 +1597,8 @@ SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_SRCS := \
 $(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_BIN): \
 	$(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		-I$(INC_DIR) -I$(SRC_DIR) \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(SCENE_EDITOR_PRIMITIVE_PREVIEW_GEOMETRY_TEST_SRCS) -lm
 
 test-scene-editor-primitive-preview-geometry: \
@@ -1646,9 +1646,9 @@ endif
 
 $(RAY_TRACING_FOLDER_PICKER_TEST_BIN): $(RAY_TRACING_FOLDER_PICKER_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
 		$(RAY_TRACING_FOLDER_PICKER_TEST_PLATFORM_FLAGS) \
-		-DRAY_TRACING_FOLDER_PICKER_FORCE_LINUX -I$(INC_DIR) -I$(SRC_DIR) \
+		-DRAY_TRACING_FOLDER_PICKER_FORCE_LINUX -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(RAY_TRACING_FOLDER_PICKER_TEST_SRCS)
 
 test-ray-tracing-folder-picker: $(RAY_TRACING_FOLDER_PICKER_TEST_BIN)
@@ -1662,8 +1662,8 @@ RAY_TRACING_PATH_OPENER_TEST_SRCS := \
 
 $(RAY_TRACING_PATH_OPENER_TEST_BIN): $(RAY_TRACING_PATH_OPENER_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L -DRAY_TRACING_PATH_OPENER_FORCE_LINUX -I$(INC_DIR) -I$(SRC_DIR) \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L -DRAY_TRACING_PATH_OPENER_FORCE_LINUX -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(RAY_TRACING_PATH_OPENER_TEST_SRCS)
 
 test-ray-tracing-path-opener: $(RAY_TRACING_PATH_OPENER_TEST_BIN)
@@ -1735,7 +1735,7 @@ $(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1751,7 +1751,7 @@ test-procedural-imported-surface-region-psg19: \
 	@$(MAKE) -C ../line_drawing imported_mesh_harness >/dev/null
 	@python3 tests/integration/test_procedural_imported_surface_region_psg19.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-19 imported surface region lane passed"
 
@@ -1793,7 +1793,7 @@ $(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1811,7 +1811,7 @@ test-procedural-imported-surface-inset-psg20: \
 	@python3 tests/integration/test_procedural_imported_surface_inset_psg20.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-21 adaptive imported surface inset lane passed"
 
@@ -1862,7 +1862,7 @@ $(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -1880,7 +1880,7 @@ test-procedural-imported-surface-growth-psg22: \
 	@python3 tests/integration/test_procedural_imported_surface_growth_psg22.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-22 imported surface attached growth lane passed"
 
@@ -1895,7 +1895,7 @@ test-procedural-surface-feature-selection-psg24: \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-24 field-selected carrier bridge passed"
 
@@ -1909,7 +1909,7 @@ test-procedural-surface-feature-inset-psg24c: \
 		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_INSET_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN) \
 		tools/procedural_surface_feature_inset_compiler.py
@@ -1932,7 +1932,7 @@ test-procedural-surface-feature-deposit-psg24d: \
 		$(PROCEDURAL_SURFACE_FEATURE_SELECTION_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_GROWTH_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(PROCEDURAL_SOLID_MESH_DIGEST_TOOL_BIN) \
 		tools/procedural_surface_feature_deposit_compiler.py \
@@ -1982,7 +1982,7 @@ $(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN): \
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
 		-D_DARWIN_C_SOURCE -D_POSIX_C_SOURCE=200809L \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-I$(CORE_OBJECT_DIR)/include -I$(CORE_UNITS_DIR)/include \
@@ -2000,7 +2000,7 @@ test-procedural-imported-surface-strands-psg23a: \
 	@python3 tests/integration/test_procedural_imported_surface_strands_psg23a.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_STRANDS_TOOL_BIN) \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness
 	@echo "PSG-23A imported surface rooted strand lane passed"
 
@@ -2034,8 +2034,8 @@ $(RUNTIME_CURVE_BLAS_PSG23B_TEST_BIN): \
 	$(RUNTIME_CURVE_BLAS_PSG23B_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
-		-I$(INC_DIR) -I$(SRC_DIR) \
+		-g \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
@@ -2077,8 +2077,8 @@ $(RUNTIME_CURVE_SCENE_PSG23C_TEST_BIN): \
 	$(RUNTIME_CURVE_SCENE_PSG23C_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
-		-I$(INC_DIR) -I$(SRC_DIR) \
+		-g \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
@@ -2110,7 +2110,7 @@ test-procedural-imported-surface-strands-psg23e: \
 	@python3 tests/integration/test_procedural_carrier_curve_groom_psg23e.py \
 		tools/procedural_carrier_curve_groom_authoring.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(BUILD_DIR)/tools/cli/ray_tracing_render_headless \
 		tests/fixtures/procedural_imported_surface_strands_psg23a
@@ -2144,8 +2144,8 @@ $(RUNTIME_CURVE_DENSITY_PSG23F_TEST_BIN): \
 	$(RUNTIME_CURVE_DENSITY_PSG23F_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
-		-I$(INC_DIR) -I$(SRC_DIR) \
+		-g \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
@@ -2164,7 +2164,7 @@ test-procedural-imported-surface-strands-psg23f: \
 		tools/procedural_curve_render_children_authoring.py \
 		tools/procedural_carrier_curve_groom_authoring.py \
 		$(PROCEDURAL_IMPORTED_SURFACE_REGION_TOOL_BIN) \
-		../tools/procedural_object_authoring/procedural_stl_tool.py \
+		$(CODEWORK_WORKSPACE_ROOT)/tools/procedural_object_authoring/procedural_stl_tool.py \
 		../line_drawing/build/toolchains/clang/bin/imported_mesh_harness \
 		$(BUILD_DIR)/tools/cli/ray_tracing_render_headless \
 		tests/fixtures/procedural_imported_surface_strands_psg23a
@@ -2189,8 +2189,8 @@ $(RUNTIME_HAIR_SCATTERING_PSG23G_TEST_BIN): \
 	$(RUNTIME_HAIR_SCATTERING_PSG23G_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
-		-I$(INC_DIR) -I$(SRC_DIR) \
+		-g \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
@@ -2229,8 +2229,8 @@ RUNTIME_MESH_ASSET_LOADER_TEST_SRCS := \
 
 $(RUNTIME_MESH_ASSET_LOADER_TEST_BIN): $(RUNTIME_MESH_ASSET_LOADER_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include -I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
@@ -2255,8 +2255,8 @@ RUNTIME_MESH_ASSET_PACK_TEST_SRCS := \
 
 $(RUNTIME_MESH_ASSET_PACK_TEST_BIN): $(RUNTIME_MESH_ASSET_PACK_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		-I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-DRAY_TRACING_RUNTIME_MESH_ASSET_PACK_STANDALONE \
@@ -2313,8 +2313,8 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 
 $(RUNTIME_MESH_ASSET_BUILDER_TEST_BIN): $(RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include -I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
@@ -2370,8 +2370,8 @@ $(PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_BIN): \
 	$(PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror \
-		-Wno-unknown-attributes -Wno-c23-extensions -g \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+		-g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include \
@@ -2438,8 +2438,8 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 
 $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_BIN): $(RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		$(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		$(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
 		-I$(CORE_MESH_PREVIEW_DIR)/include -I$(CORE_MESH_PREVIEW_DIR)/../../shape/external \
 		-I$(CORE_IO_DIR)/include -I$(CORE_SCENE_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
@@ -2562,8 +2562,8 @@ RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 
 $(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN): $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g \
-		-I$(INC_DIR) -I$(SRC_DIR) \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		-o $@ $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS) -lm
 
 test-runtime-triangle-bvh-3d: $(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN)
@@ -2624,7 +2624,7 @@ RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_SRCS := \
 $(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_BIN): $(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_SRCS) \
 		tests/fixtures/procedural_surface_authoring_document_v1/cube_composition.canvas.json
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(SRC_DIR) \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g $(JSON_CFLAGS) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
 		$(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_SRCS) -o $@ $(JSON_LIBS) -lm
 
 test-ray-tracing-surface-authoring-canvas: $(RAY_TRACING_SURFACE_AUTHORING_CANVAS_TEST_BIN)
@@ -2640,7 +2640,7 @@ RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_SRCS := \
 $(RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_BIN): $(RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
-		-I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_SIM_DIR)/include \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_SIM_DIR)/include \
 		-o $@ $(RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_SRCS) -lm
 
 test-ray-tracing-core-sim-runtime-frame-contract: $(RAY_TRACING_CORE_SIM_RUNTIME_FRAME_TEST_BIN)
@@ -2655,7 +2655,7 @@ RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS := \
 $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN): $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -DUSE_VULKAN=0 \
-		$(SDL_CFLAGS) $(TIMER_HUD_INCLUDE) -I$(INC_DIR) -I$(SRC_DIR) -I$(VK_RENDERER_DIR)/include -I$(VK_RUNTIME_DIR)/include \
+		$(SDL_CFLAGS) $(TIMER_HUD_INCLUDE) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(VK_RENDERER_DIR)/include -I$(VK_RUNTIME_DIR)/include \
 		-o $@ $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_SRCS) -lm
 
 test-ray-tracing-runtime-host-lifecycle-contract: $(RAY_TRACING_RUNTIME_HOST_LIFECYCLE_TEST_BIN)
@@ -2698,7 +2698,7 @@ CONFIG_RUNTIME_OUTPUT_IDENTITY_TEST_BIN := $(BUILD_DIR)/tests/config_runtime_out
 $(CONFIG_RUNTIME_OUTPUT_IDENTITY_TEST_BIN): $(TEST_DIR)/config_runtime_output_identity_test.c src/config/core/config_output_identity.c
 	@mkdir -p $(dir $@)
 	$(CC) -std=c11 -Wall -Wextra -Wpedantic -Werror -g \
-		-Iinclude -Isrc \
+		-Iinclude -I$(FISICS_INCLUDE_DIR) -Isrc \
 		-o $@ $(TEST_DIR)/config_runtime_output_identity_test.c \
 		src/config/core/config_output_identity.c
 
@@ -2721,7 +2721,7 @@ SCENE_EDITOR_PANE_HOST_TEST_SRCS := \
 $(SCENE_EDITOR_PANE_HOST_TEST_BIN): $(SCENE_EDITOR_PANE_HOST_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -DKIT_RENDER_ENABLE_VK_BACKEND=0 \
-		-I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_PANE_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_PANE_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(SCENE_EDITOR_PANE_HOST_TEST_SRCS) -lm
 
 test-scene-editor-pane-host-contract: $(SCENE_EDITOR_PANE_HOST_TEST_BIN)
@@ -2732,7 +2732,7 @@ SCENE_EDITOR_VIEWPORT_NAV_TEST_SRC := $(TEST_DIR)/scene_editor_viewport_nav_cont
 
 $(SCENE_EDITOR_VIEWPORT_NAV_TEST_BIN): $(SCENE_EDITOR_VIEWPORT_NAV_TEST_SRC) $(INC_DIR)/editor/scene_editor_viewport_nav_math.h
 	@mkdir -p $(dir $@)
-	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $@ $(SCENE_EDITOR_VIEWPORT_NAV_TEST_SRC) -lm
 
 test-scene-editor-viewport-nav-contract: $(SCENE_EDITOR_VIEWPORT_NAV_TEST_BIN)
@@ -2748,7 +2748,7 @@ SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_SRCS := \
 $(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_BIN): $(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
-		-I$(INC_DIR) -I$(CORE_VIEWPORT3D_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(CORE_VIEWPORT3D_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_SRCS) -lm
 
 test-scene-editor-viewport3d-bridge-contract: $(SCENE_EDITOR_VIEWPORT3D_BRIDGE_TEST_BIN)
@@ -2770,7 +2770,7 @@ MENU_PANE_HOST_TEST_SRCS := \
 $(MENU_PANE_HOST_TEST_BIN): $(MENU_PANE_HOST_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g -DKIT_RENDER_ENABLE_VK_BACKEND=0 \
-		-I$(INC_DIR) -I$(SRC_DIR) -I$(CORE_PANE_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(CORE_BASE_DIR)/include \
+		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) -I$(CORE_PANE_DIR)/include -I$(KIT_PANE_DIR)/include -I$(KIT_RENDER_DIR)/include -I$(CORE_THEME_DIR)/include -I$(CORE_FONT_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(MENU_PANE_HOST_TEST_SRCS) -lm
 
 test-menu-pane-host-contract: $(MENU_PANE_HOST_TEST_BIN)
@@ -2907,7 +2907,7 @@ $(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN): \
 	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS) \
 	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
 	@mkdir -p $(dir $@)
-	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $@ $(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS) -lm
 
 test-ray-tracing-compound-scene-handoff-import: \
@@ -2918,7 +2918,7 @@ test-ray-tracing-compound-scene-handoff-import: \
 test-ray-tracing-compound-scene-handoff-import-sanitize:
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
-		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN).sanitize \
 		$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_SRCS) -lm
 	@$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_TEST_BIN).sanitize \
@@ -2941,7 +2941,7 @@ $(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN): \
 	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
 	$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
 	@mkdir -p $(dir $@)
-	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) \
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $@ $(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_SRCS) -lm
 
 test-ray-tracing-compound-scene-static-room-import: \
@@ -2953,7 +2953,7 @@ test-ray-tracing-compound-scene-static-room-import: \
 test-ray-tracing-compound-scene-static-room-import-sanitize:
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
-		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN).sanitize \
 		$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_SRCS) -lm
 	@$(RAY_TRACING_COMPOUND_STATIC_ROOM_TEST_BIN).sanitize \
@@ -2975,7 +2975,7 @@ RAY_TRACING_COMPOUND_Z_UP_V2_ROOM ?=
 $(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN): \
 	$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_SRCS)
 	@mkdir -p $(dir $@)
-	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) \
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $@ $(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_SRCS) -lm
 
 test-ray-tracing-compound-scene-z-up-v2-import: \
@@ -2993,7 +2993,7 @@ test-ray-tracing-compound-scene-z-up-v2-import-sanitize:
 		(echo "set RAY_TRACING_COMPOUND_Z_UP_V2_HANDOFF and RAY_TRACING_COMPOUND_Z_UP_V2_ROOM to fresh producer artifacts" >&2; exit 2)
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
-		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN).sanitize \
 		$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_SRCS) -lm
 	@$(RAY_TRACING_COMPOUND_Z_UP_V2_IMPORT_TEST_BIN).sanitize \
@@ -3016,7 +3016,7 @@ $(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN): \
 	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE) \
 	$(RAY_TRACING_COMPOUND_STATIC_ROOM_FIXTURE)
 	@mkdir -p $(dir $@)
-	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) \
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $@ $(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_SRCS) -lm
 
 test-ray-tracing-compound-scene-room-geometry: \
@@ -3028,7 +3028,7 @@ test-ray-tracing-compound-scene-room-geometry: \
 test-ray-tracing-compound-scene-room-geometry-sanitize:
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -Werror -g \
-		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN).sanitize \
 		$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_SRCS) -lm
 	@$(RAY_TRACING_COMPOUND_ROOM_GEOMETRY_TEST_BIN).sanitize \
@@ -3050,7 +3050,7 @@ $(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN): \
 	$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS) \
 	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
 	@mkdir -p $(dir $@)
-	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $@ $(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS) -lm
 
 test-ray-tracing-compound-scene-evaluated-scene: \
@@ -3061,7 +3061,7 @@ test-ray-tracing-compound-scene-evaluated-scene: \
 test-ray-tracing-compound-scene-evaluated-scene-sanitize:
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
-		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN).sanitize \
 		$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS) -lm
 	@$(RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN).sanitize \
@@ -3083,7 +3083,7 @@ $(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN): \
 	$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS) \
 	$(RAY_TRACING_COMPOUND_SCENE_HANDOFF_FIXTURE)
 	@mkdir -p $(dir $@)
-	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) \
+	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $@ $(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS) -lm
 
 test-ray-tracing-compound-scene-detached-geometry: \
@@ -3094,7 +3094,7 @@ test-ray-tracing-compound-scene-detached-geometry: \
 test-ray-tracing-compound-scene-detached-geometry-sanitize:
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
-		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) \
+		-fsanitize=address,undefined -fno-omit-frame-pointer -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) \
 		-o $(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN).sanitize \
 		$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS) -lm
 	@$(RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN).sanitize \
@@ -3129,7 +3129,7 @@ RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS := \
 	$(CORE_BASE_DIR)/src/core_base.c \
 	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
 RAY_TRACING_COMPOUND_ASSEMBLY_TEST_FLAGS := \
-	-I$(INC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
 	-I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 	-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 	-I$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson
@@ -3336,7 +3336,7 @@ RAY_TRACING_COMPOUND_S9E_EMITTER_SRCS := \
 	$(CORE_BASE_DIR)/src/core_base.c \
 	$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
 RAY_TRACING_COMPOUND_S9E_EMITTER_FLAGS := \
-	-I$(INC_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
+	-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(CORE_MESH_ASSET_DIR)/include \
 	-I$(CORE_IO_DIR)/include -I$(CORE_OBJECT_DIR)/include \
 	-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 	-I$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson

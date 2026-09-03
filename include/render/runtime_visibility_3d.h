@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_VISIBILITY_3D_H
 #define RENDER_RUNTIME_VISIBILITY_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 
 #include "render/runtime_material_payload_3d.h"
@@ -24,7 +26,7 @@ bool RuntimeVisibility3D_CanUseOpaqueNoVolumeFastPath(const RuntimeScene3D* scen
 
 void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
     const RuntimeMaterialPayload3D* payload,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double segment_distance,
+    FISICS_DIM(length) FISICS_UNIT(meter) double segment_distance,
     RuntimeVisibility3DTransmittance* io_transmittance);
 
 bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
@@ -32,7 +34,7 @@ bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
                                       Vec3 surface_normal,
                                       Vec3 light_position,
                                       HitInfo3D* out_blocker_hit,
-                                      [[fisics::dim(length)]] [[fisics::unit(meter)]] double* out_light_distance);
+                                      FISICS_DIM(length) FISICS_UNIT(meter) double* out_light_distance);
 
 RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceToLightRGB(
     const RuntimeScene3D* scene,

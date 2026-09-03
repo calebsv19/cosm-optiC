@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_VOLUME_3D_INTEGRATE_H
 #define RENDER_RUNTIME_VOLUME_3D_INTEGRATE_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 
 #include "render/runtime_visibility_3d.h"
@@ -18,7 +20,7 @@ double RuntimeVolume3DMaterial_ExtinctionDensity(double density);
 RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
     const RuntimeVolumeAttachment3D* attachment,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]]);
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter));
 
 #endif

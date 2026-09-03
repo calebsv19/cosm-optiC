@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_RAY_3D_H
 #define RENDER_RUNTIME_RAY_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -85,8 +87,8 @@ typedef struct RuntimeRay3DRouteStats {
 typedef int (*RuntimeRay3DSceneAccelerationTraceFirstHitFn)(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
     HitInfo3D* out_hit);
 
 typedef struct RuntimeRay3DTraceContext {
@@ -100,7 +102,7 @@ Ray3D RuntimeRay3D_Make(Vec3 origin, Vec3 direction);
 Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
                               Vec3 normal,
                               Vec3 direction,
-                              [[fisics::dim(length)]] [[fisics::unit(meter)]] double epsilon);
+                              FISICS_DIM(length) FISICS_UNIT(meter) double epsilon);
 void HitInfo3D_Reset(HitInfo3D* hit);
 Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit);
 /*
@@ -126,20 +128,20 @@ void RuntimeRay3D_ResolveTriangleNormals(const RuntimeTriangle3D* triangle,
 bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                     const RuntimeTriangle3D* triangle,
                                     int triangle_index,
-                                    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-                                    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                    FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+                                    FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
                                     HitInfo3D* out_hit);
 
 bool RuntimeRay3D_TraceSceneFirstHit(const RuntimeScene3D* scene,
                                      const Ray3D* ray,
-                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-                                     [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                     FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+                                     FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
                                      HitInfo3D* out_hit);
 bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* context,
                                                 const RuntimeScene3D* scene,
                                                 const Ray3D* ray,
-                                                [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-                                                [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+                                                FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+                                                FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
                                                 HitInfo3D* out_hit);
 
 const char* RuntimeRay3DTraceRouteLabel(RuntimeRay3DTraceRoute route);

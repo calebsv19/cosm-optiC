@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_VOLUME_3D_SCATTER_H
 #define RENDER_RUNTIME_VOLUME_3D_SCATTER_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 
 #include "render/runtime_caustic_volume_cache_3d.h"
@@ -44,21 +46,21 @@ typedef struct {
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter),
     const RuntimeNative3DSamplingContext* sampling);
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWithCausticCacheRGB(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter),
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeCausticVolumeCache3D* caustic_cache);
 RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]]);
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter));
 
 void RuntimeVolume3DScatter_ResetTuning(void);
 void RuntimeVolume3DScatter_SetStrengthGain(double gain);

@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_LIGHT_EMITTER_3D_H
 #define RENDER_RUNTIME_LIGHT_EMITTER_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 
 #include "render/runtime_ray_3d.h"
@@ -25,14 +27,14 @@ typedef struct {
 
 bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
                                         const Ray3D* ray,
-                                        double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                        double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                        double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+                                        double t_max FISICS_DIM(length) FISICS_UNIT(meter),
                                         RuntimeLightEmitterHit3DResult* out_result);
 
 bool RuntimeLightEmitter3D_ResolveFirstHit(const RuntimeScene3D* scene,
                                            const Ray3D* ray,
-                                           double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                           double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                           double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+                                           double t_max FISICS_DIM(length) FISICS_UNIT(meter),
                                            RuntimeLightEmitterTrace3DResult* out_result);
 
 #endif

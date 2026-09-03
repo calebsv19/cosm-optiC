@@ -43,67 +43,67 @@ toolchain-contract:
 
 dump-sema-runtime-scene-bridge:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/import/runtime_scene_bridge.c" -o "$(call program_build_dir_for,fisics)/runtime_scene_bridge.o" > "$(RAY_TRACING_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/import/runtime_scene_bridge.c" -o "$(call program_build_dir_for,fisics)/runtime_scene_bridge.o" > "$(RAY_TRACING_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-scene-bridge-authoring:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/import/runtime_scene_bridge_authoring.c" -o "$(call program_build_dir_for,fisics)/runtime_scene_bridge_authoring.o" > "$(RAY_TRACING_AUTHORING_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/import/runtime_scene_bridge_authoring.c" -o "$(call program_build_dir_for,fisics)/runtime_scene_bridge_authoring.o" > "$(RAY_TRACING_AUTHORING_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_AUTHORING_UNITS_SEMA_OUTPUT)"
 
 dump-sema-animation-fluid-scene:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/app/animation_fluid_scene.c" -o "$(call program_build_dir_for,fisics)/animation_fluid_scene.o" > "$(RAY_TRACING_FLUID_SCENE_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/app/animation_fluid_scene.c" -o "$(call program_build_dir_for,fisics)/animation_fluid_scene.o" > "$(RAY_TRACING_FLUID_SCENE_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_FLUID_SCENE_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-light-emitter-3d:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_light_emitter_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_light_emitter_3d.o" > "$(RAY_TRACING_LIGHT_EMITTER_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_light_emitter_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_light_emitter_3d.o" > "$(RAY_TRACING_LIGHT_EMITTER_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_LIGHT_EMITTER_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-volume-3d-sampling:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_volume_3d_sampling.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d_sampling.o" > "$(RAY_TRACING_VOLUME_SAMPLING_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_volume_3d_sampling.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d_sampling.o" > "$(RAY_TRACING_VOLUME_SAMPLING_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_VOLUME_SAMPLING_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-native-3d-sampling:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_native_3d_sampling.c" -o "$(call program_build_dir_for,fisics)/runtime_native_3d_sampling.o" > "$(RAY_TRACING_NATIVE_SAMPLING_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_native_3d_sampling.c" -o "$(call program_build_dir_for,fisics)/runtime_native_3d_sampling.o" > "$(RAY_TRACING_NATIVE_SAMPLING_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_NATIVE_SAMPLING_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-volume-3d:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_volume_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d.o" > "$(RAY_TRACING_VOLUME_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_volume_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d.o" > "$(RAY_TRACING_VOLUME_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_VOLUME_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-volume-3d-integrate:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_volume_3d_integrate.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d_integrate.o" > "$(RAY_TRACING_VOLUME_INTEGRATE_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_volume_3d_integrate.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d_integrate.o" > "$(RAY_TRACING_VOLUME_INTEGRATE_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_VOLUME_INTEGRATE_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-volume-3d-scatter:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_volume_3d_scatter.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d_scatter.o" > "$(RAY_TRACING_VOLUME_SCATTER_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_volume_3d_scatter.c" -o "$(call program_build_dir_for,fisics)/runtime_volume_3d_scatter.o" > "$(RAY_TRACING_VOLUME_SCATTER_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_VOLUME_SCATTER_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-direct-light-3d:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_direct_light_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_direct_light_3d.o" > "$(RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_direct_light_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_direct_light_3d.o" > "$(RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-visibility-3d:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_visibility_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_visibility_3d.o" > "$(RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_visibility_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_visibility_3d.o" > "$(RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-camera-3d-rays:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_camera_3d_rays.c" -o "$(call program_build_dir_for,fisics)/runtime_camera_3d_rays.o" > "$(RAY_TRACING_CAMERA_RAYS_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_camera_3d_rays.c" -o "$(call program_build_dir_for,fisics)/runtime_camera_3d_rays.o" > "$(RAY_TRACING_CAMERA_RAYS_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_CAMERA_RAYS_UNITS_SEMA_OUTPUT)"
 
 dump-sema-runtime-ray-3d:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
-	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(CFLAGS) --dump-sema -c "src/render/runtime_ray_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_ray_3d.o" > "$(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)" 2>&1
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_ray_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_ray_3d.o" > "$(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_RAY3D_UNITS_SEMA_OUTPUT)"
 
 $(WORKER_VERSION_HEADER): $(WORKER_VERSION_FILE) tools/generate_worker_version_header.py

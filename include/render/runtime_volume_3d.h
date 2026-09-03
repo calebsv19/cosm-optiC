@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_VOLUME_3D_H
 #define RENDER_RUNTIME_VOLUME_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -66,11 +68,11 @@ bool RuntimeVolumeGrid3D_Configure(RuntimeVolumeGrid3D* grid,
                                    uint32_t grid_w,
                                    uint32_t grid_h,
                                    uint32_t grid_d,
-                                   double time_seconds [[fisics::dim(time)]] [[fisics::unit(second)]],
+                                   double time_seconds FISICS_DIM(time) FISICS_UNIT(second),
                                    uint64_t frame_index,
-                                   double dt_seconds [[fisics::dim(time)]] [[fisics::unit(second)]],
+                                   double dt_seconds FISICS_DIM(time) FISICS_UNIT(second),
                                    Vec3 origin,
-                                   double voxel_size [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double voxel_size FISICS_DIM(length) FISICS_UNIT(meter),
                                    Vec3 scene_up,
                                    uint32_t solid_mask_crc32);
 bool RuntimeVolumeGrid3D_IsConfigured(const RuntimeVolumeGrid3D* grid);

@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_SCENE_ACCEL_3D_H
 #define RENDER_RUNTIME_SCENE_ACCEL_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -103,8 +105,8 @@ bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D
 RuntimeSceneAcceleration3DTraceStatus RuntimeSceneAcceleration3D_TraceFirstHit(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
     HitInfo3D* out_hit);
 void RuntimeSceneAcceleration3D_ResetTraceStats(void);
 void RuntimeSceneAcceleration3D_SnapshotTraceStats(

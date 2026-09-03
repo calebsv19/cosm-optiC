@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_volume_3d.h"
 
 #include <limits.h>
@@ -6,17 +8,17 @@
 #include <string.h>
 
 static double runtime_volume_3d_zero_length(void) {
-    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     return zero;
 }
 
 static double runtime_volume_3d_zero_time(void) {
-    double zero [[fisics::dim(time)]] [[fisics::unit(second)]] = 0.0;
+    double zero FISICS_DIM(time) FISICS_UNIT(second) = 0.0;
     return zero;
 }
 
 static double runtime_volume_3d_length_epsilon(void) {
-    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-9;
+    double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-9;
     return epsilon;
 }
 
@@ -78,11 +80,11 @@ bool RuntimeVolumeGrid3D_Configure(RuntimeVolumeGrid3D* grid,
                                    uint32_t grid_w,
                                    uint32_t grid_h,
                                    uint32_t grid_d,
-                                   double time_seconds [[fisics::dim(time)]] [[fisics::unit(second)]],
+                                   double time_seconds FISICS_DIM(time) FISICS_UNIT(second),
                                    uint64_t frame_index,
-                                   double dt_seconds [[fisics::dim(time)]] [[fisics::unit(second)]],
+                                   double dt_seconds FISICS_DIM(time) FISICS_UNIT(second),
                                    Vec3 origin,
-                                   double voxel_size [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                   double voxel_size FISICS_DIM(length) FISICS_UNIT(meter),
                                    Vec3 scene_up,
                                    uint32_t solid_mask_crc32) {
     Vec3 scene_up_resolved = scene_up;
@@ -92,9 +94,9 @@ bool RuntimeVolumeGrid3D_Configure(RuntimeVolumeGrid3D* grid,
     double zero_time = runtime_volume_3d_zero_time();
     double scene_up_length = 0.0;
     double epsilon = runtime_volume_3d_length_epsilon();
-    double extent_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = zero_length;
-    double extent_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = zero_length;
-    double extent_z [[fisics::dim(length)]] [[fisics::unit(meter)]] = zero_length;
+    double extent_x FISICS_DIM(length) FISICS_UNIT(meter) = zero_length;
+    double extent_y FISICS_DIM(length) FISICS_UNIT(meter) = zero_length;
+    double extent_z FISICS_DIM(length) FISICS_UNIT(meter) = zero_length;
 
     if (!grid || !(voxel_size > zero_length)) {
         return false;

@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "app/animation.h"
 
 #include "camera/camera_path_3d.h"
@@ -39,31 +41,31 @@ static double ClampDoubleLocal(double value, double min_value, double max_value)
 }
 
 static double FluidSceneZeroLength(void) {
-    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     return zero;
 }
 
 static double FluidSceneLengthEpsilon(void) {
-    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-4;
+    double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-4;
     return epsilon;
 }
 
 static double FluidSceneUnitLength(void) {
-    double unit_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1.0;
+    double unit_length FISICS_DIM(length) FISICS_UNIT(meter) = 1.0;
     return unit_length;
 }
 
-static double FluidSceneLengthCenter(double min_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                     double span [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
-    double half_span [[fisics::dim(length)]] [[fisics::unit(meter)]] = span * 0.5;
+static double FluidSceneLengthCenter(double min_value FISICS_DIM(length) FISICS_UNIT(meter),
+                                     double span FISICS_DIM(length) FISICS_UNIT(meter)) {
+    double half_span FISICS_DIM(length) FISICS_UNIT(meter) = span * 0.5;
     return min_value + half_span;
 }
 
 static double FluidSceneLengthInterpolate(
-    double min_value [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double span [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double min_value FISICS_DIM(length) FISICS_UNIT(meter),
+    double span FISICS_DIM(length) FISICS_UNIT(meter),
     double normalized) {
-    double delta [[fisics::dim(length)]] [[fisics::unit(meter)]] = span * normalized;
+    double delta FISICS_DIM(length) FISICS_UNIT(meter) = span * normalized;
     return min_value + delta;
 }
 
@@ -73,12 +75,12 @@ static void ResetPathLocal(Path *path, BezierMode mode) {
     path->mode = mode;
 }
 
-static void ApplyFluidWindowAndCameraFit(double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                         double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                         double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                         double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
-    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_x - min_x;
-    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_y - min_y;
+static void ApplyFluidWindowAndCameraFit(double min_x FISICS_DIM(length) FISICS_UNIT(meter),
+                                         double min_y FISICS_DIM(length) FISICS_UNIT(meter),
+                                         double max_x FISICS_DIM(length) FISICS_UNIT(meter),
+                                         double max_y FISICS_DIM(length) FISICS_UNIT(meter)) {
+    double grid_w_world FISICS_DIM(length) FISICS_UNIT(meter) = max_x - min_x;
+    double grid_h_world FISICS_DIM(length) FISICS_UNIT(meter) = max_y - min_y;
     double epsilon = FluidSceneLengthEpsilon();
     if (grid_w_world <= epsilon || grid_h_world <= epsilon) return;
 
@@ -101,8 +103,8 @@ static void ApplyFluidWindowAndCameraFit(double min_x [[fisics::dim(length)]] [[
     sceneSettings.camera.x = FluidSceneLengthCenter(min_x, grid_w_world);
     sceneSettings.camera.y = FluidSceneLengthCenter(min_y, grid_h_world);
     sceneSettings.camera.rotation = 0.0;
-    double padded_w [[fisics::dim(length)]] [[fisics::unit(meter)]] = grid_w_world * 1.10;
-    double padded_h [[fisics::dim(length)]] [[fisics::unit(meter)]] = grid_h_world * 1.10;
+    double padded_w FISICS_DIM(length) FISICS_UNIT(meter) = grid_w_world * 1.10;
+    double padded_h FISICS_DIM(length) FISICS_UNIT(meter) = grid_h_world * 1.10;
     double zoom_x = (padded_w > epsilon) ? ((double)sceneSettings.windowWidth / padded_w) : 1.0;
     double zoom_y = (padded_h > epsilon) ? ((double)sceneSettings.windowHeight / padded_h) : 1.0;
     sceneSettings.camera.zoom = ClampDoubleLocal(fmin(zoom_x, zoom_y), 0.01, 100.0);
@@ -112,12 +114,12 @@ static void ApplyFluidWindowAndCameraFit(double min_x [[fisics::dim(length)]] [[
     sceneSettings.cameraMargin = ClampDoubleLocal(sceneSettings.cameraMargin, 0.0, margin_cap);
 }
 
-static void BuildDefaultFluidPaths(double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                   double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                   double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                   double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
-    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_x - min_x;
-    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] = max_y - min_y;
+static void BuildDefaultFluidPaths(double min_x FISICS_DIM(length) FISICS_UNIT(meter),
+                                   double min_y FISICS_DIM(length) FISICS_UNIT(meter),
+                                   double max_x FISICS_DIM(length) FISICS_UNIT(meter),
+                                   double max_y FISICS_DIM(length) FISICS_UNIT(meter)) {
+    double grid_w_world FISICS_DIM(length) FISICS_UNIT(meter) = max_x - min_x;
+    double grid_h_world FISICS_DIM(length) FISICS_UNIT(meter) = max_y - min_y;
     double epsilon = FluidSceneLengthEpsilon();
     if (grid_w_world <= epsilon || grid_h_world <= epsilon) return;
 
@@ -126,13 +128,13 @@ static void BuildDefaultFluidPaths(double min_x [[fisics::dim(length)]] [[fisics
 
     ResetPathLocal(&sceneSettings.bezierPath, BEZIER_CUBIC);
     CameraPath3D_Reset(&sceneSettings.bezierPath3D);
-    double cx [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double cx FISICS_DIM(length) FISICS_UNIT(meter) =
         FluidSceneLengthCenter(min_x, grid_w_world);
-    double cy [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double cy FISICS_DIM(length) FISICS_UNIT(meter) =
         FluidSceneLengthCenter(min_y, grid_h_world);
-    double orbit_rx [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double orbit_rx FISICS_DIM(length) FISICS_UNIT(meter) =
         fmax(grid_w_world * 0.30, grid_w_world * 0.08);
-    double orbit_ry [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double orbit_ry FISICS_DIM(length) FISICS_UNIT(meter) =
         fmax(grid_h_world * 0.30, grid_h_world * 0.08);
     if (orbit_rx <= epsilon) orbit_rx = FluidSceneUnitLength();
     if (orbit_ry <= epsilon) orbit_ry = FluidSceneUnitLength();
@@ -458,9 +460,9 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
     g_fluidGrid.max_y = manifest.origin_y + manifest.cell_size * (float)manifest.grid_h;
 
     sceneSettings.objectCount = 0;
-    double grid_w_world [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double grid_w_world FISICS_DIM(length) FISICS_UNIT(meter) =
         g_fluidGrid.max_x - g_fluidGrid.min_x;
-    double grid_h_world [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double grid_h_world FISICS_DIM(length) FISICS_UNIT(meter) =
         g_fluidGrid.max_y - g_fluidGrid.min_y;
     ApplyFluidWindowAndCameraFit(g_fluidGrid.min_x, g_fluidGrid.min_y,
                                  g_fluidGrid.max_x, g_fluidGrid.max_y);
@@ -492,9 +494,9 @@ bool AnimationApplyFluidScene(const char *manifest_path) {
     for (size_t i = 0; i < manifest.import_count; ++i) {
         const FluidImportShape *imp = &manifest.imports[i];
         if (!imp->path) continue;
-        double world_x [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        double world_x FISICS_DIM(length) FISICS_UNIT(meter) =
             FluidSceneLengthInterpolate(g_fluidGrid.min_x, grid_w_world, imp->pos_x_norm);
-        double world_y [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        double world_y FISICS_DIM(length) FISICS_UNIT(meter) =
             FluidSceneLengthInterpolate(g_fluidGrid.min_y, grid_h_world, imp->pos_y_norm);
         ShapeAsset asset = {0};
         bool loaded = LoadImportShapeAsset(imp->path, &asset);

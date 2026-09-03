@@ -11,6 +11,8 @@ Last audited: 2026-07-22.
 Current public focus:
 - dual-toolchain compiler-units rollout now starts at the runtime-scene import
   bridge, with explicit Clang-vs-`fisiCs` build/package selection
+  and first-party unit annotations expressed through the portable
+  `FISICS_DIM` / `FISICS_UNIT` macros from `<fisics/extensions.h>`
   and current sema coverage on:
   - `src/import/runtime_scene_bridge.c`
   - `src/import/runtime_scene_bridge_authoring.c`

@@ -85,6 +85,9 @@ Last updated: 2026-08-27
 - The compiler-units rollout now has its first explicit RayTracing customer
   lane:
   - dual-toolchain `clang-build` / `fisics-build`
+  - first-party unit annotations use the portable `FISICS_DIM` /
+    `FISICS_UNIT` macros from `<fisics/extensions.h>`; ordinary Clang builds
+    no longer suppress unknown-attribute or C23-attribute diagnostics
   - explicit `PACKAGE_TOOLCHAIN` package source selection
   - sema targets on:
     - `src/import/runtime_scene_bridge.c`

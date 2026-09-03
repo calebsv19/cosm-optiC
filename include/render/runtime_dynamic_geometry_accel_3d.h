@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_DYNAMIC_GEOMETRY_ACCEL_3D_H
 #define RENDER_RUNTIME_DYNAMIC_GEOMETRY_ACCEL_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -131,8 +133,8 @@ bool RuntimeDynamicGeometryAcceleration3D_OwnsScenePrimitive(
 bool RuntimeDynamicGeometryAcceleration3D_TraceWaterSurfaceFirstHit(
     const RuntimeScene3D* scene,
     const Ray3D* ray,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_min,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double t_max,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
     HitInfo3D* out_hit);
 
 const char* RuntimeDynamicGeometryAcceleration3D_StaticMeshPolicyLabel(

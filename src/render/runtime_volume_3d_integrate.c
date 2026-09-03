@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_volume_3d_integrate.h"
 
 #include <math.h>
@@ -13,17 +15,17 @@ static double gRuntimeVolume3DAbsorptionGain = 1.0;
 static double gRuntimeVolume3DOpacityClamp = kRuntimeVolume3DDefaultOpacityClamp;
 
 static double runtime_volume_3d_integrate_zero_length(void) {
-    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     return zero;
 }
 
 static double runtime_volume_3d_integrate_unit_length(void) {
-    double unit_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1.0;
+    double unit_length FISICS_DIM(length) FISICS_UNIT(meter) = 1.0;
     return unit_length;
 }
 
 static double runtime_volume_3d_integrate_minimum_step(void) {
-    double minimum_step [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+    double minimum_step FISICS_DIM(length) FISICS_UNIT(meter) =
         kRuntimeVolume3DMinimumStep;
     return minimum_step;
 }
@@ -105,12 +107,12 @@ double RuntimeVolume3DMaterial_ExtinctionDensity(double density) {
 RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
     const RuntimeVolumeAttachment3D* attachment,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter)) {
     RuntimeVisibility3DTransmittance transmittance = RuntimeVisibility3D_UnitTransmittance();
-    double t_enter [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_min;
-    double t_exit [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_max;
-    double step [[fisics::dim(length)]] [[fisics::unit(meter)]] = runtime_volume_3d_integrate_zero_length();
+    double t_enter FISICS_DIM(length) FISICS_UNIT(meter) = t_min;
+    double t_exit FISICS_DIM(length) FISICS_UNIT(meter) = t_max;
+    double step FISICS_DIM(length) FISICS_UNIT(meter) = runtime_volume_3d_integrate_zero_length();
     double optical_depth = 0.0;
     double zero_length = runtime_volume_3d_integrate_zero_length();
 
@@ -127,12 +129,12 @@ RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
     if (!(step > zero_length)) {
         step = runtime_volume_3d_integrate_unit_length();
     }
-    for (double t [[fisics::dim(length)]] [[fisics::unit(meter)]] = t_enter;
+    for (double t FISICS_DIM(length) FISICS_UNIT(meter) = t_enter;
          t < t_exit;
          t += step) {
-        const double next_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double next_t FISICS_DIM(length) FISICS_UNIT(meter) =
             fmin(t + step, t_exit);
-        const double sample_t [[fisics::dim(length)]] [[fisics::unit(meter)]] =
+        const double sample_t FISICS_DIM(length) FISICS_UNIT(meter) =
             0.5 * (t + next_t);
         const Vec3 sample_position =
             vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));

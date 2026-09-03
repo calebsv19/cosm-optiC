@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_DIRECT_LIGHT_3D_H
 #define RENDER_RUNTIME_DIRECT_LIGHT_3D_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 
 #include "render/runtime_camera_3d_rays.h"
@@ -21,7 +23,7 @@ typedef struct {
     bool visible;
     Ray3D primaryRay;
     HitInfo3D hitInfo;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double lightDistance;
+    FISICS_DIM(length) FISICS_UNIT(meter) double lightDistance;
     double ndotl;
     double attenuation;
     double radiance;

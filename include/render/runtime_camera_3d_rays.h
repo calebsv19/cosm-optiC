@@ -1,6 +1,8 @@
 #ifndef RENDER_RUNTIME_CAMERA_3D_RAYS_H
 #define RENDER_RUNTIME_CAMERA_3D_RAYS_H
 
+#include <fisics/extensions.h>
+
 #include <stdbool.h>
 
 #include "render/runtime_ray_3d.h"
@@ -30,7 +32,7 @@ bool RuntimeCameraProjector3D_ProjectPoint(const RuntimeCameraProjector3D* proje
                                            Vec3 world_point,
                                            double* out_screen_x,
                                            double* out_screen_y,
-                                           [[fisics::dim(length)]] [[fisics::unit(meter)]] double* out_camera_depth,
+                                           FISICS_DIM(length) FISICS_UNIT(meter) double* out_camera_depth,
                                            bool* out_inside_viewport);
 
 #endif

@@ -91,7 +91,7 @@ ifeq ($(UNAME_S),Linux)
 POSIX_FEATURE_CFLAGS := -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE=700
 endif
 
-CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
+CFLAGS  := $(CSTD) -Wall -Wextra -Wpedantic -g $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER
 LDFLAGS := $(ARCH_FLAGS)
 ifneq ($(strip $(SDL_TTF_LIBS)),)
 LDFLAGS += $(SDL_TTF_LIBS) $(SDL_LIBS)
@@ -100,7 +100,7 @@ LDFLAGS += -lSDL2_ttf $(SDL_LIBS)
 endif
 LDFLAGS += $(JSON_LIBS) $(PNG_LIBS) -lm
 
-CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -O3 $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
+CFLAGS_RELEASE := $(CSTD) -Wall -Wextra -Wpedantic -O3 $(POSIX_FEATURE_CFLAGS) $(ARCH_FLAGS) $(SDL_CFLAGS) $(SDL_TTF_CFLAGS) $(SDL_EXTRA_INC) $(JSON_CFLAGS) $(PNG_CFLAGS) -I$(WORKER_VERSION_GENERATED_DIR) -I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -Isrc -Isrc/tools -Isrc/tools/ShapeLib -DMAIN_DRIVER -DNDEBUG \
 	-ffast-math -fno-math-errno -march=native
 ifeq ($(UNAME_S),Darwin)
 CFLAGS += -DVK_USE_PLATFORM_METAL_EXT
@@ -128,7 +128,13 @@ CFLAGS_RELEASE += $(TIMER_HUD_INCLUDE) -I$(VK_RENDERER_DIR)/include -I$(VK_RUNTI
 # ordinary Clang command line unchanged and sanitize only the fisiCs path.
 DEPFLAGS := -MMD -MP
 ifeq ($(BUILD_TOOLCHAIN),fisics)
-CFLAGS := $(filter-out -Wall -Wextra -Wpedantic -Wno-unknown-attributes -Wno-c23-extensions -g $(ARCH_FLAGS),$(CFLAGS))
+CFLAGS := $(filter-out -Wall -Wextra -Wpedantic -g $(ARCH_FLAGS),$(CFLAGS))
 LDFLAGS := $(filter-out $(ARCH_FLAGS),$(LDFLAGS))
 DEPFLAGS :=
 endif
+
+# Semantic-dump commands invoke fisiCs even when the selected program build
+# toolchain is Clang. Forward only preprocessing inputs accepted by the fisiCs
+# driver instead of Clang warning, debug, architecture, or language flags.
+FISICS_CFLAGS = $(filter -I% -D%,$(CFLAGS)) \
+	-DRAY_TRACING_FISICS_SEMANTIC_SCAN=1

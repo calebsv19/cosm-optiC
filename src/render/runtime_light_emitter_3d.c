@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_light_emitter_3d.h"
 
 #include <math.h>
@@ -6,17 +8,17 @@
 #include "render/runtime_light_set_3d.h"
 
 static double runtime_light_emitter_3d_zero_length(void) {
-    double zero [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     return zero;
 }
 
 static double runtime_light_emitter_3d_unit_length(void) {
-    double unit_length [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1.0;
+    double unit_length FISICS_DIM(length) FISICS_UNIT(meter) = 1.0;
     return unit_length;
 }
 
 static double runtime_light_emitter_3d_length_epsilon(void) {
-    double epsilon [[fisics::dim(length)]] [[fisics::unit(meter)]] = 1e-9;
+    double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-9;
     return epsilon;
 }
 
@@ -29,8 +31,8 @@ static double runtime_light_emitter_3d_clamp(double value,
 }
 
 static double runtime_light_emitter_3d_attenuation(const RuntimeLight3D* light,
-                                                   double distance [[fisics::dim(length)]] [[fisics::unit(meter)]]) {
-    double falloff [[fisics::dim(length)]] [[fisics::unit(meter)]] = runtime_light_emitter_3d_unit_length();
+                                                   double distance FISICS_DIM(length) FISICS_UNIT(meter)) {
+    double falloff FISICS_DIM(length) FISICS_UNIT(meter) = runtime_light_emitter_3d_unit_length();
     double normalized = 0.0;
     double zero_length = runtime_light_emitter_3d_zero_length();
 
@@ -56,18 +58,18 @@ static double runtime_light_emitter_3d_attenuation(const RuntimeLight3D* light,
 static bool runtime_light_emitter_3d_intersect_light(
     const RuntimeLight3D* light,
     const Ray3D* ray,
-    double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-    double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+    double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+    double t_max FISICS_DIM(length) FISICS_UNIT(meter),
     RuntimeLightEmitterHit3DResult* out_result) {
     RuntimeLightEmitterHit3DResult result = {0};
     Vec3 sphere_offset = vec3(0.0, 0.0, 0.0);
-    double radius [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double radius FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     double b = 0.0;
     double c = 0.0;
     double discriminant = 0.0;
     double sqrt_disc = 0.0;
-    double roots[2] [[fisics::dim(length)]] [[fisics::unit(meter)]] = {0.0, 0.0};
-    double hit_t [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+    double roots[2] FISICS_DIM(length) FISICS_UNIT(meter) = {0.0, 0.0};
+    double hit_t FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
     Vec3 view_facing = vec3(0.0, 0.0, 0.0);
     double zero_length = runtime_light_emitter_3d_zero_length();
     double epsilon = runtime_light_emitter_3d_length_epsilon();
@@ -133,8 +135,8 @@ static RuntimeLight3D runtime_light_emitter_3d_light_from_source(
 
 bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
                                         const Ray3D* ray,
-                                        double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                        double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                        double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+                                        double t_max FISICS_DIM(length) FISICS_UNIT(meter),
                                         RuntimeLightEmitterHit3DResult* out_result) {
     RuntimeLightEmitterHit3DResult best = {0};
     bool found = false;
@@ -181,8 +183,8 @@ bool RuntimeLightEmitter3D_IntersectRay(const RuntimeScene3D* scene,
 
 bool RuntimeLightEmitter3D_ResolveFirstHit(const RuntimeScene3D* scene,
                                            const Ray3D* ray,
-                                           double t_min [[fisics::dim(length)]] [[fisics::unit(meter)]],
-                                           double t_max [[fisics::dim(length)]] [[fisics::unit(meter)]],
+                                           double t_min FISICS_DIM(length) FISICS_UNIT(meter),
+                                           double t_max FISICS_DIM(length) FISICS_UNIT(meter),
                                            RuntimeLightEmitterTrace3DResult* out_result) {
     RuntimeLightEmitterTrace3DResult result = {0};
 

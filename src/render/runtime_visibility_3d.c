@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_visibility_3d.h"
 
 #include <math.h>
@@ -67,18 +69,18 @@ bool RuntimeVisibility3D_ShouldBlockDirectPathThroughPayload(
 
 void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
     const RuntimeMaterialPayload3D* payload,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double segment_distance,
+    FISICS_DIM(length) FISICS_UNIT(meter) double segment_distance,
     RuntimeVisibility3DTransmittance* io_transmittance) {
     double transparency = 0.0;
     double tint_r = 1.0;
     double tint_g = 1.0;
     double tint_b = 1.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double absorption_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double absorption_distance =
         1.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double effective_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double effective_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double zero_length = 0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double zero_length = 0.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
     double distance_ratio = 1.0;
     double segment_r = 1.0;
@@ -166,16 +168,16 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_opaque_fast_
     Vec3 ray_origin,
     Vec3 ray_normal,
     Vec3 ray_dir,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double ray_length,
+    FISICS_DIM(length) FISICS_UNIT(meter) double ray_length,
     int target_scene_object_index,
     int target_triangle_index) {
     Ray3D current_ray = RuntimeRay3D_MakeOffset(ray_origin,
                                                 ray_normal,
                                                 ray_dir,
                                                 kRuntimeVisibility3DEpsilon);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double remaining_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double remaining_distance =
         ray_length;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
     int skip_count = 0;
 
@@ -219,15 +221,15 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
     Vec3 ray_origin,
     Vec3 ray_normal,
     Vec3 ray_dir,
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double ray_length,
+    FISICS_DIM(length) FISICS_UNIT(meter) double ray_length,
     int target_scene_object_index,
     int target_triangle_index) {
     Ray3D current_ray = {0};
     Ray3D segment_ray = {0};
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double remaining_distance = ray_length;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double remaining_distance = ray_length;
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double unit_length = 1.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double unit_length = 1.0;
     RuntimeVisibility3DTransmittance transmittance = RuntimeVisibility3D_UnitTransmittance();
     RuntimeVisibility3DTransmittance volume_transmittance = RuntimeVisibility3D_UnitTransmittance();
     int skip_count = 0;
@@ -267,7 +269,7 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
         RuntimeMaterialPayload3D payload = {0};
         int transparent_object_index = -1;
         HitInfo3D current_surface = {0};
-        [[fisics::dim(length)]] [[fisics::unit(meter)]] double segment_distance =
+        FISICS_DIM(length) FISICS_UNIT(meter) double segment_distance =
             0.0;
 
         RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
@@ -378,11 +380,11 @@ bool RuntimeVisibility3D_TraceToLight(const RuntimeScene3D* scene,
                                       Vec3 surface_normal,
                                       Vec3 light_position,
                                       HitInfo3D* out_blocker_hit,
-                                      [[fisics::dim(length)]] [[fisics::unit(meter)]] double* out_light_distance) {
+                                      FISICS_DIM(length) FISICS_UNIT(meter) double* out_light_distance) {
     Vec3 to_light;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double light_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
     Ray3D shadow_ray = {0};
     HitInfo3D blocker_hit = {0};
@@ -434,9 +436,9 @@ RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceToLightRGB(
     Vec3 surface_normal,
     Vec3 light_position) {
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double light_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
 
     if (!scene) {
@@ -465,9 +467,9 @@ double RuntimeVisibility3D_TransmittanceToLight(const RuntimeScene3D* scene,
                                                 Vec3 surface_normal,
                                                 Vec3 light_position) {
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double light_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
 
     if (!scene) return 0.0;
@@ -500,9 +502,9 @@ RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromHitRGB(
     const HitInfo3D* surface_hit,
     const RuntimeLight3D* light) {
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double light_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
 
     if (!scene || !surface_hit || !light) {
@@ -535,9 +537,9 @@ double RuntimeVisibility3D_TransmittanceFromHit(const RuntimeScene3D* scene,
                                                 const HitInfo3D* surface_hit,
                                                 const RuntimeLight3D* light) {
     Vec3 to_light = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double light_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double light_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
 
     if (!scene || !surface_hit || !light) return 0.0;
@@ -558,9 +560,9 @@ RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromHitToPoint
     int target_scene_object_index,
     int target_triangle_index) {
     Vec3 to_target = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double target_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double target_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
 
     if (!scene || !surface_hit) {
@@ -592,9 +594,9 @@ double RuntimeVisibility3D_TransmittanceFromHitToPoint(const RuntimeScene3D* sce
                                                        int target_scene_object_index,
                                                        int target_triangle_index) {
     Vec3 to_target = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double target_distance =
+    FISICS_DIM(length) FISICS_UNIT(meter) double target_distance =
         0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double length_epsilon =
+    FISICS_DIM(length) FISICS_UNIT(meter) double length_epsilon =
         kRuntimeVisibility3DEpsilon;
 
     if (!scene || !surface_hit) return 0.0;

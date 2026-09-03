@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "render/runtime_camera_3d_rays.h"
 
 #include <math.h>
@@ -19,8 +21,8 @@ bool RuntimeCameraProjector3D_Build(const RuntimeCamera3D* camera,
     double pitch = 0.0;
     double aspect = 1.0;
     double zoom = 1.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double near_plane = 0.1;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double near_plane_epsilon = 1e-6;
+    FISICS_DIM(length) FISICS_UNIT(meter) double near_plane = 0.1;
+    FISICS_DIM(length) FISICS_UNIT(meter) double near_plane_epsilon = 1e-6;
 
     if (!camera || !out_projector) return false;
     if (viewport_width <= 0 || viewport_height <= 0) return false;
@@ -86,15 +88,15 @@ bool RuntimeCameraProjector3D_ProjectPoint(const RuntimeCameraProjector3D* proje
                                            Vec3 world_point,
                                            double* out_screen_x,
                                            double* out_screen_y,
-                                           [[fisics::dim(length)]] [[fisics::unit(meter)]] double* out_camera_depth,
+                                           FISICS_DIM(length) FISICS_UNIT(meter) double* out_camera_depth,
                                            bool* out_inside_viewport) {
     Vec3 offset = vec3(0.0, 0.0, 0.0);
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double camera_x = 0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double camera_y = 0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double camera_z = 0.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double camera_x = 0.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double camera_y = 0.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double camera_z = 0.0;
     double ndc_x = 0.0;
     double ndc_y = 0.0;
-    [[fisics::dim(length)]] [[fisics::unit(meter)]] double near_plane = 0.0;
+    FISICS_DIM(length) FISICS_UNIT(meter) double near_plane = 0.0;
 
     if (out_screen_x) *out_screen_x = 0.0;
     if (out_screen_y) *out_screen_y = 0.0;

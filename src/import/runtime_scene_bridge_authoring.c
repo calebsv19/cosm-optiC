@@ -1,3 +1,5 @@
+#include <fisics/extensions.h>
+
 #include "import/runtime_scene_bridge_internal.h"
 
 #include "camera/camera_path_3d.h"
@@ -873,12 +875,12 @@ void runtime_scene_bridge_apply_scene3d_extension_digest(json_object *root,
 
     if (json_object_object_get_ex(scene3d, "bounds", &bounds) &&
         json_object_is_type(bounds, json_type_object)) {
-        double min_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-        double min_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-        double min_z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-        double max_x [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-        double max_y [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
-        double max_z [[fisics::dim(length)]] [[fisics::unit(meter)]] = 0.0;
+        double min_x FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+        double min_y FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+        double min_z FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+        double max_x FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+        double max_y FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
+        double max_z FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
         bool has_enabled = false;
         bool has_clamp = false;
         bool enabled = false;
@@ -925,7 +927,7 @@ void runtime_scene_bridge_apply_scene3d_extension_digest(json_object *root,
                      axis);
         }
         if (runtime_scene_bridge_parse_double_field(construction_plane, "offset", &offset)) {
-            double scene_offset [[fisics::dim(length)]] [[fisics::unit(meter)]] = offset;
+            double scene_offset FISICS_DIM(length) FISICS_UNIT(meter) = offset;
             g_last_3d_digest.construction_plane_offset =
                 runtime_scene_bridge_authoring_scale_scene_length(scene_offset, world_scale);
         }
