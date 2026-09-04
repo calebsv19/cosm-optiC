@@ -431,11 +431,14 @@ change the historical remote worker evidence below.
   plane, thin rect prism, and runtime mesh asset; all three report the same
   mirror-dominant/reflection-hit/emitter-hit structure in the canonical visual
   matrix.
-  This is still an experimental bounded integrator: it does not yet provide
-  full production-quality recursive estimator tuning, a settled recursive
-  emissive-area sampling policy for large emitter sets, BRDF-evaluated
-  direct-light estimator quality for rough reflection/transmission, or
-  release-candidate threshold repetitions.
+  This remains an experimental bounded integrator rather than the shipped
+  default. D2.35 closed the selected non-skull rough reflection/transmission
+  coverage and repeat-3 candidate-threshold boundary without source changes.
+  `promotion_ready=false` now means that no route-default policy decision was
+  selected; it is not an active implementation-plan marker. Manual
+  skull/high-triangle proof is retained as historical pressure evidence and is
+  not current work unless estimator behavior changes or a new promotion plan
+  explicitly requires it.
 - The shipped native `3D` direct-light tier samples area lights from a
   16-slot hit-seeded stratified finite-radius disk population. Shadow checks
   start with 4 samples and stop there for clearly fully visible or fully blocked
