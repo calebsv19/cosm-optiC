@@ -1,6 +1,6 @@
 # RayTracing Main Edit Worktree
 
-Last verified: 2026-08-27
+Last verified: 2026-09-04
 
 This is the RayTracing pilot runbook for the CodeWork Persistent Main-Edit
 Worktree Contract (`MEW1`). Public clones can use this document without the
@@ -141,3 +141,45 @@ At the last verification, canonical `main` was clean at source version
 mirror-transport source/test work. Therefore continuing bounded work in Main
 Edit was valid, while recycling it was not. Any later integration decision
 requires a fresh live readback.
+
+## 2026-09-04 Retained-Lane Readiness
+
+The readiness pass reconciles the committed portable fisiCs units change
+(`a8386f0`) with canonical's Disney-v2 documentation correction (`e843cab`).
+The integration checkpoint is `ec17542`; both lane versions remain application
+`0.16.0` and worker `0.7.1`. The existing named worktree is retained for the next
+functional-development cycle, with canonical adoption and final cleanliness
+read back separately after verification.
+
+Fresh validation of the integration checkpoint passed:
+
+- clean Clang application, headless-render, and material-preview builds
+- all 13 app-local fisiCs semantic-dump targets, each with zero semantic errors
+- 74 of 80 registered C test groups, executed individually
+- headless preflight, image export, mesh-asset spheres, material preview, and
+  source first-frame visual proof
+
+The broad C suite is not fully passing. Six groups fail identically in a fresh
+source snapshot of the preceding canonical commit and in the integration:
+
+- `runtime_scene_3d_geometry`, `runtime_mesh_asset_loader`, and
+  `runtime_preview_editor` terminate in the macOS stack-check path
+- `runtime_emission_transparency` reports 17 assertion failures
+- `runtime_native_3d_render` and `runtime_native_3d_render_live` each report the
+  same two assertions concerning visible emitter and environment brightness
+
+These are inherited baseline exceptions, not successful tests. Keep their
+repair as a separate bounded follow-up; do not describe this readiness pass as
+a full `test-stable` pass. Run the isolated package self-test for the exact
+final committed source identity before canonical adoption.
+
+Git cleanliness and artifact cleanliness are separate. The readiness pass
+preserves old render proofs, packages, and fresh validation outputs in an
+ignored archive outside Main Edit before leaving its generated roots empty.
+`make clean` removes compiler output but leaves `build/agent_runs/`, package
+self-test output, and `dist/`; an artifact-free checkout therefore requires a
+path-specific retention/archive decision. Future builds recreate those roots.
+
+The installed Desktop Main Edit app has its own embedded identity. Source
+integration and worktree cleanup do not refresh or close that app; read its
+identity before using it as visual evidence for a new source checkpoint.

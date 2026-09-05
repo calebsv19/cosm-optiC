@@ -1,6 +1,17 @@
 # optiC Current Truth
 
-Last updated: 2026-08-27
+Last updated: 2026-09-04
+
+## 2026-09-04 Main Edit Readiness
+
+The retained Main Edit lane now reconciles the portable fisiCs units checkpoint
+with canonical documentation drift. Fresh Clang builds, all 13 semantic dumps,
+and the selected headless/render proofs pass. The C test-group audit passes
+74 of 80 groups; the six remaining failures reproduce on the preceding
+canonical source and remain explicit baseline exceptions. See
+`docs/main_edit_worktree.md` for the exact checkpoint, verification limits, and
+artifact-retention boundary. Application and worker versions remain `0.16.0`
+and `0.7.1`; this is local source readiness, not a new release.
 
 ## 2026-08-27 Persistent Main Edit Pilot
 
