@@ -124,7 +124,8 @@ static bool resolve_render_request(const char *scene_runtime_path,
         return false;
     }
     if (request.project_backed && request.project_owned && !request.request_exists) {
-        int frame_count = animSettings.frameLimit > 0 ? animSettings.frameLimit : 1;
+        if (animSettings.frameLimit <= 0) return false;
+        int frame_count = animSettings.frameLimit;
         if (!ray_tracing_scene_project_render_request_write(&request,
                                                             animSettings.startFrameIndex,
                                                             frame_count,

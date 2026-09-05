@@ -12,6 +12,8 @@
 #include "render/runtime_caustic_settings_3d.h"
 #include "ui/menu_pane_host.h"
 #include "ui/menu_workspace.h"
+#include "ui/menu_numeric_model.h"
+#include "ui/menu_scroll.h"
 
 #define SDL_MENU_MAX_MANIFEST_OPTIONS 128
 #define SDL_MENU_MANIFEST_ITEM_HEIGHT 26
@@ -68,6 +70,10 @@ typedef struct {
     int selectedSliderMax;
     int sliderStartX;
     int sliderWidth;
+    MenuNumericEdit numericEdit;
+    bool renderInfoExpanded;
+    MenuScroll scrolls[MENU_SCROLL_COUNT];
+    float controlsScroll;
 
     char inputBuffer[10];
     bool editingBounce;
@@ -119,11 +125,8 @@ typedef struct {
     SDL_Rect manifestListRect;
     SDL_Rect manifestScrollbarRect;
     bool manifestScrollbarVisible;
-    bool manifestScrollbarDragging;
     float manifestThumbHeight;
     float manifestTrackHeight;
-    int manifestDragStartY;
-    float manifestScrollStart;
     float manifestScroll;
     float manifestMaxScroll;
 
@@ -134,11 +137,8 @@ typedef struct {
     SDL_Rect volumeListRect;
     SDL_Rect volumeScrollbarRect;
     bool volumeScrollbarVisible;
-    bool volumeScrollbarDragging;
     float volumeThumbHeight;
     float volumeTrackHeight;
-    int volumeDragStartY;
-    float volumeScrollStart;
     float volumeScroll;
     float volumeMaxScroll;
     bool volumeSummaryValid;

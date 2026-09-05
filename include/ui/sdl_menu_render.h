@@ -22,6 +22,9 @@ typedef struct MenuSlider {
     int valueX;
     int valueY;
     const char *label;
+    SDL_Rect valueRect;
+    SDL_Rect increaseRect;
+    SDL_Rect decreaseRect;
 } MenuSlider;
 
 typedef struct SliderLayout {

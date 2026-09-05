@@ -1,3 +1,5 @@
+#include "ui/menu_panel_chrome.h"
+#include "ui/menu_numeric_controls.h"
 #include "ui/sdl_menu_input.h"
 
 #include <math.h>
@@ -225,6 +227,8 @@ static bool handle_slider_click(SDL_Event* event,
     int x = event->button.x;
     int y = event->button.y;
     if (!point_in_rect(&layout->panelRect, x, y)) return false;
+    if (layout->panelRect.x == state->sliderPanelRect.x &&
+        y < layout->panelRect.y + MENU_PANEL_CHROME_TITLE_BAND) return false;
     for (size_t i = 0; i < layout->count; i++) {
         const MenuSlider* slider = &layout->items[i];
         if (point_in_rect(&slider->hitRect, x, y)) {
@@ -235,27 +239,10 @@ static bool handle_slider_click(SDL_Event* event,
             state->sliderStartX = slider->trackRect.x;
             state->sliderWidth = slider->trackRect.w;
 
-            bool adjustCamera = (state->selectedSlider == &sceneSettings.windowWidth ||
-                                 state->selectedSlider == &sceneSettings.windowHeight);
-            int prevWidth = sceneSettings.windowWidth;
-            int prevHeight = sceneSettings.windowHeight;
-
-            float percent = (float)(x - slider->trackRect.x) / slider->trackRect.w;
-            if (percent < 0.0f) percent = 0.0f;
-            if (percent > 1.0f) percent = 1.0f;
-            int newValue = slider->min + percent * (slider->max - slider->min);
-
-            if (newValue < slider->min) newValue = slider->min;
-            if (newValue > slider->max) newValue = slider->max;
-
-            *state->selectedSlider = newValue;
-            menu_state_apply_special_slider_rules(state, state->selectedSlider);
-            if (adjustCamera &&
-                (prevWidth != sceneSettings.windowWidth || prevHeight != sceneSettings.windowHeight)) {
-                menu_state_reanchor_camera_after_resize(prevWidth, prevHeight);
-                state->oldWindowWidth = sceneSettings.windowWidth;
-                state->oldWindowHeight = sceneSettings.windowHeight;
-            }
+            MenuNumericSpec spec = menu_numeric_spec(state, slider->value, slider->min, slider->max);
+            double percent = (double)(x - slider->trackRect.x) / slider->trackRect.w;
+            menu_numeric_apply(state, slider->value, menu_numeric_normalize(spec,
+                slider->min + percent * (slider->max - slider->min), true));
             return true;
         }
     }
@@ -268,6 +255,7 @@ void menu_input_handle_key(SDL_Event* event,
                            MenuRuntimeState* state) {
     if (!event || !running || !font || !state) return;
     if (state->folderPickerRequest.active) return;
+    if (menu_numeric_key(state, event)) return;
     SDL_Keymod mod = event->key.keysym.mod;
     bool ctrl_or_cmd = (mod & (KMOD_CTRL | KMOD_GUI)) != 0;
     bool shift = (mod & KMOD_SHIFT) != 0;
@@ -425,74 +413,28 @@ void menu_input_handle_mouse_motion(SDL_Event* event, MenuRuntimeState* state) {
         }
         return;
     }
-    if (!state->draggingSlider && !state->manifestScrollbarDragging &&
-        !state->volumeScrollbarDragging) {
+    for (int i = 0; i < MENU_SCROLL_COUNT; ++i)
+        if (menu_scroll_event(&state->scrolls[i], event)) return;
+    if (!state->draggingSlider)
         ray_tracing_menu_pane_host_update_pointer(&state->menuPaneHost,
-                                                  (float)event->motion.x,
-                                                  (float)event->motion.y);
-    }
-    if (state->manifestScrollbarDragging && scene_manifest_list_visible(state) && state->manifestScrollbarVisible) {
-        float trackRange = state->manifestTrackHeight - state->manifestThumbHeight;
-        if (trackRange < 1.0f) trackRange = 1.0f;
-        int deltaY = event->motion.y - state->manifestDragStartY;
-        float newScroll = state->manifestScrollStart + ((float)deltaY * state->manifestMaxScroll / trackRange);
-        state->manifestScroll = newScroll;
-        menu_state_manifest_clamp_scroll(state);
-    }
-    if (state->volumeScrollbarDragging && state->volumeDropdownOpen && state->volumeScrollbarVisible) {
-        float trackRange = state->volumeTrackHeight - state->volumeThumbHeight;
-        if (trackRange < 1.0f) trackRange = 1.0f;
-        int deltaY = event->motion.y - state->volumeDragStartY;
-        float newScroll = state->volumeScrollStart + ((float)deltaY * state->volumeMaxScroll / trackRange);
-        state->volumeScroll = newScroll;
-        menu_state_volume_clamp_scroll(state);
-    }
+            (float)event->motion.x, (float)event->motion.y);
 
     if (!state->draggingSlider || !state->selectedSlider) return;
 
     int x = event->motion.x;
 
-    bool adjustCamera = (state->selectedSlider == &sceneSettings.windowWidth ||
-                         state->selectedSlider == &sceneSettings.windowHeight);
-    int prevWidth = sceneSettings.windowWidth;
-    int prevHeight = sceneSettings.windowHeight;
-
-    float percent = (float)(x - state->sliderStartX) / state->sliderWidth;
-    int newValue = state->selectedSliderMin + percent * (state->selectedSliderMax - state->selectedSliderMin);
-
-    if (newValue < state->selectedSliderMin) newValue = state->selectedSliderMin;
-    if (newValue > state->selectedSliderMax) newValue = state->selectedSliderMax;
-
-    *state->selectedSlider = newValue;
-    menu_state_apply_special_slider_rules(state, state->selectedSlider);
-    if (adjustCamera &&
-        (prevWidth != sceneSettings.windowWidth || prevHeight != sceneSettings.windowHeight)) {
-        menu_state_reanchor_camera_after_resize(prevWidth, prevHeight);
-        state->oldWindowWidth = sceneSettings.windowWidth;
-        state->oldWindowHeight = sceneSettings.windowHeight;
-    }
+    MenuNumericSpec spec = menu_numeric_spec(state, state->selectedSlider,
+        state->selectedSliderMin, state->selectedSliderMax);
+    double percent = (double)(x - state->sliderStartX) / state->sliderWidth;
+    menu_numeric_apply(state, state->selectedSlider, menu_numeric_normalize(spec,
+        spec.min + percent * (spec.max - spec.min), true));
 }
 
 void menu_input_handle_mouse_wheel(SDL_Event *event, MenuRuntimeState* state) {
     if (!event || !state) return;
     if (state->folderPickerRequest.active) return;
-    int mx = 0;
-    int my = 0;
-    SDL_GetMouseState(&mx, &my);
-    if (scene_manifest_list_visible(state) && point_in_rect(&state->manifestPanelRect, mx, my)) {
-        float delta = (float)event->wheel.y * (float)(SDL_MENU_MANIFEST_ITEM_HEIGHT * 2);
-        menu_state_manifest_scroll_by(state, -delta);
-        return;
-    }
-    if (state->volumeDropdownOpen && point_in_rect(&state->volumePanelRect, mx, my)) {
-        float delta = (float)event->wheel.y * (float)(SDL_MENU_MANIFEST_ITEM_HEIGHT * 2);
-        menu_state_volume_scroll_by(state, -delta);
-        return;
-    }
-    if (point_in_rect(&state->sliderPanelRect, mx, my) && state->sliderMaxScroll > 0.5f) {
-        float delta = (float)event->wheel.y * 28.0f;
-        state->sliderScroll = menu_state_slider_clamp_scroll(state->sliderScroll - delta, state->sliderMaxScroll);
-    }
+    for (int i = 0; i < MENU_SCROLL_COUNT; ++i)
+        if (menu_scroll_event(&state->scrolls[i], event)) return;
 }
 
 void menu_input_handle_mouse_click(SDL_Event* event,
@@ -517,13 +459,6 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         SDL_GetWindowSize(render_ctx->window, &menu_width, &menu_height);
     }
     menu_layout_build_base(*font, state, menu_width, menu_height, &screenLayout);
-    if (ray_tracing_menu_pane_host_begin_splitter_drag(&state->menuPaneHost,
-                                                       (float)event->button.x,
-                                                       (float)event->button.y)) {
-        state->draggingSlider = false;
-        state->selectedSlider = NULL;
-        return;
-    }
     menu_render_build_button_layout(*font, state, &screenLayout, &buttons);
     menu_layout_finalize_with_buttons(&screenLayout, &buttons, state);
     menu_render_build_slider_layout(*font, state, &screenLayout, &layout);
@@ -531,6 +466,27 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     menu_resume_panel_build_layout(*font, state, &screenLayout, &resumeLayout);
     int x = event->button.x;
     int y = event->button.y;
+    if (event->button.button != SDL_BUTTON_LEFT) return;
+    if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
+        menu_numeric_click(event, &buttons.rendererControlSliders, state, *font)) return;
+    if (menu_numeric_click(event, &layout, state, *font)) return;
+    if (!menu_numeric_finish(state, true)) return;
+    SDL_Rect info_header = screenLayout.renderInfoRect;
+    info_header.h = MENU_PANEL_CHROME_TITLE_BAND;
+    if (point_in_rect(&info_header, x, y)) {
+        state->renderInfoExpanded = !state->renderInfoExpanded;
+        return;
+    }
+    for (int i = 0; i < MENU_SCROLL_COUNT; ++i)
+        if (menu_scroll_event(&state->scrolls[i], event)) return;
+    if (ray_tracing_menu_pane_host_begin_splitter_drag(&state->menuPaneHost,
+                                                       (float)event->button.x,
+                                                       (float)event->button.y)) {
+        state->draggingSlider = false;
+        state->selectedSlider = NULL;
+        return;
+    }
+
     {
         int workspace_tab = menu_workspace_tab_at_point(&screenLayout.workspace, x, y);
         if (workspace_tab >= 0) {
@@ -553,12 +509,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
 
     if (scene_manifest_list_visible(state)) {
         if (point_in_rect(&state->manifestPanelRect, x, y)) {
-            if (state->manifestScrollbarVisible && point_in_rect(&state->manifestScrollbarRect, x, y)) {
-                state->manifestScrollbarDragging = true;
-                state->manifestDragStartY = y;
-                state->manifestScrollStart = state->manifestScroll;
-                return;
-            }
+
             if (state->manifestOptionCount > 0 && point_in_rect(&state->manifestListRect, x, y)) {
                 int relativeY = y - state->manifestListRect.y + (int)state->manifestScroll;
                 int visible_indices[SDL_MENU_MAX_MANIFEST_OPTIONS];
@@ -601,12 +552,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
     if (state->volumeDropdownOpen) {
         if (point_in_rect(&state->volumePanelRect, x, y)) {
-            if (state->volumeScrollbarVisible && point_in_rect(&state->volumeScrollbarRect, x, y)) {
-                state->volumeScrollbarDragging = true;
-                state->volumeDragStartY = y;
-                state->volumeScrollStart = state->volumeScroll;
-                return;
-            }
+
             if (state->volumeOptionCount > 0 && point_in_rect(&state->volumeListRect, x, y)) {
                 int relativeY = y - state->volumeListRect.y + (int)state->volumeScroll;
                 int idx = relativeY / SDL_MENU_MANIFEST_ITEM_HEIGHT;
@@ -663,7 +609,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         if (animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
             menu_state_refresh_manifest_options(state);
             state->manifestScroll = 0.0f;
-            state->manifestScrollbarDragging = false;
+            state->scrolls[MENU_SCROLL_SCENE].dragging = false;
             return;
         }
         menu_state_set_load_scene_enabled(state, !state->manifestDropdownOpen);
@@ -837,14 +783,14 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         menu_state_refresh_volume_options(state);
         if (state->manifestDropdownOpen) {
             state->manifestScroll = 0.0f;
-            state->manifestScrollbarDragging = false;
+            state->scrolls[MENU_SCROLL_SCENE].dragging = false;
         }
         if (animSettings.spaceMode != SPACE_MODE_3D) {
             state->volumeDropdownOpen = false;
         }
         if (state->volumeDropdownOpen) {
             state->volumeScroll = 0.0f;
-            state->volumeScrollbarDragging = false;
+            state->scrolls[MENU_SCROLL_VOLUME].dragging = false;
         }
         mode_status = EditorModeRouter_SpaceButtonLabel();
         snprintf(state->statusLabel,
@@ -1092,6 +1038,13 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
 
     if (point_in_rect(&buttons.startRect, x, y)) {
+        if (animSettings.deepRenderMode && animSettings.frameLimit == 0) {
+            snprintf(state->statusLabel, sizeof(state->statusLabel),
+                     "Frame Limit is 0; increase it to render");
+            state->statusColor = (SDL_Color){255, 196, 96, 255};
+            state->statusExpireMs = SDL_GetTicks() + 4000;
+            return;
+        }
         if (path_edit_active(state)) {
             finish_root_edit(state, true);
         }

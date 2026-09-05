@@ -823,7 +823,8 @@ KIT_RENDER_SRCS := \
 KIT_UI_SRCS := \
 	$(KIT_UI_DIR)/src/kit_ui.c \
 	$(KIT_UI_DIR)/src/kit_ui_button.c \
-	$(KIT_UI_DIR)/src/kit_ui_hud.c
+	$(KIT_UI_DIR)/src/kit_ui_hud.c \
+	$(KIT_UI_DIR)/src/kit_ui_sdl.c
 KIT_PANE_SRCS := $(KIT_PANE_DIR)/src/kit_pane.c
 KIT_VIZ_SRCS := $(KIT_VIZ_DIR)/src/kit_viz.c
 KIT_RUNTIME_DIAG_SRCS := $(KIT_RUNTIME_DIAG_DIR)/src/kit_runtime_diag.c

@@ -215,7 +215,7 @@ static void menu_render_draw_render_information(
         line_height < 12) {
         line_height = 18;
     }
-    menu_panel_chrome_draw(renderer, font, rect, "Render Info", false);
+    menu_panel_chrome_draw(renderer, font, rect, state->renderInfoExpanded ? "Render Info [-]" : "Render Info [+]", false);
     menu_settings_runtime_readback(&readback);
     high_cost = animSettings.transmissionSamples3D > 8 ||
                 animSettings.secondaryDiffuseSamples3D > 16 ||
@@ -275,14 +275,15 @@ static void menu_render_draw_render_information(
     content_x = rect->x + MENU_PANEL_CHROME_INSET;
     content_y = rect->y + MENU_PANEL_CHROME_TITLE_BAND + 4;
     content_w = rect->w - MENU_PANEL_CHROME_INSET * 2;
-    for (i = 0u; i < 5u; ++i) {
+    for (i = 0u; i < (state->renderInfoExpanded ? 5u : 2u); ++i) {
+        size_t row = state->renderInfoExpanded ? i : i == 0 ? 2u : 3u;
         menu_render_fit_text_to_width(
-            font, lines[i], content_w, fitted, sizeof(fitted));
+            font, lines[row], content_w, fitted, sizeof(fitted));
         menu_render_draw_text_color(renderer,
                                     font,
                                     content_x,
                                     content_y + (int)i * line_height,
-                                    line_colors[i],
+                                    line_colors[row],
                                     fitted);
     }
 }
@@ -304,6 +305,7 @@ void menu_render_frame(SDL_Renderer* renderer,
     int menu_width = MENU_WIDTH;
     int menu_height = MENU_HEIGHT;
     if (!state) return;
+    for (int i = 0; i < MENU_SCROLL_COUNT; ++i) state->scrolls[i].visible = false;
 
     render_ctx = getRenderContext();
     if (render_ctx && render_ctx->window) {

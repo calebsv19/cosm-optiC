@@ -98,38 +98,15 @@ void menu_render_draw_volume_dropdown(SDL_Renderer *renderer,
         state->volumeThumbHeight = 0.0f;
         state->volumeScrollbarRect = (SDL_Rect){0, 0, 0, 0};
 
-        if (state->volumeScrollbarVisible) {
-            float thumb = ((float)list_h * (float)list_h) / (float)content_h;
-            if (thumb < 16.0f) thumb = 16.0f;
-            state->volumeThumbHeight = thumb;
-            float track_range = (float)list_h - thumb;
-            float thumb_y = (track_range > 0.0f && state->volumeMaxScroll > 0.0f)
-                                ? (float)list_y + (state->volumeScroll / state->volumeMaxScroll) * track_range
-                                : (float)list_y;
-            int scroll_x = panel_rect.x + panel_rect.w -
-                           SDL_MENU_RENDER_MANIFEST_SCROLLBAR_WIDTH -
-                           SDL_MENU_RENDER_MANIFEST_ITEM_PADDING;
-            SDL_Rect track = {scroll_x, list_y, SDL_MENU_RENDER_MANIFEST_SCROLLBAR_WIDTH, list_h};
-            if (has_shared_palette) {
-                SDL_SetRenderDrawColor(renderer,
-                                       palette.panel_border.r, palette.panel_border.g,
-                                       palette.panel_border.b, palette.panel_border.a);
-            } else {
-                SDL_SetRenderDrawColor(renderer, 70, 70, 80, 255);
-            }
-            SDL_RenderFillRect(renderer, &track);
-
-            state->volumeScrollbarRect =
-                (SDL_Rect){scroll_x, (int)thumb_y, SDL_MENU_RENDER_MANIFEST_SCROLLBAR_WIDTH, (int)thumb};
-            if (has_shared_palette) {
-                SDL_SetRenderDrawColor(renderer,
-                                       palette.accent_primary.r, palette.accent_primary.g,
-                                       palette.accent_primary.b, 255);
-            } else {
-                SDL_SetRenderDrawColor(renderer, 120, 120, 140, 255);
-            }
-            SDL_RenderFillRect(renderer, &state->volumeScrollbarRect);
-        }
+        {
+        SDL_Rect viewport = {list_x, list_y, list_w + SDL_MENU_RENDER_MANIFEST_SCROLLBAR_WIDTH + 4, list_h};
+        MenuScroll *scroll = &state->scrolls[MENU_SCROLL_VOLUME];
+        menu_scroll_setup(scroll, viewport, content_h, &state->volumeScroll);
+        menu_scroll_draw(renderer, scroll);
+        state->volumeScrollbarRect = scroll->layout.thumb;
+        state->volumeThumbHeight = scroll->layout.thumb.h;
+        state->volumeTrackHeight = scroll->layout.track.h;
+    }
     }
 
     {

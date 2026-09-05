@@ -1,3 +1,4 @@
+#include "ui/menu_numeric_controls.h"
 #include "ui/sdl_menu.h"
 
 #include <SDL2/SDL.h>
@@ -328,8 +329,12 @@ static uint32_t menu_elapsed_ms(uint64_t start, uint64_t end, uint64_t frequency
 static bool menu_state_interaction_active(const MenuRuntimeState* state) {
     if (!state) return false;
     return ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost) ||
+           state->numericEdit.active ||
+           state->scrolls[MENU_SCROLL_SCENE].dragging ||
+           state->scrolls[MENU_SCROLL_VOLUME].dragging ||
+           state->scrolls[MENU_SCROLL_SETTINGS].dragging ||
+           state->scrolls[MENU_SCROLL_CONTROLS].dragging ||
            state->draggingSlider ||
-           state->manifestScrollbarDragging ||
            state->editingBounce ||
            state->editingFrame ||
            state->editingStartFrame ||
@@ -398,6 +403,17 @@ static bool menu_process_event(SDL_Window* window,
         return false;
     }
 
+    if (menu_state->activeView == MENU_VIEW_MAIN && menu_state->numericEdit.active) {
+        if (mutable_event.type == SDL_KEYDOWN) {
+            (void)menu_numeric_key(menu_state, &mutable_event);
+            return true;
+        }
+        if (mutable_event.type == SDL_TEXTINPUT) {
+            (void)menu_numeric_insert(&menu_state->numericEdit, mutable_event.text.text);
+            menu_state->numericEdit.blinkEpoch = SDL_GetTicks();
+            return true;
+        }
+    }
     if (ray_tracing_workspace_authoring_host_handle_sdl_event(
             authoring_host,
             &mutable_event,
@@ -433,6 +449,8 @@ static bool menu_process_event(SDL_Window* window,
                                           menu_state);
             return true;
         case SDL_MOUSEBUTTONUP:
+            for (int i = 0; i < MENU_SCROLL_COUNT; ++i)
+                (void)menu_scroll_event(&menu_state->scrolls[i], &mutable_event);
             if (menu_state->draggingSlider && menu_state->selectedSlider) {
                 menu_settings_lifecycle_commit_slider_release(
                     menu_state, menu_state->selectedSlider);
@@ -444,7 +462,6 @@ static bool menu_process_event(SDL_Window* window,
             ray_tracing_menu_pane_host_end_splitter_drag(&menu_state->menuPaneHost);
             menu_state->draggingSlider = false;
             menu_state->selectedSlider = NULL;
-            menu_state->manifestScrollbarDragging = false;
             return true;
         case SDL_MOUSEWHEEL:
             menu_input_handle_mouse_wheel(&mutable_event, menu_state);
@@ -467,13 +484,22 @@ static bool menu_process_event(SDL_Window* window,
             } else if (menu_state->editingBounce ||
                        menu_state->editingFrame ||
                        menu_state->editingStartFrame) {
-                if (strlen(menu_state->inputBuffer) < sizeof(menu_state->inputBuffer) - 1) {
+                if (strlen(menu_state->inputBuffer) + strlen(mutable_event.text.text) < sizeof(menu_state->inputBuffer)) {
                     strcat(menu_state->inputBuffer, mutable_event.text.text);
                     return true;
                 }
             }
             return false;
         case SDL_WINDOWEVENT:
+            if (mutable_event.window.windowID == SDL_GetWindowID(window) &&
+                mutable_event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                (void)menu_numeric_finish(menu_state, false);
+                for (int i = 0; i < MENU_SCROLL_COUNT; ++i)
+                    (void)menu_scroll_event(&menu_state->scrolls[i], &mutable_event);
+                menu_state->draggingSlider = false;
+                menu_state->selectedSlider = NULL;
+                return true;
+            }
             if (mutable_event.window.windowID == SDL_GetWindowID(window) &&
                 (mutable_event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                  mutable_event.window.event == SDL_WINDOWEVENT_RESIZED ||
@@ -569,6 +595,8 @@ bool RunMenu(void) {
                                               &menuExitedNormally,
                                               &event);
         }
+        if (menuState.numericEdit.active && SDL_GetTicks() - last_render_ms >= 100)
+            frame_dirty = true;
         frame_dirty |= menu_input_poll_folder_picker(&menuState);
         frame_dirty |= MaterialEditorAuthoredTextureBindingPoll();
         if (!running) {
@@ -636,6 +664,7 @@ bool RunMenu(void) {
         SceneEditorSessionEnd(&sceneEditor);
     }
     menu_input_cancel_folder_picker(&menuState);
+    (void)menu_numeric_finish(&menuState, false);
     if (ray_tracing_workspace_authoring_host_active(&authoringHost)) {
         (void)ray_tracing_workspace_authoring_host_cancel_preview(&authoringHost);
     }

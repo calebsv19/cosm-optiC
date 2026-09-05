@@ -1,6 +1,7 @@
 #include "ui/sdl_menu_render.h"
 
 #include <math.h>
+#include "ui/menu_numeric_controls.h"
 
 #include "app/animation.h"
 #include "config/config_manager.h"
@@ -32,7 +33,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
                                      SliderLayout* out_layout) {
     SliderLayout layout = {0};
     int textHeight = 18;
-    int valueReserve = 102;
+    int valueReserve = 114;
     int sliderX = SLIDER_MARGIN_X;
     int sliderWidth = SLIDER_WIDTH;
     int rightLimit = MENU_WIDTH - MENU_MARGIN_X - 10;
@@ -91,7 +92,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
                 targetPtr, minVal, maxVal, track_, hit_, \
                 sliderX, labelY_, \
                 sliderX + sliderWidth + 10, trackY_ - ((textHeight - layout.trackHeight) / 2), \
-                labelText \
+                labelText, {0}, {0}, {0} \
             }; \
             layout.nextY = trackY_ + layout.trackHeight + SLIDER_SPACING; \
         } \
@@ -100,7 +101,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
     if (!is_3d) {
         ADD_SLIDER(&animSettings.bounceLimit, 0, 100, "Bounce Limit");
     }
-    ADD_SLIDER(&animSettings.frameLimit, 1, 5000, "Frame Limit");
+    ADD_SLIDER(&animSettings.frameLimit, 0, 5000, "Frame Limit");
     ADD_SLIDER(&animSettings.framesForTravel, 1, 5000, "Path Points");
     ADD_SLIDER(&animSettings.fps, 1, 240, "FPS");
     ADD_SLIDER(&sceneSettings.rays,
@@ -170,6 +171,13 @@ void menu_render_build_slider_layout(TTF_Font* font,
             layout.items[i].valueY -= scrollOffset;
         }
     }
+    for (size_t i = 0; i < layout.count; ++i)
+        menu_numeric_layout(&layout.items[i], textHeight, rightLimit - 10);
+    SDL_Rect viewport = layout.panelRect;
+    viewport.y += MENU_PANEL_CHROME_TITLE_BAND;
+    viewport.h -= MENU_PANEL_CHROME_TITLE_BAND;
+    menu_scroll_setup(&state->scrolls[MENU_SCROLL_SETTINGS], viewport,
+                      viewport.h + (int)ceilf(layout.maxScroll), &state->sliderScroll);
     state->sliderScroll = layout.scroll;
     state->sliderMaxScroll = layout.maxScroll;
     state->sliderPanelRect = layout.panelRect;
@@ -187,11 +195,19 @@ void menu_render_draw_slider_items(SDL_Renderer* renderer,
     RayTracingThemePalette palette = {0};
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     if (!state || !layout) return;
+    SDL_Rect old_clip;
+    bool had_clip = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &old_clip);
     if (layout->panelRect.w > 0 && layout->panelRect.h > 0) {
         SDL_Rect panel = layout->panelRect;
         if (panel_title && panel_title[0]) {
             menu_panel_chrome_draw(renderer, font, &panel, panel_title, false);
         }
+        if (panel_title && panel_title[0]) {
+            panel.y += MENU_PANEL_CHROME_TITLE_BAND;
+            panel.h -= MENU_PANEL_CHROME_TITLE_BAND;
+        }
+        if (had_clip) SDL_IntersectRect(&panel, &old_clip, &panel);
         SDL_RenderSetClipRect(renderer, &panel);
     }
 
@@ -234,102 +250,12 @@ void menu_render_draw_slider_items(SDL_Renderer* renderer,
         };
         SDL_RenderFillRect(renderer, &knob);
 
-        if (slider->value == &state->rouletteSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.3f", state->rouletteSliderValue / 1000.0);
-        } else if (slider->value == &state->envSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.2f", state->envSliderValue / 255.0);
-        } else if (slider->value == &state->cacheWeightSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.2f", state->cacheWeightSliderValue / 100.0);
-        } else if (slider->value == &state->lightIntensitySliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.2f", state->lightIntensitySliderValue / 100.0);
-        } else if (slider->value == &state->lightDecaySoftnessSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.2f", state->lightDecaySoftnessSliderValue / 100.0);
-        } else if (slider->value == &state->forwardDecaySliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", state->forwardDecaySliderValue);
-        } else if (slider->value == &state->topFillStrengthSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.2f", state->topFillStrengthSliderValue / 100.0);
-        } else if (slider->value == &state->environmentBackgroundBrightnessSliderValue) {
-            if (animSettings.environmentBackgroundBrightnessAuto) {
-                RenderText(renderer, font, slider->valueX, slider->valueY,
-                           "Auto %.2f",
-                           state->environmentBackgroundBrightnessSliderValue / 100.0);
-            } else {
-                RenderText(renderer, font, slider->valueX, slider->valueY,
-                           "%.2f",
-                           state->environmentBackgroundBrightnessSliderValue / 100.0);
-            }
-        } else if (slider->value == &state->environmentBackgroundRedSliderValue ||
-                   slider->value == &state->environmentBackgroundGreenSliderValue ||
-                   slider->value == &state->environmentBackgroundBlueSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.2f", *slider->value / 100.0);
-        } else if (slider->value == &state->bounceDepth3DSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", state->bounceDepth3DSliderValue);
-        } else if (slider->value == &state->rouletteThreshold3DSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%.3f", state->rouletteThreshold3DSliderValue / 1000.0);
-        } else if (slider->value == &state->secondaryDiffuseSamples3DSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", state->secondaryDiffuseSamples3DSliderValue);
-        } else if (slider->value == &state->transmissionSamples3DSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", state->transmissionSamples3DSliderValue);
-        } else if (slider->value == &state->temporalFrames3DSliderValue) {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", state->temporalFrames3DSliderValue);
-        } else if (slider->value == &state->renderScale3DSliderValue) {
-            if (state->renderScale3DSliderValue == RUNTIME_3D_RENDER_SCALE_HIDPI) {
-                RenderText(renderer, font, slider->valueX, slider->valueY, "HiDPI");
-            } else {
-                RenderText(renderer, font, slider->valueX, slider->valueY,
-                           "%dx", state->renderScale3DSliderValue);
-            }
-        } else {
-            RenderText(renderer, font, slider->valueX, slider->valueY,
-                       "%d", *slider->value);
-        }
+        menu_numeric_draw(renderer, font, state, slider);
     }
 
-    SDL_RenderSetClipRect(renderer, NULL);
-    if (layout->maxScroll > 0.5f && layout->panelRect.w > 0 && layout->panelRect.h > 0) {
-        SDL_Rect track = {
-            layout->panelRect.x + layout->panelRect.w - 8,
-            layout->panelRect.y + 6,
-            4,
-            layout->panelRect.h - 12
-        };
-        float ratio = (float)(layout->panelRect.h - 12) / (float)(layout->contentBottomY - layout->panelRect.y);
-        int thumbH = (int)lround((float)track.h * ratio);
-        int minThumb = max_int(20, layout->trackHeight + 4);
-        if (thumbH < minThumb) thumbH = minThumb;
-        if (thumbH > track.h) thumbH = track.h;
-        float scrollRatio = (layout->maxScroll > 0.0f) ? (layout->scroll / layout->maxScroll) : 0.0f;
-        int thumbY = track.y + (int)lround((float)(track.h - thumbH) * scrollRatio);
-        SDL_Rect thumb = {track.x, thumbY, track.w, thumbH};
-        if (has_shared_palette) {
-            SDL_SetRenderDrawColor(renderer,
-                                   palette.panel_border.r, palette.panel_border.g,
-                                   palette.panel_border.b, 180);
-            SDL_RenderFillRect(renderer, &track);
-            SDL_SetRenderDrawColor(renderer,
-                                   palette.accent_primary.r, palette.accent_primary.g,
-                                   palette.accent_primary.b, 220);
-            SDL_RenderFillRect(renderer, &thumb);
-        } else {
-            SDL_SetRenderDrawColor(renderer, 70, 70, 76, 170);
-            SDL_RenderFillRect(renderer, &track);
-            SDL_SetRenderDrawColor(renderer, 180, 180, 190, 220);
-            SDL_RenderFillRect(renderer, &thumb);
-        }
-    }
+    SDL_RenderSetClipRect(renderer, had_clip ? &old_clip : NULL);
+    menu_scroll_draw(renderer, &state->scrolls[panel_title && panel_title[0]
+        ? MENU_SCROLL_SETTINGS : MENU_SCROLL_CONTROLS]);
 }
 
 void menu_render_draw_sliders(SDL_Renderer* renderer,

@@ -136,15 +136,16 @@ static MenuSceneLibraryLane menu_library_lane_from_source(int source) {
 static void menu_state_sync_load_scene_dropdown_flags(MenuRuntimeState* state) {
     if (!state) return;
     state->manifestLoadEnabled = state->manifestDropdownOpen;
-    if (!state->manifestDropdownOpen) {
-        state->manifestScrollbarDragging = false;
+    if (!state->manifestDropdownOpen &&
+        animation_config_space_mode_clamp(animSettings.spaceMode) != SPACE_MODE_3D) {
+        state->scrolls[MENU_SCROLL_SCENE].dragging = false;
     }
 }
 
 static void menu_state_sync_volume_dropdown_flags(MenuRuntimeState* state) {
     if (!state) return;
     if (!state->volumeDropdownOpen) {
-        state->volumeScrollbarDragging = false;
+        state->scrolls[MENU_SCROLL_VOLUME].dragging = false;
     }
 }
 
@@ -665,7 +666,7 @@ void menu_state_set_load_scene_enabled(MenuRuntimeState* state, bool enabled) {
         state->volumeDropdownOpen = false;
         menu_state_refresh_manifest_options(state);
         state->manifestScroll = 0.0f;
-        state->manifestScrollbarDragging = false;
+        state->scrolls[MENU_SCROLL_SCENE].dragging = false;
     } else {
         state->manifestDropdownOpen = false;
     }
@@ -679,7 +680,7 @@ void menu_state_set_volume_load_enabled(MenuRuntimeState* state, bool enabled) {
         state->manifestDropdownOpen = false;
         menu_state_refresh_volume_options(state);
         state->volumeScroll = 0.0f;
-        state->volumeScrollbarDragging = false;
+        state->scrolls[MENU_SCROLL_VOLUME].dragging = false;
     } else {
         state->volumeDropdownOpen = false;
     }

@@ -1,3 +1,4 @@
+#include "ui/menu_numeric_controls.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/menu/sdl_menu_render_internal.h"
 
@@ -242,7 +243,7 @@ static void menu_renderer_controls_add_slider(SliderLayout* layout,
         label_y,
         slider_x + slider_width + 10,
         track_y - ((text_height - layout->trackHeight) / 2),
-        label
+        label, {0}, {0}, {0}
     };
     layout->nextY = track_y + layout->trackHeight + RENDERER_CONTROL_SLIDER_SPACING;
 }
@@ -256,7 +257,7 @@ static void menu_renderer_controls_build_slider_layout(TTF_Font* font,
     int text_height;
     int content_left;
     int content_right;
-    int value_reserve = 88;
+    int value_reserve = 114;
     int slider_x;
     int slider_width;
     int panel_bottom;
@@ -268,7 +269,7 @@ static void menu_renderer_controls_build_slider_layout(TTF_Font* font,
                     screen_layout->centerControlsRect.w - 12;
     slider_x = content_left;
     slider_width = content_right - content_left - value_reserve;
-    if (slider_width < 120) slider_width = content_right - content_left;
+
     if (slider_width < 80) slider_width = 80;
 
     layout.trackHeight = max_int(RENDERER_CONTROL_SLIDER_HEIGHT, text_height / 3);
@@ -391,8 +392,18 @@ static void menu_renderer_controls_build_slider_layout(TTF_Font* font,
     }
 
     layout.contentBottomY = layout.nextY;
-    layout.maxScroll = 0.0f;
-    layout.scroll = 0.0f;
+    layout.maxScroll = fmaxf(0, layout.nextY - (layout.panelRect.y + layout.panelRect.h));
+    menu_scroll_setup(&state->scrolls[MENU_SCROLL_CONTROLS], layout.panelRect,
+                      layout.panelRect.h + (int)ceilf(layout.maxScroll), &state->controlsScroll);
+    layout.scroll = state->controlsScroll;
+    for (size_t i = 0; i < layout.count; ++i) {
+        MenuSlider *slider = &layout.items[i];
+        slider->labelY -= (int)layout.scroll;
+        slider->trackRect.y -= (int)layout.scroll;
+        slider->hitRect.y -= (int)layout.scroll;
+        slider->valueY -= (int)layout.scroll;
+        menu_numeric_layout(slider, text_height, content_right - 10);
+    }
     *out_layout = layout;
 }
 
@@ -445,8 +456,17 @@ void menu_render_draw_button_rect(SDL_Renderer *renderer, TTF_Font *font, const 
         textColor = menu_render_choose_readable_text(fill, textColor);
     }
 
-    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-    SDL_RenderFillRect(renderer, rect);
+    int mx, my;
+    Uint32 mouse = SDL_GetMouseState(&mx, &my);
+    SDL_Point pointer = {mx, my};
+    if (SDL_PointInRect(&pointer, rect)) {
+        int delta = (mouse & SDL_BUTTON_LMASK) ? -8 : 8;
+        fill.r = (Uint8)fmin(255, fmax(0, fill.r + delta));
+        fill.g = (Uint8)fmin(255, fmax(0, fill.g + delta));
+        fill.b = (Uint8)fmin(255, fmax(0, fill.b + delta));
+    }
+    kit_ui_sdl_fill_rounded_rect(renderer, rect, 4,
+        (KitRenderColor){fill.r, fill.g, fill.b, fill.a});
 
     render_centered_text_color(renderer, font, rect, textColor, text);
 }
@@ -697,10 +717,15 @@ void menu_render_build_button_layout(TTF_Font* font,
         int root_y = layout.loadSceneRect.y + layout.loadSceneRect.h + ROOT_ROW_SPACING;
         if ((state && state->manifestDropdownOpen) ||
             animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
-            root_y += SDL_MENU_RENDER_MANIFEST_PANEL_MAX_HEIGHT + ROOT_ROW_SPACING;
+            int available = screen_layout ? screen_layout->leftPanelRect.y +
+                screen_layout->leftPanelRect.h - root_y - 280 : 340;
+            if (available < 52) available = 52;
+            if (available > SDL_MENU_RENDER_MANIFEST_PANEL_MAX_HEIGHT)
+                available = SDL_MENU_RENDER_MANIFEST_PANEL_MAX_HEIGHT;
+            root_y += available + ROOT_ROW_SPACING;
         }
-        if (root_value_w < 140) {
-            root_value_w = 140;
+        if (root_value_w < 64) {
+            root_value_w = 64;
         }
         layout.inputRootValueRect = (SDL_Rect){leftX, root_y, root_value_w, ROOT_ROW_HEIGHT};
         layout.inputRootEditRect = (SDL_Rect){leftX + root_value_w + 4, root_y, ROOT_CTRL_BUTTON_W, ROOT_ROW_HEIGHT};

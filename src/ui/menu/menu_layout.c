@@ -1,3 +1,5 @@
+#include "render/text_draw.h"
+#include "engine/Render/render_pipeline.h"
 #include "ui/menu_layout.h"
 
 #include <SDL2/SDL_ttf.h>
@@ -99,7 +101,9 @@ void menu_layout_build_base(TTF_Font* font,
     const int menu_width = (window_width > 0) ? window_width : MENU_WIDTH;
     const int menu_height = (window_height > 0) ? window_height : MENU_HEIGHT;
     const int bottom_row_y = menu_height - MENU_MARGIN_Y - MENU_BOTTOM_ACTION_HEIGHT;
-    int text_line_height = font ? TTF_FontLineSkip(font) : 18;
+    int text_line_height = 18;
+    if (font) (void)ray_tracing_text_line_height(
+        getRenderContext() ? getRenderContext()->renderer : NULL, font, &text_line_height);
     int route_row_height;
     int render_info_preferred_height;
     if (text_line_height < 12) text_line_height = 12;
@@ -111,7 +115,7 @@ void menu_layout_build_base(TTF_Font* font,
         route_row_height = MENU_ROUTE_STACK_ROW_HEIGHT_MAX;
     }
     render_info_preferred_height = MENU_PANEL_CHROME_TITLE_BAND + 8 +
-                                   text_line_height * 5;
+                                   text_line_height * (state && state->renderInfoExpanded ? 5 : 2);
     const int route_stack_h = MENU_PANEL_CHROME_TITLE_BAND +
                               route_row_height * MENU_ROUTE_STACK_ROW_COUNT +
                               MENU_ROUTE_STACK_GAP * (MENU_ROUTE_STACK_ROW_COUNT - 1) +
@@ -229,7 +233,7 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
         const int control_right = buttons->inputRootApplyRect.x + buttons->inputRootApplyRect.w;
         const int panel_bottom_limit = layout->leftPanelRect.y + layout->leftPanelRect.h - MENU_LEFT_PANEL_CONTENT_INSET;
         const int panel_w = min_int(panel_right_limit, control_right) - panel_x;
-        int panel_h = panel_bottom_limit - panel_y;
+        int panel_h = min_int(panel_bottom_limit, buttons->inputRootValueRect.y - MENU_MANIFEST_PANEL_GAP) - panel_y;
 
         if (panel_h > MENU_MANIFEST_PANEL_MAX_HEIGHT) {
             panel_h = MENU_MANIFEST_PANEL_MAX_HEIGHT;

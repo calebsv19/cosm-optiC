@@ -1,3 +1,5 @@
+#include "ui/menu_numeric_controls.h"
+#include "ui/sdl_menu_input.h"
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
@@ -469,8 +471,10 @@ static int test_menu_layout_keeps_manifest_list_inside_left_panel(void) {
     menu_layout_finalize_with_buttons(&screen, &buttons, &state);
 
     assert_true("menu_layout_manifest_list_visible", screen.manifestReserveRect.w > 0 && screen.manifestReserveRect.h > 0);
-    assert_true("menu_layout_manifest_list_expanded_for_3d",
-                screen.manifestReserveRect.h > 300);
+    assert_true("menu_layout_manifest_list_leaves_room_for_controls",
+                screen.manifestReserveRect.h >= SDL_MENU_MANIFEST_ITEM_HEIGHT * 2 &&
+                buttons.volumeToggleRect.y + buttons.volumeToggleRect.h + 42 <=
+                    screen.leftPanelRect.y + screen.leftPanelRect.h);
     assert_true("menu_layout_manifest_list_below_load_scene",
                 screen.manifestReserveRect.y >= buttons.loadSceneRect.y + buttons.loadSceneRect.h);
     assert_true("menu_layout_input_root_below_manifest_list",
@@ -2311,9 +2315,159 @@ static int test_object_editor_transparent_alpha_slider_is_labeled_transparency(v
 }
 
 
+static void test_menu_numeric_editing_and_constraints(void) {
+    MenuNumericSpec frames = {0, 5000, 5, 1, 1, 0};
+    MenuNumericSpec dimension = {2, 10000, 2, 2, 1, 0};
+    MenuNumericSpec decimal = {0, 100, 1, 1, 1000, 3};
+    MenuNumericSpec fps = {1, 240, 1, 1, 1, 0};
+    MenuNumericEdit edit;
+    int value = 1000, parsed = -1;
+    menu_numeric_begin(&edit, &value, frames);
+    menu_numeric_delete(&edit, false);
+    assert_true("numeric_empty_draft_stays_empty", edit.text[0] == '\0');
+    assert_true("numeric_draft_does_not_change_setting", value == 1000);
+    assert_true("numeric_empty_commits_zero", menu_numeric_parse(frames, edit.text, &parsed) && parsed == 0);
+    assert_true("numeric_insert_10", menu_numeric_insert(&edit, "10"));
+    menu_numeric_move(&edit, 1, false);
+    menu_numeric_delete(&edit, false);
+    assert_true("numeric_replace_middle_digit", menu_numeric_insert(&edit, "2") && strcmp(edit.text, "20") == 0);
+    menu_numeric_move(&edit, 0, false);
+    menu_numeric_delete(&edit, true);
+    assert_true("numeric_forward_delete", strcmp(edit.text, "0") == 0);
+    menu_numeric_move(&edit, 1, true);
+    assert_true("numeric_selection_replace", menu_numeric_insert(&edit, "1237") && strcmp(edit.text, "1237") == 0);
+    assert_true("numeric_precise_integer", menu_numeric_parse(frames, edit.text, &parsed) && parsed == 1237);
+    assert_true("numeric_drag_step_five", menu_numeric_normalize(frames, 1237, true) == 1235);
+    assert_true("numeric_nudge_relative", menu_numeric_normalize(frames, 1237 + frames.step, false) == 1242);
+    assert_true("numeric_dimension_odd_rounds_up", menu_numeric_parse(dimension, "1201", &parsed) && parsed == 1202);
+    assert_true("numeric_dimension_even_preserved", menu_numeric_parse(dimension, "1200", &parsed) && parsed == 1200);
+    assert_true("numeric_dimension_empty_valid_min", menu_numeric_parse(dimension, "", &parsed) && parsed == 2);
+    assert_true("numeric_fps_empty_valid_min", menu_numeric_parse(fps, "", &parsed) && parsed == 1);
+    assert_true("numeric_decimal_display_units", menu_numeric_parse(decimal, "0.005", &parsed) && parsed == 5);
+    assert_true("numeric_bounds_clamp", menu_numeric_parse(frames, "999999999", &parsed) && parsed == 5000);
+    assert_true("numeric_reject_nonfinite", !menu_numeric_parse(frames, "nan", &parsed));
+    assert_true("numeric_reject_overflow", !menu_numeric_parse(frames, "1e999", &parsed));
+    assert_true("numeric_reject_partial_number", !menu_numeric_parse(decimal, "-", &parsed));
+    assert_true("numeric_reject_garbage", !menu_numeric_parse(decimal, "1.2.3", &parsed));
+    assert_true("numeric_reject_fractional_integer", !menu_numeric_parse(frames, "1.2", &parsed));
+    char too_long[80]; memset(too_long, '1', sizeof(too_long) - 1); too_long[79] = 0;
+    assert_true("numeric_paste_is_bounded", !menu_numeric_insert(&edit, too_long));
+
+    MenuRuntimeState *state = calloc(1, sizeof(*state));
+    assert_true("numeric_state_allocated", state != NULL);
+    if (!state) return;
+    SDL_Event event = {0};
+    bool running = true;
+    TTF_Font *font = NULL;
+    menu_numeric_begin(&state->numericEdit, &value, frames);
+    event.type = SDL_KEYDOWN;
+    event.key.keysym.sym = SDLK_i;
+    bool prior_mode = animSettings.interactiveMode;
+    menu_input_handle_key(&event, &running, &font, state);
+    assert_true("numeric_captures_menu_shortcuts", animSettings.interactiveMode == prior_mode);
+    event.key.keysym.sym = SDLK_BACKSPACE;
+    menu_input_handle_key(&event, &running, &font, state);
+    assert_true("numeric_key_deletes_selection", state->numericEdit.text[0] == 0);
+    event.key.keysym.sym = SDLK_ESCAPE;
+    menu_input_handle_key(&event, &running, &font, state);
+    assert_true("numeric_escape_cancels_without_closing", running && !state->numericEdit.active && value == 1000);
+    MenuNumericSpec actual = menu_numeric_spec(state, &sceneSettings.windowWidth, 2, 10000);
+    assert_true("numeric_width_uses_even_policy", actual.step == 2 && actual.multiple == 2);
+    actual = menu_numeric_spec(state, &animSettings.tileSize, 4, 256);
+    assert_true("numeric_tile_uses_four_pixel_policy", actual.step == 4 && actual.multiple == 4);
+    assert_true("numeric_tile_decrease_changes_value", menu_numeric_normalize(actual, 32 - actual.step, false) == 28);
+    actual = menu_numeric_spec(state, &state->rouletteThreshold3DSliderValue, 0, 100);
+    assert_true("numeric_roulette_uses_display_scale", actual.divisor == 1000 && actual.decimals == 3);
+
+    MenuScreenLayout screen = {0};
+    SliderLayout sliders = {0};
+    screen.sliderPanelRect = (SDL_Rect){800, 30, 330, 500};
+    menu_render_build_slider_layout(NULL, state, &screen, &sliders);
+    assert_true("numeric_slider_rows_have_value_targets", sliders.count > 0 && sliders.items[0].valueRect.w > 0);
+    const MenuSlider *slider = &sliders.items[0];
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = slider->valueRect.x + 2;
+    event.button.y = slider->valueRect.y + 2;
+    event.button.clicks = 1;
+    (void)menu_numeric_click(&event, &sliders, state, NULL);
+    assert_true("numeric_single_click_does_not_edit", !state->numericEdit.active);
+    event.button.clicks = 2;
+    (void)menu_numeric_click(&event, &sliders, state, NULL);
+    assert_true("numeric_double_click_enters_edit", state->numericEdit.active && state->numericEdit.target == slider->value);
+    (void)menu_numeric_finish(state, false);
+    AnimationConfig saved_anim = animSettings;
+    value = 1237;
+    SliderLayout nudge = {0};
+    nudge.panelRect = (SDL_Rect){0, 0, 300, 80};
+    nudge.count = 1;
+    nudge.items[0].value = &value;
+    nudge.items[0].min = 0;
+    nudge.items[0].max = 5000;
+    nudge.items[0].increaseRect = (SDL_Rect){100, 20, 16, 12};
+    nudge.items[0].decreaseRect = (SDL_Rect){100, 32, 16, 12};
+    event.button.x = 105;
+    event.button.y = 25;
+    assert_true("numeric_up_arrow_nudges_exact_value",
+                menu_numeric_click(&event, &nudge, state, NULL) && value == 1242);
+    event.button.y = 35;
+    assert_true("numeric_down_arrow_nudges_exact_value",
+                menu_numeric_click(&event, &nudge, state, NULL) && value == 1237);
+    menu_numeric_begin(&state->numericEdit, &value, frames);
+    (void)menu_numeric_insert(&state->numericEdit, "-");
+    assert_true("numeric_invalid_commit_retains_draft",
+                !menu_numeric_finish(state, true) && state->numericEdit.active &&
+                state->numericEdit.invalid && value == 1237);
+    menu_numeric_move(&state->numericEdit, 0, false);
+    menu_numeric_move(&state->numericEdit, 1, true);
+    menu_numeric_delete(&state->numericEdit, false);
+    assert_true("numeric_empty_enter_applies_zero",
+                menu_numeric_finish(state, true) && value == 0 && !state->numericEdit.active);
+    animSettings = saved_anim;
+    menu_layout_build_base(NULL, state, 1200, 900, &screen);
+    int compact = screen.renderInfoRect.h;
+    state->renderInfoExpanded = true;
+    menu_layout_build_base(NULL, state, 1200, 900, &screen);
+    assert_true("numeric_info_expansion_reclaims_space", screen.renderInfoRect.h > compact);
+    free(state);
+}
+
+static void test_menu_scroll_interactions(void) {
+    MenuScroll scroll = {0};
+    float offset = 0;
+    SDL_Rect viewport = {10, 20, 200, 100};
+    menu_scroll_setup(&scroll, viewport, 500, &offset);
+    assert_true("scroll_shared_slim_geometry", scroll.layout.track.w == 6 && scroll.maximum == 400);
+    SDL_Event event = {0};
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = scroll.layout.thumb.x + 1;
+    event.button.y = scroll.layout.thumb.y + 2;
+    assert_true("scroll_thumb_capture", menu_scroll_event(&scroll, &event) && scroll.dragging);
+    event.type = SDL_MOUSEMOTION;
+    event.motion.y = 102;
+    assert_true("scroll_drag_bottom", menu_scroll_event(&scroll, &event) && offset == 400);
+    event.type = SDL_MOUSEBUTTONUP;
+    assert_true("scroll_release_outside", menu_scroll_event(&scroll, &event) && !scroll.dragging);
+    event.type = SDL_MOUSEBUTTONDOWN;
+    event.button.y = viewport.y + 2;
+    assert_true("scroll_track_pages", menu_scroll_event(&scroll, &event) && offset < 400);
+    scroll.dragging = true;
+    event.type = SDL_WINDOWEVENT;
+    event.window.event = SDL_WINDOWEVENT_FOCUS_LOST;
+    assert_true("scroll_focus_loss_releases", menu_scroll_event(&scroll, &event) && !scroll.dragging);
+    menu_scroll_setup(&scroll, viewport, 50, &offset);
+    assert_true("scroll_content_shrink_clamps", offset == 0 && !scroll.layout.scrollable);
+    scroll.visible = false;
+    event.type = SDL_MOUSEBUTTONDOWN;
+    assert_true("scroll_hidden_does_not_capture", !menu_scroll_event(&scroll, &event));
+}
+
 int run_test_ui_menu_contract_tests(void) {
     int before = test_support_failures();
 
+    test_menu_numeric_editing_and_constraints();
+    test_menu_scroll_interactions();
     test_menu_batch_panel_click_starts_frame_dir_edit();
     test_menu_batch_panel_clear_button_updates_frame_count();
     test_menu_scene_project_summary_detects_project_files();

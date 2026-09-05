@@ -1,6 +1,21 @@
 # optiC Current Truth
 
-Last updated: 2026-09-04
+Last updated: 2026-09-05
+
+## 2026-09-05 Main Edit Menu Controls
+
+The Main Edit source adds double-click numeric editing with a caret and selection,
+shared scrollbar presentation/interaction, relative nudge arrows, and field-specific
+adjustment rules. Frame dimensions remain even; large integer sliders use steps of
+five while typed integers keep their precision. Render Info is compact and expandable,
+and the scene list reserves room for lower controls. Menu buttons adopt the existing
+shared rounded-surface primitive. See `docs/menu_controls.md` for exact behavior,
+reuse decisions, and focused test coverage.
+
+This is a local development checkpoint at unchanged application/worker versions.
+The running Desktop Main Edit app is being used for a render and must remain
+untouched. Package self-test is separate from Desktop refresh and live visual
+acceptance; canonical adoption and artifact retention follow the visual review.
 
 ## 2026-09-04 Main Edit Readiness
 
