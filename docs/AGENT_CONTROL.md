@@ -182,3 +182,10 @@ lanes.
 
 Those actions belong to later release-readiness passes after the public local
 contract is stable.
+
+## Managed STL scene authoring
+
+For project-owned STL intake, per-instance shading, safe rebuilds and relocation
+proof, use [Managed mesh assets](managed_mesh_assets.md). Keep the complete
+project for source rebuildability; a runtime-only render export is a different
+guarantee. Existing loose scenes keep their current behavior.

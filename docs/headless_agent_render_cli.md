@@ -1325,3 +1325,10 @@ make -C ray_tracing test-ray-tracing-render-headless-water-surface-handoff
 make -C ray_tracing test-ray-tracing-job-runner-smoke
 make -C ray_tracing test-ray-tracing-job-runner-policy
 ```
+
+## Managed STL scene authoring
+
+For project-owned STL intake, per-instance shading, safe rebuilds and relocation
+proof, use [Managed mesh assets](managed_mesh_assets.md). Keep the complete
+project for source rebuildability; a runtime-only render export is a different
+guarantee. Existing loose scenes keep their current behavior.

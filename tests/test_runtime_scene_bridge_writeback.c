@@ -18,13 +18,14 @@ static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(v
         "\"unit_system\":\"meters\","
         "\"world_scale\":1.0,"
         "\"space_mode_default\":\"2d\","
-        "\"objects\":[{\"object_id\":\"obj_base\"}],"
+        "\"objects\":[{\"object_id\":\"obj_base\",\"extensions\":{\"ray_tracing\":{\"managed_mesh\":{\"asset_id\":\"wrench\",\"shading\":\"inherit\"}}}}],"
         "\"materials\":[],"
         "\"lights\":[],"
         "\"cameras\":[],"
         "\"constraints\":[],"
         "\"extensions\":{"
           "\"physics_sim\":{\"gravity\":9.81},"
+          "\"ray_tracing\":{\"managed_mesh_assets\":{\"schema\":\"optic_managed_mesh_assets_v1\"}},"
           "\"custom_tool\":{\"foo\":1}"
         "},"
         "\"compile_meta\":{\"compiler\":\"core_scene_compile\"}"
@@ -53,6 +54,10 @@ static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(v
         return 0;
     }
 
+    assert_true("runtime_scene_writeback_preserve_managed_instance",
+                strstr(merged, "wrench") != NULL && strstr(merged, "inherit") != NULL);
+    assert_true("runtime_scene_writeback_preserve_managed_assets",
+                strstr(merged, "optic_managed_mesh_assets_v1") != NULL);
     assert_true("runtime_scene_writeback_preserve_physics",
                 strstr(merged, "\"physics_sim\"") != NULL);
     assert_true("runtime_scene_writeback_preserve_custom",

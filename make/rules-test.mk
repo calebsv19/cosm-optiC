@@ -3422,3 +3422,7 @@ test-legacy:
 		echo "[legacy] one or more legacy tests failed"; \
 		exit 1; \
 	fi
+
+.PHONY: test-managed-mesh-assets
+test-managed-mesh-assets: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/test_managed_mesh_assets.py

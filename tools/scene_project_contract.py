@@ -196,6 +196,30 @@ class PortableProjectValidator:
             )
             _require(asset.get("asset_id") == asset_id, f"mesh asset id mismatch for {asset_id}")
 
+        # Managed STL records are an optional RayTracing-owned attachment lane.
+        from managed_mesh_assets import catalog, status as managed_status
+        try:
+            managed_report = managed_status(runtime_path)
+            if managed_report['status'] == 'rebuild_required':
+                raise ValueError('managed mesh rebuild required')
+            managed = catalog(runtime)
+            if managed:
+                for asset in managed['assets'].values():
+                    self._resolve(asset['source'], field='managed STL source',
+                                  base=runtime_path.parent, role='managed_mesh_source',
+                                  claim={'sha256': asset['source_sha256']})
+                for obj in runtime['objects']:
+                    setting = obj.get('extensions', {}).get('ray_tracing', {}).get('managed_mesh')
+                    if setting:
+                        variant = setting['compiled']
+                        asset_ids.add(variant['runtime_id'])
+                        for name in ('runtime', 'authoring'):
+                            self._resolve(variant[name], field='managed mesh ' + name,
+                                          base=runtime_path.parent, role='managed_mesh_' + name,
+                                          claim={'sha256': variant[name + '_sha256']})
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            raise SceneProjectValidationError(str(exc)) from exc
+
         runtime_mesh_ids: set[str] = set()
         for item in runtime.get("objects", []):
             if not isinstance(item, dict):
@@ -418,6 +442,12 @@ def validate_explicit_paths(
         and runtime.get("schema_variant") == "scene_runtime_v1",
         "legacy runtime scene has an unsupported schema",
     )
+    from managed_mesh_assets import status as managed_status
+    try:
+        managed_report = managed_status(runtime_path)
+        _require(managed_report['status'] != 'rebuild_required', 'managed mesh rebuild required')
+    except (ValueError, KeyError, TypeError, OSError) as exc:
+        raise SceneProjectValidationError(str(exc)) from exc
     files = [runtime_path]
     adapters: dict[str, dict[str, Any]] = {
         "line_drawing": {"status": "compatible", "input": "explicit_runtime_scene"}

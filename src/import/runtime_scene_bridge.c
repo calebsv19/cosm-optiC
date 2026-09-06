@@ -919,6 +919,20 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
         json_object_put(overlay_root);
         return false;
     }
+    /* Editor overlays replace the ray_tracing namespace. Managed asset
+       ownership is persisted by the backend, not reconstructed by the editor. */
+    {
+        json_object *extensions = NULL, *ray = NULL, *managed = NULL;
+        json_object *overlay_extensions = NULL, *overlay_ray = NULL;
+        if (json_object_object_get_ex(runtime_root, "extensions", &extensions) &&
+            json_object_object_get_ex(extensions, "ray_tracing", &ray) &&
+            json_object_object_get_ex(ray, "managed_mesh_assets", &managed) &&
+            json_object_object_get_ex(overlay_root, "extensions", &overlay_extensions) &&
+            json_object_object_get_ex(overlay_extensions, "ray_tracing", &overlay_ray) &&
+            json_object_is_type(overlay_ray, json_type_object)) {
+            json_object_object_add(overlay_ray, "managed_mesh_assets", json_object_get(managed));
+        }
+    }
     if (!core_scene_overlay_merge_apply(runtime_root,
                                         overlay_root,
                                         "ray_tracing",
