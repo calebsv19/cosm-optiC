@@ -92,6 +92,12 @@ static int prefix_width(SDL_Renderer *renderer, TTF_Font *font, const char *text
     return width;
 }
 
+static int text_origin(SDL_Renderer *renderer, TTF_Font *font, const MenuSlider *slider,
+                       const MenuNumericEdit *edit) {
+    int overflow = prefix_width(renderer, font, edit->text, edit->cursor) - (slider->valueRect.w - 8);
+    return slider->valueX - (overflow > 0 ? overflow : 0);
+}
+
 bool menu_numeric_click(SDL_Event *event, const SliderLayout *layout, MenuRuntimeState *state, TTF_Font *font) {
     const int x = event->button.x, y = event->button.y;
     if (event->button.button != SDL_BUTTON_LEFT || !contains(layout->panelRect, x, y)) return false;
@@ -127,7 +133,7 @@ bool menu_numeric_click(SDL_Event *event, const SliderLayout *layout, MenuRuntim
                 SDL_Renderer *renderer = getRenderContext() ? getRenderContext()->renderer : NULL;
                 int left = prefix_width(renderer, font, edit->text, index);
                 int right = prefix_width(renderer, font, edit->text, index + 1);
-                if (x - slider->valueX < (left + right) / 2) break;
+                if (x - text_origin(renderer, font, slider, edit) < (left + right) / 2) break;
             }
             menu_numeric_move(edit, (int)index, (SDL_GetModState() & KMOD_SHIFT) != 0);
             edit->blinkEpoch = SDL_GetTicks();
@@ -206,7 +212,7 @@ void menu_numeric_draw(SDL_Renderer *renderer, TTF_Font *font, MenuRuntimeState 
     int x = slider->valueX;
     if (active) {
         int caret_width = prefix_width(renderer, font, text, edit->cursor);
-        if (caret_width > clip.w - 4) x -= caret_width - clip.w + 4;
+        x = text_origin(renderer, font, slider, edit);
         const size_t start = edit->cursor < edit->anchor ? edit->cursor : edit->anchor;
         const size_t end = edit->cursor > edit->anchor ? edit->cursor : edit->anchor;
         SDL_Rect selection = {x + prefix_width(renderer, font, text, start), slider->valueY,

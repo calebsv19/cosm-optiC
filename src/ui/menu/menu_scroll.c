@@ -33,7 +33,7 @@ void menu_scroll_draw(SDL_Renderer *renderer, const MenuScroll *scroll) {
 
 bool menu_scroll_event(MenuScroll *scroll, const SDL_Event *event) {
     SDL_Point point;
-    if (event->type == SDL_MOUSEBUTTONUP ||
+    if ((event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT) ||
         (event->type == SDL_WINDOWEVENT && event->window.event == SDL_WINDOWEVENT_FOCUS_LOST)) {
         bool dragging = scroll->dragging;
         scroll->dragging = false;

@@ -470,6 +470,8 @@ void menu_render_frame(SDL_Renderer* renderer,
                                                          : (SDL_Color){210, 210, 210, 255};
             int summary_x = buttons.attachVolumeRect.x + 4;
             int summary_y = buttons.volumeToggleRect.y + buttons.volumeToggleRect.h + 8;
+            int summary_line_height = 18;
+            (void)ray_tracing_text_line_height(renderer, font, &summary_line_height);
             int summary_w = screenLayout.leftPanelRect.x + screenLayout.leftPanelRect.w - summary_x - 18;
             char summary_fit[192];
             menu_render_fit_text_to_width(font,
@@ -487,7 +489,7 @@ void menu_render_frame(SDL_Renderer* renderer,
                 menu_render_draw_text_color(renderer,
                                             font,
                                             summary_x,
-                                            summary_y + 16,
+                                            summary_y + summary_line_height + 2,
                                             summary_color,
                                             summary_fit);
             }
@@ -696,7 +698,7 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer, font, &buttons.saveRect, "Save", false);
     menu_render_draw_button_rect(renderer, font, &buttons.restoreRect, "Restore Defaults", false);
     menu_render_draw_button_rect(renderer, font, &buttons.previewRect, "Preview", animSettings.previewMode);
-    menu_render_draw_button_rect(renderer, font, &buttons.exitRect, "Exit w/o Saving", false);
+    menu_render_draw_button_rect(renderer, font, &buttons.exitRect, "Close", false);
 
     if (buttons.startRect.w > 0 && buttons.startRect.h > 0) {
         if (has_shared_palette) {

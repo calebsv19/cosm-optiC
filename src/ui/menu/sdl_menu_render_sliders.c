@@ -69,7 +69,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
     layout.trackHeight = max_int(SLIDER_HEIGHT, textHeight / 3);
     layout.knobWidth = max_int(8, (textHeight * 3) / 8);
     layout.knobHeight = layout.trackHeight + 4;
-    if (panelHeight < 120) panelHeight = 120;
+    if (panelHeight < 1) panelHeight = 1;
     layout.panelRect = pane_owned
                            ? screen_layout->sliderPanelRect
                            : (SDL_Rect){sliderX - 12,
@@ -94,7 +94,7 @@ void menu_render_build_slider_layout(TTF_Font* font,
                 sliderX + sliderWidth + 10, trackY_ - ((textHeight - layout.trackHeight) / 2), \
                 labelText, {0}, {0}, {0} \
             }; \
-            layout.nextY = trackY_ + layout.trackHeight + SLIDER_SPACING; \
+            layout.nextY = trackY_ + layout.trackHeight + (textHeight + 1) / 2 + SLIDER_SPACING; \
         } \
     } while (0)
 
@@ -213,10 +213,6 @@ void menu_render_draw_slider_items(SDL_Renderer* renderer,
 
     for (size_t i = 0; i < layout->count; i++) {
         const MenuSlider* slider = &layout->items[i];
-        if (slider->trackRect.y + slider->trackRect.h < layout->panelRect.y ||
-            slider->trackRect.y > layout->panelRect.y + layout->panelRect.h) {
-            continue;
-        }
         RenderText(renderer, font, slider->labelX, slider->labelY, "%s", slider->label);
 
         if (has_shared_palette) {

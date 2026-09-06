@@ -414,7 +414,16 @@ static bool menu_process_event(SDL_Window* window,
             return true;
         }
     }
-    if (ray_tracing_workspace_authoring_host_handle_sdl_event(
+    const bool legacy_text_edit = menu_state->activeView == MENU_VIEW_MAIN &&
+        (menu_state->editingBounce || menu_state->editingFrame || menu_state->editingStartFrame ||
+         menu_state->editingInputRoot || menu_state->editingMeshAssetRoot ||
+         menu_state->editingOutputRoot || menu_batch_panel_edit_active(menu_state));
+    if (legacy_text_edit && mutable_event.type == SDL_KEYDOWN) {
+        menu_input_handle_key(&mutable_event, running, font, menu_state);
+        return true;
+    }
+    if (!(legacy_text_edit && mutable_event.type == SDL_TEXTINPUT) &&
+        ray_tracing_workspace_authoring_host_handle_sdl_event(
             authoring_host,
             &mutable_event,
             menu_state_interaction_active(menu_state))) {
@@ -449,6 +458,7 @@ static bool menu_process_event(SDL_Window* window,
                                           menu_state);
             return true;
         case SDL_MOUSEBUTTONUP:
+            if (mutable_event.button.button != SDL_BUTTON_LEFT) return false;
             for (int i = 0; i < MENU_SCROLL_COUNT; ++i)
                 (void)menu_scroll_event(&menu_state->scrolls[i], &mutable_event);
             if (menu_state->draggingSlider && menu_state->selectedSlider) {
@@ -496,6 +506,7 @@ static bool menu_process_event(SDL_Window* window,
                 (void)menu_numeric_finish(menu_state, false);
                 for (int i = 0; i < MENU_SCROLL_COUNT; ++i)
                     (void)menu_scroll_event(&menu_state->scrolls[i], &mutable_event);
+                ray_tracing_menu_pane_host_end_splitter_drag(&menu_state->menuPaneHost);
                 menu_state->draggingSlider = false;
                 menu_state->selectedSlider = NULL;
                 return true;

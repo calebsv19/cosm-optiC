@@ -1,4 +1,5 @@
 #include "ui/menu_settings_lifecycle.h"
+#include <stdio.h>
 
 #include "config/config_manager.h"
 #include "render/runtime_native_3d_prepare_cache.h"
@@ -24,7 +25,11 @@ void menu_settings_lifecycle_commit(MenuRuntimeState* state,
         RuntimeNative3DPreparedSceneMarkDirty(
             (reason && reason[0]) ? reason : "menu_top_level_setting");
     }
-    SaveAnimationConfig();
+    if (!SaveAnimationConfigChecked()) {
+        snprintf(state->statusLabel, sizeof(state->statusLabel), "Save failed; changes remain in memory. Retry Save.");
+        state->statusColor = (SDL_Color){255, 110, 90, 255};
+        state->statusExpireMs = SDL_GetTicks() + 8000;
+    }
 }
 
 void menu_settings_lifecycle_commit_slider_release(MenuRuntimeState* state,

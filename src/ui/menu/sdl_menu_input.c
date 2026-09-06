@@ -1,4 +1,5 @@
 #include "ui/menu_panel_chrome.h"
+#include <limits.h>
 #include "ui/menu_numeric_controls.h"
 #include "ui/sdl_menu_input.h"
 
@@ -31,8 +32,8 @@
 
 static bool point_in_rect(const SDL_Rect *rect, int x, int y) {
     if (!rect || rect->w <= 0 || rect->h <= 0) return false;
-    return x >= rect->x && x <= rect->x + rect->w &&
-           y >= rect->y && y <= rect->y + rect->h;
+    return x >= rect->x && x < rect->x + rect->w &&
+           y >= rect->y && y < rect->y + rect->h;
 }
 
 static bool path_edit_active(const MenuRuntimeState *state) {
@@ -209,15 +210,23 @@ static void finish_root_edit(MenuRuntimeState *state, bool apply) {
     state->pathInputBuffer[0] = '\0';
 }
 
-static void finish_start_frame_edit(MenuRuntimeState *state, bool apply) {
-    if (!state) return;
-    if (apply && state->inputBuffer[0]) {
-        int newValue = atoi(state->inputBuffer);
-        if (newValue < 0) newValue = 0;
-        animSettings.startFrameIndex = newValue;
+static bool finish_start_frame_edit(MenuRuntimeState *state, bool apply) {
+    if (!state) return false;
+    if (apply) {
+        int value;
+        MenuNumericSpec spec = {0, INT_MAX, 1, 1, 1, 0};
+        if (!menu_numeric_parse(spec, state->inputBuffer, &value)) {
+            snprintf(state->statusLabel, sizeof(state->statusLabel), "Enter a valid whole Start Frame number");
+            state->statusColor = (SDL_Color){255, 110, 90, 255};
+            state->statusExpireMs = SDL_GetTicks() + 4000;
+            return false;
+        }
+        animSettings.startFrameIndex = value;
+        menu_settings_lifecycle_commit(state, "menu_start_frame", false);
     }
     state->editingStartFrame = false;
     state->inputBuffer[0] = '\0';
+    return true;
 }
 
 static bool handle_slider_click(SDL_Event* event,
@@ -256,6 +265,12 @@ void menu_input_handle_key(SDL_Event* event,
     if (!event || !running || !font || !state) return;
     if (state->folderPickerRequest.active) return;
     if (menu_numeric_key(state, event)) return;
+    /* Text input owns the keyboard until committed or cancelled. */
+    if (path_edit_active(state) || state->editingStartFrame || state->editingBounce || state->editingFrame) {
+        SDL_Keycode key = event->key.keysym.sym;
+        if (key != SDLK_BACKSPACE && key != SDLK_RETURN && key != SDLK_KP_ENTER &&
+            key != SDLK_TAB && key != SDLK_ESCAPE) return;
+    }
     SDL_Keymod mod = event->key.keysym.mod;
     bool ctrl_or_cmd = (mod & (KMOD_CTRL | KMOD_GUI)) != 0;
     bool shift = (mod & KMOD_SHIFT) != 0;
@@ -333,6 +348,8 @@ void menu_input_handle_key(SDL_Event* event,
                 state->inputBuffer[strlen(state->inputBuffer) - 1] = '\0';
             }
             break;
+        case SDLK_KP_ENTER:
+        case SDLK_TAB:
         case SDLK_RETURN:
             if (path_edit_active(state)) {
                 finish_root_edit(state, true);
@@ -342,8 +359,10 @@ void menu_input_handle_key(SDL_Event* event,
                 finish_start_frame_edit(state, true);
                 break;
             }
-            if (strlen(state->inputBuffer) > 0) {
-                int newValue = atoi(state->inputBuffer);
+            if (state->editingBounce || state->editingFrame) {
+                int newValue;
+                MenuNumericSpec spec = {0, state->editingBounce ? 100 : 5000, 1, 1, 1, 0};
+                if (!menu_numeric_parse(spec, state->inputBuffer, &newValue)) break;
                 if (state->editingBounce) animSettings.bounceLimit = newValue;
                 if (state->editingFrame) animSettings.frameLimit = newValue;
             }
@@ -359,6 +378,11 @@ void menu_input_handle_key(SDL_Event* event,
             }
             if (state->editingStartFrame) {
                 finish_start_frame_edit(state, false);
+                break;
+            }
+            if (state->editingBounce || state->editingFrame) {
+                state->editingBounce = state->editingFrame = false;
+                state->inputBuffer[0] = '\0';
                 break;
             }
             *running = false;
@@ -467,6 +491,18 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     int x = event->button.x;
     int y = event->button.y;
     if (event->button.button != SDL_BUTTON_LEFT) return;
+    if (point_in_rect(&buttons.exitRect, x, y)) {
+        (void)menu_numeric_finish(state, false);
+        finish_root_edit(state, false);
+        finish_start_frame_edit(state, false);
+        state->editingBounce = state->editingFrame = false;
+        *running = false;
+        return;
+    }
+    /* A click commits the old field before another editor starts. */
+    if (path_edit_active(state)) finish_root_edit(state, true);
+    if (state->editingStartFrame && !finish_start_frame_edit(state, true)) return;
+    state->editingBounce = state->editingFrame = false;
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
         menu_numeric_click(event, &buttons.rendererControlSliders, state, *font)) return;
     if (menu_numeric_click(event, &layout, state, *font)) return;
@@ -999,11 +1035,11 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             finish_start_frame_edit(state, true);
         }
         menu_state_apply_effective_render_recipe(state);
-        SaveAllSettings();
-        strncpy(state->statusLabel, "Saved", sizeof(state->statusLabel) - 1);
+        bool saved = SaveAllSettingsChecked();
+        strncpy(state->statusLabel, saved ? "Saved" : "Save failed; changes remain in memory. Retry Save.", sizeof(state->statusLabel) - 1);
         state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
-        state->statusColor = (SDL_Color){120, 220, 120, 255};
-        state->statusExpireMs = SDL_GetTicks() + 2000;
+        state->statusColor = saved ? (SDL_Color){120, 220, 120, 255} : (SDL_Color){255, 110, 90, 255};
+        state->statusExpireMs = SDL_GetTicks() + (saved ? 2000 : 8000);
     }
 
     if (point_in_rect(&buttons.restoreRect, x, y)) {
@@ -1031,10 +1067,6 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         SceneEditorSessionRequestPreviewOnBegin();
         state->activeView = MENU_VIEW_SCENE_EDITOR;
         return;
-    }
-
-    if (point_in_rect(&buttons.exitRect, x, y)) {
-        *running = false;
     }
 
     if (point_in_rect(&buttons.startRect, x, y)) {

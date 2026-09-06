@@ -280,6 +280,10 @@ typedef struct AnimationConfigSceneSourceState {
 } AnimationConfigSceneSourceState;
 
 // Function prototypes
+/* Checked saves atomically replace each file; SaveAll is not a multi-file transaction. */
+bool SaveAllSettingsChecked(void);
+bool SaveSceneConfigChecked(void);
+bool SaveAnimationConfigChecked(void);
 void SaveAllSettings(void);
 void LoadAllSettings(void);
 void SaveAnimationConfig(void);

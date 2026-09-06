@@ -19,7 +19,6 @@
 #define MENU_ROUTE_STACK_GAP 5
 #define MENU_ROUTE_STACK_CONTENT_INSET 10
 #define MENU_BOTTOM_ACTION_HEIGHT 64
-#define MENU_MANIFEST_PANEL_MIN_HEIGHT 140
 #define MENU_MANIFEST_PANEL_MAX_HEIGHT 340
 #define MENU_MANIFEST_PANEL_GAP 6
 #define MENU_LEFT_PANEL_CONTENT_INSET 18
@@ -237,10 +236,6 @@ void menu_layout_finalize_with_buttons(MenuScreenLayout* layout,
 
         if (panel_h > MENU_MANIFEST_PANEL_MAX_HEIGHT) {
             panel_h = MENU_MANIFEST_PANEL_MAX_HEIGHT;
-        }
-        if (panel_h < MENU_MANIFEST_PANEL_MIN_HEIGHT &&
-            panel_bottom_limit - panel_y >= MENU_MANIFEST_PANEL_MIN_HEIGHT) {
-            panel_h = MENU_MANIFEST_PANEL_MIN_HEIGHT;
         }
 
         if (panel_w > 0 && panel_h > 0) {

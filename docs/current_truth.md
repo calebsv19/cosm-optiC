@@ -1,6 +1,17 @@
 # optiC Current Truth
 
-Last updated: 2026-09-05
+Last updated: 2026-09-06
+
+## 2026-09-06 Menu Stability Refinements
+
+The Main Edit follow-up retains automatic saving and labels the exit action
+Close. Checked saves use the existing atomic file-write helper and expose write
+failures. Legacy text fields capture shortcuts, Start Frame parsing is checked,
+left-button captures survive other-button releases, and focus loss ends splitter
+capture. Long numeric drafts share their drawing/click origin. Slider rows and
+scene-list space account for their controls, with real-font layout regression
+coverage. See `docs/menu_controls.md` for behavior and verification details.
+Desktop replacement and live visual acceptance remain separate steps.
 
 ## 2026-09-05 Main Edit Menu Controls
 

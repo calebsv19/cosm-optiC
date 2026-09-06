@@ -1,3 +1,4 @@
+#include "core_io.h"
 #include "config/config_manager.h"
 #include "config/mesh_import_policy.h"
 #include "config/config_file_io.h"
@@ -252,17 +253,11 @@ static double DefaultForwardFalloffDistance(void) {
     return hypot(w, h);
 }
 
-void SaveAnimationConfig(void) {
+bool SaveAnimationConfigChecked(void) {
     if (!config_io_ensure_parent_directory_for_file(ANIMATION_CONFIG_RUNTIME_FILE)) {
         fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", ANIMATION_CONFIG_RUNTIME_FILE);
-        return;
+        return false;
     }
-    FILE* file = fopen(ANIMATION_CONFIG_RUNTIME_FILE, "w");
-    if (!file) {
-        perror("Failed to open animation config file for writing");
-        return;
-    }
-
     struct json_object* config = json_object_new_object();
     animation_config_sync_scene_source_legacy_fields(&animSettings);
     animation_config_sync_volume_source_fields(&animSettings);
@@ -456,12 +451,18 @@ void SaveAnimationConfig(void) {
                            "volumeDebugOverlayEnabled",
                            json_object_new_boolean(animSettings.volumeDebugOverlayEnabled));
     json_object_object_add(config, "lightHeight", json_object_new_double(animSettings.lightHeight));
-    fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
-    fclose(file);
+    const char *json = json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY);
+    CoreResult result = core_io_write_all_atomic(ANIMATION_CONFIG_RUNTIME_FILE, json, strlen(json));
     json_object_put(config);
 
-    printf("✅ Animation config saved successfully.\n");
+    if (result.code != CORE_OK) {
+        fprintf(stderr, "Failed to save %s: %s\n", ANIMATION_CONFIG_RUNTIME_FILE, result.message);
+        return false;
+    }
+    return true;
 }
+
+void SaveAnimationConfig(void) { (void)SaveAnimationConfigChecked(); }
 
 void LoadAnimationConfig(void) {
     const char* loaded_path = NULL;

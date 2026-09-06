@@ -245,7 +245,7 @@ static void menu_renderer_controls_add_slider(SliderLayout* layout,
         track_y - ((text_height - layout->trackHeight) / 2),
         label, {0}, {0}, {0}
     };
-    layout->nextY = track_y + layout->trackHeight + RENDERER_CONTROL_SLIDER_SPACING;
+    layout->nextY = track_y + layout->trackHeight + (text_height + 1) / 2 + RENDERER_CONTROL_SLIDER_SPACING;
 }
 
 static void menu_renderer_controls_build_slider_layout(TTF_Font* font,
@@ -717,8 +717,14 @@ void menu_render_build_button_layout(TTF_Font* font,
         int root_y = layout.loadSceneRect.y + layout.loadSceneRect.h + ROOT_ROW_SPACING;
         if ((state && state->manifestDropdownOpen) ||
             animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D) {
+            const int text_height = menu_renderer_controls_text_height(font);
+            const int row_height = max_int(ROOT_ROW_HEIGHT, text_height + 14);
+            const int volume_height = max_int(LOAD_SCENE_BUTTON_HEIGHT, text_height + 14);
+            const int reserved = 2 * (ROOT_ROW_HEIGHT + ROOT_ROW_SPACING) + row_height +
+                (animSettings.spaceMode == SPACE_MODE_3D ? 4 + volume_height + 6 + row_height +
+                 2 * text_height + 16 : 12);
             int available = screen_layout ? screen_layout->leftPanelRect.y +
-                screen_layout->leftPanelRect.h - root_y - 280 : 340;
+                screen_layout->leftPanelRect.h - root_y - reserved : 340;
             if (available < 52) available = 52;
             if (available > SDL_MENU_RENDER_MANIFEST_PANEL_MAX_HEIGHT)
                 available = SDL_MENU_RENDER_MANIFEST_PANEL_MAX_HEIGHT;
@@ -1044,7 +1050,7 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                  screen_layout ? (screen_layout->bottomActionRowRect.x + 14) : BOTTOM_BUTTON_MARGIN_X_EXIT,
                                                  footerButtonY,
                                                  BOTTOM_BUTTON_WIDTH_EXIT, BOTTOM_BUTTON_HEIGHT_EXIT,
-                                                 "Exit w/o Saving", 280);
+                                                 "Close", 280);
     layout.restoreRect = build_adaptive_button_rect(font, layout.exitRect.x + layout.exitRect.w + 10,
                                                     footerButtonY,
                                                     BOTTOM_BUTTON_WIDTH_RESTORE, BOTTOM_BUTTON_HEIGHT_RESTORE,

@@ -2448,6 +2448,9 @@ static void test_menu_scroll_interactions(void) {
     event.motion.y = 102;
     assert_true("scroll_drag_bottom", menu_scroll_event(&scroll, &event) && offset == 400);
     event.type = SDL_MOUSEBUTTONUP;
+    event.button.button = SDL_BUTTON_RIGHT;
+    assert_true("scroll_other_button_preserves_capture", !menu_scroll_event(&scroll, &event) && scroll.dragging);
+    event.button.button = SDL_BUTTON_LEFT;
     assert_true("scroll_release_outside", menu_scroll_event(&scroll, &event) && !scroll.dragging);
     event.type = SDL_MOUSEBUTTONDOWN;
     event.button.y = viewport.y + 2;
@@ -2463,9 +2466,123 @@ static void test_menu_scroll_interactions(void) {
     assert_true("scroll_hidden_does_not_capture", !menu_scroll_event(&scroll, &event));
 }
 
+static void test_menu_compact_layout_and_long_caret(void) {
+    MenuRuntimeState *state = calloc(1, sizeof(*state));
+    AnimationConfig saved = animSettings;
+    animSettings.spaceMode = SPACE_MODE_3D;
+    state->menuWorkspaceHost.active_module = MENU_WORKSPACE_RENDER;
+    const int sizes[][2] = {{960,640},{1080,760},{1200,900}};
+    const bool init_ttf = !TTF_WasInit();
+    assert_true("menu_layout_font_init", !init_ttf || TTF_Init() == 0);
+    for (int font_size = 18; font_size <= 24; font_size += 6) {
+        TTF_Font *font = TTF_OpenFont("third_party/codework_shared/assets/fonts/Lato-Regular.ttf", font_size);
+        assert_true("menu_layout_font_loaded", font != NULL);
+        if (!font) continue;
+        for (size_t i = 0; i < sizeof(sizes)/sizeof(sizes[0]); ++i) {
+            MenuScreenLayout screen;
+            MenuButtonLayout buttons;
+            SliderLayout sliders;
+            menu_layout_build_base(font, state, sizes[i][0], sizes[i][1], &screen);
+            menu_render_build_button_layout(font, state, &screen, &buttons);
+            menu_layout_finalize_with_buttons(&screen, &buttons, state);
+            menu_render_build_slider_layout(font, state, &screen, &sliders);
+            assert_true("compact_scene_list_stops_before_roots", screen.manifestReserveRect.y + screen.manifestReserveRect.h <= buttons.inputRootValueRect.y);
+            assert_true("compact_volume_controls_fit", buttons.volumeToggleRect.y + buttons.volumeToggleRect.h <= screen.leftPanelRect.y + screen.leftPanelRect.h);
+            for (size_t j = 1; j < sliders.count; ++j)
+                assert_true("numeric_rows_do_not_overlap", sliders.items[j-1].valueRect.y + sliders.items[j-1].valueRect.h <= sliders.items[j].labelY);
+        }
+        MenuSlider slider = {0};
+        int value = 12;
+        slider.value = &value; slider.min = 0; slider.max = INT_MAX;
+        slider.valueX = 100; slider.valueY = 100;
+        menu_numeric_layout(&slider, 24, 180);
+        SliderLayout layout = {0};
+        layout.panelRect = (SDL_Rect){50,50,200,200}; layout.count = 1; layout.items[0] = slider;
+        menu_numeric_begin(&state->numericEdit, &value, (MenuNumericSpec){0,INT_MAX,1,1,1,0});
+        strcpy(state->numericEdit.text, "12345678901234567890");
+        state->numericEdit.cursor = state->numericEdit.anchor = strlen(state->numericEdit.text);
+        SDL_Event event = {0}; event.type = SDL_MOUSEBUTTONDOWN;
+        event.button.button = SDL_BUTTON_LEFT; event.button.clicks = 1;
+        event.button.x = slider.valueRect.x + slider.valueRect.w - 3; event.button.y = slider.valueY + 5;
+        assert_true("long_draft_click_hits_value", menu_numeric_click(&event, &layout, state, font));
+        assert_true("long_draft_click_uses_scrolled_origin", state->numericEdit.cursor >= 19);
+        menu_numeric_finish(state, false);
+        TTF_CloseFont(font);
+    }
+    if (init_ttf) TTF_Quit();
+    animSettings = saved;
+    free(state);
+}
+
+static void test_menu_focus_and_save_failures(void) {
+    MenuRuntimeState *state = calloc(1, sizeof(*state));
+    AnimationConfig saved = animSettings;
+    SDL_Event event = {0};
+    TTF_Font *font = NULL;
+    bool running = true;
+    event.type = SDL_KEYDOWN;
+    state->editingInputRoot = true;
+    strcpy(state->pathInputBuffer, "river");
+    const SDL_Keycode shortcuts[] = {SDLK_i, SDLK_r, SDLK_d, SDLK_b, SDLK_m};
+    for (size_t i = 0; i < sizeof(shortcuts)/sizeof(shortcuts[0]); ++i) {
+        event.key.keysym.sym = shortcuts[i];
+        menu_input_handle_key(&event, &running, &font, state);
+        assert_true("path_edit_owns_shortcuts", memcmp(&saved, &animSettings, sizeof(saved)) == 0);
+    }
+    event.key.keysym.sym = SDLK_ESCAPE;
+    menu_input_handle_key(&event, &running, &font, state);
+    assert_true("path_escape_cancels_only_field", running && !state->editingInputRoot);
+    state->editingStartFrame = true;
+    strcpy(state->inputBuffer, "12oops");
+    event.key.keysym.sym = SDLK_RETURN;
+    menu_input_handle_key(&event, &running, &font, state);
+    assert_true("start_frame_rejects_partial_number", state->editingStartFrame && animSettings.startFrameIndex == saved.startFrameIndex);
+    event.key.keysym.sym = SDLK_ESCAPE;
+    menu_input_handle_key(&event, &running, &font, state);
+    assert_true("start_frame_escape_keeps_menu", running && !state->editingStartFrame);
+
+    char cwd[PATH_MAX], tmp[] = "/tmp/optic-menu-save-XXXXXX";
+    if (getcwd(cwd, sizeof(cwd)) && mkdtemp(tmp) && chdir(tmp) == 0) {
+        mkdir("data", 0700); mkdir("data/runtime", 0700);
+        assert_true("checked_animation_save_success", SaveAnimationConfigChecked());
+        assert_true("checked_scene_save_success", SaveSceneConfigChecked());
+        unlink("data/runtime/animation_config.json");
+        mkdir("data/runtime/animation_config.json", 0700);
+        assert_true("checked_animation_save_reports_replace_failure", !SaveAnimationConfigChecked());
+        assert_true("checked_all_save_reports_partial_failure", !SaveAllSettingsChecked());
+        rmdir("data/runtime/animation_config.json");
+        unlink("data/runtime/scene_config.json");
+        rmdir("data/runtime"); rmdir("data");
+        assert_true("save_test_restore_cwd", chdir(cwd) == 0);
+        rmdir(tmp);
+    } else assert_true("save_test_fixture_created", false);
+    MenuScreenLayout screen;
+    MenuButtonLayout buttons;
+    const bool owns_ttf = !TTF_WasInit();
+    if (owns_ttf) TTF_Init();
+    font = TTF_OpenFont("third_party/codework_shared/assets/fonts/Lato-Regular.ttf", 18);
+    assert_true("close_fixture_font", font != NULL);
+    menu_layout_build_base(font, state, 1200, 900, &screen);
+    menu_render_build_button_layout(font, state, &screen, &buttons);
+    int draft_target = 42;
+    menu_numeric_begin(&state->numericEdit, &draft_target, (MenuNumericSpec){0,5000,5,1,1,0});
+    strcpy(state->numericEdit.text, "invalid");
+    event.type = SDL_MOUSEBUTTONDOWN; event.button.button = SDL_BUTTON_LEFT;
+    event.button.x = buttons.exitRect.x + 2; event.button.y = buttons.exitRect.y + 2;
+    bool normal = false;
+    menu_input_handle_mouse_click(&event, &running, &normal, NULL, &font, state);
+    assert_true("close_discards_draft_without_applying", !running && !state->numericEdit.active && draft_target == 42);
+    if (font) TTF_CloseFont(font);
+    if (owns_ttf) TTF_Quit();
+    animSettings = saved;
+    free(state);
+}
+
 int run_test_ui_menu_contract_tests(void) {
     int before = test_support_failures();
 
+    test_menu_compact_layout_and_long_caret();
+    test_menu_focus_and_save_failures();
     test_menu_numeric_editing_and_constraints();
     test_menu_scroll_interactions();
     test_menu_batch_panel_click_starts_frame_dir_edit();

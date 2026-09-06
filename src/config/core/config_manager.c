@@ -1,3 +1,4 @@
+#include "core_io.h"
 #include "config/config_manager.h"
 #include "config/config_file_io.h"
 #include "config/scene/config_scene_material_persistence.h"
@@ -148,14 +149,15 @@ static void SyncSceneSourceLegacyFieldsForSave(void) {
     animSettings.useFluidScene = animation_config_scene_source_is_fluid(animSettings.sceneSource);
 }
 
-void SaveAllSettings(void) {
+bool SaveAllSettingsChecked(void) {
     MaterialManagerInit();
     SyncSceneSourceLegacyFieldsForSave();
-    if (animSettings.sceneSource == SCENE_SOURCE_CONFIG_2D) {
-        SaveSceneConfig();
-    }
-    SaveAnimationConfig();
+    bool scene_saved = animSettings.sceneSource != SCENE_SOURCE_CONFIG_2D || SaveSceneConfigChecked();
+    bool animation_saved = SaveAnimationConfigChecked();
+    return scene_saved && animation_saved;
 }
+
+void SaveAllSettings(void) { (void)SaveAllSettingsChecked(); }
 
 static bool LoadMaterialsFromDirIfPresent(const char* material_dir) {
     if (!config_io_directory_exists(material_dir)) {
@@ -222,17 +224,11 @@ void LoadAllSettings(void) {
     ApplyAnimationWindowSizeOverride();
 }
 
-void SaveSceneConfig(void) {
+bool SaveSceneConfigChecked(void) {
     if (!config_io_ensure_parent_directory_for_file(SCENE_CONFIG_RUNTIME_FILE)) {
         fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", SCENE_CONFIG_RUNTIME_FILE);
-        return;
+        return false;
     }
-    FILE* file = fopen(SCENE_CONFIG_RUNTIME_FILE, "w");
-    if (!file) {
-        perror("Error: Failed to open scene config file for writing");
-        return;
-    }
-
     struct json_object* config = json_object_new_object();
 
     // Save Window Size
@@ -408,12 +404,18 @@ void SaveSceneConfig(void) {
     json_object_object_add(config, "cameraZ", json_object_new_double(sceneSettings.cameraZ));
 
     // Write JSON Data to File
-    fprintf(file, "%s", json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY));
-    fclose(file);
+    const char *json = json_object_to_json_string_ext(config, JSON_C_TO_STRING_PRETTY);
+    CoreResult result = core_io_write_all_atomic(SCENE_CONFIG_RUNTIME_FILE, json, strlen(json));
     json_object_put(config);
 
-    printf("Scene configuration saved successfully.\n");
+    if (result.code != CORE_OK) {
+        fprintf(stderr, "Failed to save %s: %s\n", SCENE_CONFIG_RUNTIME_FILE, result.message);
+        return false;
+    }
+    return true;
 }
+
+void SaveSceneConfig(void) { (void)SaveSceneConfigChecked(); }
 void LoadWindowConfig(struct json_object* config) {
     printf("DEBUG: Loading Window Configuration...\n");
 
