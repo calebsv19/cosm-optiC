@@ -1,3 +1,4 @@
+#include "render/runtime_specular_bsdf_3d.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -2875,14 +2876,18 @@ static int test_runtime_disney_v2_3d_secondary_material_vertex_modulates_contrib
                 red_result.secondaryMaterialResponseR >
                     red_result.secondaryMaterialResponseB + 0.5 &&
                 red_result.secondaryVertexThroughputR >
-                    red_result.secondaryVertexThroughputB + 0.1);
+                    red_result.secondaryVertexThroughputB * 3.0);
     assert_true("runtime_disney_v2_secondary_vertex_blue_response",
                 blue_result.secondaryPrincipled.baseColorB >
                     blue_result.secondaryPrincipled.baseColorR + 0.5 &&
                 blue_result.secondaryMaterialResponseB >
                     blue_result.secondaryMaterialResponseR + 0.5 &&
                 blue_result.secondaryVertexThroughputB >
-                    blue_result.secondaryVertexThroughputR + 0.1);
+                    blue_result.secondaryVertexThroughputR * 3.0);
+    assert_close("secondary_red_throughput_retains_parent_weight", red_result.secondaryVertexThroughputR,
+                 red_result.pathState.throughputR * red_result.secondaryMaterialResponseR, 1e-9);
+    assert_close("secondary_blue_throughput_retains_parent_weight", blue_result.secondaryVertexThroughputB,
+                 blue_result.pathState.throughputB * blue_result.secondaryMaterialResponseB, 1e-9);
     assert_true("runtime_disney_v2_secondary_vertex_contribution_changes",
                 red_result.recursiveDirectRadianceR >
                     red_result.recursiveDirectRadianceB + 1e-6 &&
@@ -3201,6 +3206,21 @@ static int test_runtime_disney_v2_3d_reflection_preserves_nested_mirror_path(voi
                 result.specularReflectionRecursiveRayCount <=
                     RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY);
 
+    /* A closed, non-emissive mirror pair must not create light as depth increases. */
+    scene.hasLight = false;
+    memset(&scene.environment, 0, sizeof(scene.environment));
+    for (int depth = 1; depth <= 6; ++depth) {
+        animSettings.bounceDepth3D = animSettings.specularDepth3D = depth;
+        RuntimeDisneyV2_3DResult sweep = {0};
+        assert_true("two_mirror_depth_sweep_shades", RuntimeDisneyV2_3D_ShadeHit(&scene, &hit, &sampling, &sweep));
+        assert_true("two_mirror_no_source_no_additive_light", fabs(sweep.radianceR) < 1e-9 && fabs(sweep.radianceG) < 1e-9 && fabs(sweep.radianceB) < 1e-9);
+        for (int i = 0; i < sweep.specularReflectionRecursiveVertexCount; ++i) {
+            const RuntimeDisneyV2_3DPathState *vertex = &sweep.specularReflectionRecursiveStates[i];
+            assert_true("two_mirror_depth_is_bounded", vertex->depth <= depth);
+            assert_true("two_mirror_repeated_tint_does_not_amplify", vertex->throughputR <= 1.00001 && vertex->throughputG <= 1.00001 && vertex->throughputB <= 1.00001);
+        }
+    }
+
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
@@ -3459,6 +3479,19 @@ static int test_runtime_disney_v2_3d_rough_reflection_records_stochastic_sample(
                 result.specularReflectionRoughContributingSampleCount == 0 &&
                 result.specularReflectionRoughContribution == 0.0 &&
                 result.specularReflectionRecursiveRadianceR == 0.0);
+
+    const int original_count = scene.triangleMesh.triangleCount;
+    RuntimeTriangle3D *expanded = realloc(scene.triangleMesh.triangles, 514 * sizeof(*expanded));
+    assert_true("rough_complexity_fixture_allocated", expanded != NULL);
+    if (expanded) {
+        scene.triangleMesh.triangles = expanded;
+        memset(expanded + original_count, 0, (514-original_count) * sizeof(*expanded));
+        scene.triangleMesh.triangleCount = 514;
+        RuntimeDisneyV2_3DResult complex = {0};
+        assert_true("rough_complexity_shades", RuntimeDisneyV2_3D_ShadePrimaryHitWithPayload(&scene, &primary, &rough_glossy, &sampling, &complex));
+        assert_true("rough_quality_does_not_drop_above_512_triangles", complex.specularReflectionRoughEffectiveSampleCount == result.specularReflectionRoughEffectiveSampleCount &&
+            complex.specularReflectionRoughSampleReductionReason == RUNTIME_DISNEY_V2_3D_ROUGH_SAMPLE_REDUCTION_NONE);
+    }
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
@@ -5272,6 +5305,46 @@ static int test_runtime_disney_v2_3d_path_policy_roulette_can_terminate_recursiv
     return 0;
 }
 
+static void test_specular_sampler_energy_and_normals(void) {
+    HitInfo3D hit = {0};
+    hit.normal = hit.shadingNormal = hit.geometricNormal = vec3(0,0,1);
+    RuntimePrincipledBSDF3D bsdf = RuntimePrincipledBSDF3D_Default();
+    bsdf.valid = true;
+    bsdf.specularF0R = bsdf.specularF0G = bsdf.specularF0B = 1.0;
+    const double roughness[] = {0.02, 0.2, 0.6};
+    for (int k = 0; k < 3; ++k) {
+        bsdf.roughness = roughness[k];
+        double mean = 0.0;
+        for (int y = 0; y < 128; ++y) for (int x = 0; x < 128; ++x) {
+            RuntimeSpecularBSDF3DSample sample = RuntimeSpecularBSDF3D_Sample(
+                &bsdf, &hit, vec3(0,0,1), 1.0, (x+0.5)/128.0, (y+0.5)/128.0);
+            if (!sample.valid) continue;
+            mean += sample.throughputR / (128.0 * 128.0);
+            assert_close("specular_sample_pdf_matches_evaluation", sample.pdf,
+                RuntimeSpecularBSDF3D_Pdf(&bsdf, &hit, vec3(0,0,1), sample.direction), 1e-8);
+            assert_true("specular_sample_above_geometric_surface", vec3_dot(sample.direction, hit.geometricNormal) > 0.0);
+        }
+        assert_true("specular_white_furnace_does_not_gain_energy", mean > 0.5 && mean <= 1.000001);
+        if (k == 0) assert_true("polished_white_furnace_preserves_energy", mean > 0.99);
+    }
+    RuntimeSpecularBSDF3DSample full = RuntimeSpecularBSDF3D_Sample(&bsdf, &hit, vec3(0,0,1), 1.0, 0.3, 0.4);
+    RuntimeSpecularBSDF3DSample quarter = RuntimeSpecularBSDF3D_Sample(&bsdf, &hit, vec3(0,0,1), 0.25, 0.3, 0.4);
+    assert_close("specular_lobe_selection_pdf", quarter.pdf, full.pdf * 0.25, 1e-9);
+    assert_close("specular_lobe_selection_compensation", quarter.throughputR * 0.25, full.throughputR, 1e-9);
+    RuntimeSpecularBSDF3DSample normal_sample = RuntimeSpecularBSDF3D_Sample(&bsdf, &hit, vec3(0,0,1), 1.0, 0.3, 0.0);
+    const double alpha = bsdf.roughness * bsdf.roughness;
+    assert_close("specular_reflection_directional_jacobian", normal_sample.pdf, 1.0/(4.0*3.14159265358979323846*alpha*alpha), 1e-9);
+    hit.shadingNormal = vec3_normalize(vec3(0.99,0,0.1)); hit.normal = hit.shadingNormal;
+    for (int i = 0; i < 256; ++i) {
+        RuntimeSpecularBSDF3DSample sample = RuntimeSpecularBSDF3D_Sample(
+            &bsdf, &hit, vec3_normalize(vec3(-0.9,0,0.1)), 0.5, (i+0.5)/256, 0.61);
+        assert_true("smooth_grazing_sample_rejects_below_surface", !sample.valid || vec3_dot(sample.direction, hit.geometricNormal) > 0);
+    }
+    RuntimeMaterialPayload3D blue = runtime_disney_v2_test_payload(0.0,0.0,1.0,0.98,0.02,0.0,1.0,0.0,0.0);
+    RuntimePrincipledBSDF3D tinted = RuntimePrincipledBSDF3D_FromMaterialPayload(&blue);
+    assert_true("mirror_blue_F0_is_bounded", tinted.specularF0R == 0 && tinted.specularF0G == 0 && tinted.specularF0B > 0 && tinted.specularF0B <= 1);
+}
+
 int run_test_runtime_lighting_materials_transport_suite(void) {
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
 
@@ -5287,6 +5360,7 @@ int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_material_response_3d_mirror_surface_kind_parity();
     test_runtime_material_response_3d_mirror_dominance_reflects_light_emitter();
     test_runtime_specular_reflection_reaches_far_geometry();
+    test_specular_sampler_energy_and_normals();
     test_runtime_specular_reflection_constrains_smooth_normal_hemisphere();
     test_runtime_disney_v2_3d_recursive_bsdf_sample_is_light_invariant();
     test_runtime_disney_v2_3d_host_mirror_recursive_path_is_light_invariant();

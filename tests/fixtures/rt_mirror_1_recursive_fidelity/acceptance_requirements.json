@@ -18,11 +18,13 @@
     "blue_bounds_width_min": 110,
     "blue_bounds_height_min": 145
   },
+  "fixed_raw_subject_pixel": {"x": 114, "y": 81, "channel_floor_max": 230, "blue_minus_red_min": 20},
   "raw_chroma": {
     "first_vertex_blue_over_red_min": 1.15,
     "composed_blue_over_red_min": 1.15,
     "final_blue_over_red_min": 1.15,
-    "composed_linear_chroma_min": 1.0
+    "composed_linear_chroma_min": 1.0,
+    "neutral_subject_channel_floor_max": 245
   },
   "energy_accounting": {
     "composition_delta_abs_max": 0.000001,

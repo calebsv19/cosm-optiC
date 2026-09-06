@@ -54,6 +54,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_light_radiometry_3d.o \
 	$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 	$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
+	$(BUILD_DIR)/render/runtime_specular_bsdf_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_3d.o \
 	$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
@@ -492,6 +493,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_light_set_3d.o \
 		$(BUILD_DIR)/render/runtime_light_emitter_3d.o \
 		$(BUILD_DIR)/render/runtime_specular_reflection_3d.o \
+	$(BUILD_DIR)/render/runtime_specular_bsdf_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_3d.o \
 		$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \

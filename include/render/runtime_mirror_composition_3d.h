@@ -2,8 +2,20 @@
 #define RENDER_RUNTIME_MIRROR_COMPOSITION_3D_H
 
 #include <stdbool.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "render/runtime_material_payload_3d.h"
+
+/* Diagnostic comparison only; no menu/config persistence. */
+typedef enum { RUNTIME_MIRROR_COMBINED, RUNTIME_MIRROR_DEDICATED, RUNTIME_MIRROR_SAMPLED, RUNTIME_MIRROR_PARTITIONED } RuntimeMirrorEstimatorMode;
+static inline RuntimeMirrorEstimatorMode RuntimeMirrorComposition3D_EstimatorMode(void) {
+    const char *mode = getenv("RAY_TRACING_MIRROR_ESTIMATOR_AUDIT");
+    if (mode && strcmp(mode, "dedicated") == 0) return RUNTIME_MIRROR_DEDICATED;
+    if (mode && strcmp(mode, "sampled") == 0) return RUNTIME_MIRROR_SAMPLED;
+    if (mode && strcmp(mode, "combined") == 0) return RUNTIME_MIRROR_COMBINED;
+    return RUNTIME_MIRROR_PARTITIONED;
+}
 
 typedef struct {
     bool active;

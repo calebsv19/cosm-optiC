@@ -158,3 +158,66 @@ under the ignored root:
 ```text
 build/agent_runs/ray_tracing/rt_mirror_1_recursive_fidelity/
 ```
+
+### 2026-09-06 bounded transport correction
+
+The Main Edit follow-up reproduces a remaining white subject pixel at `(114,81)`
+against the previously passing contract. Its first vertex remained blue, but
+composed linear RGB reached `[24.751,25.839,28.568]` and resolved to
+`[250,250,250]`. The contract now also checks the fixed subject pixel and limits
+washout of the brightest low-chroma subject probe. The retained before-render
+fails both new checks; existing identity, coverage, color and accounting gates
+are retained.
+
+The correction makes these camera-reflection policies explicit:
+
+- Dedicated reflection and sampled specular transport receive complementary
+  shares of the existing mirror-dominance budget. Neither adds a second full
+  estimate of the same authored specular response.
+- Primary and deeper sampled glossy bounces use one app-local GGX NDF sampler,
+  directional PDF (`D * n.h / (4 * v.h)`), Smith masking and Schlick RGB Fresnel.
+  Throughput includes lobe-selection probability. Invalid below-surface samples
+  contribute zero instead of being redirected or clamped to an arbitrary weight.
+- Sampling and PDF evaluation use the same reflection shading-normal policy;
+  geometric normals continue to control ray offsets and valid surface sides.
+- Opaque legacy mirror base RGB is a bounded tint on principled F0. This replaces
+  the dedicated branch's luminance-normalized tint, which could amplify saturated
+  channels. Existing colored mirrors can therefore become darker. The tint is
+  applied consistently to first and deeper reflection responses.
+- Later mirror vertices use the same local-light attenuation as the host mirror.
+  Authored emission and traced emitter contributions remain separate.
+- Rough-reflection quality retains its existing requested count (at most four),
+  independent of triangle count. Large meshes can cost more than the former
+  silent one/two-sample caps.
+
+For diagnostic branch comparisons only, set
+`RAY_TRACING_MIRROR_ESTIMATOR_AUDIT=combined`, `dedicated`, or `sampled` before
+starting the headless process. Unset it for the production weighted split.
+`combined` deliberately enables the overlapping estimates; it is not an alternate
+recommended rendering mode. These switches are not persisted or exposed in UI.
+
+Evidence can be retained separately without overwriting earlier runs:
+
+```sh
+python3 tests/integration/run_rt_mirror_1_recursive_fidelity_contract.py \
+  --mode acceptance --output-root build/mirror_fidelity_comparison
+```
+
+Focused C tests additionally cover uniform-illumination energy, the directional
+Jacobian, lobe-probability compensation, smooth grazing normals, a closed
+non-emissive two-mirror depth sweep, bounded saturated tint, and preservation of
+rough quality when non-intersecting triangles cross the former 512 threshold.
+The threshold test preserves visible geometry; it is not a full mesh-subdivision
+or arbitrary STL quality claim.
+
+Reuse decision: existing scene/material/vector contracts are retained; the
+renderer-specific sample/evaluate/PDF helper lives in
+`runtime_specular_bsdf_3d.c`. Shared `core_math`, `core_scene` and `core_trace`
+provide no adopted equivalent GGX transport contract. A cross-app extraction is
+therefore deferred, with no shared API, adoption or version changes.
+
+This is a bounded fidelity correction, not a replacement of all transport math.
+The existing dedicated rough-continuation approximation and photon/caustic
+transport remain separate from the corrected camera-path GGX sampler. Normal and
+Retina live-app acceptance and comparison against the user's exact authored scene
+remain separate from the retained headless fixture proof.

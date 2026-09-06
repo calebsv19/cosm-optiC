@@ -1,3 +1,4 @@
+#include "render/runtime_specular_bsdf_3d.h"
 #include "render/runtime_disney_v2_transport_internal_3d.h"
 
 #include <math.h>
@@ -102,63 +103,6 @@ static Vec3 runtime_disney_v2_transport_3d_sample_diffuse_direction(
     return direction;
 }
 
-static Vec3 runtime_disney_v2_transport_3d_sample_specular_direction(
-    const HitInfo3D* hit,
-    Vec3 incoming_dir,
-    const RuntimeNative3DSamplingContext* sampling,
-    const RuntimePrincipledBSDF3D* principled,
-    int depth,
-    double* out_pdf,
-    double* out_cos_theta) {
-    Vec3 tangent = vec3(1.0, 0.0, 0.0);
-    Vec3 bitangent = vec3(0.0, 0.0, 1.0);
-    Vec3 normal = hit ? hit->normal : vec3(0.0, 1.0, 0.0);
-    Vec3 reflection = runtime_disney_v2_transport_3d_reflect(vec3_normalize(incoming_dir),
-                                                             normal);
-    Vec3 jitter = reflection;
-    double u = 0.5;
-    double v = 0.5;
-    double phi = 0.0;
-    double radius = 0.0;
-    double roughness = principled ? principled->roughness : 0.5;
-    double blend = 0.0;
-    uint32_t seed = runtime_disney_v2_transport_3d_seed_from_hit(hit, sampling);
-
-    runtime_disney_v2_transport_3d_build_basis(normal, &tangent, &bitangent);
-    RuntimeNative3DSampling_Stratified2D(sampling,
-                                         seed ^ (0xa136aaadU + (uint32_t)(depth * 193)),
-                                         1,
-                                         0,
-                                         (uint32_t)(12288 + depth),
-                                         &u,
-                                         &v);
-    phi = 2.0 * M_PI * u;
-    radius = sqrt(runtime_disney_v2_transport_3d_clamp01(v));
-    jitter = vec3_normalize(vec3_add(vec3_add(vec3_scale(tangent, radius * cos(phi)),
-                                             vec3_scale(bitangent, radius * sin(phi))),
-                                    vec3_scale(reflection, 1.0)));
-    blend = runtime_disney_v2_transport_3d_clamp(roughness * 0.35, 0.0, 0.35);
-    reflection = vec3_normalize(vec3_add(vec3_scale(reflection, 1.0 - blend),
-                                         vec3_scale(jitter, blend)));
-    if (vec3_dot(reflection, normal) <= 1e-6) {
-        reflection = normal;
-    }
-    if (out_cos_theta) {
-        *out_cos_theta = runtime_disney_v2_transport_3d_clamp01(vec3_dot(normal, reflection));
-    }
-    if (out_pdf) {
-        *out_pdf = fmax(RuntimePrincipledBSDF3D_GGXHalfVectorPdf(
-                            principled,
-                            sqrt(runtime_disney_v2_transport_3d_clamp01(
-                                out_cos_theta ? *out_cos_theta : vec3_dot(normal, reflection))),
-                            runtime_disney_v2_transport_3d_clamp01(
-                                fabs(vec3_dot(reflection, vec3_scale(vec3_normalize(incoming_dir),
-                                                                     -1.0))))),
-                        1e-6);
-    }
-    return reflection;
-}
-
 bool runtime_disney_v2_transport_3d_sample_vertex(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
@@ -238,32 +182,19 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
                                  fmax(transmission_probability, 1e-6);
         }
     } else if (sample.lobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR) {
-        sample.direction = runtime_disney_v2_transport_3d_sample_specular_direction(hit,
-                                                                                    incoming_dir,
-                                                                                    sampling,
-                                                                                    principled,
-                                                                                    depth,
-                                                                                    &sample.pdf,
-                                                                                    &sample.cosTheta);
-        sample.pdf = fmax(sample.pdf, 1e-6);
-        sample.throughputR = runtime_disney_v2_transport_3d_clamp(
-            (principled ? principled->specularF0R : 0.04) *
-                fmax(specular_probability, 1e-6) *
-                fmax(sample.cosTheta, 0.15) / sample.pdf,
-            0.0,
-            2.0);
-        sample.throughputG = runtime_disney_v2_transport_3d_clamp(
-            (principled ? principled->specularF0G : 0.04) *
-                fmax(specular_probability, 1e-6) *
-                fmax(sample.cosTheta, 0.15) / sample.pdf,
-            0.0,
-            2.0);
-        sample.throughputB = runtime_disney_v2_transport_3d_clamp(
-            (principled ? principled->specularF0B : 0.04) *
-                fmax(specular_probability, 1e-6) *
-                fmax(sample.cosTheta, 0.15) / sample.pdf,
-            0.0,
-            2.0);
+        double u, v;
+        RuntimeNative3DSampling_Stratified2D(sampling,
+            runtime_disney_v2_transport_3d_seed_from_hit(hit, sampling) ^
+                (0xa136aaadU + (uint32_t)(depth * 193)),
+            1, 0, (uint32_t)(12288 + depth), &u, &v);
+        RuntimeSpecularBSDF3DSample specular = RuntimeSpecularBSDF3D_Sample(
+            principled, hit, vec3_scale(incoming_dir, -1.0), specular_probability, u, v);
+        sample.direction = specular.direction;
+        sample.pdf = specular.pdf;
+        sample.cosTheta = specular.cosTheta;
+        sample.throughputR = specular.throughputR;
+        sample.throughputG = specular.throughputG;
+        sample.throughputB = specular.throughputB;
     } else {
         sample.lobe = RUNTIME_DISNEY_V2_3D_LOBE_DIFFUSE;
         sample.policyLobe = RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_DIFFUSE;

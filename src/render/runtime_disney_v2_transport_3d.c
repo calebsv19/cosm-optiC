@@ -1,3 +1,4 @@
+#include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_disney_v2_transport_internal_3d.h"
 
 #include <math.h>
@@ -222,9 +223,11 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
             break;
         }
 
-        area_throughput_r = throughput_r;
-        area_throughput_g = throughput_g;
-        area_throughput_b = throughput_b;
+        const RuntimeMirrorComposition3DPolicy local_policy = RuntimeMirrorComposition3D_Evaluate(&payload);
+        const double local_share = local_policy.active ? local_policy.baseAttenuation : 1.0;
+        area_throughput_r = throughput_r * local_share;
+        area_throughput_g = throughput_g * local_share;
+        area_throughput_b = throughput_b * local_share;
         throughput_r *= vertex_sample.throughputR;
         throughput_g *= vertex_sample.throughputG;
         throughput_b *= vertex_sample.throughputB;
@@ -586,20 +589,9 @@ static Ray3D runtime_disney_v2_transport_3d_make_rough_reflection_ray(
 static int runtime_disney_v2_transport_3d_resolve_rough_reflection_sample_count(
     const RuntimeScene3D* scene,
     double roughness) {
-    int sample_count = RuntimeDisneyV2_3D_RoughReflectionEstimatorSampleCount(roughness);
-    int triangle_count = 0;
-
-    if (!scene || sample_count <= 1) {
-        return sample_count;
-    }
-    triangle_count = scene->triangleMesh.triangleCount;
-    if (triangle_count > 100000) {
-        return 1;
-    }
-    if (triangle_count > 512 && sample_count > 2) {
-        return 2;
-    }
-    return sample_count;
+    (void)scene;
+    /* Identical surfaces retain the requested quality regardless of tessellation. */
+    return RuntimeDisneyV2_3D_RoughReflectionEstimatorSampleCount(roughness);
 }
 
 static void runtime_disney_v2_transport_3d_merge_reflection_loop(

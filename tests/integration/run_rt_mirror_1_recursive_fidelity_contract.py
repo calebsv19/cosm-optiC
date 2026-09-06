@@ -30,6 +30,14 @@ def require_equal(label: str, actual: object, expected: object) -> None:
 def render(request_name: str, lane: str) -> tuple[Path, Path]:
     request = FIXTURE / request_name
     summary = OUTPUT / lane / "render_summary.json"
+    summary.parent.mkdir(parents=True, exist_ok=True)
+    resolved = json.loads(request.read_text())
+    resolved["scene"]["runtime_scene_path"] = str((FIXTURE / resolved["scene"]["runtime_scene_path"]).resolve())
+    resolved["output"]["root"] = str(summary.parent)
+    resolved["progress"]["summary_path"] = str(summary)
+    resolved["progress"]["progress_path"] = str(summary.parent / "render_progress.json")
+    request = summary.parent / "resolved_request.json"
+    request.write_text(json.dumps(resolved, indent=2) + "\n")
     subprocess.run(
         [
             str(RENDERER),
@@ -345,6 +353,9 @@ def acceptance_failures(
     ):
         failures.append("raw tone-map prediction does not exactly match the exported pixel")
 
+    if min(neutral_subject["final_frame_rgb8"]) > requirements["raw_chroma"]["neutral_subject_channel_floor_max"]:
+        failures.append("reflected subject washes out to near-white before reconstruction")
+
     neutral_energy = neutral_subject["probe"]["host_mirror_energy_composition"]
     neutral_sum = [0.0, 0.0, 0.0]
     for term in (
@@ -376,11 +387,17 @@ def parse_args() -> argparse.Namespace:
         default="before-state",
     )
     parser.add_argument("--reuse-existing", action="store_true")
+    parser.add_argument("--output-root", type=Path, help="Separate retained evidence directory inside this checkout")
     return parser.parse_args()
 
 
 def main() -> int:
+    global OUTPUT
     args = parse_args()
+    if args.output_root:
+        OUTPUT = (ROOT / args.output_root).resolve()
+        OUTPUT.relative_to(ROOT)  # Reports intentionally use portable checkout-relative paths.
+    OUTPUT.mkdir(parents=True, exist_ok=True)
     expected = json.loads((FIXTURE / "before_state_expected.json").read_text())
     requirements = json.loads((FIXTURE / "acceptance_requirements.json").read_text())
     if not RENDERER.is_file():
@@ -416,6 +433,12 @@ def main() -> int:
     failures = acceptance_failures(
         reflected_metrics, reflected_summary, raw_isolation, neutral_subject, requirements
     )
+    fixed_pixel = requirements.get("fixed_raw_subject_pixel")
+    fixed_rgb = None
+    if fixed_pixel and raw_frame:
+        fixed_rgb = bmp_rgb_at(raw_frame, fixed_pixel["x"], fixed_pixel["y"])
+        if min(fixed_rgb) > fixed_pixel["channel_floor_max"] or fixed_rgb[2] - fixed_rgb[0] < fixed_pixel["blue_minus_red_min"]:
+            failures.append("fixed reflected-subject pixel loses blue response or washes out")
     ratio = reflected_metrics["blue_pixels"] / direct_metrics["blue_pixels"] if direct_metrics["blue_pixels"] else 0.0
 
     if args.mode == "before-state":
@@ -436,6 +459,7 @@ def main() -> int:
         "acceptance_status": "pass" if not failures else "fail",
         "acceptance_failures": failures,
         "acceptance_contract": requirements,
+        "fixed_raw_subject_pixel_rgb8": fixed_rgb,
         "frames": {
             "direct": {"path": str(direct_frame.relative_to(ROOT)), "sha256": sha256(direct_frame)},
             "reflected": {"path": str(reflected_frame.relative_to(ROOT)), "sha256": sha256(reflected_frame)},

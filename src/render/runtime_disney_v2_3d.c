@@ -130,6 +130,9 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
                                            &reflection)) {
         return;
     }
+    const RuntimeMirrorComposition3DPolicy mirror_policy = RuntimeMirrorComposition3D_Evaluate(&io_result->payload);
+    if (mirror_policy.active && RuntimeMirrorComposition3D_EstimatorMode() == RUNTIME_MIRROR_PARTITIONED)
+        reflection.weight *= mirror_policy.dominance;
     if (reflection.traced) {
         io_result->specularReflectionRayCount += 1;
     }
@@ -370,8 +373,11 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     if (!result.hairScatteringApplied) {
         runtime_disney_v2_3d_apply_mirror_composition(&result.payload, &result);
         if (continue_transport) {
-            runtime_disney_v2_3d_apply_specular_reflection(
-                scene, hit, sampling, view_dir, &result);
+            if (!RuntimeMirrorComposition3D_Evaluate(&result.payload).active ||
+                RuntimeMirrorComposition3D_EstimatorMode() != RUNTIME_MIRROR_SAMPLED) {
+                runtime_disney_v2_3d_apply_specular_reflection(
+                    scene, hit, sampling, view_dir, &result);
+            }
             runtime_disney_v2_3d_apply_stochastic_transport(
                 scene, hit, sampling, view_dir, &result);
         }

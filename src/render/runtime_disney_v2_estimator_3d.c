@@ -1,3 +1,4 @@
+#include "render/runtime_specular_bsdf_3d.h"
 #include "render/runtime_disney_v2_estimator_3d.h"
 
 #include <math.h>
@@ -345,17 +346,7 @@ double RuntimeDisneyV2_3D_EstimateDirectBsdfPdf(const RuntimePrincipledBSDF3D* p
         pdf += diffuse_probability * fabs(cos_o) / M_PI;
     }
     if (fabs(cos_o) > 1e-9 && specular_probability > 0.0) {
-        Vec3 half_vector = vec3_normalize(vec3_add(wi, wo));
-        const double cos_theta_h = runtime_disney_v2_estimator_3d_clamp(
-            fabs(vec3_dot(normal, half_vector)),
-            0.0,
-            1.0);
-        const double dot_i_h = runtime_disney_v2_estimator_3d_clamp(
-            fabs(vec3_dot(wi, half_vector)),
-            0.0,
-            1.0);
-        const double specular_pdf =
-            RuntimePrincipledBSDF3D_GGXHalfVectorPdf(&bsdf, cos_theta_h, dot_i_h);
+        const double specular_pdf = RuntimeSpecularBSDF3D_Pdf(&bsdf, hit, wi, wo);
         pdf += specular_probability * specular_pdf;
     }
     if (include_transmission &&

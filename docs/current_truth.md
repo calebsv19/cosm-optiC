@@ -2,6 +2,19 @@
 
 Last updated: 2026-09-06
 
+## 2026-09-06 Mirror Reflection Fidelity
+
+The Main Edit reflection pass adds a failure-catching raw subject-pixel contract,
+complementary dedicated/sampled mirror weights, a shared app-local GGX sampler
+for first and deeper sampled bounces, consistent geometric-side checks, bounded
+legacy mirror tint, and recursive local-light attenuation. Rough-continuation
+sample counts no longer drop silently with triangle count. Exposure, tone mapping,
+and reconstruction settings are unchanged. See
+`tests/fixtures/rt_mirror_1_recursive_fidelity/README.md` for compatibility notes,
+reproduction commands, and the camera-path versus photon-transport boundary.
+This is local source work; installed Desktop refresh and live visual acceptance
+remain separate from automated proof.
+
 ## 2026-09-06 Menu Stability Refinements
 
 The Main Edit follow-up retains automatic saving and labels the exit action

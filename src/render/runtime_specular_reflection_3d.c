@@ -1,3 +1,4 @@
+#include "render/runtime_principled_bsdf_3d.h"
 #include "render/runtime_specular_reflection_3d.h"
 
 #include <math.h>
@@ -17,43 +18,9 @@ static double runtime_specular_reflection_3d_clamp(double value,
     return value;
 }
 
-static double runtime_specular_reflection_3d_luma(double r, double g, double b) {
-    return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
-}
-
 static Vec3 runtime_specular_reflection_3d_reflect(Vec3 incident_dir, Vec3 normal) {
     const double ndoti = vec3_dot(normal, incident_dir);
     return vec3_normalize(vec3_sub(incident_dir, vec3_scale(normal, 2.0 * ndoti)));
-}
-
-static double runtime_specular_reflection_3d_weight(const RuntimeMaterialPayload3D* payload,
-                                                    Vec3 view_dir,
-                                                    Vec3 normal) {
-    double reflectivity = 0.0;
-    double spec_weight = 0.0;
-    double roughness = 1.0;
-    double view_facing = 0.0;
-    double f0 = 0.04;
-    double fresnel = 0.0;
-    double roughness_focus = 0.0;
-    double weight = 0.0;
-
-    if (!payload || !payload->valid) return 0.0;
-    if (payload->transparency > 1e-6) return 0.0;
-
-    reflectivity = runtime_specular_reflection_3d_clamp(payload->bsdf.reflectivity, 0.0, 1.0);
-    spec_weight = runtime_specular_reflection_3d_clamp(payload->bsdf.specWeight, 0.0, 1.0);
-    roughness = runtime_specular_reflection_3d_clamp(payload->bsdf.roughness, 0.0, 1.0);
-    if (!(reflectivity > 0.05) || !(spec_weight > 0.01)) return 0.0;
-
-    view_facing = runtime_specular_reflection_3d_clamp(vec3_dot(normal, vec3_normalize(view_dir)),
-                                                       0.0,
-                                                       1.0);
-    f0 = runtime_specular_reflection_3d_clamp(0.04 + (reflectivity * 0.96), 0.04, 1.0);
-    fresnel = FresnelSchlick(view_facing, f0);
-    roughness_focus = runtime_specular_reflection_3d_clamp(1.0 - (roughness * 0.75), 0.15, 1.0);
-    weight = reflectivity * spec_weight * fresnel * roughness_focus;
-    return runtime_specular_reflection_3d_clamp(weight, 0.0, 1.0);
 }
 
 bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
@@ -67,7 +34,7 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
     Vec3 incident_dir = vec3(0.0, 0.0, 0.0);
     Vec3 reflection_normal = vec3(0.0, 0.0, 0.0);
     Vec3 reflection_dir = vec3(0.0, 0.0, 0.0);
-    double tint_luma = 1.0;
+
 
     (void)sampling;
     if (!out_result) return false;
@@ -76,21 +43,18 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
 
     incident_dir = vec3_scale(vec3_normalize(view_dir), -1.0);
     reflection_normal = HitInfo3D_ShadingNormalForReflection(hit, view_dir);
-    result.weight = runtime_specular_reflection_3d_weight(payload, view_dir, reflection_normal);
-    if (!(result.weight > kRuntimeSpecularReflection3DMinWeight)) {
-        *out_result = result;
+    if (payload->transparency > 1e-6 || payload->bsdf.reflectivity <= 0.05 || payload->bsdf.specWeight <= 0.01)
         return false;
-    }
-
-    result.tintR = runtime_specular_reflection_3d_clamp(payload->baseColorR, 0.0, 1.0);
-    result.tintG = runtime_specular_reflection_3d_clamp(payload->baseColorG, 0.0, 1.0);
-    result.tintB = runtime_specular_reflection_3d_clamp(payload->baseColorB, 0.0, 1.0);
-    tint_luma = runtime_specular_reflection_3d_luma(result.tintR, result.tintG, result.tintB);
-    if (tint_luma > 1e-6) {
-        result.tintR /= tint_luma;
-        result.tintG /= tint_luma;
-        result.tintB /= tint_luma;
-    }
+    RuntimePrincipledBSDF3D bsdf = RuntimePrincipledBSDF3D_FromMaterialPayload(payload);
+    double cosine = runtime_specular_reflection_3d_clamp(vec3_dot(reflection_normal, vec3_normalize(view_dir)), 0.0, 1.0);
+    double r = RuntimePrincipledBSDF3D_FresnelSchlick(cosine, bsdf.specularF0R);
+    double g = RuntimePrincipledBSDF3D_FresnelSchlick(cosine, bsdf.specularF0G);
+    double b = RuntimePrincipledBSDF3D_FresnelSchlick(cosine, bsdf.specularF0B);
+    result.weight = fmax(r, fmax(g, b));
+    if (!(result.weight > kRuntimeSpecularReflection3DMinWeight)) return false;
+    result.tintR = r / result.weight;
+    result.tintG = g / result.weight;
+    result.tintB = b / result.weight;
 
     reflection_dir = runtime_specular_reflection_3d_reflect(incident_dir, reflection_normal);
     if (!(vec3_length(reflection_dir) > 1e-9)) {

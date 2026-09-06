@@ -1,3 +1,4 @@
+#include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_principled_bsdf_3d.h"
 
 #include <math.h>
@@ -174,7 +175,15 @@ RuntimePrincipledBSDF3D RuntimePrincipledBSDF3D_FromMaterialPayload(
     bsdf.emissiveG = payload->baseColorG;
     bsdf.emissiveB = payload->baseColorB;
     bsdf.emissiveStrength = payload->emissive;
-    return RuntimePrincipledBSDF3D_Normalize(bsdf);
+    bsdf = RuntimePrincipledBSDF3D_Normalize(bsdf);
+    /* Legacy opaque mirrors author tint through base RGB. Keep that tint bounded,
+       and use the same F0 at every reflection depth instead of normalizing luma. */
+    if (RuntimeMirrorComposition3D_Evaluate(payload).active) {
+        bsdf.specularF0R *= runtime_principled_bsdf_3d_clamp01(payload->baseColorR);
+        bsdf.specularF0G *= runtime_principled_bsdf_3d_clamp01(payload->baseColorG);
+        bsdf.specularF0B *= runtime_principled_bsdf_3d_clamp01(payload->baseColorB);
+    }
+    return bsdf;
 }
 
 RuntimePrincipledBSDF3D RuntimePrincipledBSDF3D_FromSurfaceEval(
