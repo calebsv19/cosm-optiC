@@ -222,7 +222,7 @@ package-desktop-main-edit-self-test: package-desktop-main-edit
 	@echo "package-desktop-main-edit-self-test passed."
 
 package-desktop-main-edit-refresh: package-desktop-main-edit-self-test
-	@mkdir -p "$(dir $(MAIN_EDIT_DESKTOP_APP_DIR))"
+	@mkdir -p "$$(dirname "$(MAIN_EDIT_DESKTOP_APP_DIR)")"
 	@rm -rf "$(MAIN_EDIT_DESKTOP_APP_DIR)"
 	@/usr/bin/ditto "$(MAIN_EDIT_PACKAGE_APP_DIR)" "$(MAIN_EDIT_DESKTOP_APP_DIR)"
 	@echo "Refreshed isolated main-edit app at $(MAIN_EDIT_DESKTOP_APP_DIR)"
