@@ -1,6 +1,7 @@
 #include "render/runtime_native_3d_temporal_accum.h"
 
 #include <math.h>
+#include <float.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,17 +9,11 @@
 #include "render/integrators/hybrid/integrator_tonemap.h"
 #include "render/runtime_native_3d_render.h"
 
-static const float kRuntimeNative3DTemporalEMAAlpha = 0.25f;
 static const float kRuntimeNative3DTemporalClampScale = 3.0f;
 static const float kRuntimeNative3DTemporalClampMinLuma = 1.0f;
 
 static float runtime_native_3d_temporal_accum_luma(float r, float g, float b) {
     return (0.2126f * r) + (0.7152f * g) + (0.0722f * b);
-}
-
-static float runtime_native_3d_temporal_accum_bias_correction(uint16_t sample_count) {
-    if (sample_count == 0u) return 0.0f;
-    return 1.0f - powf(1.0f - kRuntimeNative3DTemporalEMAAlpha, (float)sample_count);
 }
 
 static void runtime_native_3d_temporal_accum_resolve_history_rgb(
@@ -28,7 +23,6 @@ static void runtime_native_3d_temporal_accum_resolve_history_rgb(
     float* out_r,
     float* out_g,
     float* out_b) {
-    float correction = runtime_native_3d_temporal_accum_bias_correction(sample_count);
     float r = 0.0f;
     float g = 0.0f;
     float b = 0.0f;
@@ -37,11 +31,6 @@ static void runtime_native_3d_temporal_accum_resolve_history_rgb(
         r = accumulation->accumulationBuffer[accumulation_base];
         g = accumulation->accumulationBuffer[accumulation_base + 1u];
         b = accumulation->accumulationBuffer[accumulation_base + 2u];
-        if (correction > 1e-6f) {
-            r /= correction;
-            g /= correction;
-            b /= correction;
-        }
     }
 
     if (out_r) *out_r = r;
@@ -53,15 +42,11 @@ static float runtime_native_3d_temporal_accum_resolve_history_floor(
     const RuntimeNative3DTemporalAccumulation* accumulation,
     size_t accumulation_base,
     uint16_t sample_count) {
-    float correction = runtime_native_3d_temporal_accum_bias_correction(sample_count);
     float floor = (float)RuntimeNative3DResolveEnvironmentByte() / 255.0f;
 
     if (sample_count > 0u && accumulation && accumulation->accumulationBuffer) {
         floor = accumulation->accumulationBuffer[accumulation_base +
                                                  RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];
-        if (correction > 1e-6f) {
-            floor /= correction;
-        }
     }
     return floor;
 }
@@ -102,6 +87,9 @@ void RuntimeNative3DTemporalAccumulation_Free(RuntimeNative3DTemporalAccumulatio
     if (!accumulation) return;
     free(accumulation->accumulationBuffer);
     free(accumulation->activityBuffer);
+    free(accumulation->rawMeanBuffer);
+    free(accumulation->rawM2Buffer);
+    free(accumulation->stableSampleStreak);
     free(accumulation->sampleCountBuffer);
     memset(accumulation, 0, sizeof(*accumulation));
 }
@@ -112,20 +100,28 @@ bool RuntimeNative3DTemporalAccumulation_Ensure(RuntimeNative3DTemporalAccumulat
     float* resized = NULL;
     float* resized_activity = NULL;
     uint16_t* resized_counts = NULL;
+    float *raw_mean = NULL, *raw_m2 = NULL;
+    uint8_t* streak = NULL;
     size_t count = 0;
     if (!accumulation || width <= 0 || height <= 0) return false;
     if (accumulation->accumulationBuffer &&
-        accumulation->sampleCountBuffer &&
+        accumulation->sampleCountBuffer && accumulation->rawMeanBuffer &&
+        accumulation->rawM2Buffer && accumulation->stableSampleStreak &&
         accumulation->width == width &&
         accumulation->height == height) {
         return true;
     }
 
+    if ((size_t)width > SIZE_MAX / (size_t)height / RUNTIME_NATIVE_3D_RADIANCE_CHANNELS / sizeof(float)) return false;
     count = (size_t)width * (size_t)height;
     resized = (float*)calloc(count * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS, sizeof(*resized));
     resized_activity = (float*)calloc(count, sizeof(*resized_activity));
     resized_counts = (uint16_t*)calloc(count, sizeof(*resized_counts));
-    if (!resized || !resized_activity || !resized_counts) {
+    raw_mean = calloc(count * 3u, sizeof(float));
+    raw_m2 = calloc(count * 3u, sizeof(float));
+    streak = calloc(count, sizeof(uint8_t));
+    if (!resized || !resized_activity || !resized_counts || !raw_mean || !raw_m2 || !streak) {
+        free(raw_mean); free(raw_m2); free(streak);
         free(resized);
         free(resized_activity);
         free(resized_counts);
@@ -134,9 +130,15 @@ bool RuntimeNative3DTemporalAccumulation_Ensure(RuntimeNative3DTemporalAccumulat
 
     free(accumulation->accumulationBuffer);
     free(accumulation->activityBuffer);
+    free(accumulation->rawMeanBuffer);
+    free(accumulation->rawM2Buffer);
+    free(accumulation->stableSampleStreak);
     free(accumulation->sampleCountBuffer);
     accumulation->accumulationBuffer = resized;
     accumulation->activityBuffer = resized_activity;
+    accumulation->rawMeanBuffer = raw_mean;
+    accumulation->rawM2Buffer = raw_m2;
+    accumulation->stableSampleStreak = streak;
     accumulation->sampleCountBuffer = resized_counts;
     accumulation->width = width;
     accumulation->height = height;
@@ -161,6 +163,9 @@ void RuntimeNative3DTemporalAccumulation_Clear(RuntimeNative3DTemporalAccumulati
     if (accumulation->activityBuffer) {
         memset(accumulation->activityBuffer, 0, count * sizeof(*accumulation->activityBuffer));
     }
+    memset(accumulation->rawMeanBuffer, 0, count * 3u * sizeof(float));
+    memset(accumulation->rawM2Buffer, 0, count * 3u * sizeof(float));
+    memset(accumulation->stableSampleStreak, 0, count);
     accumulation->completedSubpasses = 0;
 }
 
@@ -193,7 +198,8 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
     const uint8_t* sample_mask,
     int sample_mask_stride) {
     if (!accumulation || !accumulation->accumulationBuffer || !accumulation->sampleCountBuffer ||
-        !radiance_region || radiance_stride <= 0) {
+        !accumulation->rawMeanBuffer || !accumulation->rawM2Buffer ||
+        !accumulation->stableSampleStreak || !radiance_region || radiance_stride <= 0) {
         return false;
     }
     if (sample_mask && sample_mask_stride <= 0) {
@@ -202,6 +208,17 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
     if (start_x < 0 || start_y < 0 || end_x > accumulation->width || end_y > accumulation->height ||
         start_x >= end_x || start_y >= end_y) {
         return false;
+    }
+
+    for (int y = start_y; y < end_y; ++y) {
+        for (int x = start_x; x < end_x; ++x) {
+            if (sample_mask && !sample_mask[(y-start_y)*sample_mask_stride+x-start_x]) continue;
+            size_t i = (size_t)y * accumulation->width + x;
+            size_t b = ((size_t)(y-start_y) * radiance_stride + x-start_x) * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
+            if (accumulation->sampleCountBuffer[i] == UINT16_MAX) return false;
+            for (int c = 0; c < RUNTIME_NATIVE_3D_RADIANCE_CHANNELS; ++c)
+                if (!isfinite(radiance_region[b+c])) return false;
+        }
     }
 
     for (int y = start_y; y < end_y; ++y) {
@@ -225,6 +242,23 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
                 const size_t region_base =
                     region_index * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
                 const uint16_t sample_count = accumulation->sampleCountBuffer[accumulation_index];
+                bool low_error = sample_count + 1u >= RUNTIME_NATIVE_3D_CONVERGENCE_MIN_SAMPLES;
+                for (int c = 0; c < 3; ++c) {
+                    size_t m = accumulation_index * 3u + c;
+                    double delta = (double)radiance_region[region_base+c] - accumulation->rawMeanBuffer[m];
+                    double mean = accumulation->rawMeanBuffer[m] + delta / (sample_count + 1.0);
+                    double m2 = accumulation->rawM2Buffer[m] + delta * ((double)radiance_region[region_base+c] - mean);
+                    accumulation->rawMeanBuffer[m] = (float)mean;
+                    accumulation->rawM2Buffer[m] = m2 > FLT_MAX ? INFINITY : (float)fmax(m2, 0.0);
+                    double error = sample_count ? sqrt(fmax(m2, 0.0) / ((sample_count + 1.0) * sample_count)) : INFINITY;
+                    if (!isfinite(error) || error > 0.005 + 0.02 * fabs(mean)) low_error = false;
+                }
+                uint8_t* streak = &accumulation->stableSampleStreak[accumulation_index];
+                *streak = low_error
+                    ? (*streak < RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS
+                        ? *streak + 1 : RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS)
+                    : 0;
+
                 float sample_r = radiance_region[region_base];
                 float sample_g = radiance_region[region_base + 1u];
                 float sample_b = radiance_region[region_base + 2u];
@@ -232,6 +266,8 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
                     radiance_region[region_base +
                                     RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];
                 float activity = 0.0f;
+                /* Samples belong to one output frame, not a rolling animation history. */
+                const float sample_weight = 1.0f / ((float)sample_count + 1.0f);
 
                 if (sample_count > 0u) {
                     float history_r = 0.0f;
@@ -253,17 +289,17 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
                                      fmaxf(fabsf(sample_g - history_g),
                                            fabsf(sample_b - history_b)));
                     accumulation->accumulationBuffer[accumulation_base] +=
-                        kRuntimeNative3DTemporalEMAAlpha *
+                        sample_weight *
                         (sample_r - accumulation->accumulationBuffer[accumulation_base]);
                     accumulation->accumulationBuffer[accumulation_base + 1u] +=
-                        kRuntimeNative3DTemporalEMAAlpha *
+                        sample_weight *
                         (sample_g - accumulation->accumulationBuffer[accumulation_base + 1u]);
                     accumulation->accumulationBuffer[accumulation_base + 2u] +=
-                        kRuntimeNative3DTemporalEMAAlpha *
+                        sample_weight *
                         (sample_b - accumulation->accumulationBuffer[accumulation_base + 2u]);
                     accumulation->accumulationBuffer
                         [accumulation_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] +=
-                        kRuntimeNative3DTemporalEMAAlpha *
+                        sample_weight *
                         (sample_floor -
                          accumulation->accumulationBuffer
                              [accumulation_base +
@@ -272,14 +308,14 @@ bool RuntimeNative3DTemporalAccumulation_AddRegionSamples(
                     activity = fmaxf(fabsf(sample_r),
                                      fmaxf(fabsf(sample_g), fabsf(sample_b)));
                     accumulation->accumulationBuffer[accumulation_base] =
-                        kRuntimeNative3DTemporalEMAAlpha * sample_r;
+                        sample_weight * sample_r;
                     accumulation->accumulationBuffer[accumulation_base + 1u] =
-                        kRuntimeNative3DTemporalEMAAlpha * sample_g;
+                        sample_weight * sample_g;
                     accumulation->accumulationBuffer[accumulation_base + 2u] =
-                        kRuntimeNative3DTemporalEMAAlpha * sample_b;
+                        sample_weight * sample_b;
                     accumulation->accumulationBuffer
                         [accumulation_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
-                        kRuntimeNative3DTemporalEMAAlpha * sample_floor;
+                        sample_weight * sample_floor;
                 }
                 if (accumulation->activityBuffer) {
                     accumulation->activityBuffer[accumulation_index] = activity;
@@ -459,4 +495,12 @@ void RuntimeNative3DTemporalAccumulation_ResolveToPixelBufferAtOffset(
             }
         }
     }
+}
+
+bool RuntimeNative3DTemporalAccumulation_PixelConverged(
+    const RuntimeNative3DTemporalAccumulation* accumulation, size_t pixel) {
+    return accumulation && accumulation->stableSampleStreak && accumulation->sampleCountBuffer &&
+        pixel < (size_t)accumulation->width * accumulation->height &&
+        accumulation->sampleCountBuffer[pixel] >= RUNTIME_NATIVE_3D_CONVERGENCE_MIN_SAMPLES &&
+        accumulation->stableSampleStreak[pixel] >= RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS;
 }

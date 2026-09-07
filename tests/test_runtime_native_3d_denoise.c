@@ -429,9 +429,9 @@ static bool test_runtime_native_3d_frame_denoise_setup_unit(
             local * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
         const size_t normal_base = local * 3u;
         const float value = source_radiance[start_x + x];
-        unit->accumulation.accumulationBuffer[radiance_base] = value * 0.25f;
-        unit->accumulation.accumulationBuffer[radiance_base + 1u] = value * 0.25f;
-        unit->accumulation.accumulationBuffer[radiance_base + 2u] = value * 0.25f;
+        unit->accumulation.accumulationBuffer[radiance_base] = value;
+        unit->accumulation.accumulationBuffer[radiance_base + 1u] = value;
+        unit->accumulation.accumulationBuffer[radiance_base + 2u] = value;
         unit->accumulation.sampleCountBuffer[local] = 1u;
         unit->accumulation.activityBuffer[local] = 0.01f;
         unit->featureBuffer.normalBuffer[normal_base + 2u] = 1.0f;

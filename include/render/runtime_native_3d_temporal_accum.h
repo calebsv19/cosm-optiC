@@ -3,15 +3,29 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
+
+enum {
+    RUNTIME_NATIVE_3D_CONVERGENCE_MIN_SAMPLES = 8,
+    RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS = 3
+};
 
 typedef struct {
+    /* Per-pixel mean of accepted samples within the current output frame. */
     float* accumulationBuffer;
     float* activityBuffer;
+    /* Unfiltered, unclamped RGB moments drive convergence only. */
+    float* rawMeanBuffer;
+    float* rawM2Buffer;
+    uint8_t* stableSampleStreak;
     uint16_t* sampleCountBuffer;
     int width;
     int height;
     int completedSubpasses;
 } RuntimeNative3DTemporalAccumulation;
+
+bool RuntimeNative3DTemporalAccumulation_PixelConverged(
+    const RuntimeNative3DTemporalAccumulation* accumulation, size_t pixel);
 
 void RuntimeNative3DTemporalAccumulation_Init(RuntimeNative3DTemporalAccumulation* accumulation);
 void RuntimeNative3DTemporalAccumulation_Free(RuntimeNative3DTemporalAccumulation* accumulation);

@@ -25,7 +25,6 @@ static const float kRuntimeNative3DAdaptiveStateHighRiskThreshold = 0.35f;
 static const int kRuntimeNative3DAdaptiveStateDefaultTileSize = 16;
 static const int kRuntimeNative3DAdaptiveStateDefaultMinSampleFloor = 2;
 static const int kRuntimeNative3DAdaptiveStateDefaultProbePeriod = 4;
-static const float kRuntimeNative3DAdaptiveStateEMAAlpha = 0.25f;
 
 static bool s_runtime_native_3d_adaptive_runtime_override_valid = false;
 static bool s_runtime_native_3d_adaptive_runtime_override_enabled = true;
@@ -102,11 +101,6 @@ int runtime_native_3d_adaptive_sampling_region_index(int x,
 
 static float runtime_native_3d_adaptive_sampling_luma(float r, float g, float b) {
     return (0.2126f * r) + (0.7152f * g) + (0.0722f * b);
-}
-
-static float runtime_native_3d_adaptive_sampling_bias_correction(uint16_t sample_count) {
-    if (sample_count == 0u) return 0.0f;
-    return 1.0f - powf(1.0f - kRuntimeNative3DAdaptiveStateEMAAlpha, (float)sample_count);
 }
 
 static float runtime_native_3d_adaptive_sampling_stable_activity_threshold(void) {
@@ -416,7 +410,10 @@ bool RuntimeNative3DAdaptiveSampling_MeasurePixelState(
     state->tileSize = resolved_tile_size;
     state->tilesX = tiles_x;
     state->tilesY = tiles_y;
-    summary.minSampleFloor = resolved_min_sample_floor;
+    const int convergence_floor = RUNTIME_NATIVE_3D_CONVERGENCE_MIN_SAMPLES +
+                                  RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS - 1;
+    summary.minSampleFloor = resolved_min_sample_floor > convergence_floor
+        ? resolved_min_sample_floor : convergence_floor;
 
     for (int y = 0; y < height; ++y) {
         for (int x = 0; x < width; ++x) {
@@ -444,24 +441,23 @@ bool RuntimeNative3DAdaptiveSampling_MeasurePixelState(
                 runtime_native_3d_adaptive_sampling_region_index(x, y, width, height);
             const bool stable =
                 sample_count >= (uint16_t)resolved_min_sample_floor &&
-                activity <= stable_activity_threshold &&
+                RuntimeNative3DTemporalAccumulation_PixelConverged(accumulation, pixel_index) &&
                 !high_risk;
             const int countdown =
                 stable ? ((resolved_probe_period -
-                           ((int)sample_count % resolved_probe_period)) %
+                           (accumulation->completedSubpasses % resolved_probe_period)) %
                           resolved_probe_period)
                        : 0;
             const bool probe = stable && countdown == 0;
             const bool active = !stable || probe || high_risk;
-            float correction = runtime_native_3d_adaptive_sampling_bias_correction(sample_count);
             float mean_r = 0.0f;
             float mean_g = 0.0f;
             float mean_b = 0.0f;
 
-            if (sample_count > 0u && correction > 1.0e-6f) {
-                mean_r = accumulation->accumulationBuffer[accumulation_base] / correction;
-                mean_g = accumulation->accumulationBuffer[accumulation_base + 1u] / correction;
-                mean_b = accumulation->accumulationBuffer[accumulation_base + 2u] / correction;
+            if (sample_count > 0u) {
+                mean_r = accumulation->accumulationBuffer[accumulation_base];
+                mean_g = accumulation->accumulationBuffer[accumulation_base + 1u];
+                mean_b = accumulation->accumulationBuffer[accumulation_base + 2u];
             }
 
             pixel->sampleCount = sample_count;

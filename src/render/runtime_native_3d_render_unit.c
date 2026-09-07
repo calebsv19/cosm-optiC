@@ -63,7 +63,8 @@ static uint64_t runtime_native_3d_render_unit_temporal_capacity_bytes(
                pixel_count,
                (uint64_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS * (uint64_t)sizeof(float)) +
            runtime_native_3d_render_unit_u64_product(pixel_count, (uint64_t)sizeof(float)) +
-           runtime_native_3d_render_unit_u64_product(pixel_count, (uint64_t)sizeof(uint16_t));
+           runtime_native_3d_render_unit_u64_product(pixel_count, (uint64_t)sizeof(uint16_t)) +
+           runtime_native_3d_render_unit_u64_product(pixel_count, 6u * sizeof(float) + sizeof(uint8_t));
 }
 
 static uint64_t runtime_native_3d_render_unit_adaptive_mask_capacity_bytes(

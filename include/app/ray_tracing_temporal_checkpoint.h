@@ -9,7 +9,7 @@
 #include "app/agent_render_request.h"
 #include "render/runtime_native_3d_tile_scheduler.h"
 
-#define RAY_TRACING_TEMPORAL_CHECKPOINT_SCHEMA_VERSION 2
+#define RAY_TRACING_TEMPORAL_CHECKPOINT_SCHEMA_VERSION 3
 
 typedef struct RayTracingTemporalCheckpointIdentity {
     char requestSha256[RAY_TRACING_SHA256_HEX_SIZE];

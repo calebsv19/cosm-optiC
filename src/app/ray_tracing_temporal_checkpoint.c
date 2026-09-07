@@ -250,7 +250,7 @@ bool ray_tracing_temporal_checkpoint_configure_frame(
     session->identity.integratorId = integrator_id;
     sampling_size = snprintf(sampling_identity,
                              sizeof(sampling_identity),
-                             "frame=%d;temporal=%d;integrator=%d;request=%s",
+                             "accumulation=moments-v2;probe=pass-v1;frame=%d;temporal=%d;integrator=%d;request=%s",
                              frame_index,
                              request->temporal_frames,
                              integrator_id,
@@ -448,9 +448,10 @@ static bool write_tile(FILE* file,
            write_exact(file,
                        unit->accumulation.accumulationBuffer,
                        radiance * sizeof(float)) &&
-           write_exact(file,
-                       unit->accumulation.activityBuffer,
-                       pixels * sizeof(float)) &&
+           write_exact(file, unit->accumulation.rawMeanBuffer, pixels * 3u * sizeof(float)) &&
+           write_exact(file, unit->accumulation.rawM2Buffer, pixels * 3u * sizeof(float)) &&
+           write_exact(file, unit->accumulation.stableSampleStreak, pixels) &&
+           write_exact(file, unit->accumulation.activityBuffer, pixels * sizeof(float)) &&
            write_exact(file,
                        unit->accumulation.sampleCountBuffer,
                        pixels * sizeof(uint16_t)) &&
@@ -489,9 +490,10 @@ static bool read_tile(FILE* file,
     if (!read_exact(file,
                     unit->accumulation.accumulationBuffer,
                     radiance * sizeof(float)) ||
-        !read_exact(file,
-                    unit->accumulation.activityBuffer,
-                    pixels * sizeof(float)) ||
+        !read_exact(file, unit->accumulation.rawMeanBuffer, pixels * 3u * sizeof(float)) ||
+        !read_exact(file, unit->accumulation.rawM2Buffer, pixels * 3u * sizeof(float)) ||
+        !read_exact(file, unit->accumulation.stableSampleStreak, pixels) ||
+        !read_exact(file, unit->accumulation.activityBuffer, pixels * sizeof(float)) ||
         !read_exact(file,
                     unit->accumulation.sampleCountBuffer,
                     pixels * sizeof(uint16_t))) {
