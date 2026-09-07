@@ -1073,3 +1073,14 @@ clamp deterministically, and layout updates remain presentation-only.
 capture changes only Loop/Bounce/direction metadata for one selected sample;
 the evaluated frame, light/camera values, transforms, provenance, and
 simulation identity remain byte-identical.
+
+## Smooth mesh connectivity baseline
+
+`make capture-smooth-mesh-connectivity-before` verifies exactly the two known
+normal defects and retains tiny compiler fixtures. This is a before-state gate,
+not acceptance. `make test-smooth-mesh-connectivity` is the strict acceptance
+contract; it now passes with the 0.7.1 connectivity correction. The retained
+0.7.0 before-state failed on disconnected smooth fans and opposed-face ordering. Existing crease-aware, connected-surface and flat controls must pass.
+Neither gate is part of the routine stable suite. The mixed full-asset baseline
+and retained evidence contract are documented in
+[`docs/smoothing_first_slice.md`](../docs/smoothing_first_slice.md).

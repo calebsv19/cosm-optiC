@@ -11,6 +11,28 @@
 #include "test_runtime_scene_3d_geometry_internal.h"
 #include "test_support.h"
 
+static int test_runtime_ray_3d_triangle_scale_invariance(void) {
+    const double scales[] = {1e-5, 1.0, 1e5};
+    for (size_t i = 0; i < 3; ++i) {
+        double scale = scales[i];
+        RuntimeTriangle3D triangle = {0};
+        HitInfo3D hit = {0};
+        triangle.p1 = vec3(scale, 0, 0);
+        triangle.p2 = vec3(0, scale, 0);
+        Ray3D ray = RuntimeRay3D_Make(vec3(0.25 * scale, 0.25 * scale, scale), vec3(0, 0, -1));
+        bool found = RuntimeRay3D_IntersectTriangle(&ray, &triangle, 0, 0, 2 * scale, &hit);
+        assert_true("triangle_scale_invariant_hit", found);
+        if (found) {
+            assert_close("triangle_scale_invariant_bary", hit.baryU, 0.5, 1e-9);
+            assert_close("triangle_scale_invariant_distance", hit.t / scale, 1, 1e-9);
+        }
+        ray.direction = vec3(1, 0, 0);
+        assert_true("triangle_parallel_rejected_at_each_scale",
+                    !RuntimeRay3D_IntersectTriangle(&ray, &triangle, 0, 0, 2 * scale, &hit));
+    }
+    return 0;
+}
+
 static int test_runtime_ray_3d_triangle_intersection_contract(void) {
     RuntimeTriangle3D triangle = {0};
     Ray3D ray = {0};
@@ -716,6 +738,7 @@ int run_test_runtime_scene_3d_geometry_trace_suite(void) {
 
     test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_triangle_intersection_contract");
     test_runtime_ray_3d_triangle_intersection_contract();
+    test_runtime_ray_3d_triangle_scale_invariance();
     test_runtime_ray_3d_shading_normal_terminator_contract();
     test_runtime_scene_3d_geometry_trace("test_runtime_ray_3d_scene_first_hit_contract");
     test_runtime_ray_3d_scene_first_hit_contract();

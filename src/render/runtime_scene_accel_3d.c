@@ -782,7 +782,7 @@ runtime_scene_accel_3d_trace_primitive_instance(
                                                              scene_triangle_index,
                                                              ray,
                                                              t_min,
-                                                             found ? best_hit.t : t_max,
+                                                             found ? fmin(t_max, best_hit.t + 1e-9) : t_max,
                                                              &candidate)) {
                 continue;
             }
@@ -801,7 +801,7 @@ runtime_scene_accel_3d_trace_primitive_instance(
                                                              i,
                                                              ray,
                                                              t_min,
-                                                             found ? best_hit.t : t_max,
+                                                             found ? fmin(t_max, best_hit.t + 1e-9) : t_max,
                                                              &candidate)) {
                 continue;
             }
@@ -880,7 +880,9 @@ static RuntimeSceneAcceleration3DTraceStatus runtime_scene_accel_3d_trace_instan
         return RUNTIME_SCENE_ACCEL_3D_TRACE_ERROR;
     }
     local_ray.direction = vec3_scale(local_direction, 1.0 / local_direction_scale);
-    world_t_tolerance = 1e-9 * fmax(1.0, fmax(fabs(t_min), fabs(t_max)));
+    /* The lower bound must not inherit an effectively unbounded far limit:
+       that admitted self-hits which hid the next valid surface in the BLAS. */
+    world_t_tolerance = 1e-9 * fmax(1.0, fabs(t_min));
     local_t_min = fmax(0.0, t_min - world_t_tolerance) * local_direction_scale;
     if (t_max + world_t_tolerance < DBL_MAX / local_direction_scale) {
         local_t_max = (t_max + world_t_tolerance) * local_direction_scale;
@@ -984,7 +986,7 @@ RuntimeSceneAcceleration3DTraceStatus RuntimeSceneAcceleration3D_TraceFirstHit(
                                                    node->min,
                                                    node->max,
                                                    t_min,
-                                                   found ? best_hit.t : t_max)) {
+                                                   found ? fmin(t_max, best_hit.t + 1e-9) : t_max)) {
             continue;
         }
         gRuntimeSceneAcceleration3DTraceStats.tlasNodeHits += 1u;
@@ -1009,7 +1011,7 @@ RuntimeSceneAcceleration3DTraceStatus RuntimeSceneAcceleration3D_TraceFirstHit(
                                                            instance->min,
                                                            instance->max,
                                                            t_min,
-                                                           found ? best_hit.t : t_max)) {
+                                                           found ? fmin(t_max, best_hit.t + 1e-9) : t_max)) {
                     continue;
                 }
                 gRuntimeSceneAcceleration3DTraceStats.tlasInstanceTests += 1u;
@@ -1017,7 +1019,7 @@ RuntimeSceneAcceleration3DTraceStatus RuntimeSceneAcceleration3D_TraceFirstHit(
                                                                instance,
                                                                ray,
                                                                t_min,
-                                                               found ? best_hit.t : t_max,
+                                                               found ? fmin(t_max, best_hit.t + 1e-9) : t_max,
                                                                &candidate);
                 if (status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT) {
                     if (runtime_scene_accel_3d_hit_better(&candidate, &best_hit, found)) {

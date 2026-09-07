@@ -3426,3 +3426,11 @@ test-legacy:
 .PHONY: test-managed-mesh-assets
 test-managed-mesh-assets: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/test_managed_mesh_assets.py
+
+.PHONY: test-smooth-mesh-connectivity capture-smooth-mesh-connectivity-before
+# Strict acceptance for connected normal islands; 0.7.0 before-state fails.
+test-smooth-mesh-connectivity: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
+	python3 tools/smooth_mesh_reflection/connectivity_contract.py --out "$$(mktemp -d $(BUILD_DIR)/smooth-connectivity-XXXXXX)/run"
+
+capture-smooth-mesh-connectivity-before: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
+	python3 tools/smooth_mesh_reflection/connectivity_contract.py --capture-known-defects --out "$$(mktemp -d $(BUILD_DIR)/smooth-connectivity-before-XXXXXX)/run"

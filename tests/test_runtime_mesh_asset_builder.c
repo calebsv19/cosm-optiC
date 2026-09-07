@@ -1349,7 +1349,43 @@ static int test_bridge_builder_consumes_retained_mesh_assets(void) {
     return 0;
 }
 
+static void test_unbounded_far_limit_preserves_near_exclusion(void) {
+    RuntimeScene3D scene;
+    RayTracingRuntimeMeshAssetSet set;
+    RuntimeScene3D_Init(&scene);
+    ray_tracing_runtime_mesh_asset_set_init(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+    set.asset_count = set.instance_count = 1;
+    snprintf(set.assets[0].asset_id, sizeof(set.assets[0].asset_id), "near_exclusion");
+    CoreMeshAssetRuntimeDocument *doc = &set.assets[0].document;
+    core_mesh_asset_runtime_document_set_vertex_count(doc, 6);
+    core_mesh_asset_runtime_document_set_triangle_count(doc, 2);
+    for (int i = 0; i < 2; ++i) {
+        doc->vertices[3*i].position = (CoreObjectVec3){0, 0, -i};
+        doc->vertices[3*i+1].position = (CoreObjectVec3){1, 0, -i};
+        doc->vertices[3*i+2].position = (CoreObjectVec3){0, 1, -i};
+        doc->triangles[i].a = 3*i;
+        doc->triangles[i].b = 3*i+1;
+        doc->triangles[i].c = 3*i+2;
+    }
+    snprintf(set.instances[0].asset_id, sizeof(set.instances[0].asset_id), "near_exclusion");
+    snprintf(set.instances[0].object_id, sizeof(set.instances[0].object_id), "near_object");
+    set.instances[0].scale_x = set.instances[0].scale_y = set.instances[0].scale_z = 1;
+    assert_true("near_exclusion_append", RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set));
+    assert_true("near_exclusion_rebuild", RuntimeSceneAcceleration3D_RebuildPreparedFromSceneAndMeshAssets(&scene, &set));
+    Ray3D ray = RuntimeRay3D_Make(vec3(0.25, 0.25, 1e-5), vec3(0, 0, -1));
+    HitInfo3D hit = {0};
+    assert_true("near_exclusion_unbounded_hit", RuntimeSceneAcceleration3D_TraceFirstHit(&scene, &ray, 1e-4, 1e30, &hit) == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT);
+    assert_near("near_exclusion_finds_next_surface", hit.t, 1.00001, 1e-9);
+    RuntimeScene3D_Free(&scene);
+    ray_tracing_runtime_mesh_asset_set_free(&set);
+    RuntimeMeshBLASCache3D_ResetForTests();
+    RuntimeSceneAcceleration3D_ResetTLASForTests();
+}
+
 int main(void) {
+    test_unbounded_far_limit_preserves_near_exclusion();
     test_append_mesh_asset_set_preserves_scene_object_lookup();
     test_mesh_blas_cache_reuses_loaded_assets();
     test_mesh_blas_cache_tracks_procedural_identity();

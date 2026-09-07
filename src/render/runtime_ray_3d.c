@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
-static const double kRuntimeRay3DDeterminantEpsilon = 1e-9;
+static const double kRuntimeRay3DDeterminantEpsilon = 1e-12;
 static const double kRuntimeRay3DMinimumOffsetEpsilon = 1e-9;
 static const RuntimeRay3DTraceRoute kRuntimeRay3DDefaultTraceRoute =
     RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS;
@@ -356,8 +356,13 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     edge2 = vec3_sub(triangle->p2, triangle->p0);
     pvec = vec3_cross(ray->direction, edge2);
     det = vec3_dot(edge1, pvec);
-    if (det > -kRuntimeRay3DDeterminantEpsilon &&
-        det < kRuntimeRay3DDeterminantEpsilon) {
+    /* A relative angular threshold has the same meaning in local BLAS and
+       scaled world geometry. An absolute area cutoff silently loses tiny STL
+       triangles in one route while accepting their enlarged instances. */
+    double determinant_scale = vec3_length(edge1) * vec3_length(edge2) *
+                               vec3_length(ray->direction);
+    if (!isfinite(det) || !isfinite(determinant_scale) || determinant_scale <= 0.0 ||
+        fabs(det) <= kRuntimeRay3DDeterminantEpsilon * determinant_scale) {
         return false;
     }
 
@@ -774,6 +779,12 @@ static bool runtime_ray_3d_trace_scene_first_hit_parity(
         runtime_ray_3d_set_parity_mismatch(context, reason);
     }
 
+    if (reason[0] && stats->parityMismatches <= 3 && getenv("RAY_TRACING_PARITY_RAY_PROBE")) {
+        fprintf(stderr, "parity probe %s o %.17g %.17g %.17g d %.17g %.17g %.17g range %.17g %.17g flat %d %.17g tlas %d %.17g\n",
+                reason, ray->origin.x, ray->origin.y, ray->origin.z,
+                ray->direction.x, ray->direction.y, ray->direction.z, t_min, t_max,
+                flattened_hit.triangleIndex, flattened_hit.t, tlas_hit.triangleIndex, tlas_hit.t);
+    }
     if (flattened_found) {
         *out_hit = flattened_hit;
         return true;

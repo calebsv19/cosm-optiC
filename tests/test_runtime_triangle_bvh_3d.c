@@ -462,9 +462,31 @@ static void test_trace_context_owns_route_stats(void) {
     RuntimeScene3D_Free(&scene);
 }
 
+static void test_bvh_tie_candidates_are_not_clipped(void) {
+    RuntimeScene3D scene;
+    RuntimeScene3D_Init(&scene);
+    scene.triangleMesh.triangleCount = scene.triangleMesh.triangleCapacity = 2;
+    scene.triangleMesh.triangles = calloc(2, sizeof(RuntimeTriangle3D));
+    for (int i = 0; i < 2; ++i) {
+        double z = -i * 5e-10;
+        scene.triangleMesh.triangles[i] = make_triangle(
+            vec3(0, 0, z), vec3(1, 0, z), vec3(0, 1, z), 0, 0, i);
+    }
+    scene.triangleMesh.bvhDirty = true;
+    assert_true("tie_bvh_build", RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh));
+    Ray3D ray = RuntimeRay3D_Make(vec3(0.25, 0.25, 1), vec3(0, 0, -1));
+    HitInfo3D hit = {0};
+    assert_true("tie_bvh_hit", RuntimeTriangleBVH3D_TraceFirstHit(&scene.triangleMesh, &ray, 0, 2, &hit));
+    assert_true("tie_bvh_highest_id_wins", hit.triangleIndex == 1);
+    assert_true("tie_respects_caller_far_limit", RuntimeTriangleBVH3D_TraceFirstHit(&scene.triangleMesh, &ray, 0, 1, &hit));
+    assert_true("tie_does_not_extend_far_limit", hit.triangleIndex == 0);
+    RuntimeScene3D_Free(&scene);
+}
+
 int main(void) {
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     test_bvh_matches_flat_trace();
+    test_bvh_tie_candidates_are_not_clipped();
     test_bvh_float_bounds_remain_conservative_at_t_max();
     test_bvh_copy_preserves_trace_results();
     test_bvh_overflow_falls_back_to_flat_trace();

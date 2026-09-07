@@ -195,7 +195,7 @@ RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
                                                  node->min,
                                                  node->max,
                                                  t_min,
-                                                 found ? best_hit.t : t_max,
+                                                 found ? fmin(t_max, best_hit.t + 1e-9) : t_max,
                                                  &node_enter)) {
             continue;
         }
@@ -210,7 +210,7 @@ RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
                                                     &mesh->triangles[triangle_index],
                                                     triangle_index,
                                                     t_min,
-                                                    found ? best_hit.t : t_max,
+                                                    found ? fmin(t_max, best_hit.t + 1e-9) : t_max,
                                                     &hit)) {
                     continue;
                 }
@@ -231,14 +231,14 @@ RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
                 mesh->bvh->nodes[node->left].min,
                 mesh->bvh->nodes[node->left].max,
                 t_min,
-                found ? best_hit.t : t_max,
+                found ? fmin(t_max, best_hit.t + 1e-9) : t_max,
                 &left_enter);
             bool hit_right = runtime_triangle_bvh_intersect_aabb(
                 ray,
                 mesh->bvh->nodes[node->right].min,
                 mesh->bvh->nodes[node->right].max,
                 t_min,
-                found ? best_hit.t : t_max,
+                found ? fmin(t_max, best_hit.t + 1e-9) : t_max,
                 &right_enter);
             if (hit_left && hit_right) {
                 int near_node = left_enter <= right_enter ? node->left : node->right;

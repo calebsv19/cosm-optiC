@@ -117,3 +117,11 @@ Shared compile-boundary helpers for the mesh-asset rollout.
   import UX, RayTracing material policy, or PhysicsSim collision derivation.
 - v0.2.0 freezes the first authoring-to-runtime compile responsibility
   contract.
+
+### 0.7.1 normal connectivity correction
+
+Smooth and crease-aware generation share edge-connected, consistently oriented
+normal islands. Point-only contacts and coincident duplicate/opposed faces stay
+separate, eliminating first-face cancellation fallback. Flat output is unchanged.
+Triangle indices are committed only after generated normals validate. This does
+not repair geometry or certify arbitrary non-manifold meshes.

@@ -54,70 +54,6 @@ static double mesh_normals_corner_angle(CoreObjectVec3 center,
     return acos(cosine);
 }
 
-static CoreResult mesh_normals_generate_smooth(CoreMeshAssetRuntimeDocument *document) {
-    CoreObjectVec3 *fallback_normals = NULL;
-    size_t i;
-    if (!document || !document->vertices || document->vertex_count == 0u ||
-        !document->triangles || document->triangle_count == 0u) {
-        return mesh_normals_invalid_arg("smooth normal generation input is invalid");
-    }
-    fallback_normals =
-        (CoreObjectVec3 *)core_alloc(document->vertex_count * sizeof(*fallback_normals));
-    if (!fallback_normals) {
-        return (CoreResult){CORE_ERR_OUT_OF_MEMORY, "out of memory"};
-    }
-    memset(fallback_normals, 0, document->vertex_count * sizeof(*fallback_normals));
-    for (i = 0u; i < document->vertex_count; ++i) {
-        document->vertices[i].normal = (CoreObjectVec3){0.0, 0.0, 0.0};
-    }
-    for (i = 0u; i < document->triangle_count; ++i) {
-        const CoreMeshAssetRuntimeTriangle *triangle = &document->triangles[i];
-        size_t indices[3] = {triangle->a, triangle->b, triangle->c};
-        CoreObjectVec3 points[3] = {
-            document->vertices[triangle->a].position,
-            document->vertices[triangle->b].position,
-            document->vertices[triangle->c].position
-        };
-        CoreObjectVec3 face_normal;
-        size_t corner;
-        if (!mesh_normals_normalize(
-                mesh_normals_cross(mesh_normals_sub(points[1], points[0]),
-                                   mesh_normals_sub(points[2], points[0])),
-                &face_normal)) {
-            core_free(fallback_normals);
-            return mesh_normals_invalid_arg("smooth normal face is degenerate");
-        }
-        for (corner = 0u; corner < 3u; ++corner) {
-            double angle = mesh_normals_corner_angle(points[corner],
-                                                     points[(corner + 1u) % 3u],
-                                                     points[(corner + 2u) % 3u]);
-            CoreObjectVec3 *normal = &document->vertices[indices[corner]].normal;
-            CoreObjectVec3 *fallback = &fallback_normals[indices[corner]];
-            if (mesh_normals_dot(*fallback, *fallback) <= 1e-24) {
-                *fallback = face_normal;
-            }
-            normal->x += face_normal.x * angle;
-            normal->y += face_normal.y * angle;
-            normal->z += face_normal.z * angle;
-        }
-    }
-    for (i = 0u; i < document->vertex_count; ++i) {
-        CoreObjectVec3 normalized;
-        if (!mesh_normals_normalize(document->vertices[i].normal, &normalized)) {
-            if (!mesh_normals_normalize(fallback_normals[i], &normalized)) {
-                core_free(fallback_normals);
-                return mesh_normals_invalid_arg("smooth vertex normal has zero contribution");
-            }
-        }
-        document->vertices[i].normal = normalized;
-    }
-    core_free(fallback_normals);
-    document->vertex_normal_count = document->vertex_count;
-    document->normal_provenance =
-        CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_SMOOTH;
-    return core_result_ok();
-}
-
 typedef struct MeshNormalsFaceInfo {
     CoreObjectVec3 normal;
     double corner_angles[3];
@@ -151,18 +87,30 @@ static bool mesh_normals_triangles_share_edge_at_vertex(
     size_t i;
     size_t j;
     if (strcmp(a->surface_group_id, b->surface_group_id) != 0) return false;
+    /* Coincident duplicate/opposed triangles are separate sheets. */
+    size_t shared = 0u;
     for (i = 0u; i < 3u; ++i) {
-        if (a_indices[i] == vertex) continue;
         for (j = 0u; j < 3u; ++j) {
-            if (b_indices[j] == a_indices[i] && b_indices[j] != vertex) return true;
+            if (a_indices[i] == b_indices[j]) ++shared;
+        }
+    }
+    if (shared != 2u) return false;
+    /* Only consistently oriented edge neighbours may share a normal island. */
+    for (i = 0u; i < 3u; ++i) {
+        size_t next = (i + 1u) % 3u;
+        if (a_indices[i] != vertex && a_indices[next] != vertex) continue;
+        for (j = 0u; j < 3u; ++j) {
+            if (a_indices[i] == b_indices[(j + 1u) % 3u] &&
+                a_indices[next] == b_indices[j]) return true;
         }
     }
     return false;
 }
 
-static CoreResult mesh_normals_generate_crease_aware(
+static CoreResult mesh_normals_generate_islands(
     CoreMeshAssetRuntimeDocument *document,
-    double crease_angle_degrees) {
+    double crease_angle_degrees,
+    CoreMeshAssetRuntimeNormalProvenance provenance) {
     const double radians_per_degree = 0.01745329251994329577;
     const size_t corner_count = document ? document->triangle_count * 3u : 0u;
     MeshNormalsFaceInfo *faces = NULL;
@@ -263,8 +211,6 @@ static CoreResult mesh_normals_generate_crease_aware(
 
     memset(new_vertices, 0, corner_count * sizeof(*new_vertices));
     for (triangle_index = 0u; triangle_index < document->triangle_count; ++triangle_index) {
-        CoreMeshAssetRuntimeTriangle *triangle = &document->triangles[triangle_index];
-        size_t *indices[3] = {&triangle->a, &triangle->b, &triangle->c};
         for (corner = 0u; corner < 3u; ++corner) {
             size_t corner_id = triangle_index * 3u + corner;
             size_t root = mesh_normals_find_root(parents, corner_id);
@@ -276,7 +222,6 @@ static CoreResult mesh_normals_generate_crease_aware(
                 new_vertices[output_vertex].position =
                     document->vertices[corner_vertices[corner_id]].position;
             }
-            *indices[corner] = output_vertex;
             normal = &new_vertices[output_vertex].normal;
             normal->x += faces[triangle_index].normal.x *
                          faces[triangle_index].corner_angles[corner];
@@ -293,13 +238,20 @@ static CoreResult mesh_normals_generate_crease_aware(
         }
         new_vertices[corner].normal = normalized;
     }
+    /* Commit index changes only after every normal has been validated. */
+    for (triangle_index = 0u; triangle_index < document->triangle_count; ++triangle_index) {
+        CoreMeshAssetRuntimeTriangle *triangle = &document->triangles[triangle_index];
+        size_t *indices[3] = {&triangle->a, &triangle->b, &triangle->c};
+        for (corner = 0u; corner < 3u; ++corner) {
+            *indices[corner] = root_to_vertex[mesh_normals_find_root(parents, triangle_index * 3u + corner)];
+        }
+    }
     core_free(document->vertices);
     document->vertices = new_vertices;
     document->vertex_count = new_vertex_count;
     document->contract.vertex_count = new_vertex_count;
     document->vertex_normal_count = new_vertex_count;
-    document->normal_provenance =
-        CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_CREASE_AWARE;
+    document->normal_provenance = provenance;
     core_free(faces);
     core_free(parents);
     core_free(first_corner);
@@ -330,10 +282,12 @@ CoreResult core_mesh_compile_runtime_generate_vertex_normals(
         return core_result_ok();
     }
     if (mode == CORE_MESH_ASSET_IMPORTED_NORMAL_MODE_SMOOTH) {
-        return mesh_normals_generate_smooth(document);
+        return mesh_normals_generate_islands(document, 180.0,
+            CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_SMOOTH);
     }
     if (mode == CORE_MESH_ASSET_IMPORTED_NORMAL_MODE_CREASE_AWARE) {
-        return mesh_normals_generate_crease_aware(document, crease_angle_degrees);
+        return mesh_normals_generate_islands(document, crease_angle_degrees,
+            CORE_MESH_ASSET_RUNTIME_NORMAL_PROVENANCE_GENERATED_CREASE_AWARE);
     }
     return mesh_normals_invalid_arg("unknown imported normal mode");
 }

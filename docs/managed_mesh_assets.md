@@ -131,3 +131,7 @@ Shared reuse decision: reuse-adopted for existing mesh asset/compiler and scene
 extension contracts; project intake policy and CLI remain app-owned. No shared
 API or module version changes. Complex-topology smoothing corrections and new
 editor controls remain separate work.
+
+The first geometry-quality follow-up is documented in
+[Smoothing slice 1](smoothing_first_slice.md): mixed real-asset baseline and
+connectivity corrections, per-object close-ups, and strict regression contracts.
