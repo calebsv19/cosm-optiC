@@ -2711,6 +2711,7 @@ SCENE_EDITOR_PANE_HOST_TEST_SRCS := \
 	$(TEST_DIR)/scene_editor_pane_host_contract_test.c \
 	$(TEST_DIR)/kit_render_backend_vk_stub.c \
 	$(SRC_DIR)/editor/scene_editor_pane_host.c \
+	$(SRC_DIR)/editor/scene_editor_workspace_layout.c \
 	$(CORE_PANE_DIR)/src/core_pane.c \
 	$(KIT_PANE_DIR)/src/kit_pane.c \
 	$(KIT_RENDER_DIR)/src/kit_render.c \
@@ -2727,6 +2728,18 @@ $(SCENE_EDITOR_PANE_HOST_TEST_BIN): $(SCENE_EDITOR_PANE_HOST_TEST_SRCS)
 
 test-scene-editor-pane-host-contract: $(SCENE_EDITOR_PANE_HOST_TEST_BIN)
 	@$(SCENE_EDITOR_PANE_HOST_TEST_BIN) || (echo "scene editor pane host contract test failed."; exit 1)
+
+# Explicit visual test only; caller supplies isolated config/scene paths.
+SCENE_EDITOR_WORKSPACE_VISUAL_BIN := $(BUILD_DIR)/tests/scene_editor_workspace_visual_test
+$(BUILD_DIR)/tests/scene_editor_workspace_app.o: $(SRC_DIR)/app/animation.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -Dmain=scene_editor_workspace_unused_app_main -c $< -o $@
+
+$(SCENE_EDITOR_WORKSPACE_VISUAL_BIN): $(BUILD_DIR)/tests/scene_editor_workspace_visual_test.o $(BUILD_DIR)/tests/scene_editor_workspace_app.o $(filter-out $(BUILD_DIR)/app/animation.o,$(OBJ))
+	$(CC) $^ -o $@ $(LDFLAGS)
+
+.PHONY: scene-editor-workspace-visual-test
+scene-editor-workspace-visual-test: $(SCENE_EDITOR_WORKSPACE_VISUAL_BIN)
 
 SCENE_EDITOR_VIEWPORT_NAV_TEST_BIN := $(BUILD_DIR)/tests/scene_editor_viewport_nav_contract_test
 SCENE_EDITOR_VIEWPORT_NAV_TEST_SRC := $(TEST_DIR)/scene_editor_viewport_nav_contract_test.c
@@ -3440,3 +3453,5 @@ test-smooth-mesh-connectivity: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 
 capture-smooth-mesh-connectivity-before: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	python3 tools/smooth_mesh_reflection/connectivity_contract.py --capture-known-defects --out "$$(mktemp -d $(BUILD_DIR)/smooth-connectivity-before-XXXXXX)/run"
+
+-include $(BUILD_DIR)/tests/scene_editor_workspace_visual_test.d $(BUILD_DIR)/tests/scene_editor_workspace_app.d

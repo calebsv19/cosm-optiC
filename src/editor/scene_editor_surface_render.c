@@ -273,7 +273,10 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
     int selected_bezier_point = -1;
     if (!renderer || !layout || !contract) return;
     bounds = layout->left_content_rect;
-    if (bounds.w <= 0 || bounds.h <= 0) return;
+    if (bounds.w <= 0 || bounds.h <= 0) {
+        ObjectEditorClearObjectListRows();
+        return;
+    }
     cursor_y = bounds.y + 2;
     bottom_y = bounds.y + bounds.h;
     if (selectButton.h > 0 && selectButton.y > bounds.y) {

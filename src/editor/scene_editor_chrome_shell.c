@@ -3,12 +3,15 @@
 #include <SDL2/SDL_ttf.h>
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "config/config_manager.h"
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_light_timeline.h"
+#include "editor/scene_editor_workspace_layout.h"
+#include "editor/scene_editor_document.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/font_runtime.h"
 #include "render/render_helper.h"
@@ -23,6 +26,8 @@ SDL_Rect animateLightButton;
 SDL_Rect selectButton;
 SDL_Rect addButton;
 SDL_Rect deleteButton;
+SDL_Rect expandViewportButton;
+SDL_Rect restoreWorkspaceButton;
 static SDL_Rect modeSelectButtons[EDITOR_MODE_COUNT];
 static char g_sceneActionFeedbackText[128];
 static Uint64 g_sceneActionFeedbackUntilMs = 0u;
@@ -187,6 +192,8 @@ int SceneEditorChromeShellResolveModeButtonAtPoint(int mx, int my) {
 }
 
 bool SceneEditorChromeShellIsButtonHit(int mx, int my) {
+    if (scene_editor_chrome_shell_point_in_rect(mx, my, &expandViewportButton) ||
+        scene_editor_chrome_shell_point_in_rect(mx, my, &restoreWorkspaceButton)) return true;
     if (SceneEditorChromeShellResolveModeButtonAtPoint(mx, my) >= 0) {
         return true;
     }
@@ -221,6 +228,8 @@ bool SceneEditorChromeShellIsButtonHit(int mx, int my) {
 }
 
 void SceneEditorChromeShellLayoutFallback(int width, int height) {
+    expandViewportButton = (SDL_Rect){0};
+    restoreWorkspaceButton = (SDL_Rect){0};
     int compactButtonHeight = scene_editor_chrome_shell_measure_button_height(36);
     int footerButtonHeight = scene_editor_chrome_shell_measure_button_height(40);
     int buttonGap = 8;
@@ -271,127 +280,26 @@ void SceneEditorChromeShellLayoutFallback(int width, int height) {
 }
 
 void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
-    int compactButtonWidth = 0;
-    int actionButtonHeight = 0;
-    int actionRowWidth = 0;
-    int actionHalfWidth = 0;
-    int buttonGap = 8;
-    int modeGap = 4;
-    SDL_Rect left = {0};
-    SDL_Rect right = {0};
-    SDL_Rect modeRect = {0};
-    int modeButtonWidth = 0;
-    int modeButtonRemain = 0;
-    int modeButtonX = 0;
-
+    SceneEditorWorkspaceChrome chrome;
     if (!layout) {
         SceneEditorChromeShellLayoutFallback(sceneSettings.windowWidth, sceneSettings.windowHeight);
         return;
     }
-
-    actionButtonHeight = scene_editor_chrome_shell_measure_button_height(38);
-    left = layout->left_content_rect;
-    right = layout->right_content_rect;
-    modeRect = layout->mode_router_rect;
-    actionRowWidth = right.w;
-    if (actionRowWidth < 160) {
-        actionRowWidth = 160;
-    }
-    actionHalfWidth = (actionRowWidth - buttonGap) / 2;
-
-    compactButtonWidth = left.w;
-    selectButton = (SDL_Rect){left.x,
-                              left.y + left.h - actionButtonHeight,
-                              compactButtonWidth,
-                              actionButtonHeight};
-    addButton = (SDL_Rect){left.x,
-                           selectButton.y - actionButtonHeight - buttonGap,
-                           actionHalfWidth,
-                           actionButtonHeight};
-    deleteButton = (SDL_Rect){addButton.x + actionHalfWidth + buttonGap,
-                              addButton.y,
-                              actionRowWidth - actionHalfWidth - buttonGap,
-                              actionButtonHeight};
-    if (deleteButton.x + deleteButton.w > left.x + left.w) {
-        deleteButton.w = (left.x + left.w) - deleteButton.x;
-    }
-    if (deleteButton.w < 60) {
-        deleteButton.w = 60;
-    }
-    if (addButton.w < 60) {
-        addButton.w = 60;
-    }
-    if (addButton.x + addButton.w > left.x + left.w) {
-        addButton.w = left.w;
-    }
-    if (deleteButton.x < left.x) {
-        deleteButton.x = left.x;
-    }
-    if (deleteButton.y < left.y) {
-        deleteButton.y = left.y;
-    }
-    if (addButton.y < left.y) {
-        addButton.y = left.y;
-    }
-    if (selectButton.y < left.y) {
-        selectButton.y = left.y;
-    }
-    if (selectButton.w < compactButtonWidth) {
-        selectButton.w = compactButtonWidth;
-    }
-    if (selectButton.x != left.x) {
-        selectButton.x = left.x;
-    }
-    if (addButton.x != left.x) {
-        addButton.x = left.x;
-    }
-    if (selectButton.w > left.w) {
-        selectButton.w = left.w;
-    }
-    if (addButton.x + addButton.w > left.x + left.w) {
-        addButton.w = left.w;
-    }
-    if (deleteButton.x + deleteButton.w > left.x + left.w) {
-        deleteButton.w = (left.x + left.w) - deleteButton.x;
-    }
-    backToMenuButton = (SDL_Rect){right.x,
-                                  right.y + right.h - actionButtonHeight,
-                                  actionRowWidth,
-                                  actionButtonHeight};
-    applyButton = (SDL_Rect){right.x,
-                             backToMenuButton.y - actionButtonHeight - buttonGap,
-                             actionHalfWidth,
-                             actionButtonHeight};
-    saveButton = (SDL_Rect){applyButton.x + actionHalfWidth + buttonGap,
-                            applyButton.y,
-                            actionRowWidth - actionHalfWidth - buttonGap,
-                            actionButtonHeight};
-    changeModeButton = (SDL_Rect){right.x,
-                                  applyButton.y - actionButtonHeight - buttonGap,
-                                  actionHalfWidth,
-                                  actionButtonHeight};
-    previewButton = (SDL_Rect){changeModeButton.x + actionHalfWidth + buttonGap,
-                               changeModeButton.y,
-                               actionRowWidth - actionHalfWidth - buttonGap,
-                               actionButtonHeight};
-    animateLightButton = (SDL_Rect){right.x,
-                                    changeModeButton.y - actionButtonHeight - buttonGap,
-                                    actionRowWidth,
-                                    actionButtonHeight};
-
-    modeButtonWidth = (modeRect.w - modeGap * (EDITOR_MODE_COUNT - 1)) / EDITOR_MODE_COUNT;
-    if (modeButtonWidth < 70) modeButtonWidth = 70;
-    modeButtonRemain = modeRect.w - (modeButtonWidth * EDITOR_MODE_COUNT +
-                                     modeGap * (EDITOR_MODE_COUNT - 1));
-    modeButtonX = modeRect.x;
-    for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
-        int button_w = modeButtonWidth;
-        if (i == EDITOR_MODE_COUNT - 1 && modeButtonRemain > 0) {
-            button_w += modeButtonRemain;
-        }
-        modeSelectButtons[i] = (SDL_Rect){modeButtonX, modeRect.y, button_w, modeRect.h};
-        modeButtonX += button_w + modeGap;
-    }
+    SceneEditorWorkspaceLayoutChrome(layout, &chrome);
+    const int mode_order[] = {EDITOR_MODE_OBJECT, EDITOR_MODE_MATERIAL,
+                              EDITOR_MODE_CAMERA, EDITOR_MODE_PATH};
+    for (int i = 0; i < EDITOR_MODE_COUNT; ++i) modeSelectButtons[mode_order[i]] = chrome.modes[i];
+    selectButton = chrome.actions[0];
+    addButton = chrome.actions[1];
+    deleteButton = chrome.actions[2];
+    previewButton = chrome.actions[3];
+    changeModeButton = chrome.actions[4];
+    applyButton = chrome.actions[5];
+    saveButton = chrome.actions[6];
+    animateLightButton = chrome.actions[7];
+    backToMenuButton = chrome.actions[8];
+    expandViewportButton = chrome.expand;
+    restoreWorkspaceButton = chrome.restore;
 }
 
 static void scene_editor_chrome_shell_render_button(SDL_Renderer* renderer,
@@ -465,11 +373,13 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         SDL_SetRenderDrawColor(renderer, modeBarFill.r, modeBarFill.g, modeBarFill.b, modeBarFill.a);
         SDL_RenderFillRect(renderer, &layout->mode_router_rect);
 
+        SDL_RenderFillRect(renderer, &layout->workspace_header_rect);
         titleRect = (SDL_Rect){layout->left_pane_rect.x + 10,
                                layout->left_pane_rect.y + 6,
                                layout->left_pane_rect.w - 20,
                                20};
-        RenderLabelText(renderer, titleRect, contract->paneLeftTitle, paneLabelColor);
+        if (!layout->viewport_expanded) RenderLabelText(renderer, titleRect,
+            contract->activeMode == EDITOR_MODE_OBJECT ? "Scene objects & assets" : "Tool controls", paneLabelColor);
 
         titleRect = (SDL_Rect){layout->center_pane_rect.x + 10,
                                layout->center_pane_rect.y + 6,
@@ -481,7 +391,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                layout->right_pane_rect.y + 6,
                                layout->right_pane_rect.w - 20,
                                20};
-        RenderLabelText(renderer, titleRect, contract->paneRightTitle, paneLabelColor);
+        if (!layout->viewport_expanded) RenderLabelText(renderer, titleRect, "Inspector", paneLabelColor);
 
         SDL_SetRenderDrawColor(renderer, paneBorder.r, paneBorder.g, paneBorder.b, paneBorder.a);
         SDL_RenderDrawRect(renderer, &layout->left_pane_rect);
@@ -502,7 +412,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         bool active = (i == contract->activeMode);
         scene_editor_chrome_shell_render_button(renderer,
                                                 modeSelectButtons[i],
-                                                SceneEditorControlSurfaceModeLabel(i),
+                                                (const char*[]){"Paths", "Scene", "Camera", "Materials"}[i],
                                                 selectable,
                                                 scene_editor_chrome_shell_button_hovered(&modeSelectButtons[i]),
                                                 active,
@@ -586,7 +496,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                             palette);
     scene_editor_chrome_shell_render_button(renderer,
                                             backToMenuButton,
-                                            contract->backToMenuLabel,
+                                            "Menu",
                                             contract->backToMenuEnabled,
                                             scene_editor_chrome_shell_button_hovered(&backToMenuButton),
                                             false,
@@ -597,7 +507,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     scene_editor_chrome_shell_render_button(
         renderer,
         animateLightButton,
-        (layout && layout->timeline_visible) ? "Close Light Timeline" : "Animate Light Position",
+        (layout && layout->timeline_visible) ? "Hide keys" : "Light keys",
         SceneEditorLightTimelineHasSelectedLight(),
         scene_editor_chrome_shell_button_hovered(&animateLightButton),
         layout && layout->timeline_visible,
@@ -606,16 +516,26 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         borderColor,
         palette);
 
-    showFeedback = (g_sceneActionFeedbackText[0] &&
-                    g_sceneActionFeedbackUntilMs > SDL_GetTicks64());
+    if (layout_valid && layout) {
+        scene_editor_chrome_shell_render_button(renderer, expandViewportButton,
+            layout->viewport_expanded ? "Show panes" : "Expand view", true,
+            scene_editor_chrome_shell_button_hovered(&expandViewportButton),
+            layout->viewport_expanded, palette.button_fill, disabledFill, borderColor, palette);
+        scene_editor_chrome_shell_render_button(renderer, restoreWorkspaceButton,
+            "Reset layout", true, scene_editor_chrome_shell_button_hovered(&restoreWorkspaceButton),
+            false, palette.button_fill, disabledFill, borderColor, palette);
+    }
+    showFeedback = (g_sceneActionFeedbackText[0] && g_sceneActionFeedbackUntilMs > SDL_GetTicks64());
+    feedbackRect = layout_valid && layout ? layout->workspace_feedback_rect : (SDL_Rect){0};
     if (showFeedback) {
-        feedbackRect = (SDL_Rect){
-            (layout_valid && layout) ? layout->right_content_rect.x : backToMenuButton.x,
-            animateLightButton.y - 30,
-            (layout_valid && layout) ? layout->right_content_rect.w : backToMenuButton.w,
-            24
-        };
-        RenderLabelText(renderer, feedbackRect, g_sceneActionFeedbackText, palette.text_primary);
+        RenderLabelTextLeft(renderer, feedbackRect, g_sceneActionFeedbackText, palette.text_primary);
+    } else if (layout_valid && layout) {
+        const char* path = SceneEditorDocumentPath();
+        const char* name = path ? strrchr(path, '/') : NULL;
+        char status[256];
+        snprintf(status, sizeof(status), "%s%s", name ? name + 1 : "Scene workspace",
+                 SceneEditorDocumentIsDirty() ? "  • Unsaved changes" : "");
+        RenderLabelTextLeft(renderer, feedbackRect, status, palette.text_primary);
     }
 
     if (layout_valid && layout) {
@@ -627,7 +547,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         SceneEditorSurfaceRenderRightPaneStatus(renderer,
                                                layout,
                                                contract,
-                                               (showFeedback ? feedbackRect.y : animateLightButton.y) - 10,
+                                               layout->right_content_rect.y + layout->right_content_rect.h,
                                                paneLabelColor,
                                                statusColor);
     }

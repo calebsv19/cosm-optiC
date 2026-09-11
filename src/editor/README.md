@@ -43,3 +43,12 @@ Interactive tooling for shaping the scene.
 - `scene_editor_digest_overlay_object_pick.c` – Thin whole-object fallback over shared `core_screen_pick >= 0.1.0`. Mesh hover/click first uses the coherent preview LOD triangle hit test; this fallback projects primitive and mesh-instance authored origins into the current Ray projector and uses the shared radius/ranking contract.
 - `scene_editor_object_list.c` – Virtualized, clipped object rows backed by vendored `kit_ui >= 0.11.2` wheel evaluation and top-anchor scroll sizing; RayTracing owns row meaning, SDL drawing, scrollbar paint, and selection.
 - `scene_editor_surface_render.c` – Shared left/right pane render adapter for the scene-editor shell so mode summaries and status flow stay out of the core event/router file.
+
+## Scene workspace presentation
+
+`scene_editor_workspace_layout.c` calculates the window-wide mode/action header.
+`scene_editor_pane_host.c` owns side-pane expansion/restoration and splitter state.
+`scene_editor_chrome_shell.c` renders and maps the header; chrome actions update
+layout without document commands. The retained document and transform inspector
+remain separate owners. See `docs/editor_workspace.md` for the bounded slice and
+open acceptance.

@@ -1,6 +1,20 @@
 # optiC Current Truth
 
-Last updated: 2026-09-06
+Last updated: 2026-09-11
+
+## 2026-09-11 Foundation checkpoint and first Scene workspace slice
+
+Existing retained-document Foundation A work was checkpointed and local canonical
+main and Main Edit were aligned at `752d12b`. Subsequent development in Main Edit
+adds window-wide modes/actions, document feedback, viewport expansion/restoration
+and layout reset. The inspector keeps its existing document command owner.
+See `docs/editor_workspace.md` for behavior, verification and open acceptance.
+
+Clang build, focused foundation/pane/bridge and headless export checks pass.
+An isolated native source test passes inspector edit/undo/redo/save/reopen and
+layout state preservation. It does not establish installed-app acceptance, the
+complete import/material loop, or broad green: the pre-slice stable suite reports
+495 failures. This is development source; no version or package refresh occurred.
 
 ## 2026-09-06 Mirror Reflection Fidelity
 

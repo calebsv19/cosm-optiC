@@ -494,6 +494,8 @@ static void SceneEditorLayoutChrome(void) {
                                               sceneSettings.windowWidth,
                                               sceneSettings.windowHeight);
     } else {
+        int row_h = animation_config_scale_text_point_size(&animSettings, 26, 12) + 12;
+        g_scenePaneHost.workspace_header_height = row_h * 2 + 36;
         pane_ok = scene_editor_pane_host_rebuild(&g_scenePaneHost,
                                                  sceneSettings.windowWidth,
                                                  sceneSettings.windowHeight);
@@ -516,6 +518,11 @@ static void SceneEditorLayoutChrome(void) {
     g_scenePaneLayoutValid = true;
 
     SceneEditorChromeShellLayoutFromPane(&g_scenePaneLayout);
+}
+
+void SceneEditorRefreshWorkspaceLayout(void) {
+    SceneEditorLayoutChrome();
+    ObjectEditorClearObjectListRows();
 }
 
 void SceneEditorSyncWindowSize(SceneEditor* editor) {

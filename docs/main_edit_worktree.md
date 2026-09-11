@@ -1,5 +1,19 @@
 # RayTracing Main Edit Worktree
 
+
+## September 11 source alignment and E0/E1 entry
+
+The operator requested checkpointing existing Main Edit work and fast-forwarding
+local main before starting the editor overhaul. Foundation A was committed as
+`752d12b065c430b72d18a4182cb6d7a4d2ce1b9f`; both source lanes were verified clean
+and aligned at that commit before the new slice. Existing ignored outputs were
+retained. This source adoption does not establish package or full GUI acceptance.
+
+The subsequent bounded Scene workspace slice belongs in Main Edit; canonical
+remains at the aligned foundation baseline until separately adopted. See
+`docs/editor_workspace.md` for tests and open acceptance. Read fresh Git state
+before resuming; historical snapshots below are not current lane identity.
+
 Last verified: 2026-09-04
 
 This is the RayTracing pilot runbook for the CodeWork Persistent Main-Edit

@@ -17,6 +17,8 @@ extern SDL_Rect animateLightButton;
 extern SDL_Rect selectButton;
 extern SDL_Rect addButton;
 extern SDL_Rect deleteButton;
+extern SDL_Rect expandViewportButton;
+extern SDL_Rect restoreWorkspaceButton;
 
 RayTracingThemePalette SceneEditorChromeShellResolvePalette(void);
 void SceneEditorChromeShellSetActionFeedback(const char* text, Uint32 lifetime_ms);

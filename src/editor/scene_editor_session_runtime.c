@@ -56,6 +56,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
         return;
     }
     if (editor->currentMode == EDITOR_MODE_OBJECT &&
+        !SceneEditorGetPaneHost()->viewport_expanded &&
         SceneEditorTransformPanelHandleEvent(event)) {
         return;
     }

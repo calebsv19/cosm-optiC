@@ -1,6 +1,7 @@
 #include "editor/scene_editor_pane_host.h"
 
 #include <assert.h>
+#include "editor/scene_editor_workspace_layout.h"
 
 static void test_pane_host_solves_left_center_right_shell(void) {
     SceneEditorPaneHost host = {0};
@@ -15,9 +16,9 @@ static void test_pane_host_solves_left_center_right_shell(void) {
     assert(layout->center_pane_rect.w >= 360);
     assert(layout->center_pane_rect.w > layout->left_pane_rect.w);
     assert(layout->center_pane_rect.w > layout->right_pane_rect.w);
-    assert(layout->left_pane_rect.h == 760);
-    assert(layout->center_pane_rect.h == 760);
-    assert(layout->right_pane_rect.h == 760);
+    assert(layout->left_pane_rect.h == 760 - host.workspace_header_height);
+    assert(layout->center_pane_rect.h == 760 - host.workspace_header_height);
+    assert(layout->right_pane_rect.h == 760 - host.workspace_header_height);
 }
 
 static void test_pane_host_rebuild_respects_targets_and_minima(void) {
@@ -91,12 +92,54 @@ static void test_pane_host_timeline_is_collapsed_then_resizable(void) {
     scene_editor_pane_host_end_splitter_drag(&host);
     resized = *scene_editor_pane_host_layout(&host);
     assert(resized.timeline_rect.h > opened.timeline_rect.h);
+    assert(scene_editor_pane_host_set_viewport_expanded(&host, true));
+    assert(!scene_editor_pane_host_layout(&host)->timeline_visible);
+    assert(host.timeline_visible);
+    assert(scene_editor_pane_host_set_viewport_expanded(&host, false));
+    assert(scene_editor_pane_host_layout(&host)->timeline_visible);
+    assert(scene_editor_pane_host_layout(&host)->timeline_rect.h == resized.timeline_rect.h);
     assert(scene_editor_pane_host_set_timeline_visible(&host, false));
     assert(!scene_editor_pane_host_layout(&host)->timeline_visible);
     assert(scene_editor_pane_host_layout(&host)->viewport_rect.h == before.viewport_rect.h);
 }
 
+
+static void test_workspace_expand_restore_and_chrome_reachability(void) {
+    const int sizes[][2] = {{1024, 640}, {1280, 800}, {1440, 900}, {2560, 1600}};
+    for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); ++i) {
+        SceneEditorPaneHost host = {0};
+        SceneEditorWorkspaceChrome chrome;
+        assert(scene_editor_pane_host_init(&host, sizes[i][0], sizes[i][1]));
+        scene_editor_pane_host_set_targets(&host, 280, 340);
+        assert(scene_editor_pane_host_rebuild(&host, sizes[i][0], sizes[i][1]));
+        SceneEditorPaneLayout before = host.layout;
+        SceneEditorWorkspaceLayoutChrome(&host.layout, &chrome);
+        for (int j = 0; j < SCENE_WORKSPACE_ACTION_COUNT; ++j) {
+            SDL_Rect r = chrome.actions[j];
+            assert(r.w > 65 && r.h >= 30);
+            assert(r.x >= 0 && r.x + r.w <= sizes[i][0]);
+            assert(r.y + r.h < before.viewport_rect.y);
+            if (j) assert(r.x > chrome.actions[j-1].x + chrome.actions[j-1].w);
+        }
+        assert(chrome.restore.x + chrome.restore.w <= sizes[i][0]);
+        assert(scene_editor_pane_host_set_viewport_expanded(&host, true));
+        assert(host.layout.left_pane_rect.w == 0 && host.layout.right_pane_rect.w == 0);
+        assert(host.layout.viewport_rect.w > before.viewport_rect.w);
+        assert(!scene_editor_pane_host_begin_splitter_drag(&host, 300, 20));
+        assert(scene_editor_pane_host_set_viewport_expanded(&host, false));
+        assert(host.layout.left_pane_rect.w == before.left_pane_rect.w);
+        assert(host.layout.right_pane_rect.w == before.right_pane_rect.w);
+        assert(scene_editor_pane_host_restore_workspace(&host));
+        assert(!host.viewport_expanded && !host.timeline_visible);
+        host.workspace_header_height = 160;
+        assert(scene_editor_pane_host_rebuild(&host, sizes[i][0], sizes[i][1]));
+        assert(host.layout.viewport_rect.y >= 160);
+        assert(host.layout.workspace_feedback_rect.y + host.layout.workspace_feedback_rect.h <= 160);
+    }
+}
+
 int main(void) {
+    test_workspace_expand_restore_and_chrome_reachability();
     test_pane_host_solves_left_center_right_shell();
     test_pane_host_rebuild_respects_targets_and_minima();
     test_pane_host_splitter_drag_updates_shell_widths();

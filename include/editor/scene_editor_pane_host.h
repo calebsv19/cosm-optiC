@@ -9,6 +9,10 @@
 #include "kit_pane.h"
 
 typedef struct SceneEditorPaneLayout {
+    SDL_Rect workspace_header_rect;
+    SDL_Rect workspace_actions_rect;
+    SDL_Rect workspace_feedback_rect;
+    bool viewport_expanded;
     SDL_Rect left_pane_rect;
     SDL_Rect center_pane_rect;
     SDL_Rect right_pane_rect;
@@ -34,6 +38,8 @@ typedef struct SceneEditorPaneHost {
     int target_timeline_height;
     bool timeline_visible;
     KitPaneSplitterInteraction splitter_interaction;
+    bool viewport_expanded;
+    int workspace_header_height;
     bool initialized;
     SceneEditorPaneLayout layout;
     char last_error[160];
@@ -47,6 +53,8 @@ void scene_editor_pane_host_set_targets(SceneEditorPaneHost* host,
 bool scene_editor_pane_host_set_timeline_visible(SceneEditorPaneHost* host,
                                                  bool visible);
 bool scene_editor_pane_host_timeline_visible(const SceneEditorPaneHost* host);
+bool scene_editor_pane_host_set_viewport_expanded(SceneEditorPaneHost* host, bool expanded);
+bool scene_editor_pane_host_restore_workspace(SceneEditorPaneHost* host);
 void scene_editor_pane_host_update_pointer(SceneEditorPaneHost* host,
                                            float pointer_x,
                                            float pointer_y);

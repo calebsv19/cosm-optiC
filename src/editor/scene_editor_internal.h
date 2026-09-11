@@ -7,6 +7,7 @@
 void SceneEditorSyncWindowSize(SceneEditor* editor);
 void SceneEditorRefreshPaneSplitterHover(SceneEditor* editor);
 bool SceneEditorHandlePaneSplitterEvent(SceneEditor* editor, SDL_Event* event);
+void SceneEditorRefreshWorkspaceLayout(void);
 void RenderSceneButtons(SDL_Renderer* renderer);
 void RenderSceneDigestOverlay(SDL_Renderer* renderer);
 SceneEditorInputRouterCallbacks SceneEditorBuildInputRouterCallbacks(SceneEditor* editor);

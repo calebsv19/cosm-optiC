@@ -11,6 +11,7 @@
 #include "editor/material_editor.h"
 #include "editor/object_editor.h"
 #include "editor/scene_editor_chrome_shell.h"
+#include "editor/scene_editor_internal.h"
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_light_timeline.h"
@@ -74,6 +75,14 @@ bool SceneEditorChromeActionsResolve(const SDL_Event* event, SceneEditorChromeAc
     if (event->button.button != SDL_BUTTON_LEFT) return false;
     mx = event->button.x;
     my = event->button.y;
+    if (scene_editor_chrome_actions_point_in_rect(mx, my, &expandViewportButton)) {
+        out_action->kind = SCENE_EDITOR_CHROME_ACTION_EXPAND_VIEWPORT;
+        return true;
+    }
+    if (scene_editor_chrome_actions_point_in_rect(mx, my, &restoreWorkspaceButton)) {
+        out_action->kind = SCENE_EDITOR_CHROME_ACTION_RESTORE_WORKSPACE;
+        return true;
+    }
     selected_mode = SceneEditorChromeShellResolveModeButtonAtPoint(mx, my);
     if (selected_mode >= 0) {
         out_action->kind = SCENE_EDITOR_CHROME_ACTION_MODE_SELECT;
@@ -119,6 +128,16 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
     SceneEditorControlSurfaceContract contract = {0};
     if (!editor || !action || action->kind == SCENE_EDITOR_CHROME_ACTION_NONE) return;
     SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
+    if (action->kind == SCENE_EDITOR_CHROME_ACTION_EXPAND_VIEWPORT ||
+        action->kind == SCENE_EDITOR_CHROME_ACTION_RESTORE_WORKSPACE) {
+        SceneEditorPaneHost* host = SceneEditorGetPaneHost();
+        bool ok = action->kind == SCENE_EDITOR_CHROME_ACTION_RESTORE_WORKSPACE
+            ? scene_editor_pane_host_restore_workspace(host)
+            : scene_editor_pane_host_set_viewport_expanded(host, !host->viewport_expanded);
+        SceneEditorChromeShellSetActionFeedback(ok ? "Workspace layout updated" : "Layout unavailable at this size", 1800);
+        SceneEditorRefreshWorkspaceLayout();
+        return;
+    }
     if (action->kind == SCENE_EDITOR_CHROME_ACTION_MODE_SELECT) {
         bool selectable = (action->mode_index >= 0 &&
                            action->mode_index < EDITOR_MODE_COUNT &&
@@ -750,6 +769,14 @@ void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
                                                 SCENE_EDITOR_INVALIDATE_REASON_PANE_CANVAS;
             result->invalidation_class = SCENE_EDITOR_INVALIDATION_TARGET_PANE;
         }
+        return;
+    }
+    /* Legacy pane handlers also own sidebar hit rectangles. Hidden controls must
+       never receive pointer events after the viewport takes their old space.
+       Navigation and the dedicated native 3D/material canvas paths run above. */
+    if (env->pane_layout_valid && env->pane_layout &&
+        env->pane_layout->viewport_expanded &&
+        command->kind != SCENE_EDITOR_PANE_COMMAND_KEY) {
         return;
     }
     switch (command->target) {
