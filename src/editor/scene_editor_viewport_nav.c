@@ -1,3 +1,4 @@
+#include "editor/scene_editor_pointer_event.h"
 #include "editor/scene_editor_viewport_nav.h"
 
 #include <math.h>
@@ -33,7 +34,7 @@ static bool scene_editor_viewport_nav_rect_contains_event_point(const SDL_Rect* 
         mx = event->button.x;
         my = event->button.y;
     } else if (event->type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mx, &my);
+        SceneEditorWheelPosition(event, &mx, &my);
     } else {
         return false;
     }

@@ -27,6 +27,8 @@ void RenderButtonTextWithColor(SDL_Renderer* renderer,
                                const char* text,
                                SDL_Color text_color);
 void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color);
+int RenderSizedText(SDL_Renderer* renderer, SDL_Rect area, const char* text,
+                    SDL_Color color, int point_size, bool wrapped, bool centered);
 int RenderLabelTextLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color);
 int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text, SDL_Color color);
 int CalculateObjectBrightness(SceneObject* obj, double lightX, double lightY);

@@ -1,7 +1,14 @@
 #include "editor/scene_editor_pane_host.h"
 
 #include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "editor/scene_editor_workspace_layout.h"
+
+#undef assert
+#define assert(condition) do { if (!(condition)) { \
+    fprintf(stderr,"Pane contract failed at %d: %s\n",__LINE__,#condition); \
+    exit(EXIT_FAILURE); } } while (0)
 
 static void test_pane_host_solves_left_center_right_shell(void) {
     SceneEditorPaneHost host = {0};
@@ -116,12 +123,24 @@ static void test_workspace_expand_restore_and_chrome_reachability(void) {
         SceneEditorWorkspaceLayoutChrome(&host.layout, &chrome);
         for (int j = 0; j < SCENE_WORKSPACE_ACTION_COUNT; ++j) {
             SDL_Rect r = chrome.actions[j];
-            assert(r.w > 65 && r.h >= 30);
+            assert(r.w >= 44 && r.h >= 24);
             assert(r.x >= 0 && r.x + r.w <= sizes[i][0]);
             assert(r.y + r.h < before.viewport_rect.y);
             if (j) assert(r.x > chrome.actions[j-1].x + chrome.actions[j-1].w);
         }
         assert(chrome.restore.x + chrome.restore.w <= sizes[i][0]);
+        SDL_Rect document_controls[]={chrome.workspace,chrome.frame_all,chrome.frame_selected,chrome.undo,chrome.redo};
+        for (int j=0;j<5;++j) {
+            SDL_Rect r=document_controls[j];
+            assert(r.w>=44 && r.h>=24);
+            assert(r.x+r.w<=chrome.expand.x);
+            if (j) assert(r.x>document_controls[j-1].x+document_controls[j-1].w);
+        }
+        for (int j=0;j<SCENE_WORKSPACE_MODE_COUNT;++j) {
+            assert(chrome.modes[j].x>=0 && chrome.modes[j].x+chrome.modes[j].w<=sizes[i][0]);
+            assert(chrome.modes[j].y+chrome.modes[j].h<=sizes[i][1]);
+            if (j) assert(chrome.modes[j].y>=chrome.modes[j-1].y+chrome.modes[j-1].h);
+        }
         assert(scene_editor_pane_host_set_viewport_expanded(&host, true));
         assert(host.layout.left_pane_rect.w == 0 && host.layout.right_pane_rect.w == 0);
         assert(host.layout.viewport_rect.w > before.viewport_rect.w);

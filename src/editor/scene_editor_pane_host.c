@@ -131,7 +131,7 @@ static bool scene_editor_pane_host_assign_layout(SceneEditorPaneHost* host) {
     int chrome_row_h = 0;
 
     if (!host) return false;
-    chrome_row_h = (host->workspace_header_height - 36) / 2;
+    chrome_row_h = (host->workspace_header_height - 24) / 2;
     if ((!host->viewport_expanded &&
          (!scene_editor_pane_host_find_rect_for_pane_id(host, SCENE_EDITOR_PANE_ID_LEFT, &left_rect) ||
           !scene_editor_pane_host_find_rect_for_pane_id(host, SCENE_EDITOR_PANE_ID_RIGHT, &right_rect))) ||
@@ -173,11 +173,11 @@ static bool scene_editor_pane_host_assign_layout(SceneEditorPaneHost* host) {
 
     host->layout.workspace_header_rect = (SDL_Rect){0, 0, (int)host->bounds_width,
                                                                   host->workspace_header_height};
-    host->layout.mode_router_rect = (SDL_Rect){10, 6, (int)host->bounds_width - 258, chrome_row_h};
-    host->layout.workspace_actions_rect = (SDL_Rect){10, 12 + chrome_row_h,
+    host->layout.mode_router_rect = (SDL_Rect){10, 2, (int)host->bounds_width - 258, chrome_row_h};
+    host->layout.workspace_actions_rect = (SDL_Rect){10, 4 + chrome_row_h,
                                                      (int)host->bounds_width - 20, chrome_row_h};
-    host->layout.workspace_feedback_rect = (SDL_Rect){10, 18 + 2 * chrome_row_h,
-                                                      (int)host->bounds_width - 20, 18};
+    host->layout.workspace_feedback_rect = (SDL_Rect){10, 6 + 2 * chrome_row_h,
+                                                      (int)host->bounds_width - 20, 16};
 
     viewport = pane_host_inset_rect(scene_editor_pane_rect_to_sdl(center_rect),
                                     SCENE_EDITOR_CONTENT_PADDING);
@@ -390,7 +390,7 @@ bool scene_editor_pane_host_rebuild(SceneEditorPaneHost* host, int width, int he
 bool scene_editor_pane_host_init(SceneEditorPaneHost* host, int width, int height) {
     if (!host) return false;
     memset(host, 0, sizeof(*host));
-    host->workspace_header_height = 112;
+    host->workspace_header_height = 72;
     host->target_left_width = 286;
     host->target_right_width = 312;
     host->target_timeline_height = SCENE_EDITOR_DEFAULT_TIMELINE_HEIGHT;

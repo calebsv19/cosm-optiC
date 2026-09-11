@@ -195,7 +195,7 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
     }
 
     contract.paneLeftTitle = "Left Pane: Editor Controls";
-    contract.paneCenterTitle = "Center Pane: Viewport";
+    contract.paneCenterTitle = "";
     contract.paneRightTitle = "Right Pane: Program / Scene";
     contract.previewLabel = "Preview";
     contract.cycleModeLabel = "Cycle Mode";

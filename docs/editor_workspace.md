@@ -1,7 +1,50 @@
 # Editor workspace
 
-E0/E1 implementation is ready for operator visual review in Main Edit. This is
-source acceptance, not installed-app, release or broad-suite acceptance.
+The initial UI recovery is implemented in Main Edit after rejection of the first
+E1 layout. E1 remains open for operator visual acceptance. This is a source review
+build, not installed-app, release or broad-suite acceptance.
+
+## Compact UI recovery
+
+The header now uses compact, content-sized controls and a Workspace selector.
+The selector supports mouse selection, arrow keys/Return, Escape and outside-click
+dismissal without passing that click into the scene. Frame All and Frame Selected
+are visible beside global Undo/Redo. Framing preserves selection and document
+revision. The isolated interactive review starts with the whole scene framed.
+
+The Scene outliner uses available panel height and bounded scrolling. Inspector
+fields appear only with a suitable selection. Import STL expands to source units
+and the file chooser; Surface/shading expands to the existing shading settings.
+Details in the inspector header reveals runtime diagnostics. Editor typography
+uses the existing font/DPI adapter at a compact size; other app screens retain
+their existing typography. Layout preferences remain session-local.
+
+Enter commits an inspector draft; Escape, clicking away, or losing window focus
+cancels an uncommitted draft. This prevents an inspector field trapping viewport
+input. Wheel routing uses event coordinates consistently with the zoom anchor on
+SDL 2.26+, with the existing cursor-position fallback on older SDL.
+
+Recovery evidence is under ignored `build/editor_ui_recovery/`:
+`visible-pick-1/acceptance.json` records the native import/edit/save/fresh-reopen/
+render loop, invalid-draft focus release, selector dismissal, orbit/pan/zoom/F
+through session input, and picking each fixture sphere before/after resize.
+`final-gates.log` records app build, Foundation A/managed mesh, pane, viewport,
+3D bridge and pick/scroll checks. Toolbar clipping compares identical document
+states before/after library scrolling, so valid Undo/Redo changes do not produce
+false failures.
+
+The separate development review app is
+`build/editor_ui_recovery/live-review/optiC UI Review.app`. It uses copied scene
+and configuration files and a pinned binary. Its launch, wheel zoom, sphere
+selection and Frame All were also inspected in the actual desktop window.
+`review-receipt.json` records binary/scene hashes and verification limits. An
+initial off-center click selected the floor; subsequent direct center tests and
+manual sphere selections passed. This does not claim exhaustive occlusion-picking
+coverage. The prior broad stable baseline of 495 failures remains separate.
+
+Material graphs, atmosphere/water creation and advanced surface authoring remain
+the subsequent E2–E7 scope. The recovery exposes existing functionality and does
+not introduce a new graph evaluator or simulation behavior.
 
 ## Workspaces and controls
 

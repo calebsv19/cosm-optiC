@@ -19,7 +19,8 @@ class SceneEditorMeshPickScrollContractTest(unittest.TestCase):
     def test_object_list_uses_shared_scroll_contract_and_clipped_hit_rows(self):
         object_list = (ROOT / "src/editor/scene_editor_object_list.c").read_text()
         self.assertIn("kit_ui_eval_scroll", object_list)
-        self.assertIn("kit_ui_scroll_content_height_top_anchor", object_list)
+        # The outliner uses ordinary bounded scrolling, not top-anchor padding
+        # that lets the last row scroll into otherwise empty trailing space.
         self.assertIn("SDL_RenderSetClipRect", object_list)
         self.assertIn("ObjectEditorRegisterObjectListRow", object_list)
 

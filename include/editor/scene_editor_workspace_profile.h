@@ -8,6 +8,8 @@ SceneEditorWorkspaceProfile SceneEditorWorkspaceProfileGet(void);
 void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspaceProfile profile);
 const char* SceneEditorWorkspaceProfileLabel(int profile);
 bool SceneEditorWorkspaceProfileHandleEvent(SceneEditor* editor, const SDL_Event* event);
+void SceneEditorWorkspaceProfileRenderOverlay(SDL_Renderer* renderer);
+bool SceneEditorWorkspaceProfileMenuOpen(void);
 void SceneEditorWorkspaceProfileReset(void);
 void SceneEditorWorkspaceProfileSyncMode(int mode);
 #endif

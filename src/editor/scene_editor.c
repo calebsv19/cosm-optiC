@@ -180,6 +180,16 @@ static void SceneEditorCamera3DGizmoReset(void) {
     g_camera3d_gizmo_state.drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
 }
 
+bool SceneEditorFrameViewport(bool selected_only) {
+    int selected = selected_only ? ObjectEditorGetSelectedObjectIndex() : -1;
+    if (!g_scenePaneLayoutValid || (selected_only && selected < 0)) return false;
+    bool ok = SceneEditorViewportNavFitDigestOverlayForTarget(&g_viewport_nav_state,
+        &g_scenePaneLayout.viewport_rect, true, animSettings.editorMode, selected);
+    SceneEditorChromeShellSetActionFeedback(ok ? (selected_only ? "Framed selection" : "Framed scene") :
+        "No frameable geometry", 1800);
+    return ok;
+}
+
 static void SceneEditorResumeAfterPreview(SceneEditor* editor) {
     if (!editor || !editor->window || !editor->renderer) return;
     SDL_CaptureMouse(SDL_FALSE);
@@ -496,8 +506,8 @@ static void SceneEditorLayoutChrome(void) {
                                               sceneSettings.windowWidth,
                                               sceneSettings.windowHeight);
     } else {
-        int row_h = animation_config_scale_text_point_size(&animSettings, 26, 12) + 12;
-        g_scenePaneHost.workspace_header_height = row_h * 2 + 36;
+        int row_h = animation_config_scale_text_point_size(&animSettings, 14, 12) + 10;
+        g_scenePaneHost.workspace_header_height = row_h * 2 + 24;
         pane_ok = scene_editor_pane_host_rebuild(&g_scenePaneHost,
                                                  sceneSettings.windowWidth,
                                                  sceneSettings.windowHeight);

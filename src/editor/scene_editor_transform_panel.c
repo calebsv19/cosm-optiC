@@ -1,3 +1,4 @@
+#include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_transform_panel.h"
 
 #include <ctype.h>
@@ -35,8 +36,8 @@ typedef enum TransformPanelJobKind {
 
 static SDL_Rect s_fields[TRANSFORM_FIELD_COUNT];
 static SDL_Rect s_name_field;
-static SDL_Rect s_undo_button;
-static SDL_Rect s_redo_button;
+static SDL_Rect s_import_expand, s_surface_expand;
+static bool s_import_open, s_surface_open;
 static SDL_Rect s_duplicate_button;
 static SDL_Rect s_remove_button;
 static SDL_Rect s_import_unit_buttons[2];
@@ -82,6 +83,16 @@ static bool panel_mutation_allowed(void) {
     return true;
 }
 
+bool SceneEditorTransformPanelHistory(bool redo) {
+    char diagnostics[256]={0};
+    if (!panel_mutation_allowed()) return false;
+    bool ok=redo ? SceneEditorDocumentRedo(diagnostics,sizeof(diagnostics)) :
+                   SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics));
+    panel_status(ok ? (redo ? "Redo applied" : "Undo applied") : diagnostics,!ok);
+    SceneEditorChromeShellSetActionFeedback(ok ? (redo ? "Redo applied" : "Undo applied") : diagnostics,2000);
+    return ok;
+}
+
 static void panel_draw_button(SDL_Renderer* renderer,
                               SDL_Rect rect,
                               const char* label,
@@ -102,7 +113,7 @@ static void panel_draw_button(SDL_Renderer* renderer,
                            palette.panel_border.b,
                            palette.panel_border.a);
     SDL_RenderDrawRect(renderer, &rect);
-    RenderButtonTextWithColor(renderer, rect, label, text);
+    SceneEditorButtonText(renderer, rect, label, text);
 }
 
 static const char* panel_field_label(int index) {
@@ -348,8 +359,8 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     s_controls_active = false;
     memset(s_fields, 0, sizeof(s_fields));
     memset(&s_name_field, 0, sizeof(s_name_field));
-    memset(&s_undo_button, 0, sizeof(s_undo_button));
-    memset(&s_redo_button, 0, sizeof(s_redo_button));
+    s_import_expand=(SDL_Rect){0};
+    s_surface_expand=(SDL_Rect){0};
     memset(&s_duplicate_button, 0, sizeof(s_duplicate_button));
     memset(&s_remove_button, 0, sizeof(s_remove_button));
     memset(s_import_unit_buttons, 0, sizeof(s_import_unit_buttons));
@@ -361,9 +372,9 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
 
     snprintf(line,
              sizeof(line),
-             "Document Inspector%s",
+             "Selection%s",
              SceneEditorDocumentIsDirty() ? " *" : "");
-    RenderLabelTextLeft(renderer,
+    SceneEditorLabelLeft(renderer,
                         (SDL_Rect){bounds.x, y, bounds.w, 20},
                         line,
                         palette.text_primary);
@@ -373,6 +384,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     editable = editable && has_transform;
     s_controls_active = true;
 
+    if (has_transform) {
     for (int row = 0; row < 3; ++row) {
         for (int column = 0; column < 3; ++column) {
             int index = row * 3 + column;
@@ -397,24 +409,13 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     snprintf(line, sizeof(line), "Name: %.115s", s_edit_name ? s_edit_buffer : object_label);
     panel_draw_button(renderer, s_name_field, line, editable, s_edit_name);
     y += field_h + gap;
+    } else {
+        SceneEditorLabelLeft(renderer, (SDL_Rect){bounds.x, y, bounds.w, 24},
+                            "Select an object to edit", palette.text_muted);
+        y += field_h + gap;
+    }
 
-    s_undo_button = (SDL_Rect){bounds.x, y, (bounds.w - gap) / 2, field_h};
-    s_redo_button = (SDL_Rect){s_undo_button.x + s_undo_button.w + gap,
-                               y,
-                               bounds.w - s_undo_button.w - gap,
-                               field_h};
-    panel_draw_button(renderer,
-                      s_undo_button,
-                      "Undo",
-                      s_job_pid <= 0 && SceneEditorDocumentCanUndo(),
-                      false);
-    panel_draw_button(renderer,
-                      s_redo_button,
-                      "Redo",
-                      s_job_pid <= 0 && SceneEditorDocumentCanRedo(),
-                      false);
-    y += field_h + gap;
-
+    if (selected >= 0) {
     s_duplicate_button = (SDL_Rect){bounds.x, y, (bounds.w - gap) / 2, field_h};
     s_remove_button = (SDL_Rect){s_duplicate_button.x + s_duplicate_button.w + gap,
                                  y,
@@ -423,7 +424,14 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     panel_draw_button(renderer, s_duplicate_button, "Duplicate", editable, false);
     panel_draw_button(renderer, s_remove_button, "Remove", editable, false);
     y += field_h + gap;
+    }
 
+    s_import_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
+    snprintf(line,sizeof(line),"Import STL (%s) %s",s_import_scale==0.001 ? "mm" : "meters",
+        s_import_open ? "-" : "+");
+    panel_draw_button(renderer,s_import_expand,line,true,false);
+    y+=field_h+gap;
+    if (s_import_open) {
     s_import_unit_buttons[0] = (SDL_Rect){bounds.x, y, (bounds.w - gap) / 2, field_h};
     s_import_unit_buttons[1] = (SDL_Rect){s_import_unit_buttons[0].x + s_import_unit_buttons[0].w + gap,
                                          y,
@@ -448,7 +456,14 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
                       SceneEditorDocumentIsOpen() && s_job_pid <= 0,
                       s_picker.active);
     y += field_h + gap;
+    }
 
+    if (has_transform) {
+    s_surface_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
+    panel_draw_button(renderer,s_surface_expand,s_surface_open ? "Surface / shading -" : "Surface / shading +",true,false);
+    y+=field_h+gap;
+    }
+    if (has_transform && s_surface_open) {
     s_crease_angle_field = (SDL_Rect){bounds.x, y, bounds.w, field_h};
     snprintf(line,
              sizeof(line),
@@ -470,14 +485,33 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
         panel_draw_button(renderer, s_shading_buttons[i], shading_labels[i], editable, false);
     }
     y += field_h + gap;
+    }
     if (s_status[0] && y < bottom_y) {
-        RenderLabelTextWrappedLeft(renderer,
+        SceneEditorLabelWrapped(renderer,
                                    (SDL_Rect){bounds.x, y, bounds.w, bottom_y - y},
                                    s_status,
                                    s_status_color);
         y += 35;
     }
     return y + 4;
+}
+
+void SceneEditorTransformPanelReleaseFocusForEvent(const SDL_Event* event) {
+    if (!event || (s_edit_field < 0 && !s_edit_name)) return;
+    if (event->type == SDL_WINDOWEVENT &&
+        event->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+        panel_cancel_edit();
+        return;
+    }
+    if (event->type == SDL_MOUSEBUTTONDOWN) {
+        const SDL_Rect* field = s_edit_name ? &s_name_field :
+            (s_edit_field == PANEL_EDIT_CREASE_ANGLE ? &s_crease_angle_field :
+                                                     &s_fields[s_edit_field]);
+        if (!panel_point_in_rect(event->button.x, event->button.y, field)) {
+            /* Enter commits; leaving a field cancels its uncommitted draft. */
+            panel_cancel_edit();
+        }
+    }
 }
 
 bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event) {
@@ -560,7 +594,8 @@ bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event) {
             return true;
         }
     }
-    if (panel_point_in_rect(event->button.x, event->button.y, &s_name_field) &&
+    if (selected >= 0 &&
+        panel_point_in_rect(event->button.x, event->button.y, &s_name_field) &&
         panel_mutation_allowed()) {
         s_edit_field = -1;
         s_edit_name = true;
@@ -568,17 +603,11 @@ bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event) {
         SDL_StartTextInput();
         return true;
     }
-    if (panel_point_in_rect(event->button.x, event->button.y, &s_undo_button)) {
-        bool ok = panel_mutation_allowed() &&
-                  SceneEditorDocumentUndo(diagnostics, sizeof(diagnostics));
-        panel_status(ok ? "Undo applied" : diagnostics, !ok);
-        return true;
+    if (panel_point_in_rect(event->button.x,event->button.y,&s_import_expand)) {
+        s_import_open=!s_import_open; return true;
     }
-    if (panel_point_in_rect(event->button.x, event->button.y, &s_redo_button)) {
-        bool ok = panel_mutation_allowed() &&
-                  SceneEditorDocumentRedo(diagnostics, sizeof(diagnostics));
-        panel_status(ok ? "Redo applied" : diagnostics, !ok);
-        return true;
+    if (panel_point_in_rect(event->button.x,event->button.y,&s_surface_expand)) {
+        s_surface_open=!s_surface_open; return true;
     }
     if (panel_point_in_rect(event->button.x, event->button.y, &s_duplicate_button)) {
         int new_index = -1;
@@ -737,4 +766,6 @@ void SceneEditorTransformPanelReset(void) {
     s_job_document_revision = 0u;
     s_status[0] = '\0';
     s_controls_active = false;
+    s_import_open=s_surface_open=false;
+    s_import_scale=1.0;
 }

@@ -1,3 +1,5 @@
+#include "editor/scene_editor_pointer_event.h"
+#include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "render/render_helper.h"
 #include "editor/scene_editor_sidebar.h"
@@ -15,6 +17,9 @@ static int last_mode = -1;
 static bool library_active, search_active;
 static SDL_Rect tabs[2], search_box;
 static char search_text[96];
+static bool diagnostics_visible;
+static SDL_Rect diagnostics_button;
+bool SceneEditorSidebarDiagnosticsVisible(void) { return diagnostics_visible; }
 bool SceneEditorSidebarLibraryActive(void) { return library_active; }
 bool SceneEditorSidebarTextActive(void) { return search_active; }
 
@@ -24,6 +29,7 @@ static bool contains(SDL_Rect r, int x, int y) {
 void SceneEditorSidebarReset(void) { memset(panes, 0, sizeof(panes)); last_mode = -1; search_active = false; }
 void SceneEditorSidebarRestoreDefaults(void) {
     SceneEditorSidebarReset(); library_active=false; search_text[0]=0;
+    diagnostics_visible=false;
     SceneEditorObjectListSetFilter("");
 }
 static void clamp(Sidebar* pane) {
@@ -52,6 +58,13 @@ bool SceneEditorSidebarInspectorEventVisible(const SDL_Event* event) {
 bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
     SceneEditorPaneLayout layout;
     if (!event) return false;
+    if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT &&
+        SceneEditorGetPaneLayout(&layout) && !layout.viewport_expanded &&
+        contains(diagnostics_button,event->button.x,event->button.y)) {
+        diagnostics_visible=!diagnostics_visible;
+        panes[1].offset=0;
+        return true;
+    }
     if (search_active && event->type == SDL_TEXTINPUT) {
         size_t used = strlen(search_text), added = strlen(event->text.text);
         if (used+added < sizeof(search_text)) memcpy(search_text+used,event->text.text,added+1);
@@ -96,7 +109,7 @@ bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
             pane->dragging = true; seek(pane, event->button.y); return true;
         }
         if (event->type == SDL_MOUSEWHEEL) {
-            int x, y; SDL_GetMouseState(&x, &y);
+            int x, y; SceneEditorWheelPosition(event, &x, &y);
             if (!contains(pane->viewport, x, y)) continue;
             float delta = event->wheel.preciseY;
             if (delta == 0) delta = (float)event->wheel.y;
@@ -118,6 +131,13 @@ bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
 }
 void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayout* layout,
     const SceneEditorControlSurfaceContract* contract, SDL_Color title, SDL_Color body) {
+    diagnostics_button=(SDL_Rect){0};
+    if (!layout->viewport_expanded) {
+        diagnostics_button=(SDL_Rect){layout->right_pane_rect.x+layout->right_pane_rect.w-88,
+            layout->right_pane_rect.y+4,78,22};
+        SceneEditorButtonText(renderer,diagnostics_button,
+            diagnostics_visible ? "Details −" : "Details +",body);
+    }
     if (last_mode != contract->activeMode) {
         SceneEditorSidebarReset(); last_mode = contract->activeMode;
     }
@@ -133,7 +153,7 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
                     pane->viewport.w/2-4,row_height};
                 SDL_SetRenderDrawColor(renderer,body.r,body.g,body.b,library_active==tab ? 180 : 70);
                 SDL_RenderFillRect(renderer,&tabs[tab]);
-                RenderButtonTextWithColor(renderer,tabs[tab],tab ? "Library" : "Objects",title);
+                SceneEditorButtonText(renderer,tabs[tab],tab ? "Library" : "Objects",title);
             }
             pane->viewport.y+=row_height+6; pane->viewport.h-=row_height+6;
             search_box=(SDL_Rect){0};
@@ -143,7 +163,7 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
                 SDL_RenderDrawRect(renderer,&search_box);
                 char label[128]; snprintf(label,sizeof(label),"%s%s",search_active ? "> " : "",
                     search_text[0] ? search_text : "Search name, ID or type");
-                RenderLabelTextLeft(renderer,search_box,label,title);
+                SceneEditorLabelLeft(renderer,search_box,label,title);
                 pane->viewport.y+=row_height+6; pane->viewport.h-=row_height+6;
             }
         }
@@ -155,6 +175,12 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
         content.y -= (int)lroundf(pane->offset);
         /* Finite measure space; actual content end sets the scroll range. */
         content.h = animation_config_scale_text_point_size(&animSettings, 1400, 1400);
+        if (i==0 && contract->activeMode==EDITOR_MODE_OBJECT && !library_active &&
+            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE) {
+            pane->offset=0;
+            content.y=pane->viewport.y;
+            content.h=pane->viewport.h;
+        }
         SDL_Rect old_clip;
         SDL_bool clipped = SDL_RenderIsClipEnabled(renderer);
         SDL_RenderGetClipRect(renderer, &old_clip);
@@ -169,6 +195,9 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
                 content.y+content.h,title,body);
         }
         pane->content = end - content.y + 8;
+        if (i==0 && contract->activeMode==EDITOR_MODE_OBJECT && !library_active &&
+            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE)
+            pane->content=pane->viewport.h;
         SDL_RenderSetClipRect(renderer, clipped ? &old_clip : NULL);
         if (pane->content > pane->viewport.h) {
             SDL_Rect bar = track(pane);

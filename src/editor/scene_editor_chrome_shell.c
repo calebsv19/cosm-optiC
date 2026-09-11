@@ -1,3 +1,5 @@
+#include "editor/object_editor_selection_tracker.h"
+#include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_chrome_shell.h"
 
@@ -329,7 +331,7 @@ static void scene_editor_chrome_shell_render_button(SDL_Renderer* renderer,
     SDL_SetRenderDrawColor(renderer, border_color.r, border_color.g, border_color.b, border_color.a);
     SDL_RenderDrawRect(renderer, &rect);
     resolvedText = scene_editor_chrome_shell_resolve_button_text_color(resolvedFill, palette);
-    RenderButtonTextWithColor(renderer, rect, label, resolvedText);
+    SceneEditorButtonText(renderer, rect, label, resolvedText);
 }
 
 void SceneEditorChromeShellRender(SDL_Renderer* renderer,
@@ -381,7 +383,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                layout->left_pane_rect.y + 6,
                                layout->left_pane_rect.w - 20,
                                20};
-        if (!layout->viewport_expanded) RenderLabelText(renderer, titleRect,
+        if (!layout->viewport_expanded) SceneEditorLabel(renderer, titleRect,
             SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_ENVIRONMENT ? "Scene resources" :
             SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SURFACE ? "Surface source" :
             contract->activeMode == EDITOR_MODE_OBJECT ? "Scene objects & assets" : "Tool controls", paneLabelColor);
@@ -390,13 +392,13 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                layout->center_pane_rect.y + 6,
                                layout->center_pane_rect.w - 20,
                                20};
-        RenderLabelText(renderer, titleRect, contract->paneCenterTitle, paneLabelColor);
+        SceneEditorLabel(renderer, titleRect, contract->paneCenterTitle, paneLabelColor);
 
         titleRect = (SDL_Rect){layout->right_pane_rect.x + 10,
                                layout->right_pane_rect.y + 6,
-                               layout->right_pane_rect.w - 20,
+                               layout->right_pane_rect.w - 110,
                                20};
-        if (!layout->viewport_expanded) RenderLabelText(renderer, titleRect, "Inspector", paneLabelColor);
+        if (!layout->viewport_expanded) SceneEditorLabelLeft(renderer, titleRect, "Inspector", paneLabelColor);
 
         SDL_SetRenderDrawColor(renderer, paneBorder.r, paneBorder.g, paneBorder.b, paneBorder.a);
         SDL_RenderDrawRect(renderer, &layout->left_pane_rect);
@@ -415,14 +417,21 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     if (layout_valid && layout) {
         SceneEditorWorkspaceChrome chrome;
         SceneEditorWorkspaceLayoutChrome(layout, &chrome);
-        for (int i=0; i<SCENE_WORKSPACE_PROFILE_COUNT; ++i) {
-            bool active = (int)SceneEditorWorkspaceProfileGet() == i;
-            scene_editor_chrome_shell_render_button(renderer, chrome.modes[i],
-                SceneEditorWorkspaceProfileLabel(i), true,
-                scene_editor_chrome_shell_button_hovered(&chrome.modes[i]), active,
-                active ? ray_tracing_theme_resolve_button_active_fill(palette) : palette.button_fill,
-                disabledFill, borderColor, palette);
-        }
+        char workspace_label[80];
+        snprintf(workspace_label,sizeof(workspace_label),"Workspace: %s  v",
+                 SceneEditorWorkspaceProfileLabel(SceneEditorWorkspaceProfileGet()));
+        scene_editor_chrome_shell_render_button(renderer,chrome.workspace,workspace_label,
+            true,scene_editor_chrome_shell_button_hovered(&chrome.workspace),
+            SceneEditorWorkspaceProfileMenuOpen(),palette.button_fill,
+            disabledFill,borderColor,palette);
+        SDL_Rect tools[]={chrome.frame_all,chrome.frame_selected,chrome.undo,chrome.redo};
+        const char* labels[]={"Frame all","Frame selected","Undo","Redo"};
+        bool enabled[]={true,ObjectEditorGetSelectedObjectIndex()>=0,
+            SceneEditorDocumentCanUndo(),SceneEditorDocumentCanRedo()};
+        for (int i=0;i<4;++i)
+            scene_editor_chrome_shell_render_button(renderer,tools[i],labels[i],enabled[i],
+                scene_editor_chrome_shell_button_hovered(&tools[i]),false,palette.button_fill,
+                disabledFill,borderColor,palette);
     }
     for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
         if (modeSelectButtons[i].w <= 0) continue;
@@ -546,14 +555,14 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     showFeedback = (g_sceneActionFeedbackText[0] && g_sceneActionFeedbackUntilMs > SDL_GetTicks64());
     feedbackRect = layout_valid && layout ? layout->workspace_feedback_rect : (SDL_Rect){0};
     if (showFeedback) {
-        RenderLabelTextLeft(renderer, feedbackRect, g_sceneActionFeedbackText, palette.text_primary);
+        SceneEditorLabelLeft(renderer, feedbackRect, g_sceneActionFeedbackText, palette.text_primary);
     } else if (layout_valid && layout) {
         const char* path = SceneEditorDocumentPath();
         const char* name = path ? strrchr(path, '/') : NULL;
         char status[256];
         snprintf(status, sizeof(status), "%s%s", name ? name + 1 : "Scene workspace",
                  SceneEditorDocumentIsDirty() ? "  • Unsaved changes" : "");
-        RenderLabelTextLeft(renderer, feedbackRect, status, palette.text_primary);
+        SceneEditorLabelLeft(renderer, feedbackRect, status, palette.text_primary);
     }
 
     if (layout_valid && layout) {

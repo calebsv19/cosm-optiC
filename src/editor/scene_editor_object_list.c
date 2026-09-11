@@ -1,3 +1,4 @@
+#include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_document.h"
 #include <ctype.h>
 #include "editor/scene_editor_object_list.h"
@@ -16,7 +17,6 @@
 
 #define OBJECT_LIST_ROW_HEIGHT 24
 #define OBJECT_LIST_ROW_GAP 4
-#define OBJECT_LIST_VISIBLE_ROWS 6
 
 static SDL_Rect g_viewport = {0, 0, 0, 0};
 static float g_scroll_offset = 0.0f;
@@ -79,7 +79,7 @@ static int render_line(SDL_Renderer* renderer,
     if (!renderer || !text || !text[0] || line_rect.w <= 0 || line_rect.h <= 0) {
         return cursor_y;
     }
-    used_height = RenderLabelTextLeft(renderer, line_rect, text, color);
+    used_height = SceneEditorLabelLeft(renderer, line_rect, text, color);
     if (used_height < 1) used_height = 18;
     return cursor_y + used_height + 6;
 }
@@ -226,16 +226,16 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,
              match_count,
              sceneSettings.objectCount);
     cursor_y = render_line(renderer, bounds, cursor_y, bottom_y, line, title_color);
-    viewport_height = OBJECT_LIST_VISIBLE_ROWS * row_pitch - OBJECT_LIST_ROW_GAP;
+    viewport_height = bottom_y - cursor_y;
     if (viewport_height > bottom_y - cursor_y) viewport_height = bottom_y - cursor_y;
     if (viewport_height < OBJECT_LIST_ROW_HEIGHT) {
         g_viewport = (SDL_Rect){0, 0, 0, 0};
         return cursor_y;
     }
     g_viewport = (SDL_Rect){bounds.x, cursor_y, bounds.w, viewport_height};
-    g_content_height = kit_ui_scroll_content_height_top_anchor(match_count,
-                                                               (float)row_pitch,
-                                                               (float)viewport_height);
+    /* A conventional outliner stops at the last row, without trailing space
+       that permits scrolling every item to the top of an otherwise empty pane. */
+    g_content_height = match_count > 0 ? match_count * row_pitch - OBJECT_LIST_ROW_GAP : 0;
     g_scroll_offset = clamp_offset(g_scroll_offset);
     reveal_selected(selected_row);
     runtime_scene_bridge_get_last_3d_digest_state(&digest);
@@ -310,7 +310,7 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,
         char display_name[128];
         if (SceneEditorDocumentObjectLabel(i,display_name,sizeof(display_name)))
             snprintf(line,sizeof(line),"#%d  %s",i,display_name);
-        RenderLabelTextLeft(renderer,
+        SceneEditorLabelLeft(renderer,
                             (SDL_Rect){row.x + 8, row.y + 2, row.w - 16, row.h - 4},
                             line,
                             body_color);

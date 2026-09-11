@@ -1,3 +1,4 @@
+#include "editor/scene_editor_pointer_event.h"
 #include "editor/scene_editor_input_router.h"
 
 #include <stdio.h>
@@ -292,7 +293,7 @@ static SceneEditorPaneHitRegion scene_editor_resolve_pane_hit_region(SceneEditor
         mx = event->button.x;
         my = event->button.y;
     } else if (event->type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mx, &my);
+        SceneEditorWheelPosition(event, &mx, &my);
     } else {
         return SCENE_EDITOR_PANE_HIT_NONE;
     }

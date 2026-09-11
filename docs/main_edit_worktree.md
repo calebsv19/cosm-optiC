@@ -1,7 +1,15 @@
 # RayTracing Main Edit Worktree
 
 
-## September 11 E0/E1 review boundary
+## September 11 UI recovery review boundary
+
+The initial E1 layout was rejected and the phase reopened. The compact recovery
+is ready for another operator visual test; details and proof are in
+`docs/editor_workspace.md`. The separate source review app is under ignored
+`build/editor_ui_recovery/live-review/`. Existing installed apps and canonical
+source have not been replaced. E1 remains open until operator acceptance.
+
+## Historical: September 11 E0/E1 first review boundary
 
 E0/E1 source implementation and automated acceptance are complete in Main Edit;
 operator visual acceptance is next. The isolated acceptance driver and interactive

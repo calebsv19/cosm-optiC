@@ -1,3 +1,4 @@
+#include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_sidebar.h"
 #include "ui/volume_source_ui_labels.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -55,8 +56,8 @@ static int SceneEditorSurfaceRenderFlowLine(SDL_Renderer* renderer,
     line_rect.h = bottom_y - cursor_y;
     if (line_rect.w <= 0 || line_rect.h <= 0) return cursor_y;
     used_height = wrapped
-                      ? RenderLabelTextWrappedLeft(renderer, line_rect, text, color)
-                      : RenderLabelTextLeft(renderer, line_rect, text, color);
+                      ? SceneEditorLabelWrapped(renderer, line_rect, text, color)
+                      : SceneEditorLabelLeft(renderer, line_rect, text, color);
     if (used_height < 1) used_height = 18;
     return cursor_y + used_height + gap;
 }
@@ -242,7 +243,7 @@ static int __attribute__((unused)) SceneEditorSurfaceRenderObjectList(SDL_Render
                      short_id,
                      obj->z);
         }
-        RenderLabelTextLeft(renderer,
+        SceneEditorLabelLeft(renderer,
                             (SDL_Rect){row.x + 8, row.y + 2, row.w - 16, row.h - 4},
                             line,
                             body_color);
@@ -311,6 +312,15 @@ int SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
     }
     if (contract->activeMode == EDITOR_MODE_MATERIAL) {
         return MaterialEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+    }
+
+    if (contract->activeMode == EDITOR_MODE_OBJECT &&
+        SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SCENE) {
+        selected_index = ObjectEditorGetSelectedObjectIndex();
+        int controls_y = bottom_y - 34;
+        cursor_y = SceneEditorObjectListRender(renderer, bounds, cursor_y,
+            controls_y - 8, selected_index, title_color, body_color);
+        return ObjectEditorRenderPaneControls(renderer,bounds,controls_y,bottom_y);
     }
 
     snprintf(line,
@@ -482,6 +492,7 @@ int SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
             cursor_y = preview_bottom + 8;
         }
     }
+    if (!SceneEditorSidebarDiagnosticsVisible()) return cursor_y;
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,
                                                 bounds,
                                                 cursor_y,

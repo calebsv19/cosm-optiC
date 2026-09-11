@@ -1,3 +1,4 @@
+#include "editor/scene_editor_pointer_event.h"
 #include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_chrome_actions.h"
@@ -40,7 +41,7 @@ static bool scene_editor_chrome_actions_viewport_rect_contains_event_point(
         mx = event->button.x;
         my = event->button.y;
     } else if (event->type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mx, &my);
+        SceneEditorWheelPosition(event, &mx, &my);
     } else {
         return false;
     }

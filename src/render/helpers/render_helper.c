@@ -448,6 +448,20 @@ static int RenderTextBlockWithColor(SDL_Renderer* renderer,
     return measured_h;
 }
 
+int RenderSizedText(SDL_Renderer* renderer, SDL_Rect area, const char* text,
+                    SDL_Color color, int point_size, bool wrapped, bool centered) {
+    if (!renderer || area.w <= 0 || area.h <= 0) return 0;
+    SDL_Rect prior, visible = area;
+    SDL_bool clipped = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &prior);
+    if (clipped) SDL_IntersectRect(&prior, &area, &visible);
+    SDL_RenderSetClipRect(renderer, &visible);
+    int height = RenderTextBlockWithColor(renderer, area, text, color, point_size,
+                                          wrapped, centered, centered);
+    SDL_RenderSetClipRect(renderer, clipped ? &prior : NULL);
+    return height;
+}
+
 static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const char* text, SDL_Color textColor, int maxFontSize) {
     (void)RenderTextBlockWithColor(renderer,
                                    button,

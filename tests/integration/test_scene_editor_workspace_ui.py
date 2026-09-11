@@ -73,10 +73,10 @@ def main():
     assert recipe['source_sha256'] == source_hash
     assert digest(source) == source_hash
     # The existing header must not be overdrawn by scrolled sidebar labels.
-    width, height, initial = ppm(out / 'workspace_compact.ppm')
-    width2, height2, scrolled = ppm(out / 'workspace_material_assignment.ppm')
+    width, height, initial = ppm(out / 'workspace_library_top.ppm')
+    width2, height2, scrolled = ppm(out / 'workspace_library_scrolled.ppm')
     assert (width, height) == (width2, height2)
-    header_bytes = width * round(90 * width / 1024) * 3  # Top 90 logical pixels.
+    header_bytes = width * round(72 * width / 1024) * 3  # Compact header, normal text scale.
     assert initial[:header_bytes] == scrolled[:header_bytes], 'Scrolled pane escaped its clipping boundary'
     request = build_request(project, 'e01', 'tlas_blas_parity')
     request['render'].update(width=320, height=200)

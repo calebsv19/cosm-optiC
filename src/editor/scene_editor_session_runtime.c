@@ -64,6 +64,8 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
          event->type == SDL_MOUSEWHEEL)) {
         return;
     }
+    SceneEditorTransformPanelReleaseFocusForEvent(event);
+    if (SceneEditorWorkspaceProfileHandleEvent(editor, event)) return;
     if (SceneEditorSidebarTextActive() && SceneEditorSidebarHandleEvent(event)) return;
     if (editor->currentMode == EDITOR_MODE_OBJECT &&
         SceneEditorWorkspaceProfileGet() != SCENE_WORKSPACE_ENVIRONMENT &&
@@ -74,7 +76,6 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (SceneEditorTransformPanelInteractionActive()) {
         return;
     }
-    if (SceneEditorWorkspaceProfileHandleEvent(editor, event)) return;
     if (SceneEditorSidebarHandleEvent(event)) return;
     {
         SceneEditorPaneLayout layout;
@@ -134,6 +135,7 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     if (post_draw) {
         post_draw(editor, editor->renderer, context);
     }
+    SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
     render_end_frame();
 }
 
@@ -256,6 +258,7 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 }
             }
 
+            SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
             render_end_frame();
             frame_dirty = false;
             last_render_ms = SDL_GetTicks();

@@ -9,7 +9,10 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
                                     int top_y,
                                     int bottom_y);
 bool SceneEditorTransformPanelImportSTL(const char* path);
+bool SceneEditorTransformPanelHistory(bool redo);
 bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event);
+/* Release a draft before pane hit filtering so other panes remain reachable. */
+void SceneEditorTransformPanelReleaseFocusForEvent(const SDL_Event* event);
 bool SceneEditorTransformPanelInteractionActive(void);
 bool SceneEditorTransformPanelPoll(void);
 void SceneEditorTransformPanelReset(void);

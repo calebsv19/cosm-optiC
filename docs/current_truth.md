@@ -2,7 +2,18 @@
 
 Last updated: 2026-09-11
 
-## 2026-09-11 E0/E1 source acceptance and review handoff
+## UI recovery after operator review
+
+The first E1 layout was rejected; its acceptance claim is superseded. Main Edit
+now has compact workspace selection, visible framing and global history controls,
+contextual/import/shading inspector sections, a height-filling outliner and optional
+diagnostics. Inspector focus release and wheel-event coordinate routing were
+corrected. Native interaction and document round-trip checks pass, and a separate
+development review app has been inspected on the desktop. See
+`docs/editor_workspace.md` for evidence and limits. E1 operator visual acceptance
+remains open; installed app, canonical source and release versions are unchanged.
+
+## Historical: 2026-09-11 E0/E1 first review handoff
 
 Main Edit now provides five workspace profiles, searchable named objects,
 Objects/Library tabs, clipped scrollable sidebars, responsive viewport expansion,

@@ -17,6 +17,7 @@
 #include "editor/object_editor_selection_tracker.h"
 #include "vk_renderer.h"
 #include "editor/scene_editor_viewport_nav.h"
+#include "editor/scene_editor_digest_overlay_internal.h"
 
 /* Acceptance failures are ordinary test exits, not OS crash reports. */
 static SceneEditor* active_editor;
@@ -58,6 +59,82 @@ static void capture(SceneEditor* editor, const char* path) {
     assert(renderer->debug_capture.dumped);
 }
 
+static void verify_viewport_gestures(SceneEditor* editor) {
+    SceneEditorPaneLayout layout;
+    assert(SceneEditorGetPaneLayout(&layout));
+    int x=layout.viewport_rect.x+layout.viewport_rect.w/2;
+    int y=layout.viewport_rect.y+layout.viewport_rect.h/2;
+    unsigned long long revision=SceneEditorDocumentRevision();
+    int selected=ObjectEditorGetSelectedObjectIndex();
+    SDL_WarpMouseInWindow(editor->window,x,y);
+    SDL_PumpEvents();
+    SceneEditorDigestOverlayNavState before=*SceneEditorGetViewportNavState();
+    SDL_Keymod previous_mods=SDL_GetModState();
+    SDL_SetModState(KMOD_ALT);
+    SDL_Event event={0}; event.type=SDL_MOUSEMOTION;
+    event.motion.windowID=SDL_GetWindowID(editor->window);
+    event.motion.x=x; event.motion.y=y;
+    event.motion.xrel=32; event.motion.yrel=12;
+    event.motion.state=SDL_BUTTON_LMASK;
+    SceneEditorSessionRuntimeHandleEvent(editor,&event);
+    SceneEditorSessionRuntimeRender(editor);
+    assert(SceneEditorGetViewportNavState()->orbit_yaw_deg!=before.orbit_yaw_deg);
+    SDL_SetModState(previous_mods);
+    event=(SDL_Event){0}; event.type=SDL_MOUSEBUTTONUP;
+    event.button.button=SDL_BUTTON_LEFT; event.button.x=x; event.button.y=y;
+    SceneEditorSessionRuntimeHandleEvent(editor,&event);
+    before=*SceneEditorGetViewportNavState();
+    event.type=SDL_MOUSEBUTTONDOWN; event.button.button=SDL_BUTTON_MIDDLE;
+    SceneEditorSessionRuntimeHandleEvent(editor,&event);
+    event=(SDL_Event){0}; event.type=SDL_MOUSEMOTION;
+    event.motion.x=x+20; event.motion.y=y+10;
+    event.motion.xrel=20; event.motion.yrel=10; event.motion.state=SDL_BUTTON_MMASK;
+    SceneEditorSessionRuntimeHandleEvent(editor,&event);
+    SceneEditorSessionRuntimeRender(editor);
+    const SceneEditorDigestOverlayNavState* current=SceneEditorGetViewportNavState();
+    assert(current->target_x!=before.target_x || current->target_y!=before.target_y ||
+           current->target_z!=before.target_z);
+    event=(SDL_Event){0}; event.type=SDL_MOUSEBUTTONUP;
+    event.button.button=SDL_BUTTON_MIDDLE; event.button.x=x; event.button.y=y;
+    SceneEditorSessionRuntimeHandleEvent(editor,&event);
+    before=*SceneEditorGetViewportNavState();
+    event=(SDL_Event){0}; event.type=SDL_MOUSEWHEEL;
+    /* Framing a tiny imported mesh may already be at maximum zoom. */
+    event.wheel.y = before.overlay_zoom >= before.zoom_max ? -1 : 1;
+    event.wheel.preciseY = (float)event.wheel.y;
+#if SDL_VERSION_ATLEAST(2,26,0)
+    event.wheel.mouseX=x; event.wheel.mouseY=y;
+#endif
+    SceneEditorSessionRuntimeHandleEvent(editor,&event);
+    SceneEditorSessionRuntimeRender(editor);
+    assert(SceneEditorGetViewportNavState()->overlay_zoom!=before.overlay_zoom);
+    key(editor,SDLK_f);
+    SceneEditorSessionRuntimeRender(editor);
+    SceneEditorWorkspaceChrome chrome;
+    SceneEditorWorkspaceLayoutChrome(&layout,&chrome);
+    click(editor,chrome.frame_all);
+    assert(SceneEditorDocumentRevision()==revision);
+    assert(ObjectEditorGetSelectedObjectIndex()==selected);
+    RuntimeSceneBridge3DDigestState digest={0};
+    SceneEditorDigestOverlayProjector projector;
+    assert(SceneEditorDigestOverlayResolve(&digest));
+    assert(SceneEditorDigestOverlayBuildProjector(&digest,&layout.viewport_rect,
+        SceneEditorGetViewportNavState(),&projector));
+    /* The fixture contains three visible mesh spheres above a primitive floor.
+       Pick their projected centers through ordinary session input. */
+    for (int i=3;i<=5;++i) {
+        SceneEditorDocumentTransform transform; char diagnostics[256];
+        assert(SceneEditorDocumentGetTransformForSceneIndex(i,&transform,diagnostics,sizeof(diagnostics)));
+        int px,py;
+        assert(SceneEditorDigestOverlayProjectPoint(&projector,transform.position[0],
+            transform.position[1],transform.position[2],&px,&py));
+        click(editor,(SDL_Rect){px,py,1,1});
+        assert(ObjectEditorGetSelectedObjectIndex()==i);
+    }
+    ObjectEditorSetSelectedObjectIndex(selected);
+    SceneEditorSessionRuntimeRender(editor);
+}
+
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
@@ -80,11 +157,11 @@ int main(int argc, char** argv) {
     assert(SceneEditorDocumentIsOpen());
     if (review_only) {
         SDL_SetWindowTitle(editor.window, "optiC E0/E1 review — isolated scene copy");
-        ObjectEditorSetSelectedObjectIndex(sceneSettings.objectCount-1);
+        ObjectEditorSetSelectedObjectIndex(-1);
         SceneEditorPaneLayout review_layout;
         if (SceneEditorGetPaneLayout(&review_layout))
             SceneEditorViewportNavFitDigestOverlayForTarget((SceneEditorDigestOverlayNavState*)SceneEditorGetViewportNavState(),
-                &review_layout.viewport_rect,true,EDITOR_MODE_OBJECT,sceneSettings.objectCount-1);
+                &review_layout.viewport_rect,true,EDITOR_MODE_OBJECT,-1);
         SceneEditorLoop(&editor);
         active_editor = NULL; DestroySceneEditor(&editor); TTF_Quit(); SDL_Quit();
         return 0;
@@ -107,9 +184,12 @@ int main(int argc, char** argv) {
         SceneEditorSessionRuntimeRender(&editor);
         SceneEditorPaneLayout import_layout;
         assert(SceneEditorGetPaneLayout(&import_layout));
+        /* Open import setup before selecting the source unit. */
+        click(&editor,(SDL_Rect){import_layout.right_content_rect.x+30,
+            import_layout.right_content_rect.y+23+29+8,1,1});
         /* The fixture is 1000 mm wide. Exercise the actual source-unit control. */
         click(&editor,(SDL_Rect){import_layout.right_content_rect.x + import_layout.right_content_rect.w*3/4,
-            import_layout.right_content_rect.y + 25 + 6*29 + 8,1,1});
+            import_layout.right_content_rect.y + 23 + 2*29 + 8,1,1});
         capture(&editor, "workspace_import_units.ppm");
         SDL_Event drop = {0}; drop.type = SDL_DROPFILE;
         drop.drop.file = SDL_strdup(argv[3]);
@@ -134,6 +214,7 @@ int main(int argc, char** argv) {
         &before.viewport_rect, true, EDITOR_MODE_OBJECT, 0);
     unsigned long long revision = SceneEditorDocumentRevision();
     int selected = ObjectEditorGetSelectedObjectIndex();
+    verify_viewport_gestures(&editor);
     capture(&editor, "workspace_scene.ppm");
     /* Search captures typing/escape and does not alter selection or history. */
     SDL_Rect search_field={before.left_content_rect.x+12,before.left_content_rect.y+42,1,1};
@@ -168,7 +249,18 @@ int main(int argc, char** argv) {
 
     SceneEditorWorkspaceChrome chrome;
     SceneEditorWorkspaceLayoutChrome(&before, &chrome);
+    click(&editor,chrome.workspace);
+    capture(&editor,"workspace_selector.ppm");
+    key(&editor,SDLK_ESCAPE);
+    assert(!SceneEditorWorkspaceProfileMenuOpen());
+    click(&editor,chrome.workspace);
+    click(&editor,expandViewportButton);
+    assert(!SceneEditorWorkspaceProfileMenuOpen());
+    assert(SceneEditorGetPaneLayout(&after) && !after.viewport_expanded);
+    assert(SceneEditorDocumentRevision()==revision);
     for (int profile=0; profile<SCENE_WORKSPACE_PROFILE_COUNT; ++profile) {
+        click(&editor, chrome.workspace);
+        assert(SceneEditorWorkspaceProfileMenuOpen());
         click(&editor, chrome.modes[profile]);
         assert((int)SceneEditorWorkspaceProfileGet() == profile);
         assert(SceneEditorDocumentRevision() == revision);
@@ -176,6 +268,7 @@ int main(int argc, char** argv) {
         char capture_name[80]; snprintf(capture_name,sizeof(capture_name),"workspace_profile_%d.ppm",profile);
         capture(&editor,capture_name);
     }
+    click(&editor, chrome.workspace);
     click(&editor, chrome.modes[SCENE_WORKSPACE_SCENE]);
     click(&editor, expandViewportButton);
     assert(SceneEditorGetPaneLayout(&after) && after.viewport_expanded);
@@ -196,6 +289,7 @@ int main(int argc, char** argv) {
     capture(&editor, "workspace_compact.ppm");
     /* Exercise the actual inspector and Save action against the copied fixture. */
     assert(SceneEditorGetPaneLayout(&after));
+    verify_viewport_gestures(&editor);
     SceneEditorDocumentTransform original, edited, reopened;
     char diagnostics[256];
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected, &original,
@@ -213,6 +307,23 @@ int main(int argc, char** argv) {
     assert(SceneEditorTransformPanelInteractionActive());
     key(&editor,SDLK_ESCAPE);
     assert(!SceneEditorTransformPanelInteractionActive() && editor.running);
+    /* An invalid draft must not trap clicks in the inspector. Use a real
+       workspace action to prove the outside click continues through routing. */
+    click(&editor, position_x);
+    for (int i=0; i<32; ++i) key(&editor,SDLK_BACKSPACE);
+    SceneEditorSessionRuntimeHandleEvent(&editor,&invalid_input);
+    assert(SceneEditorTransformPanelInteractionActive());
+    click(&editor, expandViewportButton);
+    assert(!SceneEditorTransformPanelInteractionActive());
+    assert(SceneEditorGetPaneLayout(&after) && after.viewport_expanded);
+    assert(SceneEditorDocumentRevision()==invalid_revision);
+    click(&editor, expandViewportButton);
+    assert(SceneEditorGetPaneLayout(&after) && !after.viewport_expanded);
+    click(&editor, position_x);
+    SDL_Event focus_lost={0}; focus_lost.type=SDL_WINDOWEVENT;
+    focus_lost.window.event=SDL_WINDOWEVENT_FOCUS_LOST;
+    SceneEditorSessionRuntimeHandleEvent(&editor,&focus_lost);
+    assert(!SceneEditorTransformPanelInteractionActive());
     click(&editor, position_x);
     for (int i = 0; i < 32; ++i) key(&editor, SDLK_BACKSPACE);
     SDL_Event text = {0};
@@ -225,15 +336,13 @@ int main(int argc, char** argv) {
     assert(fabs(edited.position[0] - original.position[0] - 0.25) < 1e-6);
     assert(SceneEditorDocumentIsDirty());
     SceneEditorSessionRuntimeRender(&editor);
-    SDL_Rect undo = {after.right_content_rect.x,
-        after.right_content_rect.y + 25 + 4 * 29,
-        (after.right_content_rect.w - 4) / 2, 25};
+    SceneEditorWorkspaceLayoutChrome(&after,&chrome);
+    SDL_Rect undo=chrome.undo;
     click(&editor, undo);
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected, &reopened,
         diagnostics, sizeof(diagnostics)));
     assert(fabs(reopened.position[0] - original.position[0]) < 1e-6);
-    SDL_Rect redo = undo;
-    redo.x += undo.w + 4;
+    SDL_Rect redo = chrome.redo;
     click(&editor, redo);
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected, &reopened,
         diagnostics, sizeof(diagnostics)));
@@ -244,7 +353,10 @@ int main(int argc, char** argv) {
         material_layout.left_content_rect.y+8,1,1});
     SDL_Rect scrollbar_bottom = {material_layout.left_content_rect.x + material_layout.left_content_rect.w - 8,
         material_layout.left_content_rect.y + material_layout.left_content_rect.h - 4, 2, 2};
+    SceneEditorChromeShellSetActionFeedback(NULL,0);
+    capture(&editor,"workspace_library_top.ppm");
     click(&editor, scrollbar_bottom);
+    capture(&editor,"workspace_library_scrolled.ppm");
     int old_material = sceneSettings.sceneObjects[selected].material_id;
     bool material_clicked = false;
     for (int y=material_layout.left_content_rect.y; y<material_layout.left_content_rect.y+material_layout.left_content_rect.h; ++y) {
