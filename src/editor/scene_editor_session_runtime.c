@@ -1,3 +1,5 @@
+#include "editor/scene_editor_workspace_profile.h"
+#include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_session_runtime.h"
 
 #include <stdint.h>
@@ -45,6 +47,13 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
+    if (event->type == SDL_DROPFILE) {
+        if (!SceneEditorTransformPanelInteractionActive())
+            (void)SceneEditorTransformPanelImportSTL(event->drop.file);
+        SDL_free(event->drop.file);
+        event->drop.file = NULL;
+        return;
+    }
     if (MaterialEditorAuthoredTextureBindingPickerActive() &&
         (event->type == SDL_KEYDOWN ||
          event->type == SDL_KEYUP ||
@@ -55,14 +64,18 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
          event->type == SDL_MOUSEWHEEL)) {
         return;
     }
+    if (SceneEditorSidebarTextActive() && SceneEditorSidebarHandleEvent(event)) return;
     if (editor->currentMode == EDITOR_MODE_OBJECT &&
-        !SceneEditorGetPaneHost()->viewport_expanded &&
+        SceneEditorWorkspaceProfileGet() != SCENE_WORKSPACE_ENVIRONMENT &&
+        SceneEditorSidebarInspectorEventVisible(event) &&
         SceneEditorTransformPanelHandleEvent(event)) {
         return;
     }
     if (SceneEditorTransformPanelInteractionActive()) {
         return;
     }
+    if (SceneEditorWorkspaceProfileHandleEvent(editor, event)) return;
+    if (SceneEditorSidebarHandleEvent(event)) return;
     {
         SceneEditorPaneLayout layout;
         if (SceneEditorGetPaneLayout(&layout) &&

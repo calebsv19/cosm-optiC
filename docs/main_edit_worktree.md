@@ -1,6 +1,16 @@
 # RayTracing Main Edit Worktree
 
 
+## September 11 E0/E1 review boundary
+
+E0/E1 source implementation and automated acceptance are complete in Main Edit;
+operator visual acceptance is next. The isolated acceptance driver and interactive
+review mode are documented in `docs/editor_workspace.md`. The review runs a copied
+scene with its own configuration and a pinned local binary. It does not replace
+or close the installed Main Edit app. Canonical main remains at `752d12b`; source
+adoption, Desktop refresh and release work are separate decisions.
+
+
 ## September 11 source alignment and E0/E1 entry
 
 The operator requested checkpointing existing Main Edit work and fast-forwarding

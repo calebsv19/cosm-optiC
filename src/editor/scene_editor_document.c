@@ -612,6 +612,19 @@ bool SceneEditorDocumentRenameForSceneIndex(int scene_object_index,
     return document_finish_command(diagnostics, diagnostics_size);
 }
 
+bool SceneEditorDocumentObjectLabel(int scene_object_index, char* label, size_t size) {
+    json_object* object = document_object_for_scene_index(scene_object_index, NULL, 0);
+    json_object* value = NULL;
+    if (!label || !size) return false;
+    label[0] = '\0';
+    if (!object) return false;
+    if (!json_object_object_get_ex(object, "display_name", &value))
+        (void)json_object_object_get_ex(object, "object_id", &value);
+    if (!value || !json_object_is_type(value, json_type_string)) return false;
+    snprintf(label, size, "%s", json_object_get_string(value));
+    return true;
+}
+
 bool SceneEditorDocumentCanUndo(void) { return s_document.undo_count > 0; }
 bool SceneEditorDocumentCanRedo(void) { return s_document.redo_count > 0; }
 

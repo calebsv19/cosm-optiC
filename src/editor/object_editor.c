@@ -267,15 +267,19 @@ static void RefreshImportList(void) {
     closedir(dir);
 }
 
-void InitializeObjectEditor(void) {
-    width = sceneSettings.windowWidth;
-    height = sceneSettings.windowHeight;
+void ObjectEditorClearPaneToolButtons(void) {
     objectHandlesButton = (SDL_Rect){0, 0, 0, 0};
     circleButton = (SDL_Rect){0, 0, 0, 0};
     squareButton = (SDL_Rect){0, 0, 0, 0};
     polygonButton = (SDL_Rect){0, 0, 0, 0};
     confirmPolygonButton = (SDL_Rect){0, 0, 0, 0};
     cancelPolygonButton = (SDL_Rect){0, 0, 0, 0};
+}
+
+void InitializeObjectEditor(void) {
+    width = sceneSettings.windowWidth;
+    height = sceneSettings.windowHeight;
+    ObjectEditorClearPaneToolButtons();
 
     ObjectEditorPanels_UpdateLayout();
     RefreshAssetLibrary();

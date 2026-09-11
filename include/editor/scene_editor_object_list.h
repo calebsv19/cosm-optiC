@@ -15,5 +15,6 @@ bool SceneEditorObjectListContainsPoint(int x, int y);
 bool SceneEditorObjectListHandleWheel(int x, int y, float wheel_delta_y);
 float SceneEditorObjectListScrollOffset(void);
 void SceneEditorObjectListReset(void);
+void SceneEditorObjectListSetFilter(const char* text);
 
 #endif

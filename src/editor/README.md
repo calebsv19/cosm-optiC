@@ -52,3 +52,11 @@ Interactive tooling for shaping the scene.
 layout without document commands. The retained document and transform inspector
 remain separate owners. See `docs/editor_workspace.md` for the bounded slice and
 open acceptance.
+
+The E0/E1 continuation adds `scene_editor_workspace_profile.c` for the five task
+profiles and `scene_editor_sidebar.c` for clipped scroll containers, Objects/Library
+tabs and search focus. Outliner names come from the retained document, and filtering
+never changes selected identity. `scene_editor_transform_panel.c` shares its managed
+import between the picker and SDL file drop; no-selection import controls remain
+available. App-local label helpers intersect parent clips so scrolling cannot
+escape a pane. No shared module was extended.

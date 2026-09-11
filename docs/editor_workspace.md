@@ -1,55 +1,110 @@
-# Scene workspace shell
+# Editor workspace
 
-The September 11 source slice places the existing Scene, Materials, Camera and
-Paths mode selectors and scene actions in a window-wide header. These are the
-existing editor modes, not the future Surface or Atmosphere workspace profiles.
-Document/feedback status stays beneath the actions. Object-mode retained transform,
-name, undo/redo and managed STL controls remain in the right inspector.
+E0/E1 implementation is ready for operator visual review in Main Edit. This is
+source acceptance, not installed-app, release or broad-suite acceptance.
 
-`Expand view` hides both side panes and any open light timeline. `Show panes`
-restores their widths and timeline visibility. `Reset layout` restores the default
-pane widths, shows the side panes and collapses the timeline. These operations
-change presentation only; they do not dirty the document or change selection.
-The existing pane graph and splitter kit still own sizing and drag behavior;
-`scene_editor_workspace_layout.c` owns only header button geometry.
+## Workspaces and controls
 
-Expanded view supports navigation and the dedicated native 3D and material canvas
-routes. Legacy pane pointer handlers are suppressed there because they also own
-sidebar hit rectangles; show the panes to use legacy 2D tools. Hidden inspector
-controls cannot receive pointer edits. Workspace state is session-local.
+- **Scene:** searchable object outliner, separate Objects and Library tabs, and
+  the retained document inspector. Search matches display name, stable ID, type
+  or `#index` without changing selection. Library holds existing assets and
+  material presets. Rename readback appears in the outliner and inspector.
+- **Materials:** the existing focused material editor, compact graph controls
+  and preview. This is not a new unrestricted graph evaluator.
+- **Surface:** source-object selection plus existing instance transforms, managed
+  STL import and Flat/Smooth/Crease shading controls. Derived geometry graphs and
+  attachment authoring remain the later surface milestone.
+- **Atmos / Water:** inspection of the selected volume source and loaded runtime
+  scene, with Preview available. Preset creation and water-resource editing belong
+  to E3/E4; this workspace does not claim those operations yet.
+- **Render:** existing camera controls and Preview. Camera and Paths are directly
+  reachable from the action row; Menu retains the full render settings.
 
-## Verification
+Save retains the existing checked document/overlay save path. The former Apply
+button called that same save operation; keyboard routing remains compatible.
+Light keys opens the existing selected-light timeline drawer when available.
+
+`Expand view` hides both side panes and an open light timeline. `Show panes`
+restores their widths and timeline visibility. `Reset layout` restores default
+widths, clears sidebar search/scroll, selects Objects, and collapses the timeline.
+Windows narrower than 980 logical pixels automatically expand the viewport;
+resize wider and choose Show panes to resume sidebar editing. Layout, search and
+profile changes do not dirty the scene or change its revision/selection.
+Workspace preferences are session-local.
+
+Both sidebars scroll within their visible bounds. Scrollbar dragging and wheel
+input reach longer controls; the outliner retains its own row scrolling.
+Nested labels respect the parent's clip. Search captures typing, Backspace,
+Cmd/Ctrl+A, Return and Escape; Escape leaves search without closing the editor.
+Hidden controls cannot receive pointer edits. Expanded view supports navigation
+and dedicated native 3D/material canvas routes; show panes for legacy 2D tools.
+
+## Import and document ownership
+
+Import STL and source meters/mm are available even with no selected object.
+Dropping an STL onto the editor uses the same managed import path and selected
+source units as the file picker. Instance transforms preserve original STL bytes.
+Managed candidate adoption saves atomically and retains Undo history; subsequent
+numeric/material edits remain dirty until saved. Invalid numeric drafts cannot
+mutate the document and can be canceled with Escape.
+
+| Edit family | Current owner | E0/E1 boundary |
+| --- | --- | --- |
+| Instance transform, name, duplicate/remove, preset material ID | Retained document commands and stable-ID mapping | Existing undo/save path; names now read back in the outliner |
+| Managed import and shading variant | Managed mesh compiler, validated candidate, retained document history | Same-directory atomic publication; source-unit recipe retained |
+| Detailed material layers/graphs/face overrides | Existing material mutation/overlay adapters | Existing controls exposed; universal document-history integration is not claimed |
+| Camera, light paths and light timeline | Existing mode/timeline owners and save overlays | Accessible from shell; broader timeline unification remains later work |
+| Atmosphere/water resources | Existing runtime consumers and configuration | Inspection here; authored preset transactions belong to E3/E4 |
+| Unknown runtime extensions | Complete retained runtime document | Preserved through import/edit/save/reopen; not reverse-compiled through Sculpt |
+
+`scene_editor_workspace_profile.c` owns task-profile routing.
+`scene_editor_sidebar.c` owns sidebar presentation, search focus and scrolling.
+`scene_editor_workspace_layout.c` owns header geometry. Existing `core_pane`,
+`kit_pane` and `kit_ui` remain the sizing/splitter/scroll mechanisms. No shared
+module API, version or adoption change is introduced.
+
+## Reproduce source acceptance
 
 ```sh
-make BUILD_TOOLCHAIN=clang all test-scene-editor-foundation-a \
-  test-scene-editor-pane-host-contract test-runtime-scene-bridge-contract \
+make BUILD_TOOLCHAIN=clang all scene-editor-workspace-visual-test \
+  test-scene-editor-foundation-a test-scene-editor-pane-host-contract \
+  test-runtime-scene-bridge-contract test-scene-editor-viewport-nav-contract \
+  test-scene-editor-viewport3d-bridge-contract \
+  test-scene-editor-mesh-pick-scroll-contract test-menu-pane-host-contract \
   test-ray-tracing-render-headless-preflight \
-  test-ray-tracing-render-headless-image-export
-make BUILD_TOOLCHAIN=clang scene-editor-workspace-visual-test
+  test-ray-tracing-render-headless-image-export test-ray-tracing-folder-picker
+python3 tests/integration/test_scene_editor_workspace_ui.py \
+  --output-root build/editor-workspace-acceptance-new
 ```
 
-The second target builds an opt-in native GUI test. Run
-`build/toolchains/clang/<arch>/tests/scene_editor_workspace_visual_test` with a
-task-owned working directory and an absolute path to a **copied** runtime fixture.
-The test edits/saves that copy, creates its own SDL window and writes PPM captures
-in the supplied working directory. Provide isolated `data/runtime/animation_config.json`
-and `scene_config.json` there; set `RAY_TRACING_PROGRAM_ROOT` to the checkout so
-fonts and read-only input assets resolve. Do not pass a scene or working directory
-you want preserved unchanged. A GUI desktop session is required.
+The Python acceptance driver requires a GUI desktop session and a **new** output
+directory. It copies a fixture and writes only task-owned configuration/scenes,
+logs and captures. It launches the actual source UI, imports a 1000 mm fixture
+with a recorded 0.001 scale, searches/selects it, edits its transform, rejects an
+invalid draft, exercises Undo/Redo and material assignment, then saves. A second
+process reopens the saved object; a fresh headless process renders that scene.
+Unknown extension data, original objects and source STL bytes are checked.
+A pixel comparison checks that scrolling cannot draw over the toolbar.
 
-The pane contract checks toolbar reachability, expand/restore, splitters and layout
-at 1024x640, 1280x800, 1440x900 and 2560x1600, plus increased header text height.
-The native source test checks 1280x800 and 1024x640 (2x backing pixels on the
-validation host), selection/revision preservation, an inspector position edit,
-Undo, Redo, Save and document reopen. Reopen uses the document API in the same
-process; it is not an installed-app restart test.
+Native captures cover 1280x800, 1024x640, 1440x900, larger text and 800x600 automatic
+expansion, with 2x backing pixels on the acceptance host. Pure pane contracts also
+exercise larger geometry, splitters and timeline restoration. Source-test failures
+exit with diagnostics instead of intentionally raising macOS crash dialogs.
 
-## Open acceptance
+The optional native test binary accepts `--review` as its final argument instead
+of an STL path to open an interactive editor on a copied scene. It accepts
+`--reopen` for the fresh-process assertion pass. Use the Python driver's output
+and a separate scene copy for review; do not point the test at a scene you need
+preserved unchanged.
 
-This is the first bounded Scene shell slice. The legacy left-pane asset/material
-stack still overflows at smaller sizes; scrolling/group separation needs its own
-follow-up. Full text-scale, keyboard/focus, all mode controls, native STL picker
-and material assignment acceptance remain open. Dedicated Surface, Atmosphere &
-Water and Render profiles, durable workspace persistence and graph expansion are
-future work. Broad `test-stable` was non-green before this slice (495 reported
-failures); focused passes do not establish broad green or package acceptance.
+## Review and regression limits
+
+E0/E1 source implementation and automated acceptance are complete; operator visual
+acceptance is the next step. The system file-picker selection itself remains part
+of that manual review; drag/drop import and picker helper contracts are tested.
+Advanced preset/graph/contributor work remains E2–E7.
+
+The broad stable suite still reports 495 failures, matching the pre-slice total
+and the same 47 explicit `FAIL` lines. This is not a broad-green claim or a fresh
+individual proof of all 495 assertions. No version bump, release package, Desktop
+replacement, canonical adoption or remote work is implied by this source review.

@@ -1,6 +1,11 @@
+#include "editor/scene_editor_workspace_layout.h"
+#include "editor/scene_editor_workspace_profile.h"
+#include "editor/scene_editor_transform_panel.h"
+#include "editor/object_editor_panels.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <SDL2/SDL_ttf.h>
@@ -12,6 +17,16 @@
 #include "editor/object_editor_selection_tracker.h"
 #include "vk_renderer.h"
 #include "editor/scene_editor_viewport_nav.h"
+
+/* Acceptance failures are ordinary test exits, not OS crash reports. */
+static SceneEditor* active_editor;
+static void fail_check(const char* expression, int line) {
+    fprintf(stderr, "UI acceptance failed at line %d: %s\n", line, expression);
+    if (active_editor) DestroySceneEditor(active_editor);
+    TTF_Quit(); SDL_Quit(); exit(EXIT_FAILURE);
+}
+#undef assert
+#define assert(expression) do { if (!(expression)) fail_check(#expression, __LINE__); } while (0)
 
 static void click(SceneEditor* editor, SDL_Rect rect) {
     SDL_Event event = {0};
@@ -46,7 +61,9 @@ static void capture(SceneEditor* editor, const char* path) {
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
-    assert(argc == 3); /* Task-owned working directory and copied runtime scene. */
+    assert(argc == 3 || argc == 4);
+    bool reopen_only = argc == 4 && strcmp(argv[3], "--reopen") == 0;
+    bool review_only = argc == 4 && strcmp(argv[3], "--review") == 0; /* Task-owned working directory and copied runtime scene. */
     assert(chdir(argv[1]) == 0);
     assert(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) == 0);
     assert(TTF_Init() == 0);
@@ -54,19 +71,112 @@ int main(int argc, char** argv) {
     animSettings.spaceMode = SPACE_MODE_3D;
     snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", argv[2]);
     assert(InitializeSceneEditor(&editor));
+    active_editor = &editor;
     SDL_SetWindowTitle(editor.window, "optiC E0/E1 isolated source proof");
     SDL_SetWindowSize(editor.window, 1280, 800);
+    SceneEditorWorkspaceProfileSelect(&editor, SCENE_WORKSPACE_SCENE);
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
-    ObjectEditorSetSelectedObjectIndex(0);
+    if (review_only) {
+        SDL_SetWindowTitle(editor.window, "optiC E0/E1 review — isolated scene copy");
+        ObjectEditorSetSelectedObjectIndex(sceneSettings.objectCount-1);
+        SceneEditorPaneLayout review_layout;
+        if (SceneEditorGetPaneLayout(&review_layout))
+            SceneEditorViewportNavFitDigestOverlayForTarget((SceneEditorDigestOverlayNavState*)SceneEditorGetViewportNavState(),
+                &review_layout.viewport_rect,true,EDITOR_MODE_OBJECT,sceneSettings.objectCount-1);
+        SceneEditorLoop(&editor);
+        active_editor = NULL; DestroySceneEditor(&editor); TTF_Quit(); SDL_Quit();
+        return 0;
+    }
+    if (reopen_only) {
+        int selected = sceneSettings.objectCount-1;
+        SceneEditorDocumentTransform loaded; char diagnostics[256];
+        assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&loaded,diagnostics,sizeof(diagnostics)));
+        assert(fabs(loaded.position[0] - 0.25) < 1e-6);
+        assert(sceneSettings.sceneObjects[selected].material_id == 1);
+        ObjectEditorSetSelectedObjectIndex(selected);
+        capture(&editor,"workspace_fresh_reopen.ppm");
+        active_editor = NULL; DestroySceneEditor(&editor); TTF_Quit(); SDL_Quit();
+        puts("Fresh process reopened imported object with saved transform and Mirror material");
+        return 0;
+    }
+    if (argc == 4) {
+        int original_count = sceneSettings.objectCount;
+        ObjectEditorSetSelectedObjectIndex(-1);
+        SceneEditorSessionRuntimeRender(&editor);
+        SceneEditorPaneLayout import_layout;
+        assert(SceneEditorGetPaneLayout(&import_layout));
+        /* The fixture is 1000 mm wide. Exercise the actual source-unit control. */
+        click(&editor,(SDL_Rect){import_layout.right_content_rect.x + import_layout.right_content_rect.w*3/4,
+            import_layout.right_content_rect.y + 25 + 6*29 + 8,1,1});
+        capture(&editor, "workspace_import_units.ppm");
+        SDL_Event drop = {0}; drop.type = SDL_DROPFILE;
+        drop.drop.file = SDL_strdup(argv[3]);
+        SceneEditorSessionRuntimeHandleEvent(&editor, &drop);
+        Uint32 deadline = SDL_GetTicks() + 30000;
+        while (SceneEditorTransformPanelInteractionActive() && SDL_GetTicks() < deadline) {
+            SceneEditorTransformPanelPoll();
+            SDL_PumpEvents();
+            SceneEditorSessionRuntimeRender(&editor);
+            SDL_Delay(10);
+        }
+        assert(!SceneEditorTransformPanelInteractionActive());
+        assert(sceneSettings.objectCount == original_count + 1);
+        /* Managed candidate adoption publishes atomically and retains undo. */
+        assert(SceneEditorDocumentCanUndo());
+        click(&editor, saveButton);
+    }
+    ObjectEditorSetSelectedObjectIndex(argc == 4 ? sceneSettings.objectCount - 1 : 0);
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorGetPaneLayout(&before));
-    SceneEditorViewportNavFitDigestOverlayForTarget(SceneEditorGetViewportNavState(),
+    SceneEditorViewportNavFitDigestOverlayForTarget((SceneEditorDigestOverlayNavState*)SceneEditorGetViewportNavState(),
         &before.viewport_rect, true, EDITOR_MODE_OBJECT, 0);
     unsigned long long revision = SceneEditorDocumentRevision();
     int selected = ObjectEditorGetSelectedObjectIndex();
     capture(&editor, "workspace_scene.ppm");
+    /* Search captures typing/escape and does not alter selection or history. */
+    SDL_Rect search_field={before.left_content_rect.x+12,before.left_content_rect.y+42,1,1};
+    click(&editor,search_field);
+    SDL_Event search_input={0}; search_input.type=SDL_TEXTINPUT;
+    snprintf(search_input.text.text,sizeof(search_input.text.text),"no-such-object");
+    SceneEditorSessionRuntimeHandleEvent(&editor,&search_input);
+    SceneEditorSessionRuntimeRender(&editor);
+    for (int y=before.left_content_rect.y+70;y<before.left_content_rect.y+before.left_content_rect.h;++y)
+        assert(ObjectEditorObjectListIndexAtPoint(before.left_content_rect.x+30,y) < 0);
+    SDL_Event select_all={0}; select_all.type=SDL_KEYDOWN;
+    select_all.key.keysym.sym=SDLK_a; select_all.key.keysym.mod=KMOD_GUI;
+    SceneEditorSessionRuntimeHandleEvent(&editor,&select_all);
+    snprintf(search_input.text.text,sizeof(search_input.text.text),"#%d",selected);
+    SceneEditorSessionRuntimeHandleEvent(&editor,&search_input);
+    key(&editor,SDLK_ESCAPE);
+    SceneEditorSessionRuntimeRender(&editor);
+    ObjectEditorSetSelectedObjectIndex(0);
+    bool picked=false;
+    for (int y=before.left_content_rect.y+70;y<before.left_content_rect.y+before.left_content_rect.h;++y) {
+        int x=before.left_content_rect.x+30;
+        if (ObjectEditorObjectListIndexAtPoint(x,y)==selected) {
+            click(&editor,(SDL_Rect){x,y,1,1}); picked=true; break;
+        }
+    }
+    assert(picked && ObjectEditorGetSelectedObjectIndex()==selected);
+    assert(SceneEditorDocumentRevision()==revision && editor.running);
+    click(&editor,search_field);
+    SceneEditorSessionRuntimeHandleEvent(&editor,&select_all);
+    key(&editor,SDLK_ESCAPE);
+    SceneEditorSessionRuntimeRender(&editor);
+
+    SceneEditorWorkspaceChrome chrome;
+    SceneEditorWorkspaceLayoutChrome(&before, &chrome);
+    for (int profile=0; profile<SCENE_WORKSPACE_PROFILE_COUNT; ++profile) {
+        click(&editor, chrome.modes[profile]);
+        assert((int)SceneEditorWorkspaceProfileGet() == profile);
+        assert(SceneEditorDocumentRevision() == revision);
+        assert(ObjectEditorGetSelectedObjectIndex() == selected);
+        char capture_name[80]; snprintf(capture_name,sizeof(capture_name),"workspace_profile_%d.ppm",profile);
+        capture(&editor,capture_name);
+    }
+    click(&editor, chrome.modes[SCENE_WORKSPACE_SCENE]);
     click(&editor, expandViewportButton);
     assert(SceneEditorGetPaneLayout(&after) && after.viewport_expanded);
     assert(after.viewport_rect.w > before.viewport_rect.w);
@@ -93,6 +203,17 @@ int main(int argc, char** argv) {
     SDL_Rect position_x = {after.right_content_rect.x,
         after.right_content_rect.y + 25, (after.right_content_rect.w - 8) / 3, 25};
     click(&editor, position_x);
+    for (int i=0; i<32; ++i) key(&editor,SDLK_BACKSPACE);
+    SDL_Event invalid_input={0}; invalid_input.type=SDL_TEXTINPUT;
+    snprintf(invalid_input.text.text,sizeof(invalid_input.text.text),"--");
+    unsigned long long invalid_revision=SceneEditorDocumentRevision();
+    SceneEditorSessionRuntimeHandleEvent(&editor,&invalid_input);
+    key(&editor,SDLK_RETURN);
+    assert(SceneEditorDocumentRevision()==invalid_revision);
+    assert(SceneEditorTransformPanelInteractionActive());
+    key(&editor,SDLK_ESCAPE);
+    assert(!SceneEditorTransformPanelInteractionActive() && editor.running);
+    click(&editor, position_x);
     for (int i = 0; i < 32; ++i) key(&editor, SDLK_BACKSPACE);
     SDL_Event text = {0};
     text.type = SDL_TEXTINPUT;
@@ -117,6 +238,26 @@ int main(int argc, char** argv) {
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected, &reopened,
         diagnostics, sizeof(diagnostics)));
     assert(fabs(reopened.position[0] - edited.position[0]) < 1e-6);
+    SceneEditorPaneLayout material_layout;
+    assert(SceneEditorGetPaneLayout(&material_layout));
+    click(&editor,(SDL_Rect){material_layout.left_content_rect.x+material_layout.left_content_rect.w*3/4,
+        material_layout.left_content_rect.y+8,1,1});
+    SDL_Rect scrollbar_bottom = {material_layout.left_content_rect.x + material_layout.left_content_rect.w - 8,
+        material_layout.left_content_rect.y + material_layout.left_content_rect.h - 4, 2, 2};
+    click(&editor, scrollbar_bottom);
+    int old_material = sceneSettings.sceneObjects[selected].material_id;
+    bool material_clicked = false;
+    for (int y=material_layout.left_content_rect.y; y<material_layout.left_content_rect.y+material_layout.left_content_rect.h; ++y) {
+        int x=material_layout.left_content_rect.x+30;
+        int candidate=ObjectEditorPanels_MaterialIndexAtPoint(x,y);
+        if (candidate >= 0 && candidate != old_material) {
+            click(&editor,(SDL_Rect){x,y,1,1});
+            material_clicked = sceneSettings.sceneObjects[selected].material_id != old_material;
+            if (material_clicked) break;
+        }
+    }
+    assert(material_clicked);
+    capture(&editor,"workspace_material_assignment.ppm");
     click(&editor, saveButton);
     assert(!SceneEditorDocumentIsDirty());
     assert(SceneEditorDocumentOpen(argv[2], diagnostics, sizeof(diagnostics)));
@@ -124,6 +265,25 @@ int main(int argc, char** argv) {
         diagnostics, sizeof(diagnostics)));
     assert(fabs(reopened.position[0] - edited.position[0]) < 1e-6);
     capture(&editor, "workspace_saved_edit.ppm");
+    revision = SceneEditorDocumentRevision();
+    animSettings.textZoomStep = 2;
+    SceneEditorWorkspaceProfileSelect(&editor, SCENE_WORKSPACE_SCENE);
+    SceneEditorSessionRuntimeRender(&editor);
+    capture(&editor,"workspace_large_text.ppm");
+    assert(SceneEditorDocumentRevision() == revision);
+    animSettings.textZoomStep = 0;
+    SDL_SetWindowSize(editor.window,1440,900);
+    SceneEditorSessionRuntimeRender(&editor);
+    capture(&editor,"workspace_1440.ppm");
+    SDL_SetWindowSize(editor.window,800,600);
+    SceneEditorSessionRuntimeRender(&editor);
+    assert(SceneEditorGetPaneLayout(&after) && after.viewport_expanded);
+    capture(&editor,"workspace_narrow.ppm");
+
+    assert(SceneEditorDocumentRevision()==revision);
+
+
+    active_editor = NULL;
     DestroySceneEditor(&editor);
     TTF_Quit();
     SDL_Quit();

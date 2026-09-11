@@ -1,3 +1,5 @@
+#include "editor/scene_editor_sidebar.h"
+#include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_chrome_actions.h"
 
 #include <stdio.h>
@@ -19,7 +21,7 @@
 #include "editor/scene_editor_tool_state.h"
 
 static bool scene_editor_chrome_actions_point_in_rect(int x, int y, const SDL_Rect* rect) {
-    if (!rect) return false;
+    if (!rect || rect->w <= 0 || rect->h <= 0) return false;
     return x >= rect->x && x <= rect->x + rect->w &&
            y >= rect->y && y <= rect->y + rect->h;
 }
@@ -134,6 +136,8 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         bool ok = action->kind == SCENE_EDITOR_CHROME_ACTION_RESTORE_WORKSPACE
             ? scene_editor_pane_host_restore_workspace(host)
             : scene_editor_pane_host_set_viewport_expanded(host, !host->viewport_expanded);
+        if (ok && action->kind == SCENE_EDITOR_CHROME_ACTION_RESTORE_WORKSPACE)
+            SceneEditorSidebarRestoreDefaults();
         SceneEditorChromeShellSetActionFeedback(ok ? "Workspace layout updated" : "Layout unavailable at this size", 1800);
         SceneEditorRefreshWorkspaceLayout();
         return;
@@ -751,6 +755,17 @@ void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
         }
         return;
     }
+    if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_ENVIRONMENT) return;
+    if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SURFACE &&
+        command->kind != SCENE_EDITOR_PANE_COMMAND_KEY) {
+        /* Surface has an outliner but no legacy asset/material sidebar. */
+        if (command->event->type == SDL_MOUSEBUTTONDOWN && command->event->button.button == SDL_BUTTON_LEFT) {
+            int index = ObjectEditorObjectListIndexAtPoint(command->event->button.x, command->event->button.y);
+            if (index >= 0) { ObjectEditorSetSelectedObjectIndex(index); result->consumed = true; }
+        }
+        return;
+    }
+
     canvas_allowed_for_target = scene_editor_contract_canvas_allowed_for_target(&contract, command->target);
     if (command->kind != SCENE_EDITOR_PANE_COMMAND_KEY &&
         command->pane_hit_region != SCENE_EDITOR_PANE_HIT_CONTROLS &&

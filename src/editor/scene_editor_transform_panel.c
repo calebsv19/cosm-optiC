@@ -368,18 +368,9 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
                         line,
                         palette.text_primary);
     y += 23;
-    if (selected < 0 ||
-        !SceneEditorDocumentGetTransformForSceneIndex(selected,
-                                                      &transform,
-                                                      diagnostics,
-                                                      sizeof(diagnostics))) {
-        RenderLabelTextWrappedLeft(renderer,
-                                   (SDL_Rect){bounds.x, y, bounds.w, 42},
-                                   selected < 0 ? "Select a runtime object to edit its retained transform."
-                                                : diagnostics,
-                                   palette.text_muted);
-        return y + 46;
-    }
+    bool has_transform = selected >= 0 && SceneEditorDocumentGetTransformForSceneIndex(
+        selected, &transform, diagnostics, sizeof(diagnostics));
+    editable = editable && has_transform;
     s_controls_active = true;
 
     for (int row = 0; row < 3; ++row) {
@@ -387,7 +378,9 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
             int index = row * 3 + column;
             double value = *panel_transform_component(&transform, index);
             s_fields[index] = (SDL_Rect){bounds.x + column * (cell_w + gap), y, cell_w, field_h};
-            if (s_edit_field == index) {
+            if (!has_transform) {
+                snprintf(line, sizeof(line), "%s —", panel_field_label(index));
+            } else if (s_edit_field == index) {
                 snprintf(line, sizeof(line), "%s %s", panel_field_label(index), s_edit_buffer);
             } else {
                 snprintf(line, sizeof(line), "%s %.3g", panel_field_label(index), value);
@@ -398,10 +391,10 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     }
 
     s_name_field = (SDL_Rect){bounds.x, y, bounds.w, field_h};
-    snprintf(line,
-             sizeof(line),
-             "Name: %s",
-             s_edit_name ? s_edit_buffer : "click to rename");
+    char object_label[128] = {0};
+    if (selected >= 0) SceneEditorDocumentObjectLabel(selected, object_label, sizeof(object_label));
+    else snprintf(object_label, sizeof(object_label), "Select an object or import STL");
+    snprintf(line, sizeof(line), "Name: %.115s", s_edit_name ? s_edit_buffer : object_label);
     panel_draw_button(renderer, s_name_field, line, editable, s_edit_name);
     y += field_h + gap;
 
@@ -413,12 +406,12 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     panel_draw_button(renderer,
                       s_undo_button,
                       "Undo",
-                      editable && SceneEditorDocumentCanUndo(),
+                      s_job_pid <= 0 && SceneEditorDocumentCanUndo(),
                       false);
     panel_draw_button(renderer,
                       s_redo_button,
                       "Redo",
-                      editable && SceneEditorDocumentCanRedo(),
+                      s_job_pid <= 0 && SceneEditorDocumentCanRedo(),
                       false);
     y += field_h + gap;
 
@@ -653,6 +646,15 @@ bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event) {
     return false;
 }
 
+bool SceneEditorTransformPanelImportSTL(const char* path) {
+    const char* extension = path ? strrchr(path, '.') : NULL;
+    if (!extension || strcasecmp(extension, ".stl") != 0) {
+        panel_status("Select an STL file", true); return false;
+    }
+    return panel_spawn_managed_job(TRANSFORM_PANEL_JOB_IMPORT, path, NULL, NULL,
+        s_import_scale, s_crease_angle_degrees);
+}
+
 bool SceneEditorTransformPanelPoll(void) {
     bool changed = false;
     if (s_picker.active) {
@@ -661,17 +663,7 @@ bool SceneEditorTransformPanelPoll(void) {
                                                                            selected,
                                                                            sizeof(selected));
         if (result == RAY_TRACING_FOLDER_PICKER_SELECTED) {
-            const char* extension = strrchr(selected, '.');
-            if (!extension || strcasecmp(extension, ".stl") != 0) {
-                panel_status("Select an STL file", true);
-            } else {
-                (void)panel_spawn_managed_job(TRANSFORM_PANEL_JOB_IMPORT,
-                                              selected,
-                                              NULL,
-                                              NULL,
-                                              s_import_scale,
-                                              s_crease_angle_degrees);
-            }
+            (void)SceneEditorTransformPanelImportSTL(selected);
             changed = true;
         } else if (result == RAY_TRACING_FOLDER_PICKER_CANCELLED) {
             panel_status("STL import cancelled", false);

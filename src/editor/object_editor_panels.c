@@ -52,3 +52,10 @@ bool ObjectEditorPanels_MotionActionAtPoint(int mx,
                                             ObjectEditorPanelMotionAction* out_action) {
     return ObjectEditorPanels_MotionActionAtPointImpl(mx, my, out_action);
 }
+
+int ObjectEditorPanels_ContentBottom(void) { return materialPanelRect.y + materialPanelRect.h; }
+
+void ObjectEditorPanelsHide(void) {
+    assetPanelRect = assetToggleRect = assetCollapseRect = (SDL_Rect){0};
+    materialPanelRect = materialCollapseRect = (SDL_Rect){0};
+}

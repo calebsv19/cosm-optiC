@@ -29,6 +29,7 @@ typedef enum ObjectEditorHitRegion {
 
 // Object Editor Functions
 void InitializeObjectEditor(void);
+void ObjectEditorClearPaneToolButtons(void);
 void RenderObjectEditor(SDL_Renderer* renderer);
 int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y);
 void HandleObjectEditorEvents(SDL_Event* event);

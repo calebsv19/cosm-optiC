@@ -1,3 +1,5 @@
+#include "editor/scene_editor_workspace_profile.h"
+#include "editor/scene_editor_sidebar.h"
 // scene_editor.c  
 #include "editor/scene_editor.h"
 #include "app/ray_tracing_build_identity.h"
@@ -543,6 +545,9 @@ void SceneEditorSyncWindowSize(SceneEditor* editor) {
         }
 #endif
     }
+    if (width < 980 && g_scenePaneHost.initialized && !g_scenePaneHost.viewport_expanded) {
+        (void)scene_editor_pane_host_set_viewport_expanded(&g_scenePaneHost, true);
+    }
     SceneEditorLayoutChrome();
     SceneEditorRefreshPaneSplitterHover(editor);
 }
@@ -969,6 +974,8 @@ void SceneEditorSessionEnd(SceneEditor* editor) {
     SceneEditorCamera3DGizmoReset();
     scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
+    SceneEditorWorkspaceProfileReset();
+    SceneEditorSidebarRestoreDefaults();
     SceneEditorTransformPanelReset();
     SceneEditorDocumentClose();
     sceneEditorExitFlag = false;
@@ -1079,6 +1086,8 @@ void DestroySceneEditor(SceneEditor* editor) {
     editor->owns_shared_device = false;
     scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
+    SceneEditorWorkspaceProfileReset();
+    SceneEditorSidebarRestoreDefaults();
     SceneEditorTransformPanelReset();
     SceneEditorDocumentClose();
     ray_tracing_font_runtime_shutdown();
@@ -1087,6 +1096,7 @@ void DestroySceneEditor(SceneEditor* editor) {
 }
 
 static void InitializeEditorMode(SceneEditor* editor) {
+    SceneEditorWorkspaceProfileSyncMode(editor->currentMode);
     switch (editor->currentMode) {
         case EDITOR_MODE_PATH:
             InitializeBezierEditor();

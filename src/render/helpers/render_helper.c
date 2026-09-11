@@ -478,7 +478,9 @@ void RenderLabelText(SDL_Renderer* renderer, SDL_Rect area, const char* text, SD
     clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer, &previous_clip);
     if (area.w > 0 && area.h > 0) {
-        SDL_RenderSetClipRect(renderer, &area);
+        SDL_Rect visible_area = area;
+        if (clip_was_enabled) SDL_IntersectRect(&previous_clip, &area, &visible_area);
+        SDL_RenderSetClipRect(renderer, &visible_area);
     }
     RenderTextWithColor(renderer, area, text, color, 16);
     if (clip_was_enabled) {
@@ -496,7 +498,9 @@ int RenderLabelTextLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text,
     clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer, &previous_clip);
     if (area.w > 0 && area.h > 0) {
-        SDL_RenderSetClipRect(renderer, &area);
+        SDL_Rect visible_area = area;
+        if (clip_was_enabled) SDL_IntersectRect(&previous_clip, &area, &visible_area);
+        SDL_RenderSetClipRect(renderer, &visible_area);
     }
     used_height = RenderTextBlockWithColor(renderer,
                                            area,
@@ -522,7 +526,9 @@ int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char
     clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer, &previous_clip);
     if (area.w > 0 && area.h > 0) {
-        SDL_RenderSetClipRect(renderer, &area);
+        SDL_Rect visible_area = area;
+        if (clip_was_enabled) SDL_IntersectRect(&previous_clip, &area, &visible_area);
+        SDL_RenderSetClipRect(renderer, &visible_area);
     }
     used_height = RenderTextBlockWithColor(renderer,
                                            area,

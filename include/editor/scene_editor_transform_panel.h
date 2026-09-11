@@ -8,6 +8,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
                                     SDL_Rect bounds,
                                     int top_y,
                                     int bottom_y);
+bool SceneEditorTransformPanelImportSTL(const char* path);
 bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event);
 bool SceneEditorTransformPanelInteractionActive(void);
 bool SceneEditorTransformPanelPoll(void);

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_chrome_shell.h"
 
 #include <SDL2/SDL_ttf.h>
@@ -11,6 +12,7 @@
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_workspace_layout.h"
+#include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_document.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/font_runtime.h"
@@ -286,15 +288,15 @@ void SceneEditorChromeShellLayoutFromPane(const SceneEditorPaneLayout* layout) {
         return;
     }
     SceneEditorWorkspaceLayoutChrome(layout, &chrome);
-    const int mode_order[] = {EDITOR_MODE_OBJECT, EDITOR_MODE_MATERIAL,
-                              EDITOR_MODE_CAMERA, EDITOR_MODE_PATH};
-    for (int i = 0; i < EDITOR_MODE_COUNT; ++i) modeSelectButtons[mode_order[i]] = chrome.modes[i];
+    memset(modeSelectButtons, 0, sizeof(modeSelectButtons));
+    modeSelectButtons[EDITOR_MODE_CAMERA] = chrome.actions[4];
+    modeSelectButtons[EDITOR_MODE_PATH] = chrome.actions[5];
     selectButton = chrome.actions[0];
     addButton = chrome.actions[1];
     deleteButton = chrome.actions[2];
     previewButton = chrome.actions[3];
-    changeModeButton = chrome.actions[4];
-    applyButton = chrome.actions[5];
+    changeModeButton = (SDL_Rect){0};
+    applyButton = (SDL_Rect){0};
     saveButton = chrome.actions[6];
     animateLightButton = chrome.actions[7];
     backToMenuButton = chrome.actions[8];
@@ -321,6 +323,7 @@ static void scene_editor_chrome_shell_render_button(SDL_Renderer* renderer,
                                                                  enabled,
                                                                  hovered,
                                                                  emphasized);
+    if (rect.w <= 0 || rect.h <= 0) return;
     SDL_SetRenderDrawColor(renderer, resolvedFill.r, resolvedFill.g, resolvedFill.b, 255);
     SDL_RenderFillRect(renderer, &rect);
     SDL_SetRenderDrawColor(renderer, border_color.r, border_color.g, border_color.b, border_color.a);
@@ -379,6 +382,8 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                layout->left_pane_rect.w - 20,
                                20};
         if (!layout->viewport_expanded) RenderLabelText(renderer, titleRect,
+            SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_ENVIRONMENT ? "Scene resources" :
+            SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SURFACE ? "Surface source" :
             contract->activeMode == EDITOR_MODE_OBJECT ? "Scene objects & assets" : "Tool controls", paneLabelColor);
 
         titleRect = (SDL_Rect){layout->center_pane_rect.x + 10,
@@ -407,7 +412,20 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                                       splitter_hovered,
                                                       splitter_active);
 
+    if (layout_valid && layout) {
+        SceneEditorWorkspaceChrome chrome;
+        SceneEditorWorkspaceLayoutChrome(layout, &chrome);
+        for (int i=0; i<SCENE_WORKSPACE_PROFILE_COUNT; ++i) {
+            bool active = (int)SceneEditorWorkspaceProfileGet() == i;
+            scene_editor_chrome_shell_render_button(renderer, chrome.modes[i],
+                SceneEditorWorkspaceProfileLabel(i), true,
+                scene_editor_chrome_shell_button_hovered(&chrome.modes[i]), active,
+                active ? ray_tracing_theme_resolve_button_active_fill(palette) : palette.button_fill,
+                disabledFill, borderColor, palette);
+        }
+    }
     for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
+        if (modeSelectButtons[i].w <= 0) continue;
         bool selectable = contract->modeSelectable[i];
         bool active = (i == contract->activeMode);
         scene_editor_chrome_shell_render_button(renderer,
@@ -539,16 +557,6 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     }
 
     if (layout_valid && layout) {
-        SceneEditorSurfaceRenderLeftPaneContent(renderer,
-                                               layout,
-                                               contract,
-                                               paneLabelColor,
-                                               statusColor);
-        SceneEditorSurfaceRenderRightPaneStatus(renderer,
-                                               layout,
-                                               contract,
-                                               layout->right_content_rect.y + layout->right_content_rect.h,
-                                               paneLabelColor,
-                                               statusColor);
+        SceneEditorSidebarRender(renderer, layout, contract, paneLabelColor, statusColor);
     }
 }

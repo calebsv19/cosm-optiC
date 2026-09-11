@@ -1,3 +1,6 @@
+#include "editor/scene_editor_sidebar.h"
+#include "ui/volume_source_ui_labels.h"
+#include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_surface_render.h"
 
 #include <math.h>
@@ -259,33 +262,55 @@ static int __attribute__((unused)) SceneEditorSurfaceRenderObjectList(SDL_Render
     return cursor_y + 4;
 }
 
-void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
+int SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                              const SceneEditorPaneLayout* layout,
                                              const SceneEditorControlSurfaceContract* contract,
                                              SDL_Color title_color,
                                              SDL_Color body_color) {
     SDL_Rect bounds = {0, 0, 0, 0};
-    SDL_Rect object_panel_region = {0, 0, 0, 0};
     int cursor_y = 0;
     int bottom_y = 0;
     char line[256];
     int selected_index = -1;
     int selected_bezier_point = -1;
-    if (!renderer || !layout || !contract) return;
+    if (!renderer || !layout || !contract) return cursor_y;
     bounds = layout->left_content_rect;
     if (bounds.w <= 0 || bounds.h <= 0) {
         ObjectEditorClearObjectListRows();
-        return;
+        return cursor_y;
     }
     cursor_y = bounds.y + 2;
     bottom_y = bounds.y + bounds.h;
-    if (selectButton.h > 0 && selectButton.y > bounds.y) {
-        bottom_y = selectButton.y - 10;
-    }
 
+    if (contract->activeMode == EDITOR_MODE_OBJECT &&
+        SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SCENE && SceneEditorSidebarLibraryActive()) {
+        ObjectEditorClearObjectListRows(); ObjectEditorClearPaneToolButtons();
+        ObjectEditorPanels_UpdateLayoutForRegion(&bounds);
+        ObjectEditorPanels_DrawAssetList(renderer);
+        ObjectEditorPanels_DrawMaterialList(renderer);
+        return ObjectEditorPanels_ContentBottom();
+    }
+    ObjectEditorPanelsHide();
+    if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_ENVIRONMENT) {
+        ObjectEditorClearObjectListRows();
+        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y,
+            "Atmosphere & Water", title_color, true, 12);
+        snprintf(line, sizeof(line), "Volume interaction: %s", animSettings.volumeInteractionEnabled ? "enabled" : "disabled");
+        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,line,body_color,true,8);
+        volume_source_ui_format_attach_status(animSettings.volumeSourceKind, animSettings.volumeSourcePath,
+            animSettings.volumeInteractionEnabled, line, sizeof(line));
+        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,line,body_color,true,8);
+        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,
+            animSettings.volumeSourcePath[0] ? animSettings.volumeSourcePath : "No external volume source selected",
+            body_color,true,12);
+        snprintf(line, sizeof(line), "Affects lighting: %s", animSettings.volumeAffectsLighting ? "yes" : "no");
+        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,line,body_color,true,8);
+        return SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,
+            "Water geometry and cached resources belong to the loaded scene. Use Preview to inspect the current result. This workspace currently inspects existing resources.",
+            body_color,true,8);
+    }
     if (contract->activeMode == EDITOR_MODE_MATERIAL) {
-        MaterialEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
-        return;
+        return MaterialEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
     }
 
     snprintf(line,
@@ -349,16 +374,13 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                         true,
                                                         8);
         }
-        cursor_y = ObjectEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
-        object_panel_region = bounds;
-        object_panel_region.y = cursor_y + 8;
-        object_panel_region.h = bottom_y - object_panel_region.y;
-        if (object_panel_region.h > 0) {
-            ObjectEditorPanels_UpdateLayoutForRegion(&object_panel_region);
-            ObjectEditorPanels_DrawAssetList(renderer);
-            ObjectEditorPanels_DrawMaterialList(renderer);
+        if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SURFACE) {
+            return SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,
+                "Instance transforms preserve source mesh bytes. Import STL and choose Flat, Smooth or Crease in the inspector to build a managed shading variant. Material composition lives in Materials.",
+                body_color,true,8);
         }
-        return;
+        cursor_y = ObjectEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+        return cursor_y;
     }
 
     if (contract->activeMode == EDITOR_MODE_PATH) {
@@ -388,8 +410,8 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                     body_color,
                                                     true,
                                                     4);
-        BezierEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
-        return;
+        cursor_y = BezierEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+        return cursor_y;
     }
 
     snprintf(line,
@@ -423,10 +445,10 @@ void SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
                                                 body_color,
                                                 true,
                                                 4);
-    CameraEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+    return CameraEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
 }
 
-void SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
+int SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
                                              const SceneEditorPaneLayout* layout,
                                              const SceneEditorControlSurfaceContract* contract,
                                              int status_bottom,
@@ -434,9 +456,9 @@ void SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
                                              SDL_Color body_color) {
     SDL_Rect bounds = {0, 0, 0, 0};
     int cursor_y = 0;
-    if (!renderer || !layout || !contract) return;
+    if (!renderer || !layout || !contract) return cursor_y;
     bounds = layout->right_content_rect;
-    if (bounds.w <= 0 || bounds.h <= 0) return;
+    if (bounds.w <= 0 || bounds.h <= 0) return cursor_y;
     if (status_bottom <= bounds.y + 30) {
         status_bottom = bounds.y + bounds.h;
     }
@@ -444,7 +466,8 @@ void SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
         status_bottom = bounds.y + bounds.h;
     }
     cursor_y = bounds.y + 2;
-    if (contract->activeMode == EDITOR_MODE_OBJECT) {
+    if (contract->activeMode == EDITOR_MODE_OBJECT &&
+        SceneEditorWorkspaceProfileGet() != SCENE_WORKSPACE_ENVIRONMENT) {
         cursor_y = SceneEditorTransformPanelRender(renderer,
                                                    bounds,
                                                    cursor_y,
@@ -515,7 +538,7 @@ void SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
                                                 body_color,
                                                 true,
                                                 4);
-    SceneEditorSurfaceRenderFlowLine(renderer,
+    return SceneEditorSurfaceRenderFlowLine(renderer,
                                      bounds,
                                      cursor_y,
                                      status_bottom,

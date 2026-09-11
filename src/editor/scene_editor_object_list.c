@@ -1,3 +1,5 @@
+#include "editor/scene_editor_document.h"
+#include <ctype.h>
 #include "editor/scene_editor_object_list.h"
 
 #include <math.h>
@@ -20,6 +22,22 @@ static SDL_Rect g_viewport = {0, 0, 0, 0};
 static float g_scroll_offset = 0.0f;
 static float g_content_height = 0.0f;
 static int g_last_selected = -1;
+
+static char filter_text[96];
+void SceneEditorObjectListSetFilter(const char* text) {
+    snprintf(filter_text,sizeof(filter_text),"%s",text ? text : "");
+    for (char* p=filter_text; *p; ++p) *p=(char)tolower((unsigned char)*p);
+    g_scroll_offset=0; g_last_selected=-1;
+}
+static bool filter_matches(int index) {
+    char label[128]={0}, id[128]={0}, haystack[320];
+    if (!filter_text[0]) return true;
+    SceneEditorDocumentObjectLabel(index,label,sizeof(label));
+    runtime_scene_bridge_get_last_object_id_for_scene_index(index,id,sizeof(id));
+    snprintf(haystack,sizeof(haystack),"%s %s %s #%d",label,id,sceneSettings.sceneObjects[index].type,index);
+    for (char* p=haystack; *p; ++p) *p=(char)tolower((unsigned char)*p);
+    return strstr(haystack,filter_text) != NULL;
+}
 
 static void draw_scrollbar(SDL_Renderer* renderer) {
     SDL_Rect track = {0, 0, 0, 0};
@@ -193,15 +211,20 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,
     int viewport_height = 0;
     int first_row = 0;
     int row_y = 0;
+    int matches[MAX_OBJECTS], match_count=0, selected_row=-1;
     char line[160];
     if (!renderer || bounds.w <= 0 || cursor_y >= bottom_y) return cursor_y;
 
     ObjectEditorClearObjectListRows();
+    for (int i=0; i<sceneSettings.objectCount; ++i) if (filter_matches(i)) {
+        if (i==selected_index) selected_row=match_count;
+        matches[match_count++]=i;
+    }
     snprintf(line,
              sizeof(line),
-             "Scene Objects  %d   Mesh Preview %d",
-             sceneSettings.objectCount,
-             SceneEditorMeshPreviewStoreInstanceCount());
+             "Objects  %d / %d",
+             match_count,
+             sceneSettings.objectCount);
     cursor_y = render_line(renderer, bounds, cursor_y, bottom_y, line, title_color);
     viewport_height = OBJECT_LIST_VISIBLE_ROWS * row_pitch - OBJECT_LIST_ROW_GAP;
     if (viewport_height > bottom_y - cursor_y) viewport_height = bottom_y - cursor_y;
@@ -210,20 +233,23 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,
         return cursor_y;
     }
     g_viewport = (SDL_Rect){bounds.x, cursor_y, bounds.w, viewport_height};
-    g_content_height = kit_ui_scroll_content_height_top_anchor(sceneSettings.objectCount,
+    g_content_height = kit_ui_scroll_content_height_top_anchor(match_count,
                                                                (float)row_pitch,
                                                                (float)viewport_height);
     g_scroll_offset = clamp_offset(g_scroll_offset);
-    reveal_selected(selected_index);
+    reveal_selected(selected_row);
     runtime_scene_bridge_get_last_3d_digest_state(&digest);
 
     clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer, &previous_clip);
-    SDL_RenderSetClipRect(renderer, &g_viewport);
+    SDL_Rect clipped_viewport = g_viewport;
+    if (clip_was_enabled) SDL_IntersectRect(&previous_clip, &g_viewport, &clipped_viewport);
+    SDL_RenderSetClipRect(renderer, &clipped_viewport);
     first_row = (int)floorf(g_scroll_offset / (float)row_pitch);
     if (first_row < 0) first_row = 0;
     row_y = g_viewport.y + first_row * row_pitch - (int)lroundf(g_scroll_offset);
-    for (int i = first_row; i < sceneSettings.objectCount; ++i, row_y += row_pitch) {
+    for (int row_index = first_row; row_index < match_count; ++row_index, row_y += row_pitch) {
+        int i = matches[row_index];
         const SceneObject* obj = &sceneSettings.sceneObjects[i];
         const RayTracingRuntimeMeshAssetInstance* loaded = loaded_mesh(i);
         const RayTracingRuntimeMeshAssetSkippedInstance* skipped = skipped_mesh(i);
@@ -264,7 +290,8 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,
         if (hit_row.y + hit_row.h > g_viewport.y + g_viewport.h) {
             hit_row.h = g_viewport.y + g_viewport.h - hit_row.y;
         }
-        ObjectEditorRegisterObjectListRow(i, hit_row);
+        if (SDL_IntersectRect(&hit_row, &clipped_viewport, &hit_row))
+            ObjectEditorRegisterObjectListRow(i, hit_row);
         if (SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(i)) {
             snprintf(line, sizeof(line), "#%d  %s  %s  AABB fallback", i, role, short_id);
         } else if (skipped && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
@@ -280,6 +307,9 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,
             snprintf(line, sizeof(line), "#%d  %s%s  %s  z %.1f", i, role,
                      SceneObjectIsGuideOnly(obj) ? " guide" : "", short_id, obj->z);
         }
+        char display_name[128];
+        if (SceneEditorDocumentObjectLabel(i,display_name,sizeof(display_name)))
+            snprintf(line,sizeof(line),"#%d  %s",i,display_name);
         RenderLabelTextLeft(renderer,
                             (SDL_Rect){row.x + 8, row.y + 2, row.w - 16, row.h - 4},
                             line,

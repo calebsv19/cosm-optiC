@@ -47,6 +47,7 @@ bool SceneEditorDocumentRenameForSceneIndex(int scene_object_index,
                                             char* diagnostics,
                                             size_t diagnostics_size);
 
+bool SceneEditorDocumentObjectLabel(int scene_object_index, char* label, size_t size);
 bool SceneEditorDocumentCanUndo(void);
 bool SceneEditorDocumentCanRedo(void);
 bool SceneEditorDocumentUndo(char* diagnostics, size_t diagnostics_size);

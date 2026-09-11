@@ -2,7 +2,23 @@
 
 Last updated: 2026-09-11
 
-## 2026-09-11 Foundation checkpoint and first Scene workspace slice
+## 2026-09-11 E0/E1 source acceptance and review handoff
+
+Main Edit now provides five workspace profiles, searchable named objects,
+Objects/Library tabs, clipped scrollable sidebars, responsive viewport expansion,
+and source-unit/import controls without a selected object. The complete isolated
+native import/select/edit/undo/redo/material/save/fresh-process-reopen/render
+acceptance passes, including recorded millimeter scale, invalid-draft rejection,
+unknown-field preservation and toolbar clipping pixels.
+
+See `docs/editor_workspace.md` for current edit-family ownership, reproduction and
+review limits. E0/E1 implementation is ready for operator visual acceptance; later
+preset/graph features are not claimed. Broad stable remains at the prior 495
+failures, with the same 47 explicit FAIL lines. Canonical main remains at the
+foundation baseline; this is local development with unchanged versions and no
+installed-app replacement.
+
+## 2026-09-11 Earlier foundation checkpoint and first Scene workspace slice
 
 Existing retained-document Foundation A work was checkpointed and local canonical
 main and Main Edit were aligned at `752d12b`. Subsequent development in Main Edit

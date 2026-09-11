@@ -20,6 +20,8 @@ typedef enum ObjectEditorPanelMotionAction {
     OBJECT_EDITOR_PANEL_MOTION_ACTION_PHYSICS_RESERVED = 3
 } ObjectEditorPanelMotionAction;
 
+int ObjectEditorPanels_ContentBottom(void);
+void ObjectEditorPanelsHide(void);
 void ObjectEditorPanels_UpdateLayout(void);
 void ObjectEditorPanels_UpdateLayoutForRegion(const SDL_Rect* region);
 void ObjectEditorPanels_DrawAssetList(SDL_Renderer* renderer);
