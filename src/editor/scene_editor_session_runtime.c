@@ -8,6 +8,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_internal.h"
 #include "editor/scene_editor_light_timeline.h"
+#include "editor/scene_editor_transform_panel.h"
 #include "editor/scene_editor_viewport_render.h"
 #include "engine/Render/render_pipeline.h"
 #include "scene/object_manager.h"
@@ -52,6 +53,13 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
          event->type == SDL_MOUSEBUTTONUP ||
          event->type == SDL_MOUSEMOTION ||
          event->type == SDL_MOUSEWHEEL)) {
+        return;
+    }
+    if (editor->currentMode == EDITOR_MODE_OBJECT &&
+        SceneEditorTransformPanelHandleEvent(event)) {
+        return;
+    }
+    if (SceneEditorTransformPanelInteractionActive()) {
         return;
     }
     {
@@ -190,6 +198,9 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 frame_dirty = true;
             }
             if (MaterialEditorAuthoredTextureBindingPoll()) {
+                frame_dirty = true;
+            }
+            if (SceneEditorTransformPanelPoll()) {
                 frame_dirty = true;
             }
 

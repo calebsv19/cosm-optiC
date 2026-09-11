@@ -4,6 +4,8 @@
 #include "editor/bezier_editor.h"
 #include "editor/object_editor.h"   //  Required for object editing
 #include "editor/object_editor_motion.h"
+#include "editor/scene_editor_document.h"
+#include "editor/scene_editor_transform_panel.h"
 #include "editor/material_editor.h"
 #include "editor/material_editor_face_preview.h"
 #include "editor/object_editor_panels.h"
@@ -657,6 +659,18 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     if (!SceneEditorLoadSessionState(editor)) {
         return false;
     }
+    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        animSettings.runtimeScenePath[0] != '\0') {
+        char document_diagnostics[256] = {0};
+        if (!SceneEditorDocumentOpenActive(document_diagnostics,
+                                           sizeof(document_diagnostics))) {
+            fprintf(stderr,
+                    "[editor] runtime document unavailable: %s\n",
+                    document_diagnostics);
+        }
+    } else {
+        SceneEditorDocumentClose();
+    }
     SceneEditorMeshPreviewRenderReset(renderer);
     SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
 
@@ -730,6 +744,18 @@ bool InitializeSceneEditor(SceneEditor* editor) {
 
     if (!SceneEditorLoadSessionState(editor)) {
         return false;
+    }
+    if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
+        animSettings.runtimeScenePath[0] != '\0') {
+        char document_diagnostics[256] = {0};
+        if (!SceneEditorDocumentOpenActive(document_diagnostics,
+                                           sizeof(document_diagnostics))) {
+            fprintf(stderr,
+                    "[editor] runtime document unavailable: %s\n",
+                    document_diagnostics);
+        }
+    } else {
+        SceneEditorDocumentClose();
     }
     if (g_scenePaneHost.initialized) {
         (void)scene_editor_pane_host_set_timeline_visible(&g_scenePaneHost, false);
@@ -907,6 +933,7 @@ bool SceneEditorSessionInteractionActive(const SceneEditor* editor) {
            g_viewport_nav_state.pan_active ||
            scene_editor_pane_host_splitter_drag_active(&g_scenePaneHost) ||
            SceneEditorLightTimelineInteractionActive() ||
+           SceneEditorTransformPanelInteractionActive() ||
            g_bezier3d_gizmo_state.dragging ||
            g_camera3d_gizmo_state.dragging;
 }
@@ -935,6 +962,8 @@ void SceneEditorSessionEnd(SceneEditor* editor) {
     SceneEditorCamera3DGizmoReset();
     scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
+    SceneEditorTransformPanelReset();
+    SceneEditorDocumentClose();
     sceneEditorExitFlag = false;
     setRenderContext(NULL, NULL, 0, 0);
 }
@@ -1043,6 +1072,8 @@ void DestroySceneEditor(SceneEditor* editor) {
     editor->owns_shared_device = false;
     scene_editor_pane_host_end_splitter_drag(&g_scenePaneHost);
     SceneEditorInputRouterReset();
+    SceneEditorTransformPanelReset();
+    SceneEditorDocumentClose();
     ray_tracing_font_runtime_shutdown();
     setRenderContext(NULL, NULL, 0, 0);
     printf("Scene Editor Closed. Returning to main menu...\n");

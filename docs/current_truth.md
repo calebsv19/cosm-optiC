@@ -1223,6 +1223,21 @@ change the historical remote worker evidence below.
       and then rehydrates the editor through the same preview-limited deferred
       mesh path, so saving a skull-scale scene does not synchronously full-load
       or parse over-budget mesh sidecars in the editor process
+    - the runtime-scene editor now retains the complete JSON document beside the
+      reduced renderer state, maps selected rows through stable object IDs, and
+      publishes through one exact-base checked, advisory-locked, atomic save;
+      unknown extensions survive supported edits and external byte drift rejects
+      a stale save instead of overwriting it
+    - Object mode now exposes a compact document inspector for XYZ position,
+      degree rotation, positive per-axis scale, rename, duplicate/remove,
+      material preset assignment, bounded undo/redo, meter or millimeter STL
+      intake, and inherit/flat/smooth/crease shading with a validated angle
+    - managed STL jobs compile into a validated same-directory candidate while
+      the active scene remains unchanged; the document owner accepts only the
+      expected revision and commits the result through the same save path
+    - document mutation input is deferred while a render or managed operation
+      owns mutable state; source/headless tests cover fresh reopen/render and
+      relocation, while hands-on isolated-app acceptance remains pending
     - the object-mode left pane now reports the current scene-object list plus
       the retained loaded mesh-preview instance count; object rows distinguish
       loaded mesh sidecars, over-budget skipped mesh sidecars, and primitive

@@ -18,6 +18,7 @@
 #include "editor/editor_mode_router.h"
 #include "editor/scene_editor_control_surface.h"
 #include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_document.h"
 #include "editor/scene_editor_material_face_metrics.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_graph.h"
@@ -602,6 +603,208 @@ static int test_scene_editor_runtime_scene_persistence_roundtrip(void) {
 
     free(persisted_json);
     unlink(runtime_path);
+    sceneSettings = saved_scene;
+    animSettings = saved_anim;
+    return 0;
+}
+
+static int test_scene_editor_document_transform_history_and_atomic_conflict(void) {
+    SceneConfig saved_scene = sceneSettings;
+    AnimationConfig saved_anim = animSettings;
+    const char* runtime_path = "/tmp/ray_tracing_scene_editor_document_foundation_a.json";
+    const char* candidate_path = "/tmp/.ray_tracing_scene_editor_document_candidate.json";
+    const char* runtime_json =
+        "{"
+        "\"schema_family\":\"codework_scene\","
+        "\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,"
+        "\"scene_id\":\"foundation_a_document_test\","
+        "\"unit_system\":\"meters\","
+        "\"world_scale\":1.0,"
+        "\"space_mode_default\":\"3d\","
+        "\"objects\":[{"
+          "\"object_id\":\"editable_panel\","
+          "\"object_type\":\"plane_primitive\","
+          "\"transform\":{"
+            "\"position\":{\"x\":1.0,\"y\":2.0,\"z\":3.0},"
+            "\"rotation\":{\"x\":4.0,\"y\":5.0,\"z\":6.0},"
+            "\"scale\":{\"x\":1.0,\"y\":1.5,\"z\":2.0}"
+          "},"
+          "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":1.0,\"height\":1.0}"
+        "}],"
+        "\"materials\":[],\"lights\":[],\"cameras\":[],\"constraints\":[],"
+        "\"extensions\":{\"physics_sim\":{\"custom_unknown\":{\"keep_me\":731}}}"
+        "}";
+    RuntimeSceneBridgePreflight summary = {0};
+    SceneEditorDocumentTransform transform = {0};
+    char diagnostics[256] = {0};
+    char* persisted = NULL;
+    FILE* external = NULL;
+    int duplicate_index = -1;
+    json_object* candidate_root = NULL;
+
+    SceneEditorDocumentClose();
+    assert_true("foundation_a_document_fixture_write",
+                test_scene_editor_write_text_file(runtime_path, runtime_json));
+    memset(&sceneSettings, 0, sizeof(sceneSettings));
+    memset(&animSettings, 0, sizeof(animSettings));
+    assert_true("foundation_a_document_initial_apply",
+                runtime_scene_bridge_apply_file(runtime_path, &summary));
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath,
+             sizeof(animSettings.runtimeScenePath),
+             "%s",
+             runtime_path);
+    assert_true("foundation_a_document_open",
+                SceneEditorDocumentOpenActive(diagnostics, sizeof(diagnostics)));
+    assert_true("foundation_a_document_transform_read",
+                SceneEditorDocumentGetTransformForSceneIndex(0,
+                                                             &transform,
+                                                             diagnostics,
+                                                             sizeof(diagnostics)) &&
+                    fabs(transform.rotation_degrees[1] - 5.0) <= 1e-9 &&
+                    fabs(transform.scale[2] - 2.0) <= 1e-9);
+
+    transform.position[0] = 7.25;
+    transform.rotation_degrees[1] = 42.0;
+    transform.scale[2] = 0.75;
+    assert_true("foundation_a_document_transform_set",
+                SceneEditorDocumentSetTransformForSceneIndex(0,
+                                                             &transform,
+                                                             diagnostics,
+                                                             sizeof(diagnostics)));
+    assert_true("foundation_a_document_undo_available", SceneEditorDocumentCanUndo());
+    assert_true("foundation_a_document_undo",
+                SceneEditorDocumentUndo(diagnostics, sizeof(diagnostics)));
+    memset(&transform, 0, sizeof(transform));
+    assert_true("foundation_a_document_undo_readback",
+                SceneEditorDocumentGetTransformForSceneIndex(0,
+                                                             &transform,
+                                                             diagnostics,
+                                                             sizeof(diagnostics)) &&
+                    fabs(transform.position[0] - 1.0) <= 1e-9);
+    transform.scale[0] = 0.0;
+    assert_true("foundation_a_document_invalid_edit_rejected_with_redo_intact",
+                !SceneEditorDocumentSetTransformForSceneIndex(0,
+                                                              &transform,
+                                                              diagnostics,
+                                                              sizeof(diagnostics)) &&
+                    SceneEditorDocumentCanRedo());
+    assert_true("foundation_a_document_redo",
+                SceneEditorDocumentRedo(diagnostics, sizeof(diagnostics)));
+    assert_true("foundation_a_document_duplicate",
+                SceneEditorDocumentDuplicateForSceneIndex(0,
+                                                           &duplicate_index,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)) &&
+                    duplicate_index == 1 && sceneSettings.objectCount == 2);
+    assert_true("foundation_a_document_rename",
+                SceneEditorDocumentRenameForSceneIndex(1,
+                                                       "Retained Copy",
+                                                       diagnostics,
+                                                       sizeof(diagnostics)));
+    assert_true("foundation_a_document_remove",
+                SceneEditorDocumentRemoveForSceneIndex(1,
+                                                       diagnostics,
+                                                       sizeof(diagnostics)) &&
+                    sceneSettings.objectCount == 1);
+    assert_true("foundation_a_document_atomic_save",
+                SceneEditorDocumentSave(diagnostics, sizeof(diagnostics)));
+    persisted = read_text_file_alloc(runtime_path, NULL);
+    assert_true("foundation_a_document_unknown_extension_preserved",
+                persisted && strstr(persisted, "\"custom_unknown\"") != NULL &&
+                    strstr(persisted, "731") != NULL);
+    free(persisted);
+    persisted = NULL;
+    SceneEditorDocumentClose();
+    assert_true("foundation_a_document_reopen",
+                SceneEditorDocumentOpen(runtime_path, diagnostics, sizeof(diagnostics)));
+    memset(&transform, 0, sizeof(transform));
+    assert_true("foundation_a_document_fresh_process_transform_readback",
+                SceneEditorDocumentGetTransformForSceneIndex(0,
+                                                             &transform,
+                                                             diagnostics,
+                                                             sizeof(diagnostics)) &&
+                    fabs(transform.position[0] - 7.25) <= 1e-9 &&
+                    fabs(transform.rotation_degrees[1] - 42.0) <= 1e-9 &&
+                    fabs(transform.scale[2] - 0.75) <= 1e-9);
+
+    persisted = read_text_file_alloc(runtime_path, NULL);
+    candidate_root = persisted ? json_tokener_parse(persisted) : NULL;
+    if (candidate_root) {
+        json_object* objects = NULL;
+        json_object* object = NULL;
+        json_object* transform_json = NULL;
+        json_object* position = NULL;
+        json_object_object_get_ex(candidate_root, "objects", &objects);
+        object = objects ? json_object_array_get_idx(objects, 0) : NULL;
+        if (object) json_object_object_get_ex(object, "transform", &transform_json);
+        if (transform_json) json_object_object_get_ex(transform_json, "position", &position);
+        if (position) json_object_object_add(position, "x", json_object_new_double(8.5));
+        assert_true("foundation_a_document_candidate_write",
+                    test_scene_editor_write_text_file(
+                        candidate_path,
+                        json_object_to_json_string_ext(candidate_root,
+                                                       JSON_C_TO_STRING_PRETTY)));
+    } else {
+        assert_true("foundation_a_document_candidate_parse", false);
+    }
+    free(persisted);
+    persisted = NULL;
+    if (candidate_root) json_object_put(candidate_root);
+    assert_true("foundation_a_document_candidate_adopt",
+                SceneEditorDocumentAdoptCandidateAsCommand(candidate_path,
+                                                           diagnostics,
+                                                           sizeof(diagnostics)));
+    memset(&transform, 0, sizeof(transform));
+    assert_true("foundation_a_document_candidate_active_readback",
+                SceneEditorDocumentGetTransformForSceneIndex(0,
+                                                             &transform,
+                                                             diagnostics,
+                                                             sizeof(diagnostics)) &&
+                    fabs(transform.position[0] - 8.5) <= 1e-9);
+    assert_true("foundation_a_document_candidate_undo",
+                SceneEditorDocumentUndo(diagnostics, sizeof(diagnostics)));
+    memset(&transform, 0, sizeof(transform));
+    assert_true("foundation_a_document_candidate_undo_readback",
+                SceneEditorDocumentGetTransformForSceneIndex(0,
+                                                             &transform,
+                                                             diagnostics,
+                                                             sizeof(diagnostics)) &&
+                    fabs(transform.position[0] - 7.25) <= 1e-9);
+    assert_true("foundation_a_document_material_command",
+                SceneEditorDocumentSetMaterialIdForSceneIndex(0,
+                                                              3,
+                                                              diagnostics,
+                                                              sizeof(diagnostics)) &&
+                    sceneSettings.sceneObjects[0].material_id == 3);
+    assert_true("foundation_a_document_material_undo",
+                SceneEditorDocumentUndo(diagnostics, sizeof(diagnostics)) &&
+                    sceneSettings.sceneObjects[0].material_id != 3);
+
+    transform.position[2] = 9.0;
+    assert_true("foundation_a_document_conflict_mutation",
+                SceneEditorDocumentSetTransformForSceneIndex(0,
+                                                             &transform,
+                                                             diagnostics,
+                                                             sizeof(diagnostics)));
+    external = fopen(runtime_path, "ab");
+    assert_true("foundation_a_document_conflict_external_open", external != NULL);
+    if (external) {
+        fwrite(" ", 1u, 1u, external);
+        fclose(external);
+    }
+    assert_true("foundation_a_document_conflict_rejected",
+                !SceneEditorDocumentSave(diagnostics, sizeof(diagnostics)) &&
+                    strstr(diagnostics, "changed concurrently") != NULL);
+    persisted = read_text_file_alloc(runtime_path, NULL);
+    assert_true("foundation_a_document_conflict_preserves_external_bytes",
+                persisted && strlen(persisted) > 0u && persisted[strlen(persisted) - 1u] == ' ');
+
+    free(persisted);
+    SceneEditorDocumentClose();
+    unlink(runtime_path);
+    unlink(candidate_path);
     sceneSettings = saved_scene;
     animSettings = saved_anim;
     return 0;
@@ -7018,6 +7221,7 @@ int run_test_runtime_scene_editor_tests(void) {
     int before = test_support_failures();
 
     test_scene_editor_tool_state_contract();
+    test_scene_editor_document_transform_history_and_atomic_conflict();
     test_scene_editor_runtime_scene_persistence_roundtrip();
     test_scene_editor_runtime_scene_persistence_roundtrip_object_motion();
     test_scene_editor_runtime_scene_persist_keeps_preview_limited_mesh_reload();

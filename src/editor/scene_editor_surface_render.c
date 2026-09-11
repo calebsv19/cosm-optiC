@@ -20,6 +20,7 @@
 #include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_object_list.h"
 #include "editor/scene_editor_tool_state.h"
+#include "editor/scene_editor_transform_panel.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/render_helper.h"
 
@@ -440,6 +441,12 @@ void SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
         status_bottom = bounds.y + bounds.h;
     }
     cursor_y = bounds.y + 2;
+    if (contract->activeMode == EDITOR_MODE_OBJECT) {
+        cursor_y = SceneEditorTransformPanelRender(renderer,
+                                                   bounds,
+                                                   cursor_y,
+                                                   status_bottom);
+    }
     if (contract->activeMode == EDITOR_MODE_MATERIAL) {
         int preview_bottom = MaterialEditorRenderRightPanePreview(renderer,
                                                                   bounds,

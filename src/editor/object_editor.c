@@ -3,6 +3,7 @@
 #include "scene/object_manager.h"
 #include "config/config_manager.h"
 #include "editor/scene_editor.h"
+#include "editor/scene_editor_document.h"
 #include "editor/editor_mode_router.h"
 #include "editor/object_editor_object_ops.h"
 #include "editor/scene_editor_tool_state.h"
@@ -600,10 +601,17 @@ void ObjectEditorSetSelectedObjectIndex(int index) {
 
 void ObjectEditorAssignMaterialToSelected(int material_id) {
     int selected_index = ObjectEditorGetSelectedObjectIndex();
+    char diagnostics[256] = {0};
     if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
     }
-    ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[selected_index], material_id);
+    if (!SceneEditorDocumentIsOpen() ||
+        !SceneEditorDocumentSetMaterialIdForSceneIndex(selected_index,
+                                                       material_id,
+                                                       diagnostics,
+                                                       sizeof(diagnostics))) {
+        ObjectEditorObjectAssignMaterial(&sceneSettings.sceneObjects[selected_index], material_id);
+    }
     ObjectEditorSetSelectedMaterialIndex(material_id);
 }
 

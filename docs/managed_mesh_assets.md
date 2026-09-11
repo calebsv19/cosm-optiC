@@ -1,8 +1,9 @@
 # Managed STL assets and per-object shading
 
-This is a backend workflow in Main Edit. It reuses `scene_runtime_v1`,
-`mesh_asset_runtime_v1`, the shared mesh compiler, and the existing runtime mesh
-path adapter. It does not require a new editor panel or change legacy scenes.
+This Main Edit workflow reuses `scene_runtime_v1`, `mesh_asset_runtime_v1`, the
+shared mesh compiler, and the existing runtime mesh path adapter. The Object-mode
+document inspector now exposes STL intake and per-instance shading while the CLI
+remains available for automation. Legacy unmanaged scenes remain compatible.
 
 ## Ownership and contract
 
@@ -61,6 +62,13 @@ python3 tools/managed_mesh_assets.py apply \
   --default-mode smooth
 ```
 
+Create a new default mesh instance by adding `--spawn-object-id dragon_object`
+instead of `--object-id`. The new instance receives a stable ID, identity XYZ
+transform, first available material reference and retained managed-mesh binding.
+Use `--output-scene /same/parent/.candidate.json` to publish a validated
+same-directory candidate while preserving the active scene bytes; the editor uses
+this form and commits the candidate through its document transaction.
+
 For a wrench, select `--default-mode flat`. For mixed curved/hard surfaces,
 select `--default-mode crease_aware --crease-angle 60` and validate the result.
 Use `--scale 0.001` for millimeter coordinates. The backend does not guess units.
@@ -93,17 +101,20 @@ Preserve/quarantine a corrupt file explicitly before rebuilding it.
 
 ## Persistence, portability, and compatibility
 
-Dependencies are written first into content-derived paths; the scene JSON is
-atomically replaced last. Compiler or validation failure preserves the previous
-scene. Interrupted imports may leave unreferenced immutable files; there is no
-automatic cleanup. Backend writers share a file lock and detect scene changes
-before replacement. Do not concurrently save this same scene in an editor:
-external writers do not participate in that lock.
+Dependencies are written first into content-derived paths; the scene JSON or
+requested candidate is atomically replaced last, followed by a parent-directory
+sync. Compiler or validation failure preserves the previous scene. Interrupted
+imports may leave unreferenced immutable files; there is no automatic cleanup.
+Backend writers share the editor's file lock and detect exact scene-byte changes
+before publication. The editor asks the helper for a same-directory candidate,
+checks the in-memory document revision, and then commits through its own atomic
+expected-base save. Uncooperative external writers remain unsupported.
 
-Normal editor overlay writeback preserves the managed catalog. New backend
-changes become visible when the scene is reopened/reloaded. Existing prepared
-render state is not hot-swapped. Direct manual changes to stored policies require
-backend apply before rendering; the C renderer consumes the resolved sidecar.
+Normal editor overlay writeback preserves the managed catalog. Editor-managed
+changes become visible after candidate adoption and scene rehydration. Existing
+prepared render state is not hot-swapped. Direct manual changes to stored policies
+require backend apply before rendering; the C renderer consumes the resolved
+sidecar.
 
 The existing project validator includes managed retained sources and active
 variants in its content manifest. Legacy explicit scenes remain compatible.
@@ -120,7 +131,9 @@ their existing project contracts; managed STL intake does not collect them.
 
 ## Verification and boundaries
 
-`make BUILD_TOOLCHAIN=clang test-managed-mesh-assets` proves two instance modes,
+`make BUILD_TOOLCHAIN=clang test-scene-editor-foundation-a` runs the retained
+document/command/save group and managed-mesh integration. The managed tests prove
+two instance modes,
 scene toggle restoration, failed-compile atomicity, invalid angle rejection,
 removal of an external source, project relocation, deletion of derived meshes,
 byte-identical rebuilding, and a real headless render with route readback.
@@ -128,9 +141,10 @@ byte-identical rebuilding, and a real headless render with route readback.
 Artifacts are under `build/managed_mesh_proof/`.
 
 Shared reuse decision: reuse-adopted for existing mesh asset/compiler and scene
-extension contracts; project intake policy and CLI remain app-owned. No shared
-API or module version changes. Complex-topology smoothing corrections and new
-editor controls remain separate work.
+extension contracts; project intake policy, document transactions and CLI remain
+app-owned. No shared API or module version changes. Complex-topology smoothing
+corrections remain separate work. Hands-on acceptance of the new editor controls
+requires an isolated app run and is not established by these headless tests.
 
 The first geometry-quality follow-up is documented in
 [Smoothing slice 1](smoothing_first_slice.md): mixed real-asset baseline and

@@ -55,6 +55,7 @@ STABLE_TEST_TARGETS := \
 	test-scene-editor-mesh-preview-outline \
 	test-scene-editor-mesh-preview-shading \
 	test-scene-editor-primitive-preview-geometry \
+	test-scene-editor-foundation-a \
 	test-runtime-mesh-asset-pack \
 	test-runtime-mesh-asset-builder \
 	test-smooth-mesh-reflection-fixtures \
@@ -3425,6 +3426,11 @@ test-legacy:
 
 .PHONY: test-managed-mesh-assets
 test-managed-mesh-assets: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/test_managed_mesh_assets.py
+
+.PHONY: test-scene-editor-foundation-a
+test-scene-editor-foundation-a: $(TEST_BIN) $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN) $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	TEST_RUNNER_GROUP=runtime_scene_editor ./$(TEST_BIN)
 	python3 tests/integration/test_managed_mesh_assets.py
 
 .PHONY: test-smooth-mesh-connectivity capture-smooth-mesh-connectivity-before

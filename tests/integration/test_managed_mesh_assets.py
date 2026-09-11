@@ -19,6 +19,78 @@ RENDERER = ROOT / f'build/toolchains/clang/{platform.machine()}/tools/cli/ray_tr
 
 
 class ManagedMeshTest(unittest.TestCase):
+    def test_cli_can_spawn_first_class_managed_instance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory) / 'project'
+            project.mkdir()
+            scene = project / 'scene_runtime.json'
+            source_scene = build_scene({f: f for f in ('crease', 'analytic_sphere', 'icosphere', 'organic_blob')})
+            source_scene['objects'] = []
+            source_scene['extensions']['ray_tracing']['authoring']['object_materials'] = []
+            scene.write_text(json.dumps(source_scene))
+            original_scene_bytes = scene.read_bytes()
+            candidate = project / '.managed-ui-candidate.json'
+            source = ROOT / 'third_party/codework_shared/core/core_mesh_compile/tests/fixtures/imports/tetrahedron_ascii.stl'
+            subprocess.run([
+                sys.executable,
+                str(ROOT / 'tools/managed_mesh_assets.py'),
+                'apply',
+                '--scene', str(scene),
+                '--compiler', str(COMPILER),
+                '--source', str(source),
+                '--asset-id', 'ui_import_tetrahedron',
+                '--spawn-object-id', 'ui_import_tetrahedron',
+                '--default-mode', 'flat',
+                '--output-scene', str(candidate),
+            ], check=True, capture_output=True)
+            self.assertEqual(scene.read_bytes(), original_scene_bytes)
+            self.assertEqual(status(candidate, COMPILER)['status'], 'ready')
+            candidate.replace(scene)
+            saved = json.loads(scene.read_text())
+            spawned = next(obj for obj in saved['objects'] if obj['object_id'] == 'ui_import_tetrahedron')
+            self.assertEqual(spawned['object_type'], 'mesh_asset_instance')
+            self.assertEqual(spawned['extensions']['ray_tracing']['managed_mesh']['asset_id'],
+                             'ui_import_tetrahedron')
+            self.assertEqual(status(scene, COMPILER)['status'], 'ready')
+            # Match the retained editor command sequence before a fresh renderer process.
+            spawned['transform'] = {
+                'position': {'x': 0.4, 'y': 0.3, 'z': 1.2},
+                'rotation': {'x': 12.0, 'y': 28.0, 'z': 7.0},
+                'scale': {'x': 0.8, 'y': 1.1, 'z': 0.9},
+            }
+            authoring = saved.setdefault('extensions', {}).setdefault('ray_tracing', {}).setdefault('authoring', {})
+            object_materials = authoring.setdefault('object_materials', [])
+            object_materials.append({'object_id': 'ui_import_tetrahedron',
+                                     'material_id': 0,
+                                     'object_color': 0x4C8ED9,
+                                     'roughness': 0.32})
+            scene.write_text(json.dumps(saved, indent=2, sort_keys=True) + '\n')
+            update(scene, COMPILER, object_id='ui_import_tetrahedron',
+                   shading='crease_aware', crease_angle=52.0)
+            request = build_request(project, 'foundation_a', 'tlas_blas_parity')
+            request['render'].update(width=96, height=64)
+            request_path = project / 'request.json'
+            request_path.write_text(json.dumps(request))
+            subprocess.run([str(RENDERER), '--request', str(request_path), '--render'],
+                           check=True, capture_output=True)
+            first_frame = project / 'renders/foundation_a_tlas_blas_parity/frames/frame_0000.bmp'
+            first_hash = digest(first_frame)
+            relocated = project.parent / 'relocated_foundation_a'
+            project.rename(relocated)
+            relocated_request = build_request(relocated, 'foundation_a_reopen', 'tlas_blas_parity')
+            relocated_request['render'].update(width=96, height=64)
+            relocated_request_path = relocated / 'request_reopen.json'
+            relocated_request_path.write_text(json.dumps(relocated_request))
+            subprocess.run([str(RENDERER), '--request', str(relocated_request_path), '--render'],
+                           check=True, capture_output=True)
+            reopened_frame = relocated / 'renders/foundation_a_reopen_tlas_blas_parity/frames/frame_0000.bmp'
+            self.assertEqual(digest(reopened_frame), first_hash)
+            reopened = json.loads((relocated / 'scene_runtime.json').read_text())
+            reopened_object = next(obj for obj in reopened['objects']
+                                   if obj['object_id'] == 'ui_import_tetrahedron')
+            self.assertEqual(reopened_object['transform']['rotation']['y'], 28.0)
+            self.assertEqual(status(relocated / 'scene_runtime.json', COMPILER)['status'], 'ready')
+
     def test_existing_project_validation(self):
         from scene_project_contract import validate_project
         with tempfile.TemporaryDirectory() as directory:

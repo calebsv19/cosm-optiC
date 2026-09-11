@@ -21,6 +21,16 @@ SCHEMA = 'optic_managed_mesh_assets_v1'
 MODES = {'flat', 'smooth', 'crease_aware'}
 
 
+def sync_directory(path):
+    """Make a rename/link commit durable before a scene can reference it."""
+    flags = os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0)
+    fd = os.open(path, flags)
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def digest(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as f:
@@ -65,6 +75,7 @@ def publish(path, data):
         os.link(tmp, path)
     finally:
         tmp.unlink()
+    sync_directory(path.parent)
 
 
 def catalog(scene):
@@ -203,7 +214,8 @@ def status(scene_path, compiler=None):
 
 def update(scene_path, compiler, *, source=None, asset_id=None, object_id=None,
            shading='inherit', default_mode='flat', crease_angle=60, scale=1.0,
-           weld_tolerance=1e-6, smoothing_enabled=None, spawn=None):
+           weld_tolerance=1e-6, smoothing_enabled=None, spawn=None,
+           output_scene=None):
     """Intake/bind, change policy, or rebuild. Existing objects are preserved.
 
     spawn is an optional complete scene object; its ID must not already exist.
@@ -212,6 +224,9 @@ def update(scene_path, compiler, *, source=None, asset_id=None, object_id=None,
     """
     scene_path = Path(scene_path).resolve()
     root = scene_path.parent
+    output_scene = Path(output_scene).resolve() if output_scene is not None else None
+    if output_scene is not None and (output_scene.parent != root or output_scene == scene_path):
+        raise ValueError('candidate output must be a different file in the scene directory')
     with (root / ('.' + scene_path.name + '.managed.lock')).open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         original = scene_path.read_bytes()
@@ -262,10 +277,44 @@ def update(scene_path, compiler, *, source=None, asset_id=None, object_id=None,
                 raise ValueError('candidate not ready')
             if scene_path.read_bytes() != original:
                 raise ValueError('scene changed concurrently; retry from fresh scene')
-            os.replace(pending, scene_path)
+            committed_path = output_scene or scene_path
+            if output_scene is not None and output_scene.exists():
+                raise ValueError('candidate output already exists')
+            os.replace(pending, committed_path)
+            sync_directory(root)
         finally:
             pending.unlink(missing_ok=True)
-    return status(scene_path, compiler)
+    return status(output_scene or scene_path, compiler)
+
+
+def default_spawn_object(scene, object_id):
+    """Build the smallest retained mesh instance accepted by scene_runtime_v1."""
+    if not object_id or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', object_id):
+        raise ValueError('spawn object ID must use 1-64 letters, digits, underscore, or dash')
+    if any(obj.get('object_id') == object_id for obj in scene['objects']):
+        raise ValueError('spawn object ID already exists')
+    spawned = {
+        'object_id': object_id,
+        'display_name': object_id,
+        'object_type': 'mesh_asset_instance',
+        'space_mode_intent': '3d',
+        'dimensional_mode': 'full_3d',
+        'transform': {
+            'position': {'x': 0.0, 'y': 0.0, 'z': 0.0},
+            'rotation': {'x': 0.0, 'y': 0.0, 'z': 0.0},
+            'scale': {'x': 1.0, 'y': 1.0, 'z': 1.0},
+        },
+        'geometry_ref': {'kind': 'mesh_asset', 'id': 'pending_managed_import'},
+        'tags': ['authoring', 'ray_tracing', 'managed_mesh'],
+        'flags': {'visible': True, 'locked': False, 'selectable': True},
+        'extensions': {'line_drawing': {'geometry_source': 'mesh_asset_instance'}},
+    }
+    materials = scene.get('materials')
+    if isinstance(materials, list) and materials and isinstance(materials[0], dict):
+        material_id = materials[0].get('material_id')
+        if isinstance(material_id, str) and material_id:
+            spawned['material_ref'] = {'id': material_id}
+    return spawned
 
 
 def main():
@@ -275,6 +324,9 @@ def main():
     p.add_argument('--compiler', type=Path)
     p.add_argument('--source', type=Path)
     p.add_argument('--asset-id'); p.add_argument('--object-id')
+    p.add_argument('--spawn-object-id')
+    p.add_argument('--output-scene', type=Path,
+                   help='write a validated same-directory candidate without replacing --scene')
     p.add_argument('--shading', choices=['inherit', *sorted(MODES)], default='inherit')
     p.add_argument('--default-mode', choices=sorted(MODES), default='flat')
     p.add_argument('--crease-angle', type=float, default=60)
@@ -288,10 +340,16 @@ def main():
         else:
             if not a.compiler:
                 p.error('apply requires --compiler')
+            spawn = None
+            if a.spawn_object_id:
+                source_scene = json.loads(a.scene.read_text())
+                check_scene(source_scene)
+                spawn = default_spawn_object(source_scene, a.spawn_object_id)
             result = update(a.scene, a.compiler, source=a.source, asset_id=a.asset_id,
                 object_id=a.object_id, shading=a.shading, default_mode=a.default_mode,
                 crease_angle=a.crease_angle, scale=a.scale, weld_tolerance=a.weld_tolerance,
-                smoothing_enabled=None if a.smoothing is None else a.smoothing == 'on')
+                smoothing_enabled=None if a.smoothing is None else a.smoothing == 'on',
+                spawn=spawn, output_scene=a.output_scene)
         print(json.dumps(result, indent=2))
         return 0 if result['status'] != 'rebuild_required' else 1
     except (ValueError, KeyError, TypeError, OSError, subprocess.CalledProcessError) as e:

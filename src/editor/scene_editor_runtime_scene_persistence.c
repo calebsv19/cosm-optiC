@@ -9,6 +9,7 @@
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/object_editor_motion.h"
+#include "editor/scene_editor_document.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
@@ -756,15 +757,10 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
 }
 
 bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_diagnostics_size) {
-    RuntimeSceneBridgePreflight summary = {0};
     char* runtime_scene_json = NULL;
     char* overlay_json = NULL;
-    char* merged_json = NULL;
-    char persisted_runtime_scene_path[sizeof(animSettings.runtimeScenePath)];
     double world_scale = 1.0;
     long long logical_clock = 1;
-    CoreResult write_result;
-    bool ok = false;
 
     scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "invalid input");
     if (animSettings.sceneSource != SCENE_SOURCE_RUNTIME_SCENE ||
@@ -772,10 +768,12 @@ bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_d
         scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "runtime scene source is not active");
         return false;
     }
-    snprintf(persisted_runtime_scene_path,
-             sizeof(persisted_runtime_scene_path),
-             "%s",
-             animSettings.runtimeScenePath);
+    if (!SceneEditorDocumentIsOpen() ||
+        strcmp(SceneEditorDocumentPath(), animSettings.runtimeScenePath) != 0) {
+        if (!SceneEditorDocumentOpenActive(out_diagnostics, out_diagnostics_size)) {
+            return false;
+        }
+    }
 
     if (!scene_editor_runtime_scene_read_file(animSettings.runtimeScenePath,
                                               &runtime_scene_json,
@@ -803,40 +801,13 @@ bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_d
         return false;
     }
 
-    ok = runtime_scene_bridge_writeback_ray_overlay_json(runtime_scene_json,
-                                                         overlay_json,
-                                                         &merged_json,
-                                                         out_diagnostics,
-                                                         out_diagnostics_size);
     free(runtime_scene_json);
+    if (!SceneEditorDocumentMergeOverlayAndSave(overlay_json,
+                                                out_diagnostics,
+                                                out_diagnostics_size)) {
+        free(overlay_json);
+        return false;
+    }
     free(overlay_json);
-    if (!ok || !merged_json) {
-        free(merged_json);
-        return false;
-    }
-
-    write_result = core_io_write_all(animSettings.runtimeScenePath, merged_json, strlen(merged_json));
-    free(merged_json);
-    if (write_result.code != CORE_OK) {
-        scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "failed to write merged runtime scene");
-        return false;
-    }
-
-    if (!runtime_scene_bridge_apply_file_defer_mesh_assets(animSettings.runtimeScenePath, &summary)) {
-        scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, summary.diagnostics);
-        return false;
-    }
-    {
-        RuntimeMotionTrack3DSummary motion_summary;
-        runtime_scene_motion_bridge_get_last_summary(&motion_summary);
-        ObjectEditorMotionHydrateFromRuntimeSummary(&motion_summary);
-    }
-    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
-    snprintf(animSettings.runtimeScenePath,
-             sizeof(animSettings.runtimeScenePath),
-             "%s",
-             persisted_runtime_scene_path);
-
-    scene_editor_runtime_scene_diag(out_diagnostics, out_diagnostics_size, "ok");
     return true;
 }
