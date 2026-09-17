@@ -46,6 +46,12 @@ Interactive tooling for shaping the scene.
 
 ## Scene workspace presentation
 
+The scene-digest overlay requests a wire reference across the five task
+profiles. Materials alone displays the selected-object Bounds/Wire/Solid/Material
+toolbar; unselected objects remain wire context. Workspace switching preserves
+the scene view until the user explicitly frames a selection. This policy stays
+RayTracing-owned; shared viewport and mesh-preview libraries provide geometry.
+
 `scene_editor_workspace_layout.c` calculates the window-wide mode/action header.
 `scene_editor_pane_host.c` owns side-pane expansion/restoration and splitter state.
 `scene_editor_chrome_shell.c` renders and maps the header; chrome actions update

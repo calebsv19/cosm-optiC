@@ -177,6 +177,13 @@ mutate the document and can be canceled with Escape.
 `kit_pane` and `kit_ui` remain the sizing/splitter/scroll mechanisms. No shared
 module API, version or adoption change is introduced.
 
+The current Main Edit viewport keeps a wire scene reference in Scene, Surface,
+Atmos / Water and Render. Materials retains the other objects as wire context
+around its selected-object preview. Bounds/Wire/Solid/Material buttons are
+Material-only session view controls. Entering Materials preserves scene
+placement; Frame selected is explicit. These view changes do not issue document
+commands or alter final render content.
+
 ## Reproduce source acceptance
 
 ```sh

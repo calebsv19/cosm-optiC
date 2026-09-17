@@ -502,14 +502,17 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     bool material_focus_mode = (active_mode == EDITOR_MODE_MATERIAL);
     bool material_preview_rendered = false;
     bool preview_surface_composed = false;
-    SceneEditorMeshDisplayMode preview_mode = SceneEditorMeshPreviewModeGet();
+    SceneEditorMeshDisplayMode preview_mode = active_mode == EDITOR_MODE_MATERIAL &&
+                                              selected_object_index >= 0
+        ? SceneEditorMeshPreviewModeGet() : SCENE_EDITOR_MESH_DISPLAY_WIRE;
     SceneEditorMaterialPreviewTriangleAddress selected_triangles
         [SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES];
     int selected_triangle_count = 0;
     if (!renderer || !projector || !digest) return;
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
 
-    if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL) {
+    if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL ||
+        active_mode == EDITOR_MODE_CAMERA) {
         SceneEditorMeshPreviewFrameStats mesh_stats = {0};
         preview_surface_composed = SceneEditorMeshPreviewRenderGeometry(
             renderer,
@@ -564,7 +567,8 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                 selected_triangle_count += 1;
             }
         }
-        material_preview_rendered =
+        material_preview_rendered = (preview_mode == SCENE_EDITOR_MESH_DISPLAY_SOLID ||
+                                     preview_mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL) &&
             SceneEditorMaterialPreviewRenderFocusedObjectWithSelection(
                 renderer,
                 projector,
@@ -579,25 +583,25 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
             const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds.primitives[i];
             SDL_Color primitive_color =
                 SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
-            bool is_selected = ((active_mode == EDITOR_MODE_OBJECT ||
-                                 active_mode == EDITOR_MODE_MATERIAL) &&
-                                selected_object_index == primitive->scene_object_index);
+            bool is_selected = selected_object_index == primitive->scene_object_index;
             bool is_hover = (active_mode == EDITOR_MODE_OBJECT &&
                              hover_object_index == primitive->scene_object_index);
             SDL_Color highlight_color = is_selected
                                             ? (SDL_Color){255, 120, 70, 255}
                                             : (SDL_Color){84, 224, 255, 245};
             primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
-            if (material_focus_mode && !is_selected) continue;
+            const SceneEditorMeshDisplayMode primitive_mode =
+                material_focus_mode && !is_selected
+                    ? SCENE_EDITOR_MESH_DISPLAY_WIRE : preview_mode;
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
                 if (primitive->guide_only) {
                     scene_editor_digest_overlay_draw_seed_plane_guide(renderer,
                                                                       projector,
                                                                       primitive,
                                                                       primitive_color);
-                } else if (!material_preview_rendered &&
+                } else if ((!material_preview_rendered || (material_focus_mode && !is_selected)) &&
                            SceneEditorMeshPreviewDrawsPrimitiveWire(
-                               preview_mode,
+                               primitive_mode,
                                primitive->guide_only,
                                preview_surface_composed)) {
                     scene_editor_digest_overlay_draw_seed_plane(renderer,
@@ -611,9 +615,9 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                                                       projector,
                                                                       primitive,
                                                                       primitive_color);
-                } else if (!material_preview_rendered &&
+                } else if ((!material_preview_rendered || (material_focus_mode && !is_selected)) &&
                            SceneEditorMeshPreviewDrawsPrimitiveWire(
-                               preview_mode,
+                               primitive_mode,
                                primitive->guide_only,
                                preview_surface_composed)) {
                     scene_editor_digest_overlay_draw_seed_prism(renderer,
@@ -633,16 +637,14 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
             const RuntimeSceneBridgePrimitiveDigest* primitive = &digest->primitives[i];
             SDL_Color primitive_color =
                 SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
-            bool is_selected = ((active_mode == EDITOR_MODE_OBJECT ||
-                                 active_mode == EDITOR_MODE_MATERIAL) &&
-                                selected_object_index == primitive->scene_object_index);
+            bool is_selected = selected_object_index == primitive->scene_object_index;
             bool is_hover = (active_mode == EDITOR_MODE_OBJECT &&
                              hover_object_index == primitive->scene_object_index);
             SDL_Color highlight_color = is_selected
                                             ? (SDL_Color){255, 120, 70, 255}
                                             : (SDL_Color){84, 224, 255, 245};
             primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
-            if (material_focus_mode && !is_selected) continue;
+            /* Unselected objects remain as scene context in Materials. */
             if (!primitive->guide_only) continue;
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {
                 double half_w = fmax(0.05, fabs(primitive->width) * 0.5);
@@ -684,16 +686,14 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
         const RuntimeSceneBridgePrimitiveDigest* primitive = &digest->primitives[i];
         SDL_Color primitive_color =
             SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
-        bool is_selected = ((active_mode == EDITOR_MODE_OBJECT ||
-                             active_mode == EDITOR_MODE_MATERIAL) &&
-                            selected_object_index == primitive->scene_object_index);
+        bool is_selected = selected_object_index == primitive->scene_object_index;
         bool is_hover = (active_mode == EDITOR_MODE_OBJECT &&
                          hover_object_index == primitive->scene_object_index);
         SDL_Color highlight_color = is_selected
                                         ? (SDL_Color){255, 120, 70, 255}
                                         : (SDL_Color){84, 224, 255, 245};
         primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
-        if (material_focus_mode && !is_selected) continue;
+        /* Material focus changes the selected preview, not scene visibility. */
         if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {
             double half_w = fmax(0.05, fabs(primitive->width) * 0.5);
             double half_h = fmax(0.05, fabs(primitive->height) * 0.5);

@@ -5,6 +5,7 @@
 #include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_workspace_layout.h"
 #include "editor/scene_editor_workspace_profile.h"
+#include "editor/material_editor.h"
 #include "editor/scene_editor_transform_panel.h"
 #include "editor/object_editor_panels.h"
 #include <assert.h>
@@ -259,11 +260,16 @@ int main(int argc, char** argv) {
     click(&editor,(SDL_Rect){material_field.x,material_field.y+29,1,1});
     assert(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_MATERIALS);
     assert(ObjectEditorGetSelectedObjectIndex()==selected);
+    assert(MaterialEditorGetViewMode()==MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT);
+    assert(memcmp(&before_material,SceneEditorGetViewportNavState(),sizeof(before_material))==0);
+    capture(&editor,"workspace_material_scene_context.ppm");
+    /* Focusing the object is now explicit; entering Materials keeps the scene. */
+    assert(SceneEditorFrameViewport(true));
     RuntimeSceneBridge3DDigestState material_digest={0};
     assert(SceneEditorDigestOverlayResolve(&material_digest));
     SceneEditorDigestOverlayProjector material_projector;
     assert(SceneEditorDigestOverlayBuildObjectProjector(&material_digest,&before.viewport_rect,
-        SceneEditorGetViewportNavState(),selected,true,&material_projector));
+        SceneEditorGetViewportNavState(),selected,false,&material_projector));
     double lo[3],hi[3];
     assert(SceneEditorDigestOverlayResolveObjectExtents(&material_digest,selected,
         &lo[0],&lo[1],&lo[2],&hi[0],&hi[1],&hi[2],NULL));

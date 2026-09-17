@@ -2,6 +2,18 @@
 
 Last updated: 2026-09-16
 
+## September 16 Main Edit cross-workspace scene reference
+
+The retained Main Edit source now renders a wire reference for primitive and
+imported-mesh objects in Scene, Surface, Atmos / Water, and Render. Materials
+keeps a selected-object preview with wire context for other objects. The four
+Bounds/Wire/Solid/Material buttons appear only in Materials and affect its
+selected-object preview; entering Materials preserves scene placement until
+Frame selected is explicitly requested. A copied-scene native UI acceptance
+passes workspace switching, selection/revision preservation, save/reopen and
+render. The open review app and installed app have not been refreshed, and
+operator visual acceptance remains open.
+
 ## September 16 Main Edit object-move checkpoint
 
 Main Edit adds a selected-object XYZ move gizmo in the Scene workspace. A drag

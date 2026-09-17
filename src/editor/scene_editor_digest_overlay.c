@@ -451,7 +451,7 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                       projector.center_z + projector.span_max * 0.15,
                                       (SDL_Color){120, 170, 240, 240});
 
-    if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL) {
+    if (active_mode == EDITOR_MODE_MATERIAL) {
         SceneEditorMeshPreviewRenderToolbar(renderer, &projector.viewport);
     }
 

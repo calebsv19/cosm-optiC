@@ -564,7 +564,11 @@ bool SceneEditorMeshPreviewRenderGeometry(
     SceneEditorMeshPreviewFrameStats* out_stats) {
     SceneEditorMeshPreviewFrameStats stats = {0};
     bool surface_rendered = false;
-    stats.mode = SceneEditorMeshPreviewModeGet();
+    /* Scene context is always wire; the selected Material preview owns the
+       session-only display choice. */
+    stats.mode = active_editor_mode == EDITOR_MODE_MATERIAL && selected_object_index >= 0
+                     ? SceneEditorMeshPreviewModeGet()
+                     : SCENE_EDITOR_MESH_DISPLAY_WIRE;
     if (out_stats) *out_stats = stats;
     if (!renderer || !projector) return false;
 
@@ -585,16 +589,18 @@ bool SceneEditorMeshPreviewRenderGeometry(
         const CoreMeshAssetRuntimeContract* contract = NULL;
         const CoreMeshPreviewLodMesh* lod = NULL;
         SDL_Color highlight = {0};
-        if (!instance ||
-            !scene_editor_mesh_preview_instance_visible(active_editor_mode,
-                                                        selected_object_index,
-                                                        instance->scene_object_index)) {
+        if (!instance) {
             continue;
         }
+        const bool context_wire = active_editor_mode == EDITOR_MODE_MATERIAL &&
+                                  selected_object_index >= 0 &&
+                                  instance->scene_object_index != selected_object_index;
+        const SceneEditorMeshDisplayMode instance_mode = context_wire
+            ? SCENE_EDITOR_MESH_DISPLAY_WIRE : stats.mode;
         contract = SceneEditorMeshPreviewStoreGetContract(instance->asset_index);
         lod = SceneEditorMeshPreviewStoreGet(instance->asset_index);
         if (!contract || !lod) continue;
-        if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS) {
+        if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS) {
             scene_editor_mesh_preview_draw_bounds(renderer,
                                                   projector,
                                                   contract,
@@ -602,7 +608,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                   (SDL_Color){112, 168, 220, 235});
             stats.rendered_bounds += 1;
             stats.rendered_instances += 1;
-        } else if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || !surface_rendered) {
+        } else if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || !surface_rendered) {
 #if USE_VULKAN
             VkRenderer* vk = (VkRenderer*)renderer;
             int slot_index = (int)vk->current_frame_index;
@@ -627,22 +633,22 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                       instance->scene_object_index)) {
                 continue;
             }
-            if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || surface_rendered) {
+            if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || surface_rendered) {
                 vk_renderer_draw_line_mesh(vk, &slot->wire_mesh);
                 stats.rendered_wire_segments += slot->wire_segment_count;
             } else {
                 vk_renderer_draw_tri_mesh(
                     vk,
-                    stats.mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL
+                    instance_mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL
                         ? &slot->material_mesh
                         : &slot->solid_mesh);
                 stats.rendered_triangles += slot->triangle_count;
-                if (SceneEditorMeshDisplayModeDrawsStructuralWire(stats.mode)) {
+                if (SceneEditorMeshDisplayModeDrawsStructuralWire(instance_mode)) {
                     vk_renderer_draw_line_mesh(vk, &slot->wire_mesh);
                     stats.rendered_wire_segments += slot->wire_segment_count;
                 }
             }
-            if (stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || !surface_rendered) {
+            if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || !surface_rendered) {
                 stats.rendered_instances += 1;
             }
 #else
@@ -655,8 +661,8 @@ bool SceneEditorMeshPreviewRenderGeometry(
             highlight = (SDL_Color){92, 228, 255, 245};
         }
         if (highlight.a != 0u &&
-            (stats.mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS ||
-             stats.mode == SCENE_EDITOR_MESH_DISPLAY_WIRE ||
+            (instance_mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS ||
+             instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE ||
              !surface_rendered)) {
             scene_editor_mesh_preview_draw_bounds(renderer,
                                                   projector,
@@ -753,7 +759,8 @@ int SceneEditorMeshPreviewPickObjectIndex(
     double picked_depth = -DBL_MAX;
     double picked_area = DBL_MAX;
     if (!projector ||
-        SceneEditorMeshPreviewModeButtonAtPoint(&projector->viewport, screen_x, screen_y) >= 0) {
+        (active_editor_mode == EDITOR_MODE_MATERIAL &&
+         SceneEditorMeshPreviewModeButtonAtPoint(&projector->viewport, screen_x, screen_y) >= 0)) {
         return -1;
     }
     for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {

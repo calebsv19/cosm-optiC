@@ -330,7 +330,7 @@ int SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
              SceneEditorToolStateToolLabel(SceneEditorToolStateGetActive()));
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y, line, title_color, false, 8);
 
-    if (contract->activeMode == EDITOR_MODE_OBJECT) {
+    if (contract->activeMode == EDITOR_MODE_MATERIAL) {
         selected_index = ObjectEditorGetSelectedObjectIndex();
         snprintf(line,
                  sizeof(line),

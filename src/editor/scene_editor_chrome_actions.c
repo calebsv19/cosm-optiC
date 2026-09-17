@@ -328,12 +328,6 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
     metrics = SceneEditorDigestOverlayResolveBezierMetrics(&digest, &projector);
     plane_z = SceneEditorDigestOverlayResolveEditPlaneZ(&digest, &projector);
 
-    if (SceneEditorMeshPreviewHandleModeClick(&projector.viewport,
-                                              command->event->button.x,
-                                              command->event->button.y)) {
-        return true;
-    }
-
     pick = SceneEditorMeshPreviewPickObjectIndex(&projector,
                                                  EDITOR_MODE_OBJECT,
                                                  -1,

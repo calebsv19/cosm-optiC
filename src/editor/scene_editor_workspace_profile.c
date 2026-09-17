@@ -8,6 +8,7 @@
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_transform_panel.h"
 #include "editor/scene_editor_object_move_gizmo.h"
+#include "editor/material_editor.h"
 static SceneEditorWorkspaceProfile active;
 static bool menu_open, add_menu;
 static int menu_focus;
@@ -32,7 +33,9 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     SetSceneMode(editor, profile == SCENE_WORKSPACE_MATERIALS ? EDITOR_MODE_MATERIAL :
         profile == SCENE_WORKSPACE_RENDER ? EDITOR_MODE_CAMERA : EDITOR_MODE_OBJECT);
     ObjectEditorSetSelectedObjectIndex(selected);
-    if (entering_material && selected>=0) SceneEditorFrameViewport(true);
+    if (entering_material) {
+        MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT);
+    }
     if (leaving_material && scene_nav_saved) { SceneEditorRestoreViewportNav(&scene_nav); scene_nav_saved=false; }
     SceneEditorSidebarReset();
     if (profile==SCENE_WORKSPACE_SCENE) SceneEditorSidebarShowLibrary(false);
