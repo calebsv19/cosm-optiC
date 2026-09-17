@@ -1,8 +1,17 @@
 # optiC Current Truth
 
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
-## UI recovery after operator review
+## September 12 editor usability correction
+
+Main Edit now has explicit close decisions, Escape cancellation, a selected-object
+material entry/return path, and Add/import setup. Native dirty-save, failed-save,
+leave-without-saving, fresh-reopen and existing editor/viewport checks pass. The
+separate copied-scene review is prepared; operator acceptance remains open. See
+`docs/editor_workspace.md` for the current receipt and boundaries. Installed apps,
+canonical source and release versions remain unchanged.
+
+## Historical: September 11 UI recovery after operator review
 
 The first E1 layout was rejected; its acceptance claim is superseded. Main Edit
 now has compact workspace selection, visible framing and global history controls,

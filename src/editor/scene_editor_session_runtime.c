@@ -1,3 +1,7 @@
+#include "editor/scene_editor_document.h"
+#include "editor/scene_editor_mesh_preview_store.h"
+#include "editor/scene_editor_mesh_preview_render.h"
+#include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_session_runtime.h"
@@ -31,6 +35,16 @@ static void scene_editor_session_runtime_update_dirty_objects(void) {
 }
 
 static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
+    static unsigned long long preview_revision;
+    unsigned long long revision=SceneEditorDocumentRevision();
+    if (SceneEditorDocumentIsOpen() && revision!=preview_revision) {
+        /* Document commands rebuild runtime instances. Publish their new meshes
+           to the editor as well, including import, transform, Undo and Redo. */
+        SceneEditorMeshPreviewRenderReset(editor->renderer);
+        SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
+        preview_revision=revision;
+    }
+
     RayTracingThemePalette palette = {0};
     setRenderContext(editor->renderer, editor->window,
                      sceneSettings.windowWidth, sceneSettings.windowHeight);
@@ -47,6 +61,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
+    if (SceneEditorLifecycleHandleEvent(editor,event)) return;
     if (event->type == SDL_DROPFILE) {
         if (!SceneEditorTransformPanelInteractionActive())
             (void)SceneEditorTransformPanelImportSTL(event->drop.file);
@@ -70,7 +85,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (editor->currentMode == EDITOR_MODE_OBJECT &&
         SceneEditorWorkspaceProfileGet() != SCENE_WORKSPACE_ENVIRONMENT &&
         SceneEditorSidebarInspectorEventVisible(event) &&
-        SceneEditorTransformPanelHandleEvent(event)) {
+        SceneEditorTransformPanelHandleEvent(editor,event)) {
         return;
     }
     if (SceneEditorTransformPanelInteractionActive()) {
@@ -136,6 +151,7 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
         post_draw(editor, editor->renderer, context);
     }
     SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
+    SceneEditorLifecycleRender(editor->renderer);
     render_end_frame();
 }
 
@@ -259,6 +275,7 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
             }
 
             SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
+            SceneEditorLifecycleRender(editor->renderer);
             render_end_frame();
             frame_dirty = false;
             last_render_ms = SDL_GetTicks();

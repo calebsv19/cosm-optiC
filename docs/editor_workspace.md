@@ -1,10 +1,64 @@
 # Editor workspace
 
+## September 12 usability corrections
+
+The follow-up pass repairs editor lifecycle and selected-object workflows after
+operator rejection of the earlier recovery. Visual acceptance remains open.
+
+- Idle Escape returns to Select and keeps the editor open. Drafts and popups
+  retain their own cancel behavior.
+- **Leave editor**, window close and application quit request an explicit
+  **Save and leave / Leave without saving / Keep editing** decision. Escape and
+  the default Return action keep editing; Tab/arrows select another decision.
+  Failed runtime-scene saving keeps the editor open. Active edits, pickers,
+  managed jobs and active desktop render work block closing until resolved.
+  Leaving without saving does not reverse previously saved edits or imports.
+- **Add → Import STL** reveals units and the file chooser in the inspector;
+  successful import collapses that setup. **Add → Place from library** exposes
+  the existing placement library and tool. Escape cancels placement.
+- Document commands now refresh the editor mesh cache, so imported meshes and
+  transform/history changes appear without restarting. Selected-object framing
+  includes real mesh geometry bounds. Material entry frames that mesh, and returning
+  to Scene restores the prior navigation state. Fit calculations use the same
+  projection basis as the focused material view.
+- The selected-object inspector shows its assigned material. Expand that row to
+  assign an existing preset through retained-document history. **Edit material /
+  preview** opens existing detailed tools; the affected object's name is shown,
+  and **< Scene** returns with the same selection. Surface also has this return.
+- Lifecycle messages record the requested close reason, cancellation, failed save
+  and final decision. The standalone review has one cleanup owner and its launcher
+  records process exit status in its own `session.log`.
+
+Current isolated proof: `build/editor_ui_recovery/usability-pass-7/acceptance.json`,
+`edit.log`, `fresh-reopen.log`, and `focused-gates.log`. Native coverage includes
+material assignment/Undo, entry/return, Add/import units, dirty close cancellation,
+default Keep editing, real save failure, dirty Save and leave, fresh reopen,
+projected material bounds, scene-view restoration and
+Leave without saving with preserved disk bytes. Existing navigation, picking,
+resize, clipping, unknown-field preservation and render checks also pass.
+The 320x200 render SHA-256 remains
+`1a51085bc5054083b534168b8afddd489d2ccaab84863bd444bd32750d86b977`.
+
+The pinned development review is
+`build/editor_ui_recovery/usability-review-final/optiC Usability Review.app`.
+It uses a copied scene/configuration and records hashes in `receipt.json`.
+It has been prepared but not launched for operator review. Native captures were
+inspected; this does not establish installed-app or operator acceptance.
+The old `live-review/` artifact and its evidence remain historical.
+
+Reuse decision: existing core_pane/kit_pane/kit_ui and core_font-backed editor
+presentation are retained. Close policy and workflow routing belong to the app;
+retained document commands implement material assignment and persistence. No
+shared modules, APIs, versions, release artifacts or installed apps changed.
+The broad stable suite was not rerun; its earlier 495-failure baseline is not
+superseded by these focused passes. Advanced graphs and water/VF3D creation remain
+later milestones; edge/occlusion picking is not exhaustively verified.
+
 The initial UI recovery is implemented in Main Edit after rejection of the first
 E1 layout. E1 remains open for operator visual acceptance. This is a source review
 build, not installed-app, release or broad-suite acceptance.
 
-## Compact UI recovery
+## Historical: September 11 compact UI recovery
 
 The header now uses compact, content-sized controls and a Workspace selector.
 The selector supports mouse selection, arrow keys/Return, Escape and outside-click
@@ -61,7 +115,8 @@ not introduce a new graph evaluator or simulation behavior.
   scene, with Preview available. Preset creation and water-resource editing belong
   to E3/E4; this workspace does not claim those operations yet.
 - **Render:** existing camera controls and Preview. Camera and Paths are directly
-  reachable from the action row; Menu retains the full render settings.
+  reachable from the action row. Leave editor is an explicit lifecycle action,
+  not a settings menu.
 
 Save retains the existing checked document/overlay save path. The former Apply
 button called that same save operation; keyboard routing remains compatible.

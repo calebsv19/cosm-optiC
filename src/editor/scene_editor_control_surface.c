@@ -201,7 +201,7 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
     contract.cycleModeLabel = "Cycle Mode";
     contract.applyLabel = "Apply";
     contract.saveLabel = "Save";
-    contract.backToMenuLabel = "Back to Menu";
+    contract.backToMenuLabel = "Leave editor";
 
     snprintf(contract.statusTitle, sizeof(contract.statusTitle), "ray_tracing Scene Editor");
     snprintf(contract.statusSource,
@@ -273,7 +273,7 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
         snprintf(contract.statusRuntime, sizeof(contract.statusRuntime), "Runtime: 2D lane active.");
         snprintf(contract.statusControls,
                  sizeof(contract.statusControls),
-                 "Controls: Shared TAB cycle ESC close | 2D LMB edit MMB pan Wheel zoom F frame");
+                 "Controls: Shared TAB cycle ESC cancel | 2D LMB edit MMB pan Wheel zoom F frame");
     } else if (contract.lane == SCENE_EDITOR_CONTROL_SURFACE_LANE_CONTROLLED_3D) {
         if (RayTracingModeBackend_IsNative3D(&input->route)) {
             snprintf(contract.statusRuntime,
@@ -287,19 +287,19 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
         if (contract.activeMode == EDITOR_MODE_PATH) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame LMB select bezier Shift+LMB add point Cmd+drag smooth");
+                     "Controls: TAB cycle ESC cancel Alt+LMB orbit MMB pan Wheel zoom F frame LMB select bezier Shift+LMB add point Cmd+drag smooth");
         } else if (contract.activeMode == EDITOR_MODE_OBJECT) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame LMB pick object");
+                     "Controls: TAB cycle ESC cancel Alt+LMB orbit MMB pan Wheel zoom F frame LMB pick object");
         } else if (contract.activeMode == EDITOR_MODE_CAMERA) {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame LMB select camera Shift+LMB add camera point Cmd+drag smooth");
+                     "Controls: TAB cycle ESC cancel Alt+LMB orbit MMB pan Wheel zoom F frame LMB select camera Shift+LMB add camera point Cmd+drag smooth");
         } else {
             snprintf(contract.statusControls,
                      sizeof(contract.statusControls),
-                     "Controls: TAB cycle ESC close Alt+LMB orbit MMB pan Wheel zoom F frame | Material controls edit selected object");
+                     "Controls: TAB cycle ESC cancel Alt+LMB orbit MMB pan Wheel zoom F frame | Material controls edit selected object");
         }
     }
 

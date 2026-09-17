@@ -1,3 +1,5 @@
+#include "editor/scene_editor_workspace_profile.h"
+#include "material/material_manager.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_transform_panel.h"
 
@@ -37,7 +39,11 @@ typedef enum TransformPanelJobKind {
 static SDL_Rect s_fields[TRANSFORM_FIELD_COUNT];
 static SDL_Rect s_name_field;
 static SDL_Rect s_import_expand, s_surface_expand;
+static SDL_Rect s_material_expand, s_material_edit, s_material_choices[MAX_MATERIALS];
+static bool s_material_open;
+
 static bool s_import_open, s_surface_open;
+void SceneEditorTransformPanelOpenImport(void) { s_import_open=true; }
 static SDL_Rect s_duplicate_button;
 static SDL_Rect s_remove_button;
 static SDL_Rect s_import_unit_buttons[2];
@@ -359,6 +365,8 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     s_controls_active = false;
     memset(s_fields, 0, sizeof(s_fields));
     memset(&s_name_field, 0, sizeof(s_name_field));
+    s_material_expand=(SDL_Rect){0}; s_material_edit=(SDL_Rect){0};
+    memset(s_material_choices,0,sizeof(s_material_choices));
     s_import_expand=(SDL_Rect){0};
     s_surface_expand=(SDL_Rect){0};
     memset(&s_duplicate_button, 0, sizeof(s_duplicate_button));
@@ -426,11 +434,35 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     y += field_h + gap;
     }
 
+    if (has_transform) {
+        int material_id=sceneSettings.sceneObjects[selected].material_id;
+        static const char* names[]={"Default","Mirror","Rough metal","Glossy","Emissive","Transparent"};
+        const char* name=material_id>=0 && material_id<6 ? names[material_id] : "Custom";
+        s_material_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
+        snprintf(line,sizeof(line),"Material: %s  %s",name,s_material_open ? "-" : "+");
+        panel_draw_button(renderer,s_material_expand,line,editable,s_material_open);
+        y+=field_h+gap;
+        if (s_material_open) {
+            for (int i=0;i<MaterialManagerCount() && i<MAX_MATERIALS;++i) {
+                s_material_choices[i]=(SDL_Rect){bounds.x,y,bounds.w,field_h};
+                snprintf(line,sizeof(line),"%s%s",i==material_id ? "Assigned: " : "Assign: ",i<6 ? names[i] : "Custom");
+                if (i>=6) snprintf(line,sizeof(line),"%s material %d",i==material_id ? "Assigned:" : "Assign",i);
+                panel_draw_button(renderer,s_material_choices[i],line,editable,i==material_id);
+                y+=field_h+gap;
+            }
+        }
+        s_material_edit=(SDL_Rect){bounds.x,y,bounds.w,field_h};
+        panel_draw_button(renderer,s_material_edit,"Edit material / preview >",editable,false);
+        y+=field_h+gap;
+    }
+
+    if (s_import_open) {
     s_import_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
     snprintf(line,sizeof(line),"Import STL (%s) %s",s_import_scale==0.001 ? "mm" : "meters",
         s_import_open ? "-" : "+");
     panel_draw_button(renderer,s_import_expand,line,true,false);
     y+=field_h+gap;
+    }
     if (s_import_open) {
     s_import_unit_buttons[0] = (SDL_Rect){bounds.x, y, (bounds.w - gap) / 2, field_h};
     s_import_unit_buttons[1] = (SDL_Rect){s_import_unit_buttons[0].x + s_import_unit_buttons[0].w + gap,
@@ -514,7 +546,7 @@ void SceneEditorTransformPanelReleaseFocusForEvent(const SDL_Event* event) {
     }
 }
 
-bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event) {
+bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* event) {
     static const char* shading_modes[4] = {"inherit", "flat", "smooth", "crease_aware"};
     char diagnostics[256] = {0};
     int selected = ObjectEditorGetSelectedObjectIndex();
@@ -601,6 +633,20 @@ bool SceneEditorTransformPanelHandleEvent(const SDL_Event* event) {
         s_edit_name = true;
         s_edit_buffer[0] = '\0';
         SDL_StartTextInput();
+        return true;
+    }
+    if (panel_point_in_rect(event->button.x,event->button.y,&s_material_expand)) {
+        s_material_open=!s_material_open; return true;
+    }
+    if (panel_point_in_rect(event->button.x,event->button.y,&s_material_edit)) {
+        if (selected>=0 && panel_mutation_allowed())
+            SceneEditorWorkspaceProfileSelect(editor,SCENE_WORKSPACE_MATERIALS);
+        return true;
+    }
+    for (int i=0;i<MAX_MATERIALS;++i) if (panel_point_in_rect(event->button.x,event->button.y,&s_material_choices[i])) {
+        bool ok=panel_mutation_allowed() && SceneEditorDocumentSetMaterialIdForSceneIndex(selected,i,diagnostics,sizeof(diagnostics));
+        if (ok) { ObjectEditorSetSelectedMaterialIndex(i); s_material_open=false; }
+        panel_status(ok ? "Material assigned. Undo is available." : diagnostics,!ok);
         return true;
     }
     if (panel_point_in_rect(event->button.x,event->button.y,&s_import_expand)) {
@@ -729,6 +775,7 @@ bool SceneEditorTransformPanelPoll(void) {
                                         : "Shading variant rebuilt")
                                  : (diagnostics[0] ? diagnostics : "Managed mesh operation failed"),
                          !success);
+            if (success && s_job_kind==TRANSFORM_PANEL_JOB_IMPORT) s_import_open=false;
             s_job_pid = -1;
             s_job_kind = TRANSFORM_PANEL_JOB_NONE;
             s_job_document_revision = 0u;
@@ -766,6 +813,6 @@ void SceneEditorTransformPanelReset(void) {
     s_job_document_revision = 0u;
     s_status[0] = '\0';
     s_controls_active = false;
-    s_import_open=s_surface_open=false;
+    s_import_open=s_surface_open=s_material_open=false;
     s_import_scale=1.0;
 }

@@ -392,7 +392,15 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                layout->center_pane_rect.y + 6,
                                layout->center_pane_rect.w - 20,
                                20};
-        SceneEditorLabel(renderer, titleRect, contract->paneCenterTitle, paneLabelColor);
+        if (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_MATERIALS ||
+            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SURFACE) {
+            char object_label[128]={0}, context_label[160];
+            int selected=ObjectEditorGetSelectedObjectIndex();
+            if (selected>=0 && SceneEditorDocumentObjectLabel(selected,object_label,sizeof(object_label)))
+                snprintf(context_label,sizeof(context_label),"Editing #%d: %s",selected,object_label);
+            else snprintf(context_label,sizeof(context_label),"Select an object to edit");
+            SceneEditorLabel(renderer,titleRect,context_label,paneLabelColor);
+        } else SceneEditorLabel(renderer, titleRect, contract->paneCenterTitle, paneLabelColor);
 
         titleRect = (SDL_Rect){layout->right_pane_rect.x + 10,
                                layout->right_pane_rect.y + 6,
@@ -439,7 +447,8 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         bool active = (i == contract->activeMode);
         scene_editor_chrome_shell_render_button(renderer,
                                                 modeSelectButtons[i],
-                                                (const char*[]){"Paths", "Scene", "Camera", "Materials"}[i],
+                                                (const char*[]){"Paths", "Scene", (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_MATERIALS ||
+                                             SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SURFACE) ? "< Scene" : "Camera", "Materials"}[i],
                                                 selectable,
                                                 scene_editor_chrome_shell_button_hovered(&modeSelectButtons[i]),
                                                 active,
@@ -523,7 +532,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                                             palette);
     scene_editor_chrome_shell_render_button(renderer,
                                             backToMenuButton,
-                                            "Menu",
+                                            "Leave editor",
                                             contract->backToMenuEnabled,
                                             scene_editor_chrome_shell_button_hovered(&backToMenuButton),
                                             false,

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_pointer_event.h"
 #include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -48,7 +49,7 @@ static bool scene_editor_chrome_actions_viewport_rect_contains_event_point(
     return scene_editor_chrome_actions_point_in_rect(mx, my, &env->pane_layout->viewport_rect);
 }
 
-static bool scene_editor_save_current_authoring(void) {
+bool SceneEditorChromeActionsSaveAuthoring(void) {
     char diagnostics[256];
 
     if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&
@@ -189,7 +190,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         if (!contract.applyEnabled) {
             return;
         }
-        if (!scene_editor_save_current_authoring()) {
+        if (!SceneEditorChromeActionsSaveAuthoring()) {
             SceneEditorChromeShellSetActionFeedback("Scene apply failed", 2200);
             return;
         }
@@ -201,7 +202,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         if (!contract.saveEnabled) {
             return;
         }
-        if (!scene_editor_save_current_authoring()) {
+        if (!SceneEditorChromeActionsSaveAuthoring()) {
             SceneEditorChromeShellSetActionFeedback("Scene save failed", 2200);
             return;
         }
@@ -219,9 +220,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         if (!contract.backToMenuEnabled) {
             return;
         }
-        editor->running = false;
-        sceneEditorExitFlag = true;
-        printf("Exited scene editor from mode %d\n", editor->currentMode);
+        SceneEditorLifecycleRequestClose(editor,"Leave editor button");
     }
 }
 

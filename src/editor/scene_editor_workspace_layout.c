@@ -25,7 +25,7 @@ void SceneEditorWorkspaceLayoutChrome(const SceneEditorPaneLayout* layout,
     memset(chrome, 0, sizeof(*chrome));
     if (!layout || layout->workspace_header_rect.w <= 0) return;
     SDL_Rect modes = layout->mode_router_rect;
-    static const int action_widths[] = {64, 52, 62, 72, 72, 58, 56, 86, 58};
+    static const int action_widths[] = {64, 52, 62, 72, 72, 58, 56, 86, 100};
     static const int document_widths[]={190,80,100,48,48};
     chrome->workspace=row_item(modes,0,5,document_widths);
     chrome->frame_all=row_item(modes,1,5,document_widths);

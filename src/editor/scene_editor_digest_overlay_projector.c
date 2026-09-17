@@ -223,6 +223,7 @@ static void scene_editor_digest_overlay_rotate_mesh_point(
 }
 
 static void scene_editor_digest_overlay_accumulate_mesh_asset_extents(
+    int selected_object_index,
     bool* seeded,
     double* min_x,
     double* min_y,
@@ -236,6 +237,7 @@ static void scene_editor_digest_overlay_accumulate_mesh_asset_extents(
     }
     for (int i = 0; i < mesh_assets->instance_count; ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance = &mesh_assets->instances[i];
+        if (selected_object_index>=0 && instance->scene_object_index!=selected_object_index) continue;
         const CoreMeshAssetRuntimeDocument* document = NULL;
         if (instance->asset_index < 0 || instance->asset_index >= mesh_assets->asset_count) {
             continue;
@@ -436,7 +438,9 @@ bool SceneEditorDigestOverlayResolveObjectExtents(const RuntimeSceneBridge3DDige
     double span_z = 0.0;
     double span_max = 0.0;
     bool seeded = false;
-    seeded = scene_editor_digest_overlay_resolve_object_seed_extents(scene_object_index,
+    scene_editor_digest_overlay_accumulate_mesh_asset_extents(scene_object_index,&seeded,
+        &min_x,&min_y,&min_z,&max_x,&max_y,&max_z);
+    if (!seeded) seeded = scene_editor_digest_overlay_resolve_object_seed_extents(scene_object_index,
                                                                      &min_x,
                                                                      &min_y,
                                                                      &min_z,
@@ -623,7 +627,7 @@ bool SceneEditorDigestOverlayResolveExtents(const RuntimeSceneBridge3DDigestStat
                                                               &max_x,
                                                               &max_y,
                                                               &max_z);
-    scene_editor_digest_overlay_accumulate_mesh_asset_extents(&seeded,
+    scene_editor_digest_overlay_accumulate_mesh_asset_extents(-1,&seeded,
                                                               &min_x,
                                                               &min_y,
                                                               &min_z,

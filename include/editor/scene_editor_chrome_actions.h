@@ -23,6 +23,8 @@ typedef struct SceneEditorChromeActionsEnvironment {
     void (*resume_after_preview)(SceneEditor* editor);
 } SceneEditorChromeActionsEnvironment;
 
+bool SceneEditorChromeActionsSaveAuthoring(void);
+
 bool SceneEditorChromeActionsResolve(const SDL_Event* event, SceneEditorChromeAction* out_action);
 void SceneEditorChromeActionsApply(SceneEditor* editor,
                                    const SceneEditorChromeAction* action,

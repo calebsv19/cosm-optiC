@@ -1,7 +1,16 @@
 # RayTracing Main Edit Worktree
 
 
-## September 11 UI recovery review boundary
+## September 12 usability review boundary
+
+Lifecycle and selected-object workflow corrections are implemented in retained
+Main Edit. The new pinned copied-scene development review is under
+`build/editor_ui_recovery/usability-review-final/`; it has not been launched for operator
+review. Source and native acceptance evidence are in `docs/editor_workspace.md`.
+The installed app/render and canonical main were not operated or replaced. E1
+remains open for visual acceptance.
+
+## Historical: September 11 UI recovery review boundary
 
 The initial E1 layout was rejected and the phase reopened. The compact recovery
 is ready for another operator visual test; details and proof are in

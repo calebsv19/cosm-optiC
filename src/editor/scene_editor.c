@@ -1,3 +1,5 @@
+#include "editor/scene_editor_tool_state.h"
+#include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_sidebar.h"
 // scene_editor.c  
@@ -306,14 +308,9 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
     if (!editor || !event || !result) return false;
     SceneEditorControlSurfaceBuildCurrent(ObjectEditorGetSelectedObjectIndex(), &contract);
     if (event->type == SDL_QUIT || SceneEditorIsOwnWindowCloseEvent(editor, event)) {
-        printf("Received SDL_QUIT event. Closing Scene Editor.\n");
-        editor->running = false;
-        sceneEditorExitFlag = true;
+        SceneEditorLifecycleRequestClose(editor,"system close");
         result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
         result->consumed = true;
-        result->invalidation_class = SCENE_EDITOR_INVALIDATION_FULL_EXIT;
-        result->requested_full_invalidation = true;
-        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_EXIT;
         return true;
     }
     if (event->type == SDL_KEYDOWN &&
@@ -337,13 +334,10 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
     if (event->type == SDL_KEYDOWN &&
         event->key.keysym.sym == SDLK_ESCAPE &&
         contract.sharedKeyEscapeEnabled) {
-        editor->running = false;
-        sceneEditorExitFlag = true;
+        SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
+        SceneEditorChromeShellSetActionFeedback("Select tool",1000);
         result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
         result->consumed = true;
-        result->invalidation_class = SCENE_EDITOR_INVALIDATION_FULL_EXIT;
-        result->requested_full_invalidation = true;
-        result->invalidation_reason_bits |= SCENE_EDITOR_INVALIDATE_REASON_EXIT;
         return true;
     }
     if (event->type == SDL_KEYDOWN) {
@@ -1023,6 +1017,10 @@ SceneEditorPaneHost* SceneEditorGetPaneHost(void) {
     return &g_scenePaneHost;
 }
 
+void SceneEditorRestoreViewportNav(const SceneEditorDigestOverlayNavState* state) {
+    if (state) g_viewport_nav_state=*state;
+}
+
 const SceneEditorDigestOverlayNavState* SceneEditorGetViewportNavState(void) {
     return &g_viewport_nav_state;
 }
@@ -1102,7 +1100,7 @@ void DestroySceneEditor(SceneEditor* editor) {
     SceneEditorDocumentClose();
     ray_tracing_font_runtime_shutdown();
     setRenderContext(NULL, NULL, 0, 0);
-    printf("Scene Editor Closed. Returning to main menu...\n");
+    printf("Scene editor resources released.\n");
 }
 
 static void InitializeEditorMode(SceneEditor* editor) {

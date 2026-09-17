@@ -21,6 +21,7 @@ static bool diagnostics_visible;
 static SDL_Rect diagnostics_button;
 bool SceneEditorSidebarDiagnosticsVisible(void) { return diagnostics_visible; }
 bool SceneEditorSidebarLibraryActive(void) { return library_active; }
+void SceneEditorSidebarShowLibrary(bool active) { SceneEditorSidebarReset(); library_active=active; }
 bool SceneEditorSidebarTextActive(void) { return search_active; }
 
 static bool contains(SDL_Rect r, int x, int y) {

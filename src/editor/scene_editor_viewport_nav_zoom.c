@@ -74,6 +74,7 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
                                                        const SDL_Rect* viewport_rect,
                                                        bool reset_angles,
                                                        bool use_selected_object,
+                                                       bool material_focus,
                                                        int selected_object_index,
                                                        double* out_fit_zoom,
                                                        SceneEditorViewportNavVec3* out_target,
@@ -127,14 +128,17 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
         return true;
     }
 
-    if (!SceneEditorDigestOverlayBuildProjectorWithView(&digest,
-                                                        viewport_rect,
-                                                        nav_state->orbit_yaw_deg,
-                                                        nav_state->orbit_pitch_deg,
-                                                        1.0,
-                                                        &projector)) {
-        return false;
-    }
+    SceneEditorDigestOverlayNavState unit_view=*nav_state;
+    unit_view.overlay_zoom=1.0;
+    unit_view.target_valid=false;
+    /* Fit in the same projection basis that rendering uses. Focused materials
+       normalize to object bounds; using the scene basis magnifies twice. */
+    bool built=material_focus
+        ? SceneEditorDigestOverlayBuildObjectProjector(&digest,viewport_rect,&unit_view,
+            selected_object_index,true,&projector)
+        : SceneEditorDigestOverlayBuildProjectorWithView(&digest,viewport_rect,
+            unit_view.orbit_yaw_deg,unit_view.orbit_pitch_deg,1.0,&projector);
+    if (!built) return false;
     projector.center_x = (min_x + max_x) * 0.5;
     projector.center_y = (min_y + max_y) * 0.5;
     projector.center_z = (min_z + max_z) * 0.5;
@@ -238,6 +242,7 @@ bool SceneEditorViewportNavFitDigestOverlayForTarget(SceneEditorDigestOverlayNav
                                                    viewport_rect,
                                                    reset_angles,
                                                    selected_object_index >= 0,
+                                                   material_focus,
                                                    selected_object_index,
                                                    &fit_zoom,
                                                    &target,
@@ -444,6 +449,7 @@ bool SceneEditorViewportNavApplyDigestWheelZoom(SceneEditorDigestOverlayNavState
         scene_editor_viewport_nav_resolve_fit_zoom(&candidate,
                                                    viewport_rect,
                                                    false,
+                                                   material_focus,
                                                    material_focus,
                                                    selected_object_index,
                                                    &fit_zoom,

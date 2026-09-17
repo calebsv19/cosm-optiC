@@ -6,6 +6,7 @@ void SceneEditorSidebarReset(void);
 bool SceneEditorSidebarDiagnosticsVisible(void);
 void SceneEditorSidebarRestoreDefaults(void);
 bool SceneEditorSidebarLibraryActive(void);
+void SceneEditorSidebarShowLibrary(bool active);
 bool SceneEditorSidebarTextActive(void);
 bool SceneEditorSidebarHandleEvent(const SDL_Event* event);
 bool SceneEditorSidebarInspectorEventVisible(const SDL_Event* event);

@@ -6914,7 +6914,7 @@ static int test_scene_editor_control_surface_source_path_parity(void) {
     assert_true("surface_runtime_orbit_disabled_in_2d",
                 !contract.laneGestureOrbitEnabled);
     assert_true("surface_runtime_controls_hint_shared",
-                strstr(contract.statusControls, "Shared TAB cycle ESC close") != NULL);
+                strstr(contract.statusControls, "Shared TAB cycle ESC cancel") != NULL);
 
     memset(&input, 0, sizeof(input));
     memset(&contract, 0, sizeof(contract));
