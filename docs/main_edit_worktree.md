@@ -1,5 +1,13 @@
 # RayTracing Main Edit Worktree
 
+## September 16 editor checkpoints
+
+Main Edit committed the September 12 lifecycle/Add/material corrections as
+`e6ff6bb`. The following selected-object move-gizmo source slice is limited to
+the Scene workspace and copied-scene verification; operator visual acceptance
+and canonical adoption remain open. Read Git state before using this historical
+summary for a later handoff.
+
 
 ## September 12 usability review boundary
 

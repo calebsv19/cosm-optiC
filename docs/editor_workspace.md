@@ -1,5 +1,21 @@
 # Editor workspace
 
+## September 16 selected-object move checkpoint
+
+The Scene workspace now draws X/Y/Z move handles for a selected runtime object
+with an editable XYZ transform. Drag a square handle to preview the destination
+as a bounds outline; release commits one retained-document transform command.
+Escape cancels without changing the document. Undo/Redo and save/fresh reopen
+use the same transform path as numeric inspector edits. The handles use a stable
+screen size and endpoint-only picking so ordinary object clicks remain available.
+The object's shaded mesh moves on release; during a drag the bounds outline is
+the position preview. This is a source/development checkpoint, not operator
+visual acceptance or an installed-app update. Atmos / Water is still inspection-only.
+
+Current copied-scene proof is under
+`build/editor_ui_recovery/checkpoint-20260916/object-move-acceptance-final/`.
+The native test exercises drag, cancel, Undo, Redo, save, fresh reopen, and render.
+
 ## September 12 usability corrections
 
 The follow-up pass repairs editor lifecycle and selected-object workflows after

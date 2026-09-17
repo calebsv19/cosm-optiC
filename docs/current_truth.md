@@ -1,6 +1,14 @@
 # optiC Current Truth
 
-Last updated: 2026-09-12
+Last updated: 2026-09-16
+
+## September 16 Main Edit object-move checkpoint
+
+Main Edit adds a selected-object XYZ move gizmo in the Scene workspace. A drag
+previews translated bounds and commits one undoable retained-document transform
+on release; Escape cancels. Copied-scene native acceptance checks history,
+save/reopen and render. This is not yet operator visual acceptance, canonical
+adoption, or an installed-app update. Atmos / Water remains inspection-only.
 
 ## September 12 editor usability correction
 

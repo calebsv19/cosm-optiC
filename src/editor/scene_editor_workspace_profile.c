@@ -7,6 +7,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_transform_panel.h"
+#include "editor/scene_editor_object_move_gizmo.h"
 static SceneEditorWorkspaceProfile active;
 static bool menu_open, add_menu;
 static int menu_focus;
@@ -14,13 +15,14 @@ static bool scene_nav_saved;
 static SceneEditorDigestOverlayNavState scene_nav;
 bool SceneEditorWorkspaceProfileMenuOpen(void) { return menu_open; }
 SceneEditorWorkspaceProfile SceneEditorWorkspaceProfileGet(void) { return active; }
-void SceneEditorWorkspaceProfileReset(void) { active = SCENE_WORKSPACE_SCENE; scene_nav_saved=false; menu_open=false; add_menu=false; SceneEditorLifecycleReset(); }
+void SceneEditorWorkspaceProfileReset(void) { active = SCENE_WORKSPACE_SCENE; scene_nav_saved=false; menu_open=false; add_menu=false; SceneEditorObjectMoveGizmoReset(); SceneEditorLifecycleReset(); }
 const char* SceneEditorWorkspaceProfileLabel(int profile) {
     static const char* labels[] = {"Scene", "Materials", "Surface", "Atmos / Water", "Render"};
     return profile >= 0 && profile < SCENE_WORKSPACE_PROFILE_COUNT ? labels[profile] : "Scene";
 }
 void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspaceProfile profile) {
     if (!editor || profile < 0 || profile >= SCENE_WORKSPACE_PROFILE_COUNT) return;
+    SceneEditorObjectMoveGizmoReset();
     int selected = ObjectEditorGetSelectedObjectIndex();
     bool entering_material=profile==SCENE_WORKSPACE_MATERIALS && active!=SCENE_WORKSPACE_MATERIALS;
     bool leaving_material=profile!=SCENE_WORKSPACE_MATERIALS && active==SCENE_WORKSPACE_MATERIALS;

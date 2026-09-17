@@ -2,6 +2,7 @@
 #include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_lifecycle.h"
+#include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_session_runtime.h"
@@ -61,6 +62,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
+    if (SceneEditorObjectMoveGizmoHandleEvent(event, editor->window)) return;
     if (SceneEditorLifecycleHandleEvent(editor,event)) return;
     if (event->type == SDL_DROPFILE) {
         if (!SceneEditorTransformPanelInteractionActive())

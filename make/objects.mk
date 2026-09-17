@@ -634,6 +634,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/object_editor_selection_tracker.o \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
 	$(BUILD_DIR)/editor/scene_editor_digest_overlay_projector.o \
+	$(BUILD_DIR)/editor/scene_editor_object_move_gizmo.o \
 	$(BUILD_DIR)/editor/scene_editor_material_face_placement.o \
 	$(BUILD_DIR)/editor/scene_editor_material_stack.o \
 	$(BUILD_DIR)/editor/scene_editor_material_preview.o \
