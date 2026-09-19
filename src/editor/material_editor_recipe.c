@@ -1,3 +1,4 @@
+#include "editor/scene_editor_document.h"
 #include "editor/material_editor_internal.h"
 
 #include <stdio.h>
@@ -402,6 +403,7 @@ bool MaterialEditorToggleRecipeMenuAxis(MaterialEditorRecipeAxis axis) {
 }
 
 bool MaterialEditorApplyRecipeOptionForFocused(MaterialEditorRecipeAxis axis, int option_index) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     MaterialEditorRecipeOption options[MATERIAL_EDITOR_RECIPE_MENU_MAX_ITEMS];
     int option_count = 0;
@@ -429,6 +431,7 @@ bool MaterialEditorApplyRecipeOptionForFocused(MaterialEditorRecipeAxis axis, in
 }
 
 bool MaterialEditorCycleRecipeFamilyForFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     if (!obj) return false;
     ObjectEditorObjectAssignMaterial(obj, material_editor_recipe_next_family_id(obj->material_id));
@@ -437,6 +440,7 @@ bool MaterialEditorCycleRecipeFamilyForFocused(void) {
 }
 
 bool MaterialEditorCycleRecipeSurfaceForFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
     RuntimeMaterialTextureLayerKind current = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID;
     RuntimeMaterialTextureLayerKind next = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID;
@@ -459,6 +463,7 @@ bool MaterialEditorCycleRecipeSurfaceForFocused(void) {
 }
 
 bool MaterialEditorCycleRecipeFinishForFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
     RuntimeMaterialTextureLayerKind current = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;
     RuntimeMaterialTextureLayerKind next = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_NONE;

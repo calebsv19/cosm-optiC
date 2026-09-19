@@ -339,6 +339,10 @@ bool ray_tracing_runtime_curve_assets_load_scene_file(
         const char *sha = NULL;
         int asset_index = -1;
         char resolved[RAY_TRACING_RUNTIME_CURVE_ASSET_PATH_MAX] = {0};
+        json_object *visibility_flags=NULL,*visibility_value=NULL;
+        if (json_object_object_get_ex(object,"flags",&visibility_flags) &&
+            json_object_object_get_ex(visibility_flags,"visible",&visibility_value) &&
+            json_object_is_type(visibility_value,json_type_boolean) && !json_object_get_boolean(visibility_value)) continue;
         if (runtime_mesh_asset_is_authoring_helper_object_type(type)) {
             continue;
         }

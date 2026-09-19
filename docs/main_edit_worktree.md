@@ -1,5 +1,65 @@
 # RayTracing Main Edit Worktree
 
+## U2.3 selection, Scene list and Inspector checkpoint
+
+The Scene tab now lists retained document objects, including hidden objects,
+with readable fallback names, type labels and separate View/Lock controls.
+Assets remains the secondary tab. Search accepts names, stable IDs and types;
+indices are no longer user-facing identities. Rows retain clipped hitboxes and
+visible-row rendering with the existing kit_ui scrolling helpers. New row and
+sticky-identity text storage remains valid throughout the render frame.
+
+A sticky Inspector header shows the name, readable type and hidden/locked state.
+Details exposes the stable ID and the single-selection limit. Transform,
+Material, Geometry / Surface and Visibility sections appear where applicable;
+there are no inert Rendering/Advanced property groups. Hidden geometry must be
+shown before geometry/transform inspection; its identity, flags and stable-ID
+rename remain available through document readback/commands. Multi-selection,
+multi-edit, temporary isolation and new Rendering properties are not implemented.
+
+Selection in a retained runtime document is stored by object_id. Runtime indices
+are resolved adapters; legacy non-document scenes retain their existing tracker.
+Outliner and viewport selection converge on that identity, which survives
+filtering, document rehydration and workspace changes. Hiding an object retains
+selection with runtime_index=-1; deleting it clears selection on readback.
+Document close resets selection. Material focus cannot fall back to another
+runtime slot while a hidden object is selected.
+
+Existing flags.visible and flags.locked are persisted without a schema migration.
+Absent flags default to visible/unlocked. A changed flag is one retained command;
+identical values are no-ops. Unknown fields, including unknown flags, survive.
+Visibility excludes objects consistently from primitive, mesh and curve imports,
+so it affects viewport picking and final rendering, not opacity alone. Hidden
+objects remain in the Scene list and can be shown again. This corrects the older
+primitive bridge behavior that merely reduced opacity.
+
+Locked objects remain selectable and inspectable. Retained transform, rename,
+material assignment, duplicate/remove and shading mutations reject them; the
+object/material editing facades and selected-object motion controls also enforce
+locks. Visibility requires unlocking first; unlock, Undo and Redo remain allowed.
+Locks are editor protections, not file permissions or protection against another
+program rewriting the scene. Unrelated Add/import remains available.
+
+`scene_editor_document_objects.c` owns document object readback and flag/name
+commands through the existing private transaction seam. The focused
+`scene_editor_object_commands.c` exposes revision-checked select/rename/visibility/
+lock execution and semantic selection/revision/dirty/history readback. No public
+CLI/MCP transport or second history system is added. Shared kit_ui/font/render
+contracts are reused; no shared API, adoption minimum or VERSION changes.
+
+Evidence is retained under ignored `build/editor_ui_recovery/u23-closeout/`.
+Acceptance includes actual row selection/lock clicks, stable-ID selection parity,
+rename, lock rejection, primitive-hide index remapping, hidden selection across
+Material/Scene, no-op/stale commands, Undo, flag Save/fresh reopen, existing
+transform/material/Add/import behavior, window-size captures and headless render
+comparison for a hidden mesh. Focused editor, mesh-loader and curve material
+regression gates supplement native acceptance. Screenshots are source GUI proof;
+operator visual acceptance and installed-package acceptance remain separate.
+
+This checkpoint stops before U2.4. The existing U2.2 Local-axis mathematics and
+numeric label-dragging gaps remain. No packaging, Desktop refresh, canonical main
+adoption, release or Registry operation is part of U2.3.
+
 ## September 19 U2.2 transform ergonomics checkpoint
 
 The Scene tool row now exposes Move, Rotate and Scale alongside World/Local

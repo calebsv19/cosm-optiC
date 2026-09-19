@@ -1,3 +1,4 @@
+#include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 #include <limits.h>
 #include "editor/scene_editor_lifecycle.h"
@@ -136,6 +137,8 @@ static void verify_viewport_gestures(SceneEditor* editor) {
             transform.position[1],transform.position[2],&px,&py));
         click(editor,(SDL_Rect){px,py,1,1});
         assert(ObjectEditorGetSelectedObjectIndex()==i);
+        char picked_id[128];assert(runtime_scene_bridge_get_last_object_id_for_scene_index(i,picked_id,sizeof(picked_id)));
+        assert(strcmp(ObjectEditorSelectionTrackerId(),picked_id)==0);
     }
     ObjectEditorSetSelectedObjectIndex(selected);
     SceneEditorSessionRuntimeRender(editor);
@@ -143,6 +146,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 
 #include "scene_editor_move_acceptance.h"
 #include "scene_editor_transform_acceptance.h"
+#include "scene_editor_selection_acceptance.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -164,6 +168,19 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && strcmp(argv[3],"--u23-flags")==0) {
+        SceneEditorDocumentObjectInfo info;bool found=false;
+        for(int i=0;i<SceneEditorDocumentObjectCount();++i) {
+            assert(SceneEditorDocumentObjectAt(i,&info));
+            if(strcmp(info.name,"U2.3 review mesh")==0) {
+                assert(!info.visible && info.locked && info.runtime_index==-1);
+                assert(ObjectEditorSelectionTrackerSelectId(info.id));found=true;break;
+            }
+        }
+        assert(found && !SceneEditorDocumentIsDirty());
+        capture(&editor,"workspace_u23_fresh_flags.ppm");
+        DestroySceneEditor(&editor);active_editor=NULL;TTF_Quit();SDL_Quit();return 0;
+    }
     if (review_only) {
         SDL_SetWindowTitle(editor.window, "optiC E0/E1 review — isolated scene copy");
         ObjectEditorSetSelectedObjectIndex(-1);
@@ -260,7 +277,7 @@ int main(int argc, char** argv) {
         assert(!SceneEditorWorkspaceProfileMenuOpen());
         /* The fixture is 1000 mm wide. Exercise the actual source-unit control. */
         click(&editor,(SDL_Rect){import_layout.right_content_rect.x + import_layout.right_content_rect.w*3/4,
-            import_layout.right_content_rect.y + 23 + 2*29 + 8,1,1});
+            import_layout.right_content_rect.y + 48 + 23 + 2*29 + 8,1,1});
         capture(&editor, "workspace_import_units.ppm");
         SDL_Event drop = {0}; drop.type = SDL_DROPFILE;
         drop.drop.file = SDL_strdup(argv[3]);
@@ -296,7 +313,7 @@ int main(int argc, char** argv) {
     assert(SceneEditorToolStateGetActive()==SCENE_EDITOR_TOOL_SELECT && editor.running);
     assert(SceneEditorMeshPreviewStoreHasSceneObject(selected));
     int material_before=sceneSettings.sceneObjects[selected].material_id;
-    SDL_Rect material_field={before.right_content_rect.x+25,before.right_content_rect.y+23+5*29+66+8,1,1};
+    SDL_Rect material_field={before.right_content_rect.x+25,before.right_content_rect.y+48+23+5*29+66+8,1,1};
     click(&editor,material_field);
     capture(&editor,"workspace_inspector_materials.ppm");
     /* Mirror is the second preset; assignment stays in the selected-object inspector. */
@@ -372,7 +389,7 @@ int main(int argc, char** argv) {
     SDL_Event select_all={0}; select_all.type=SDL_KEYDOWN;
     select_all.key.keysym.sym=SDLK_a; select_all.key.keysym.mod=KMOD_GUI;
     SceneEditorSessionRuntimeHandleEvent(&editor,&select_all);
-    snprintf(search_input.text.text,sizeof(search_input.text.text),"#%d",selected);
+    runtime_scene_bridge_get_last_object_id_for_scene_index(selected,search_input.text.text,sizeof(search_input.text.text));
     SceneEditorSessionRuntimeHandleEvent(&editor,&search_input);
     key(&editor,SDLK_ESCAPE);
     SceneEditorSessionRuntimeRender(&editor);
@@ -430,7 +447,7 @@ int main(int argc, char** argv) {
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected, &original,
         diagnostics, sizeof(diagnostics)));
     SDL_Rect position_x = {after.right_content_rect.x,
-        after.right_content_rect.y + 25 + 22, (after.right_content_rect.w - 8) / 3, 25};
+        after.right_content_rect.y + 48 + 25 + 22, (after.right_content_rect.w - 8) / 3, 25};
     click(&editor, position_x);
     for (int i=0; i<32; ++i) key(&editor,SDLK_BACKSPACE);
     SDL_Event invalid_input={0}; invalid_input.type=SDL_TEXTINPUT;
@@ -512,6 +529,7 @@ int main(int argc, char** argv) {
         diagnostics, sizeof(diagnostics)));
     assert(fabs(reopened.position[0] - edited.position[0]) < 1e-6);
     capture(&editor, "workspace_saved_edit.ppm");
+    verify_u23_selection(&editor,argv[2],selected);
     verify_move_acceptance(&editor,argv[2],selected);
     verify_primitive_move_preview(&editor,selected);
     verify_transform_acceptance(&editor,argv[2],selected);

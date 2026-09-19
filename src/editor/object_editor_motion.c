@@ -1,3 +1,4 @@
+#include "editor/scene_editor_document.h"
 #include "editor/object_editor_motion.h"
 
 #include "app/animation.h"
@@ -311,6 +312,7 @@ bool ObjectEditorMotionObjectIdForSceneIndex(int scene_object_index,
 }
 
 bool ObjectEditorMotionSetSelectedObjectStatic(int scene_object_index) {
+    if(!SceneEditorDocumentRequireEditable(scene_object_index)) return false;
     char object_id[RUNTIME_MOTION_TRACK_3D_OBJECT_ID_SIZE];
     if (!ObjectEditorMotionObjectIdForSceneIndex(scene_object_index,
                                                  object_id,
@@ -321,6 +323,7 @@ bool ObjectEditorMotionSetSelectedObjectStatic(int scene_object_index) {
 }
 
 bool ObjectEditorMotionSetSelectedObjectAuthored(int scene_object_index) {
+    if(!SceneEditorDocumentRequireEditable(scene_object_index)) return false;
     char object_id[RUNTIME_MOTION_TRACK_3D_OBJECT_ID_SIZE];
     const SceneObject* object = NULL;
     if (scene_object_index < 0 || scene_object_index >= sceneSettings.objectCount) {

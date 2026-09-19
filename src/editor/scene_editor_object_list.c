@@ -1,6 +1,13 @@
+#include "editor/scene_editor_sidebar.h"
+#include "editor/scene_editor_workspace_profile.h"
+#include "editor/scene_editor_object_commands.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_document.h"
 #include <ctype.h>
+#include "editor/object_editor_selection_tracker.h"
+#include "editor/scene_editor_chrome_shell.h"
+#include "editor/scene_editor_object_move_gizmo.h"
+#include "app/ray_tracing_deep_render_desktop_host.h"
 #include "editor/scene_editor_object_list.h"
 
 #include <math.h>
@@ -29,14 +36,24 @@ void SceneEditorObjectListSetFilter(const char* text) {
     for (char* p=filter_text; *p; ++p) *p=(char)tolower((unsigned char)*p);
     g_scroll_offset=0; g_last_selected=-1;
 }
-static bool filter_matches(int index) {
-    char label[128]={0}, id[128]={0}, haystack[320];
-    if (!filter_text[0]) return true;
-    SceneEditorDocumentObjectLabel(index,label,sizeof(label));
-    runtime_scene_bridge_get_last_object_id_for_scene_index(index,id,sizeof(id));
-    snprintf(haystack,sizeof(haystack),"%s %s %s #%d",label,id,sceneSettings.sceneObjects[index].type,index);
-    for (char* p=haystack; *p; ++p) *p=(char)tolower((unsigned char)*p);
-    return strstr(haystack,filter_text) != NULL;
+typedef struct ObjectRowHit { SDL_Rect select, visibility, lock; char id[128], label[180]; } ObjectRowHit;
+static ObjectRowHit row_hits[MAX_OBJECTS];
+static int hit_count;
+void SceneEditorObjectListClearHits(void) { hit_count=0;g_viewport=(SDL_Rect){0};ObjectEditorClearObjectListRows(); }
+bool SceneEditorObjectListRowRects(const char* id,SDL_Rect* select,SDL_Rect* visibility,SDL_Rect* lock) {
+    for(int i=0;id && i<hit_count;++i) if(strcmp(id,row_hits[i].id)==0) {
+        if(select) *select=row_hits[i].select;
+        if(visibility) *visibility=row_hits[i].visibility;
+        if(lock) *lock=row_hits[i].lock;
+        return true;
+    }
+    return false;
+}
+static bool filter_matches(const SceneEditorDocumentObjectInfo* info) {
+    char haystack[384];
+    snprintf(haystack,sizeof(haystack),"%s %s %s",info->name,info->id,info->type);
+    for(char* p=haystack;*p;++p) *p=(char)tolower((unsigned char)*p);
+    return !filter_text[0] || strstr(haystack,filter_text)!=NULL;
 }
 
 static void draw_scrollbar(SDL_Renderer* renderer) {
@@ -84,86 +101,12 @@ static int render_line(SDL_Renderer* renderer,
     return cursor_y + used_height + 6;
 }
 
-static const RayTracingRuntimeMeshAssetInstance* loaded_mesh(int object_index) {
-    const RayTracingRuntimeMeshAssetSet* assets = ray_tracing_runtime_mesh_assets_last();
-    if (!assets || object_index < 0) return NULL;
-    for (int i = 0; i < assets->instance_count; ++i) {
-        if (assets->instances[i].scene_object_index == object_index) return &assets->instances[i];
-    }
-    return NULL;
-}
-
-static const RayTracingRuntimeMeshAssetSkippedInstance* skipped_mesh(int object_index) {
-    const RayTracingRuntimeMeshAssetSet* assets = ray_tracing_runtime_mesh_assets_last();
-    if (!assets || object_index < 0) return NULL;
-    for (int i = 0; i < assets->skipped_instance_count; ++i) {
-        if (assets->skipped_instances[i].scene_object_index == object_index) {
-            return &assets->skipped_instances[i];
-        }
-    }
-    return NULL;
-}
-
-static const RuntimeSceneBridgePrimitiveDigest* primitive_for(
-    const RuntimeSceneBridge3DDigestState* digest,
-    int object_index) {
-    if (!digest || !digest->valid || object_index < 0) return NULL;
-    for (int i = 0; i < digest->primitive_count; ++i) {
-        if (digest->primitives[i].scene_object_index == object_index) return &digest->primitives[i];
-    }
-    return NULL;
-}
-
-static const char* primitive_label(RuntimeSceneBridgePrimitiveKind kind) {
-    switch (kind) {
-        case RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE: return "plane";
-        case RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM: return "prism";
-        case RUNTIME_SCENE_BRIDGE_PRIMITIVE_BOX: return "box";
-        case RUNTIME_SCENE_BRIDGE_PRIMITIVE_TRIANGLE_MESH: return "tri mesh";
-        case RUNTIME_SCENE_BRIDGE_PRIMITIVE_UNKNOWN:
-        default: return "primitive";
-    }
-}
-
-static const char* short_object_id(int object_index, char* buffer, size_t buffer_size) {
-    const char* prefix = NULL;
-    if (!buffer || buffer_size == 0u) return "";
-    buffer[0] = '\0';
-    if (!runtime_scene_bridge_get_last_object_id_for_scene_index(object_index,
-                                                                 buffer,
-                                                                 buffer_size)) {
-        return "";
-    }
-    prefix = strrchr(buffer, '_');
-    return (prefix && prefix[1]) ? prefix + 1 : buffer;
-}
-
 static float clamp_offset(float offset) {
     float max_offset = g_content_height - (float)g_viewport.h;
     if (max_offset < 0.0f) max_offset = 0.0f;
     if (offset < 0.0f) return 0.0f;
     if (offset > max_offset) return max_offset;
     return offset;
-}
-
-static void reveal_selected(int selected_index) {
-    const float row_pitch = (float)(OBJECT_LIST_ROW_HEIGHT + OBJECT_LIST_ROW_GAP);
-    float row_top = 0.0f;
-    float row_bottom = 0.0f;
-    if (selected_index < 0 || selected_index >= sceneSettings.objectCount ||
-        selected_index == g_last_selected || g_viewport.h <= 0) {
-        g_last_selected = selected_index;
-        return;
-    }
-    row_top = (float)selected_index * row_pitch;
-    row_bottom = row_top + (float)OBJECT_LIST_ROW_HEIGHT;
-    if (row_top < g_scroll_offset) {
-        g_scroll_offset = row_top;
-    } else if (row_bottom > g_scroll_offset + (float)g_viewport.h) {
-        g_scroll_offset = row_bottom - (float)g_viewport.h;
-    }
-    g_scroll_offset = clamp_offset(g_scroll_offset);
-    g_last_selected = selected_index;
 }
 
 bool SceneEditorObjectListContainsPoint(int x, int y) {
@@ -197,125 +140,92 @@ void SceneEditorObjectListReset(void) {
     g_last_selected = -1;
 }
 
-int SceneEditorObjectListRender(SDL_Renderer* renderer,
-                                SDL_Rect bounds,
-                                int cursor_y,
-                                int bottom_y,
-                                int selected_index,
-                                SDL_Color title_color,
-                                SDL_Color body_color) {
-    const int row_pitch = OBJECT_LIST_ROW_HEIGHT + OBJECT_LIST_ROW_GAP;
-    RuntimeSceneBridge3DDigestState digest = {0};
-    SDL_Rect previous_clip = {0, 0, 0, 0};
-    SDL_bool clip_was_enabled = SDL_FALSE;
-    int viewport_height = 0;
-    int first_row = 0;
-    int row_y = 0;
-    int matches[MAX_OBJECTS], match_count=0, selected_row=-1;
-    char line[160];
-    if (!renderer || bounds.w <= 0 || cursor_y >= bottom_y) return cursor_y;
-
-    ObjectEditorClearObjectListRows();
-    for (int i=0; i<sceneSettings.objectCount; ++i) if (filter_matches(i)) {
-        if (i==selected_index) selected_row=match_count;
-        matches[match_count++]=i;
-    }
-    snprintf(line,
-             sizeof(line),
-             "Objects  %d / %d",
-             match_count,
-             sceneSettings.objectCount);
-    cursor_y = render_line(renderer, bounds, cursor_y, bottom_y, line, title_color);
-    viewport_height = bottom_y - cursor_y;
-    if (viewport_height > bottom_y - cursor_y) viewport_height = bottom_y - cursor_y;
-    if (viewport_height < OBJECT_LIST_ROW_HEIGHT) {
-        g_viewport = (SDL_Rect){0, 0, 0, 0};
-        return cursor_y;
-    }
-    g_viewport = (SDL_Rect){bounds.x, cursor_y, bounds.w, viewport_height};
-    /* A conventional outliner stops at the last row, without trailing space
-       that permits scrolling every item to the top of an otherwise empty pane. */
-    g_content_height = match_count > 0 ? match_count * row_pitch - OBJECT_LIST_ROW_GAP : 0;
-    g_scroll_offset = clamp_offset(g_scroll_offset);
-    reveal_selected(selected_row);
-    runtime_scene_bridge_get_last_3d_digest_state(&digest);
-
-    clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
-    SDL_RenderGetClipRect(renderer, &previous_clip);
-    SDL_Rect clipped_viewport = g_viewport;
-    if (clip_was_enabled) SDL_IntersectRect(&previous_clip, &g_viewport, &clipped_viewport);
-    SDL_RenderSetClipRect(renderer, &clipped_viewport);
-    first_row = (int)floorf(g_scroll_offset / (float)row_pitch);
-    if (first_row < 0) first_row = 0;
-    row_y = g_viewport.y + first_row * row_pitch - (int)lroundf(g_scroll_offset);
-    for (int row_index = first_row; row_index < match_count; ++row_index, row_y += row_pitch) {
-        int i = matches[row_index];
-        const SceneObject* obj = &sceneSettings.sceneObjects[i];
-        const RayTracingRuntimeMeshAssetInstance* loaded = loaded_mesh(i);
-        const RayTracingRuntimeMeshAssetSkippedInstance* skipped = skipped_mesh(i);
-        const RuntimeSceneBridgePrimitiveDigest* primitive = primitive_for(&digest, i);
-        char id_buffer[64];
-        const char* short_id = short_object_id(i, id_buffer, sizeof(id_buffer));
-        const char* role = NULL;
-        bool selected = i == selected_index;
-        SDL_Rect row = {bounds.x, row_y, bounds.w - 12, OBJECT_LIST_ROW_HEIGHT};
-        SDL_Rect hit_row = row;
-        SDL_Color fill = selected ? (SDL_Color){96, 104, 112, 220}
-                                  : (SDL_Color){20, 23, 26, 210};
-        SDL_Color border = selected ? (SDL_Color){188, 198, 208, 255}
-                                    : (SDL_Color){48, 54, 60, 220};
-        if (row.y >= g_viewport.y + g_viewport.h) break;
-        if (row.y + row.h <= g_viewport.y) continue;
-        if (loaded) {
-            role = SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(i)
-                       ? "mesh bounds" : "mesh loaded";
-        } else if (skipped && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
-            role = SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(i)
-                       ? "mesh bounds" : "mesh preview";
-        } else if (skipped) {
-            role = "mesh skipped";
-        } else if (primitive) {
-            role = primitive_label(primitive->kind);
+bool SceneEditorObjectListHandleClick(int x,int y) {
+    if(animSettings.editorMode!=EDITOR_MODE_OBJECT || (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE && SceneEditorSidebarLibraryActive())) return false;
+    for(int i=0;i<hit_count;++i) {
+        ObjectRowHit* hit=&row_hits[i];
+        bool visibility=point_in_rect(x,y,&hit->visibility), lock=point_in_rect(x,y,&hit->lock);
+        if (!visibility && !lock && !point_in_rect(x,y,&hit->select)) continue;
+        SceneEditorDocumentObjectInfo info;
+        if(!SceneEditorDocumentObjectById(hit->id,&info)) return true;
+        SceneEditorObjectMoveGizmoReset();
+        if (visibility || lock) {
+            char message[256]={0};
+            if(RayTracingDeepRenderDesktopHost_HasActiveWork()) {
+                SceneEditorChromeShellSetActionFeedback("Object edits wait for the active render",4000);return true;
+            }
+            bool ok=SceneEditorObjectExecute(visibility ? SCENE_OBJECT_VISIBILITY : SCENE_OBJECT_LOCK,info.id,NULL,
+                visibility ? !info.visible : !info.locked,SceneEditorDocumentRevision(),NULL,message,sizeof(message));
+            SceneEditorChromeShellSetActionFeedback(ok ? (visibility ? "Visibility updated; Undo available" : "Lock updated; Undo available") : message,4000);
         } else {
-            role = obj->type[0] ? obj->type : "object";
+            SceneEditorObjectExecute(SCENE_OBJECT_SELECT,info.id,NULL,false,SceneEditorDocumentRevision(),NULL,NULL,0);
         }
-        SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-        SDL_RenderFillRect(renderer, &row);
-        SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        SDL_RenderDrawRect(renderer, &row);
-        if (hit_row.y < g_viewport.y) {
-            hit_row.h -= g_viewport.y - hit_row.y;
-            hit_row.y = g_viewport.y;
-        }
-        if (hit_row.y + hit_row.h > g_viewport.y + g_viewport.h) {
-            hit_row.h = g_viewport.y + g_viewport.h - hit_row.y;
-        }
-        if (SDL_IntersectRect(&hit_row, &clipped_viewport, &hit_row))
-            ObjectEditorRegisterObjectListRow(i, hit_row);
-        if (SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(i)) {
-            snprintf(line, sizeof(line), "#%d  %s  %s  AABB fallback", i, role, short_id);
-        } else if (skipped && SceneEditorMeshPreviewStoreHasSceneObject(i)) {
-            snprintf(line, sizeof(line), "#%d  %s  %s  LOD from %.1f MB", i, role, short_id,
-                     (double)skipped->file_size_bytes / (1024.0 * 1024.0));
-        } else if (skipped) {
-            snprintf(line, sizeof(line), "#%d  %s  %s  %.1f/%.1f MB", i, role, short_id,
-                     (double)skipped->file_size_bytes / (1024.0 * 1024.0),
-                     (double)skipped->max_file_size_bytes / (1024.0 * 1024.0));
-        } else if (loaded) {
-            snprintf(line, sizeof(line), "#%d  %s  %s  z %.1f", i, role, short_id, obj->z);
-        } else {
-            snprintf(line, sizeof(line), "#%d  %s%s  %s  z %.1f", i, role,
-                     SceneObjectIsGuideOnly(obj) ? " guide" : "", short_id, obj->z);
-        }
-        char display_name[128];
-        if (SceneEditorDocumentObjectLabel(i,display_name,sizeof(display_name)))
-            snprintf(line,sizeof(line),"#%d  %s",i,display_name);
-        SceneEditorLabelLeft(renderer,
-                            (SDL_Rect){row.x + 8, row.y + 2, row.w - 16, row.h - 4},
-                            line,
-                            body_color);
+        return true;
     }
-    SDL_RenderSetClipRect(renderer, clip_was_enabled ? &previous_clip : NULL);
+    return false;
+}
+int SceneEditorObjectListRender(SDL_Renderer* renderer,SDL_Rect bounds,int cursor_y,int bottom_y,
+    int selected_index,SDL_Color title_color,SDL_Color body_color) {
+    (void)selected_index;
+    const int pitch=32;
+    int matches[MAX_OBJECTS],count=0,selected_row=-1;
+    static char line[180];
+    hit_count=0; ObjectEditorClearObjectListRows();
+    if(!renderer || bounds.w<=0) return cursor_y;
+    const char* selected_id=ObjectEditorSelectionTrackerId();
+    for(int i=0;i<SceneEditorDocumentObjectCount() && count<MAX_OBJECTS;++i) {
+        SceneEditorDocumentObjectInfo info;
+        if(SceneEditorDocumentObjectAt(i,&info) && filter_matches(&info)) {
+            if(strcmp(info.id,selected_id)==0) selected_row=count;
+            matches[count++]=i;
+        }
+    }
+    snprintf(line,sizeof(line),"Objects %d / %d",count,SceneEditorDocumentObjectCount());
+    int title_y=cursor_y;
+    cursor_y=render_line(renderer,bounds,cursor_y,bottom_y,line,title_color);
+    SceneEditorButtonText(renderer,(SDL_Rect){bounds.x+bounds.w-88,title_y,36,22},"View",body_color);
+    SceneEditorButtonText(renderer,(SDL_Rect){bounds.x+bounds.w-48,title_y,36,22},"Lock",body_color);
+    g_viewport=(SDL_Rect){bounds.x,cursor_y,bounds.w,bottom_y-cursor_y};
+    if(g_viewport.h<28) {g_viewport.h=0;return cursor_y;}
+    g_content_height=count ? count*pitch-4 : 0;
+    g_scroll_offset=clamp_offset(g_scroll_offset);
+    if(selected_row>=0 && selected_row!=g_last_selected) {
+        float top=selected_row*pitch;
+        if(top<g_scroll_offset) g_scroll_offset=top;
+        if(top+28>g_scroll_offset+g_viewport.h) g_scroll_offset=top+28-g_viewport.h;
+        g_scroll_offset=clamp_offset(g_scroll_offset);
+    }
+    g_last_selected=selected_row;
+    SDL_Rect old_clip,clip=g_viewport; SDL_bool had_clip=SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer,&old_clip);
+    if(had_clip) SDL_IntersectRect(&clip,&old_clip,&clip);
+    SDL_RenderSetClipRect(renderer,&clip);
+    for(int row=(int)(g_scroll_offset/pitch);row<count;++row) {
+        SceneEditorDocumentObjectInfo info;
+        SceneEditorDocumentObjectAt(matches[row],&info);
+        SDL_Rect rect={bounds.x,cursor_y+row*pitch-(int)g_scroll_offset,bounds.w-12,28};
+        if(rect.y>=cursor_y+g_viewport.h) break;
+        bool selected=strcmp(info.id,selected_id)==0;
+        SDL_SetRenderDrawColor(renderer,selected ? 78 : 20,selected ? 94 : 23,selected ? 108 : 26,255);
+        SDL_RenderFillRect(renderer,&rect);
+        if(selected) {SDL_SetRenderDrawColor(renderer,188,198,208,255);SDL_RenderDrawRect(renderer,&rect);}
+        ObjectRowHit* hit=&row_hits[hit_count++];
+        snprintf(hit->id,sizeof(hit->id),"%s",info.id);
+        hit->visibility=(SDL_Rect){rect.x+rect.w-76,rect.y,36,28};
+        hit->lock=(SDL_Rect){rect.x+rect.w-36,rect.y,36,28};
+        hit->select=(SDL_Rect){rect.x,rect.y,rect.w-80,28};
+        snprintf(hit->label,sizeof(hit->label),"[%c] %s",SceneEditorDocumentTypeLabel(info.type)[0],info.name);
+        SceneEditorLabelLeft(renderer,hit->select,hit->label,body_color);
+        SDL_SetRenderDrawColor(renderer,90,105,118,255);
+        SDL_RenderDrawRect(renderer,&hit->visibility);SDL_RenderDrawRect(renderer,&hit->lock);
+        SceneEditorButtonText(renderer,hit->visibility,info.visible ? "On" : "Off",body_color);
+        SceneEditorButtonText(renderer,hit->lock,info.locked ? "Yes" : "No",body_color);
+        SDL_IntersectRect(&hit->select,&clip,&hit->select);
+        if(info.runtime_index>=0) ObjectEditorRegisterObjectListRow(info.runtime_index,hit->select);
+        SDL_IntersectRect(&hit->visibility,&clip,&hit->visibility);
+        SDL_IntersectRect(&hit->lock,&clip,&hit->lock);
+    }
+    SDL_RenderSetClipRect(renderer,had_clip ? &old_clip : NULL);
     draw_scrollbar(renderer);
-    return g_viewport.y + g_viewport.h + 8;
+    return bottom_y;
 }

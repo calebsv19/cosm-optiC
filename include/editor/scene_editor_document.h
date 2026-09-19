@@ -49,6 +49,21 @@ bool SceneEditorDocumentRenameForSceneIndex(int scene_object_index,
                                             char* diagnostics,
                                             size_t diagnostics_size);
 
+typedef struct SceneEditorDocumentObjectInfo {
+    char id[128], name[128], type[64];
+    int runtime_index;
+    bool visible, locked;
+} SceneEditorDocumentObjectInfo;
+const char* SceneEditorDocumentTypeLabel(const char* type);
+int SceneEditorDocumentObjectCount(void);
+bool SceneEditorDocumentObjectAt(int ordinal, SceneEditorDocumentObjectInfo* out);
+bool SceneEditorDocumentObjectById(const char* id, SceneEditorDocumentObjectInfo* out);
+bool SceneEditorDocumentRenameById(const char* id,const char* name,unsigned long long revision,char* diagnostics,size_t size);
+bool SceneEditorDocumentSetFlag(const char* id, const char* flag, bool value,
+    unsigned long long revision, char* diagnostics, size_t diagnostics_size);
+bool SceneEditorDocumentRequireEditable(int index);
+bool SceneEditorDocumentObjectEditable(int index, char* diagnostics, size_t diagnostics_size);
+
 bool SceneEditorDocumentObjectLabel(int scene_object_index, char* label, size_t size);
 bool SceneEditorDocumentCanUndo(void);
 bool SceneEditorDocumentCanRedo(void);

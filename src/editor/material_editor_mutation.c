@@ -1,3 +1,5 @@
+#include "editor/scene_editor_document.h"
+#include "editor/scene_editor_chrome_shell.h"
 #include "editor/material_editor_internal.h"
 
 #include "editor/material_editor_face_preview.h"
@@ -197,6 +199,7 @@ MaterialEditorMutationDestinationForFocusedTextureControls(void) {
 }
 
 bool MaterialEditorAddOverlayLayerToFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -210,6 +213,7 @@ bool MaterialEditorAddOverlayLayerToFocused(void) {
 }
 
 bool MaterialEditorDeleteActiveLayer(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -223,6 +227,7 @@ bool MaterialEditorDeleteActiveLayer(void) {
 }
 
 bool MaterialEditorMoveActiveLayer(int direction) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -236,6 +241,7 @@ bool MaterialEditorMoveActiveLayer(int direction) {
 }
 
 bool MaterialEditorToggleActiveLayerEnabled(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -249,6 +255,7 @@ bool MaterialEditorToggleActiveLayerEnabled(void) {
 }
 
 bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -262,6 +269,7 @@ bool MaterialEditorApplyLayerKindToFocused(RuntimeMaterialTextureLayerKind kind)
 }
 
 bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     MaterialEditorMutationDestination destination =
@@ -304,6 +312,7 @@ bool MaterialEditorApplyTextureKindToFocused(int texture_id) {
 }
 
 bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, double value) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     MaterialEditorMutationDestination destination =
@@ -372,6 +381,7 @@ bool MaterialEditorApplySliderValueToFocused(MaterialEditorSliderKind kind, doub
 }
 
 bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     MaterialEditorMutationDestination destination =
@@ -415,6 +425,7 @@ bool MaterialEditorApplyTexturePatternToFocused(int pattern_mode) {
 }
 
 bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKind kind, double value) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     MaterialEditorMutationDestination destination =
@@ -480,6 +491,7 @@ bool MaterialEditorApplyTextureParamValueToFocused(MaterialEditorTextureParamKin
 }
 
 bool MaterialEditorApplyLayerOpacityValueToFocused(double value) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -495,6 +507,7 @@ bool MaterialEditorApplyLayerOpacityValueToFocused(double value) {
 }
 
 bool MaterialEditorApplyLayerOpacityStepToFocused(double delta) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     RuntimeMaterialTextureLayer layer = {0};
     if (!obj) return false;
@@ -505,6 +518,7 @@ bool MaterialEditorApplyLayerOpacityStepToFocused(double delta) {
 
 bool MaterialEditorApplyLayerInfluenceValueToFocused(MaterialEditorLayerInfluenceKind kind,
                                                      double value) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -526,6 +540,7 @@ bool MaterialEditorApplyLayerInfluenceValueToFocused(MaterialEditorLayerInfluenc
 
 bool MaterialEditorApplyLayerInfluenceStepToFocused(MaterialEditorLayerInfluenceKind kind,
                                                     double delta) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     RuntimeMaterialTextureLayer layer = {0};
     double current = 0.0;
@@ -550,6 +565,7 @@ bool MaterialEditorApplyLayerInfluenceStepToFocused(MaterialEditorLayerInfluence
 }
 
 bool MaterialEditorApplyResponseValueToFocused(MaterialEditorResponseField field, double value) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -629,6 +645,7 @@ bool MaterialEditorApplyResponseValueToFocused(MaterialEditorResponseField field
 }
 
 bool MaterialEditorApplyResponseTintToFocused(int packed_color) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_object_index < 0) return false;
@@ -657,6 +674,7 @@ bool MaterialEditorApplyResponseTintToFocused(int packed_color) {
 }
 
 bool MaterialEditorApplyResponseStepToFocused(MaterialEditorResponseField field, double delta) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     RuntimeMaterialTextureLayer layer = {0};
@@ -745,6 +763,7 @@ bool MaterialEditorApplyResponseStepToFocused(MaterialEditorResponseField field,
 }
 
 bool MaterialEditorApplyGlassOverlayForFocused(RuntimeMaterialTextureLayerKind kind) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
@@ -797,6 +816,7 @@ bool MaterialEditorApplyGlassOverlayForFocused(RuntimeMaterialTextureLayerKind k
 }
 
 bool MaterialEditorResetActiveFacePlacement(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     char layer_id[RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE];
@@ -819,6 +839,7 @@ bool MaterialEditorResetActiveFacePlacement(void) {
 }
 
 bool MaterialEditorCopyActiveFacePlacementToSelected(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
     SceneEditorMaterialFacePlacement active;

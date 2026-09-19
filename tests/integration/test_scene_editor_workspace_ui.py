@@ -44,6 +44,7 @@ def main():
     before = json.loads(scene.read_text())
     probe = {'owner': 'acceptance', 'nested': [7, {'keep': 'unchanged'}]}
     before['extensions']['e0_preservation_probe'] = probe
+    before['objects'][0].setdefault('flags', {})['u23_unknown'] = {'keep': [1, 2, 3]}
     scene.write_text(json.dumps(before, indent=2))
     runtime = out / 'data/runtime'
     runtime.mkdir(parents=True)
@@ -64,6 +65,12 @@ def main():
     with (out / 'committed-move-reopen.log').open('w') as log:
         subprocess.run([str(binary), str(out), str(scene)+'.committed-move.json', '--move-reopen'],
                        env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
+    with (out / 'u23-flags-reopen.log').open('w') as log:
+        subprocess.run([str(binary),str(out),str(scene)+'.u23-flags.json','--u23-flags'],env=env,
+                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=120)
+    flags_scene=json.loads(Path(str(scene)+'.u23-flags.json').read_text())
+    flagged=next(o for o in flags_scene['objects'] if o.get('display_name')=='U2.3 review mesh')
+    assert flagged['flags']['visible'] is False and flagged['flags']['locked'] is True
     transform_changes = {}
     for mode in ('rotate', 'scale'):
         for cancelled in (False, True):
@@ -129,7 +136,17 @@ def main():
                        stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
     frame = project / 'renders/e01_tlas_blas_parity/frames/frame_0000.bmp'
     assert frame.exists() and len(set(frame.read_bytes()[122:])) > 4
-    report = {'status': 'passed', 'rotation_scale_live_pixels': transform_changes,
+    hidden_request=build_request(project,'u23_hidden','tlas_blas_parity')
+    hidden_request['render'].update(width=320,height=200)
+    hidden_request['scene']['runtime_scene_path']=str(scene)+'.u23-flags.json'
+    hidden_request_path=project/'request_u23_hidden.json'
+    hidden_request_path.write_text(json.dumps(hidden_request,indent=2))
+    with (out/'hidden-render.log').open('w') as log:
+        subprocess.run([str(binary_root/'tools/cli/ray_tracing_render_headless'),'--request',str(hidden_request_path),'--render'],
+                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=120)
+    hidden_frame=project/'renders/u23_hidden_tlas_blas_parity/frames/frame_0000.bmp'
+    assert hidden_frame.exists() and digest(hidden_frame)!=digest(frame), 'Hidden mesh still renders identically'
+    report = {'status': 'passed', 'stable_id_selection_and_lock': True, 'visibility_lock_fresh_reopen': True, 'hidden_mesh_render_differs': True, 'rotation_scale_live_pixels': transform_changes,
               'rotation_scale_committed_and_cancelled_fresh_reopen': True,
               'scene_unit_world_scale_conversion': True, 'live_preview_changed_pixels': changed,
               'primitive_preview_changed_pixels': primitive_changed,

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_document.h"
 #include "editor/material_editor_internal.h"
 
 #include <string.h>
@@ -169,6 +170,12 @@ bool material_editor_face_group_fully_selected(
 SceneObject* material_editor_focused_object(void) {
     int object_count = sceneSettings.objectCount;
     int selected = ObjectEditorSelectionTrackerCurrent(object_count);
+    if(SceneEditorDocumentIsOpen() && animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE &&
+       strcmp(SceneEditorDocumentPath(),animSettings.runtimeScenePath)==0) {
+        if(selected<0 && !ObjectEditorSelectionTrackerId()[0]) selected=ObjectEditorSelectionTrackerLast(object_count);
+        s_material_editor_focused_object_index=selected;
+        return selected>=0 && selected<object_count ? &sceneSettings.sceneObjects[selected] : NULL;
+    }
     if (selected >= 0 && selected < object_count) {
         s_material_editor_focused_object_index = selected;
         return &sceneSettings.sceneObjects[selected];

@@ -1,3 +1,4 @@
+#include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_transform_feedback.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -56,6 +57,7 @@ static int s_edit_field = -1;
 static bool s_edit_name = false;
 static char s_edit_buffer[128];
 static char s_status[160];
+static unsigned long long s_status_revision;
 static SDL_Color s_status_color = {210, 210, 215, 255};
 static RayTracingFolderPickerRequest s_picker;
 static bool s_picker_initialized = false;
@@ -74,6 +76,7 @@ static bool panel_point_in_rect(int x, int y, const SDL_Rect* rect) {
 }
 
 static void panel_status(const char* text, bool error) {
+    s_status_revision=SceneEditorDocumentRevision();
     snprintf(s_status, sizeof(s_status), "%s", text ? text : "");
     s_status_color = error ? (SDL_Color){255, 170, 140, 255}
                            : (SDL_Color){180, 225, 190, 255};
@@ -363,7 +366,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     int gap = 4;
     int field_h = 25;
     int cell_w = (bounds.w - gap * 2) / 3;
-    bool editable = SceneEditorDocumentIsOpen() && selected >= 0 && s_job_pid <= 0;
+    bool editable = SceneEditorDocumentIsOpen() && selected >= 0 && s_job_pid <= 0 && SceneEditorDocumentObjectEditable(selected,NULL,0);
     s_controls_active = false;
     memset(s_fields, 0, sizeof(s_fields));
     memset(&s_name_field, 0, sizeof(s_name_field));
@@ -382,7 +385,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
 
     snprintf(line,
              sizeof(line),
-             SceneEditorObjectTransformPreview(selected,NULL,NULL) ? "Transform (before drag)%s" : "Transform%s",
+             selected<0 ? "Object properties%s" : SceneEditorObjectTransformPreview(selected,NULL,NULL) ? "Transform (before drag)%s" : "Transform%s",
              SceneEditorDocumentIsDirty() ? " *" : "");
     SceneEditorLabelLeft(renderer,
                         (SDL_Rect){bounds.x, y, bounds.w, 20},
@@ -424,7 +427,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     y += field_h + gap;
     } else {
         SceneEditorLabelLeft(renderer, (SDL_Rect){bounds.x, y, bounds.w, 24},
-                            "Select an object to edit", palette.text_muted);
+                            ObjectEditorSelectionTrackerId()[0] ? "Hidden object: show it in Scene to edit" : "Select an object to edit", palette.text_muted);
         y += field_h + gap;
     }
 
@@ -445,7 +448,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
         const char* name=material_id>=0 && material_id<6 ? names[material_id] : "Custom";
         s_material_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
         snprintf(line,sizeof(line),"Material: %s  %s",name,s_material_open ? "-" : "+");
-        panel_draw_button(renderer,s_material_expand,line,editable,s_material_open);
+        panel_draw_button(renderer,s_material_expand,line,true,s_material_open);
         y+=field_h+gap;
         if (s_material_open) {
             for (int i=0;i<MaterialManagerCount() && i<MAX_MATERIALS;++i) {
@@ -457,7 +460,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
             }
         }
         s_material_edit=(SDL_Rect){bounds.x,y,bounds.w,field_h};
-        panel_draw_button(renderer,s_material_edit,"Edit material / preview >",editable,false);
+        panel_draw_button(renderer,s_material_edit,"Edit material / preview >",true,false);
         y+=field_h+gap;
     }
 
@@ -497,7 +500,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
 
     if (has_transform) {
     s_surface_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
-    panel_draw_button(renderer,s_surface_expand,s_surface_open ? "Surface / shading -" : "Surface / shading +",true,false);
+    panel_draw_button(renderer,s_surface_expand,s_surface_open ? "Geometry / Surface -" : "Geometry / Surface +",true,false);
     y+=field_h+gap;
     }
     if (has_transform && s_surface_open) {
@@ -523,7 +526,14 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     }
     y += field_h + gap;
     }
-    if (s_status[0] && y < bottom_y && !SceneEditorObjectTransformPreview(selected,NULL,NULL)) {
+    SceneEditorDocumentObjectInfo identity;
+    if(SceneEditorDocumentObjectById(ObjectEditorSelectionTrackerId(),&identity)) {
+        SceneEditorLabelLeft(renderer,(SDL_Rect){bounds.x,y,bounds.w,22},"Visibility",palette.text_primary);y+=24;
+        static char visibility_text[160];
+        snprintf(visibility_text,sizeof(visibility_text),"%s | %s",identity.visible ? "Visible in viewport and render" : "Hidden in viewport and render",identity.locked ? "Locked" : "Unlocked");
+        SceneEditorLabelWrapped(renderer,(SDL_Rect){bounds.x,y,bounds.w,44},visibility_text,palette.text_muted);y+=46;
+    }
+    if (s_status[0] && s_status_revision==SceneEditorDocumentRevision() && y < bottom_y && !SceneEditorObjectTransformPreview(selected,NULL,NULL)) {
         SceneEditorLabelWrapped(renderer,
                                    (SDL_Rect){bounds.x, y, bounds.w, bottom_y - y},
                                    s_status,

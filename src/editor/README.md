@@ -80,3 +80,19 @@ plain-language task status and inspector group labels. Rendering consumes these 
 retained documents or runtime geometry. Workspace changes cancel the gesture.
 Native acceptance lives in `tests/scene_editor_move_acceptance.h` and
 `tests/scene_editor_transform_acceptance.h` within the workspace harness.
+
+U2.3 object identity and commands:
+
+- `scene_editor_document_objects.c` enumerates retained objects and provides
+  copied readback, flags and names through the document's private transaction
+  seam. It does not introduce another history owner.
+- `scene_editor_object_commands.c` provides revision-checked object actions and
+  selection/dirty/history readback for UI and agent callers.
+- `object_editor_selection_tracker.c` stores stable IDs for retained documents;
+  runtime indices are resolved on read. Its legacy index path is restricted to
+  non-retained scenes.
+- `scene_editor_object_list.c` owns document-backed rows and clipped per-control
+  hitboxes. `scene_editor_sidebar.c` owns sticky Inspector identity and disclosure.
+  New row/header strings have persistent frame backing storage.
+- Primitive, mesh and curve importers omit explicitly hidden objects using the
+  same rule, preserving runtime slot alignment across their separate passes.

@@ -28,6 +28,7 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     SceneEditorObjectMoveGizmoReset();
     SceneEditorChromeShellSetActionFeedback("",0);
     int selected = ObjectEditorGetSelectedObjectIndex();
+    char selected_id[128];snprintf(selected_id,sizeof(selected_id),"%s",ObjectEditorSelectionTrackerId());
     bool entering_material=profile==SCENE_WORKSPACE_MATERIALS && active!=SCENE_WORKSPACE_MATERIALS;
     bool leaving_material=profile!=SCENE_WORKSPACE_MATERIALS && active==SCENE_WORKSPACE_MATERIALS;
     if (entering_material) { scene_nav=*SceneEditorGetViewportNavState(); scene_nav_saved=true; }
@@ -35,7 +36,8 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     active = profile;
     SetSceneMode(editor, profile == SCENE_WORKSPACE_MATERIALS ? EDITOR_MODE_MATERIAL :
         profile == SCENE_WORKSPACE_RENDER ? EDITOR_MODE_CAMERA : EDITOR_MODE_OBJECT);
-    ObjectEditorSetSelectedObjectIndex(selected);
+    if(selected_id[0]) ObjectEditorSelectionTrackerSelectId(selected_id);
+    else ObjectEditorSetSelectedObjectIndex(selected);
     if (entering_material) {
         MaterialEditorSetViewMode(MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT);
     }

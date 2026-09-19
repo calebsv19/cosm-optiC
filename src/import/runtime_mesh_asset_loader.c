@@ -749,6 +749,11 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
         size_t asset_file_size_bytes = 0u;
 
         if (!object || !json_object_is_type(object, json_type_object)) continue;
+        json_object *visibility_flags=NULL,*visibility_value=NULL;
+        if (json_object_object_get_ex(object,"flags",&visibility_flags) &&
+            json_object_object_get_ex(visibility_flags,"visible",&visibility_value) &&
+            json_object_is_type(visibility_value,json_type_boolean) && !json_object_get_boolean(visibility_value)) continue;
+
         object_type = runtime_mesh_asset_string_field(object, "object_type");
         if (runtime_mesh_asset_is_authoring_helper_object_type(object_type)) continue;
         if (!object_type || strcmp(object_type, "mesh_asset_instance") != 0) {

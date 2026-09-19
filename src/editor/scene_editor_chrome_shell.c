@@ -389,7 +389,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         if (!layout->viewport_expanded) SceneEditorLabel(renderer, titleRect,
             SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_ENVIRONMENT ? "Scene resources" :
             SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SURFACE ? "Surface source" :
-            contract->activeMode == EDITOR_MODE_OBJECT ? "Scene objects & assets" : "Tool controls", paneLabelColor);
+            contract->activeMode == EDITOR_MODE_OBJECT ? "Scene" : "Tool controls", paneLabelColor);
 
         titleRect = (SDL_Rect){layout->center_pane_rect.x + 10,
                                layout->center_pane_rect.y + 6,

@@ -1,3 +1,4 @@
+#include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_transform_feedback.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/object_editor.h"
@@ -28,6 +29,11 @@ bool SceneEditorTransformOperationLabel(int selected,char* out,size_t size) {
         else snprintf(out,size,"Scale %c: x%.4g | Release applies; Esc cancels",'X'+axis,
                 preview.scale[axis]/original.scale[axis]);
         return true;
+    }
+    SceneEditorDocumentObjectInfo identity;
+    if(SceneEditorDocumentObjectById(ObjectEditorSelectionTrackerId(),&identity) && (!identity.visible || identity.locked)) {
+        snprintf(out,size,"%s | %s in Scene to transform",identity.name,identity.locked ? "Unlock this object" : "Show this object");
+        return false;
     }
     snprintf(out,size,"%s | %s | %s | %s",modes[mode],selected<0 ? "Select an object to transform" :
         !ObjectEditorTransformHandlesVisible() ? "Show transform handles to edit" : instructions[mode],

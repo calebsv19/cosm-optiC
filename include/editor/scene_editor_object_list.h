@@ -11,6 +11,9 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,
                                 int selected_index,
                                 SDL_Color title_color,
                                 SDL_Color body_color);
+void SceneEditorObjectListClearHits(void);
+bool SceneEditorObjectListRowRects(const char* id, SDL_Rect* select, SDL_Rect* visibility, SDL_Rect* lock);
+bool SceneEditorObjectListHandleClick(int x, int y);
 bool SceneEditorObjectListContainsPoint(int x, int y);
 bool SceneEditorObjectListHandleWheel(int x, int y, float wheel_delta_y);
 float SceneEditorObjectListScrollOffset(void);

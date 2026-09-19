@@ -1,3 +1,5 @@
+#include "editor/scene_editor_document.h"
+#include "editor/scene_editor_object_list.h"
 #include "editor/object_editor_internal.h"
 
 #include "app/data_paths.h"
@@ -49,7 +51,7 @@ static bool IsClickingButton(int mx, int my) {
         return true;
     }
 
-    if (ObjectEditorObjectListIndexAtPoint(mx, my) >= 0) {
+    if (SceneEditorObjectListContainsPoint(mx, my)) {
         return true;
     }
 
@@ -211,6 +213,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
         int mx = event->button.x;
         int my = event->button.y;
         int object_list_index = -1;
+        if(SceneEditorObjectListHandleClick(mx,my)) return;
         viewportPanDragging = false;
         object_list_index = ObjectEditorObjectListIndexAtPoint(mx, my);
         if (object_list_index >= 0) {
@@ -452,6 +455,7 @@ void HandleObjectEditorMouseClick(SDL_Event* event) {
 }
 
 void HandleObjectEditorMouseDrag(SDL_Event* event) {
+    if (!SceneEditorDocumentRequireEditable(ObjectEditorGetSelectedObjectIndex())) return;
     if (event->motion.state & SDL_BUTTON_LMASK) {
         int mx = event->motion.x;
         int my = event->motion.y;

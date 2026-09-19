@@ -1,3 +1,5 @@
+#include "editor/scene_editor_document.h"
+#include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_pointer_event.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -132,6 +134,8 @@ bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
 }
 void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayout* layout,
     const SceneEditorControlSurfaceContract* contract, SDL_Color title, SDL_Color body) {
+    if(library_active || contract->activeMode!=EDITOR_MODE_OBJECT || SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_SCENE)
+        SceneEditorObjectListClearHits();
     diagnostics_button=(SDL_Rect){0};
     if (!layout->viewport_expanded) {
         diagnostics_button=(SDL_Rect){layout->right_pane_rect.x+layout->right_pane_rect.w-88,
@@ -154,7 +158,7 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
                     pane->viewport.w/2-4,row_height};
                 SDL_SetRenderDrawColor(renderer,body.r,body.g,body.b,library_active==tab ? 180 : 70);
                 SDL_RenderFillRect(renderer,&tabs[tab]);
-                SceneEditorButtonText(renderer,tabs[tab],tab ? "Library" : "Objects",title);
+                SceneEditorButtonText(renderer,tabs[tab],tab ? "Assets" : "Scene",title);
             }
             pane->viewport.y+=row_height+6; pane->viewport.h-=row_height+6;
             search_box=(SDL_Rect){0};
@@ -169,6 +173,25 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
             }
         }
 
+        if(i==1) {
+            static SceneEditorDocumentObjectInfo info;
+            SDL_Rect identity=pane->viewport;
+            identity.h=22;
+            const char* id=ObjectEditorSelectionTrackerId();
+            if(SceneEditorDocumentObjectById(id,&info)) {
+                SceneEditorLabelLeft(renderer,identity,info.name,title);identity.y+=24;
+                static char label[180];snprintf(label,sizeof(label),"%s%s%s",SceneEditorDocumentTypeLabel(info.type),info.locked ? " | Locked" : "",info.visible ? "" : " | Hidden");
+                SceneEditorLabelLeft(renderer,identity,label,body);identity.y+=24;
+                if(info.locked) { SceneEditorLabelLeft(renderer,identity,"Unlock in Scene to edit",body);identity.y+=24; }
+                if(diagnostics_visible) { SceneEditorLabelLeft(renderer,identity,info.id,body);identity.y+=24; }
+            } else {
+                SceneEditorLabelLeft(renderer,identity,"No object selected",title);identity.y+=24;
+                SceneEditorLabelLeft(renderer,identity,"Select one object in Scene or viewport",body);identity.y+=24;
+            }
+            if(diagnostics_visible) {SceneEditorLabelLeft(renderer,identity,"Single selection; multi-edit unavailable",body);identity.y+=24;}
+            int header_height=identity.y-pane->viewport.y;
+            pane->viewport.y+=header_height;pane->viewport.h-=header_height;
+        }
         clamp(pane);
         SceneEditorPaneLayout virtual_layout = *layout;
         SDL_Rect content = pane->viewport;

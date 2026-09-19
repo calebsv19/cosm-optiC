@@ -1,3 +1,4 @@
+#include "editor/scene_editor_document.h"
 #include "editor/material_editor_internal.h"
 
 #include <stdio.h>
@@ -77,6 +78,7 @@ static bool material_editor_graph_get_or_seed(RuntimeMaterialGraphDocument* out_
 }
 
 bool MaterialEditorEnsureGraphForFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     RuntimeMaterialGraphDocument graph = RuntimeMaterialGraphDocumentEmpty();
     RuntimeMaterialGraphCompileResult compile_result = {0};
     SceneObject* obj = NULL;
@@ -91,6 +93,7 @@ bool MaterialEditorEnsureGraphForFocused(void) {
 }
 
 bool MaterialEditorAddGraphLayerNodeForFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     RuntimeMaterialGraphDocument graph = RuntimeMaterialGraphDocumentEmpty();
     RuntimeMaterialGraphCompileResult compile_result = {0};
     RuntimeMaterialTextureLayerKind kind = RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_RUST;
@@ -121,6 +124,7 @@ bool MaterialEditorAddGraphLayerNodeForFocused(void) {
 }
 
 bool MaterialEditorAddGraphChannelNodeForFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     RuntimeMaterialGraphDocument graph = RuntimeMaterialGraphDocumentEmpty();
     RuntimeMaterialGraphCompileResult compile_result = {0};
     SceneObject* obj = NULL;
@@ -146,6 +150,7 @@ bool MaterialEditorAddGraphChannelNodeForFocused(void) {
 }
 
 bool MaterialEditorClearGraphForFocused(void) {
+    if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_index = MaterialEditorResolveFocusedObjectIndex();
     if (!obj || focused_index < 0) return false;

@@ -67,6 +67,7 @@ static bool move_available(int selected) {
     return SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SCENE &&
            animSettings.editorMode == EDITOR_MODE_OBJECT &&
            SceneEditorDocumentIsOpen() && selected >= 0 &&
+           SceneEditorDocumentObjectEditable(selected,NULL,0) &&
            !SceneEditorLifecycleClosePending() && !SceneEditorWorkspaceProfileMenuOpen() &&
            !SceneEditorTransformPanelInteractionActive() && !SceneEditorSidebarTextActive() &&
            !MaterialEditorAuthoredTextureBindingPickerActive() &&

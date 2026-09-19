@@ -1,3 +1,4 @@
+#include "editor/scene_editor_document.h"
 #include "editor/material_editor_authored_texture_binding.h"
 
 #include <limits.h>
@@ -128,6 +129,7 @@ void MaterialEditorAuthoredTextureBindingReset(void) {
 
 bool MaterialEditorAuthoredTextureBindingBindForFocused(int focused_object_index,
                                                         const char* manifest_path) {
+    if (!SceneEditorDocumentRequireEditable(focused_object_index)) return false;
     char object_id[64];
     char reason[RUNTIME_MATERIAL_AUTHORED_TEXTURE_REASON_CAPACITY];
     char ignored_manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
@@ -169,6 +171,7 @@ bool MaterialEditorAuthoredTextureBindingBindForFocused(int focused_object_index
 }
 
 bool MaterialEditorAuthoredTextureBindingClearForFocused(int focused_object_index) {
+    if (!SceneEditorDocumentRequireEditable(focused_object_index)) return false;
     if (!RuntimeMaterialAuthoredTextureClearBindingForObject(focused_object_index)) {
         material_editor_authored_set_status("Clear failed: invalid object",
                                             (SDL_Color){255, 170, 140, 255});

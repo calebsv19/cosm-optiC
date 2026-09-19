@@ -1,3 +1,4 @@
+#include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_document.h"
 
 #include <errno.h>
@@ -223,7 +224,7 @@ static bool document_apply_saved_file(char* diagnostics, size_t diagnostics_size
     return true;
 }
 
-static bool document_begin_command(char* diagnostics, size_t diagnostics_size) {
+bool document_begin_command(char* diagnostics, size_t diagnostics_size) {
     char* before = document_serialize_root(s_document.root, NULL);
     if (s_document.pending_before) {
         document_diag(diagnostics, diagnostics_size, "another document command is pending");
@@ -258,7 +259,7 @@ static void document_rollback_command(void) {
     s_document.root = restored;
 }
 
-static json_object* document_object_for_scene_index(int scene_object_index,
+json_object* document_object_for_scene_index(int scene_object_index,
                                                      char* diagnostics,
                                                      size_t diagnostics_size) {
     char object_id[64] = {0};
@@ -311,7 +312,7 @@ static json_object* document_vec3_new(const double value[3]) {
     return vector;
 }
 
-static bool document_finish_command(char* diagnostics, size_t diagnostics_size) {
+bool document_finish_command(char* diagnostics, size_t diagnostics_size) {
     if (!document_apply_current(diagnostics, diagnostics_size)) {
         document_rollback_command();
         (void)document_apply_current(NULL, 0u);
@@ -367,6 +368,7 @@ bool SceneEditorDocumentOpenActive(char* diagnostics, size_t diagnostics_size) {
 }
 
 void SceneEditorDocumentClose(void) {
+    ObjectEditorSelectionTrackerReset();
     if (s_document.root) json_object_put(s_document.root);
     free(s_document.baseline_bytes);
     free(s_document.pending_before);
@@ -404,6 +406,7 @@ bool SceneEditorDocumentSetTransformForSceneIndex(int scene_object_index,
                                                   const SceneEditorDocumentTransform* transform_value,
                                                   char* diagnostics,
                                                   size_t diagnostics_size) {
+    if (!SceneEditorDocumentObjectEditable(scene_object_index, diagnostics, diagnostics_size)) return false;
     json_object* object = NULL;
     json_object* transform = NULL;
     if (!transform_value) return false;
@@ -434,6 +437,7 @@ bool SceneEditorDocumentSetManagedShadingForSceneIndex(int scene_object_index,
                                                        double crease_angle_degrees,
                                                        char* diagnostics,
                                                        size_t diagnostics_size) {
+    if (!SceneEditorDocumentObjectEditable(scene_object_index, diagnostics, diagnostics_size)) return false;
     json_object* object = NULL;
     json_object* extensions = NULL;
     json_object* ray = NULL;
@@ -482,6 +486,7 @@ bool SceneEditorDocumentSetMaterialIdForSceneIndex(int scene_object_index,
                                                    int material_id,
                                                    char* diagnostics,
                                                    size_t diagnostics_size) {
+    if (!SceneEditorDocumentObjectEditable(scene_object_index, diagnostics, diagnostics_size)) return false;
     json_object* object = document_object_for_scene_index(scene_object_index,
                                                            diagnostics,
                                                            diagnostics_size);
@@ -555,6 +560,7 @@ bool SceneEditorDocumentDuplicateForSceneIndex(int scene_object_index,
                                                int* out_new_scene_object_index,
                                                char* diagnostics,
                                                size_t diagnostics_size) {
+    if (!SceneEditorDocumentObjectEditable(scene_object_index, diagnostics, diagnostics_size)) return false;
     json_object* source = document_object_for_scene_index(scene_object_index, diagnostics, diagnostics_size);
     json_object* objects = NULL;
     json_object* id = NULL;
@@ -582,6 +588,7 @@ bool SceneEditorDocumentDuplicateForSceneIndex(int scene_object_index,
 bool SceneEditorDocumentRemoveForSceneIndex(int scene_object_index,
                                             char* diagnostics,
                                             size_t diagnostics_size) {
+    if (!SceneEditorDocumentObjectEditable(scene_object_index, diagnostics, diagnostics_size)) return false;
     json_object* object = document_object_for_scene_index(scene_object_index, diagnostics, diagnostics_size);
     json_object* objects = NULL;
     if (!object || !json_object_object_get_ex(s_document.root, "objects", &objects)) return false;
@@ -596,33 +603,19 @@ bool SceneEditorDocumentRemoveForSceneIndex(int scene_object_index,
     return false;
 }
 
-bool SceneEditorDocumentRenameForSceneIndex(int scene_object_index,
-                                            const char* display_name,
-                                            char* diagnostics,
-                                            size_t diagnostics_size) {
-    json_object* object = NULL;
-    size_t length = display_name ? strlen(display_name) : 0u;
-    if (length == 0u || length > 96u) {
-        document_diag(diagnostics, diagnostics_size, "display name must contain 1 to 96 characters");
-        return false;
-    }
-    object = document_object_for_scene_index(scene_object_index, diagnostics, diagnostics_size);
-    if (!object || !document_begin_command(diagnostics, diagnostics_size)) return false;
-    json_object_object_add(object, "display_name", json_object_new_string(display_name));
-    return document_finish_command(diagnostics, diagnostics_size);
+bool SceneEditorDocumentRenameForSceneIndex(int index,const char* name,char* diagnostics,size_t size) {
+    char id[128];
+    if(!runtime_scene_bridge_get_last_object_id_for_scene_index(index,id,sizeof(id))) return false;
+    return SceneEditorDocumentRenameById(id,name,SceneEditorDocumentRevision(),diagnostics,size);
 }
 
-bool SceneEditorDocumentObjectLabel(int scene_object_index, char* label, size_t size) {
-    json_object* object = document_object_for_scene_index(scene_object_index, NULL, 0);
-    json_object* value = NULL;
-    if (!label || !size) return false;
-    label[0] = '\0';
-    if (!object) return false;
-    if (!json_object_object_get_ex(object, "display_name", &value))
-        (void)json_object_object_get_ex(object, "object_id", &value);
-    if (!value || !json_object_is_type(value, json_type_string)) return false;
-    snprintf(label, size, "%s", json_object_get_string(value));
-    return true;
+bool SceneEditorDocumentObjectLabel(int scene_object_index,char* label,size_t size) {
+    char id[128];SceneEditorDocumentObjectInfo info;
+    if(!label || !size) return false;
+    label[0]=0;
+    if(!runtime_scene_bridge_get_last_object_id_for_scene_index(scene_object_index,id,sizeof(id)) ||
+       !SceneEditorDocumentObjectById(id,&info)) return false;
+    snprintf(label,size,"%s",info.name);return true;
 }
 
 bool SceneEditorDocumentCanUndo(void) { return s_document.undo_count > 0; }
@@ -893,3 +886,5 @@ double SceneEditorDocumentWorldScale(void) {
         value=json_object_get_double(scale);
     return isfinite(value) && value>0 ? value : 1.0;
 }
+
+json_object* SceneEditorDocumentRetainedRoot(void) { return s_document.root; }

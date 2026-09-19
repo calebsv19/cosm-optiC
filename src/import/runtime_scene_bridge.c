@@ -660,6 +660,11 @@ static void apply_objects(json_object *root,
         SceneObject *dst = NULL;
         const char *object_id = NULL;
         if (!obj || !json_object_is_type(obj, json_type_object)) continue;
+        json_object *visibility_flags=NULL,*visibility_value=NULL;
+        if (json_object_object_get_ex(obj,"flags",&visibility_flags) &&
+            json_object_object_get_ex(visibility_flags,"visible",&visibility_value) &&
+            json_object_is_type(visibility_value,json_type_boolean) && !json_object_get_boolean(visibility_value)) continue;
+
 
         if (json_object_object_get_ex(obj, "object_type", &object_type) &&
             json_object_is_type(object_type, json_type_string)) {

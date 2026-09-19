@@ -1,3 +1,4 @@
+#include "editor/scene_editor_chrome_shell.h"
 #include "editor/object_editor.h"
 #include "editor/object_editor_internal.h"
 #include "scene/object_manager.h"
@@ -425,6 +426,13 @@ bool ObjectEditorAddPlacementAt(double world_x, double world_y) {
 }
 
 bool ObjectEditorDeleteObjectIndex(int index) {
+    if (!SceneEditorDocumentRequireEditable(index)) return false;
+    if (SceneEditorDocumentIsOpen() && animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE) {
+        char reason[256];
+        bool ok=SceneEditorDocumentRemoveForSceneIndex(index,reason,sizeof(reason));
+        SceneEditorChromeShellSetActionFeedback(ok ? "Object removed; Undo available" : reason,4000);
+        return ok;
+    }
     if (index < 0 || index >= sceneSettings.objectCount) {
         return false;
     }
@@ -605,6 +613,7 @@ void ObjectEditorSetSelectedObjectIndex(int index) {
 }
 
 void ObjectEditorAssignMaterialToSelected(int material_id) {
+    if (!SceneEditorDocumentRequireEditable(ObjectEditorGetSelectedObjectIndex())) return;
     int selected_index = ObjectEditorGetSelectedObjectIndex();
     char diagnostics[256] = {0};
     if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
@@ -621,6 +630,7 @@ void ObjectEditorAssignMaterialToSelected(int material_id) {
 }
 
 void ObjectEditorAssignColorToSelected(int packed_color) {
+    if (!SceneEditorDocumentRequireEditable(ObjectEditorGetSelectedObjectIndex())) return;
     int selected_index = ObjectEditorGetSelectedObjectIndex();
     if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
@@ -632,6 +642,7 @@ void ObjectEditorAssignColorToSelected(int packed_color) {
 }
 
 void ObjectEditorAssignAlphaToSelected(double alpha) {
+    if (!SceneEditorDocumentRequireEditable(ObjectEditorGetSelectedObjectIndex())) return;
     int selected_index = ObjectEditorGetSelectedObjectIndex();
     if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
@@ -644,6 +655,7 @@ void ObjectEditorAssignAlphaToSelected(double alpha) {
 }
 
 void ObjectEditorAssignEmissiveStrengthToSelected(double emissive_strength) {
+    if (!SceneEditorDocumentRequireEditable(ObjectEditorGetSelectedObjectIndex())) return;
     int selected_index = ObjectEditorGetSelectedObjectIndex();
     if (selected_index < 0 || selected_index >= sceneSettings.objectCount) {
         return;
