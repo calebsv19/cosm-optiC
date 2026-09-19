@@ -126,21 +126,23 @@ static void test_workspace_expand_restore_and_chrome_reachability(void) {
             assert(r.w >= 44 && r.h >= 24);
             assert(r.x >= 0 && r.x + r.w <= sizes[i][0]);
             assert(r.y + r.h < before.viewport_rect.y);
-            if (j) assert(r.x > chrome.actions[j-1].x + chrome.actions[j-1].w);
         }
         assert(chrome.restore.x + chrome.restore.w <= sizes[i][0]);
-        SDL_Rect document_controls[]={chrome.workspace,chrome.frame_all,chrome.frame_selected,chrome.undo,chrome.redo};
-        for (int j=0;j<5;++j) {
+        SDL_Rect document_controls[]={chrome.document_identity,chrome.undo,chrome.redo,
+            chrome.actions[6],chrome.actions[3],chrome.actions[8]};
+        for (int j=0;j<6;++j) {
             SDL_Rect r=document_controls[j];
             assert(r.w>=44 && r.h>=24);
-            assert(r.x+r.w<=chrome.expand.x);
             if (j) assert(r.x>document_controls[j-1].x+document_controls[j-1].w);
         }
+        assert(chrome.workspace.x < chrome.modes[0].x);
         for (int j=0;j<SCENE_WORKSPACE_MODE_COUNT;++j) {
             assert(chrome.modes[j].x>=0 && chrome.modes[j].x+chrome.modes[j].w<=sizes[i][0]);
             assert(chrome.modes[j].y+chrome.modes[j].h<=sizes[i][1]);
-            if (j) assert(chrome.modes[j].y>=chrome.modes[j-1].y+chrome.modes[j-1].h);
+            if (j) assert(chrome.modes[j].x>chrome.modes[j-1].x+chrome.modes[j-1].w);
         }
+        assert(chrome.modes[SCENE_WORKSPACE_MODE_COUNT-1].x+
+               chrome.modes[SCENE_WORKSPACE_MODE_COUNT-1].w<chrome.expand.x);
         assert(scene_editor_pane_host_set_viewport_expanded(&host, true));
         assert(host.layout.left_pane_rect.w == 0 && host.layout.right_pane_rect.w == 0);
         assert(host.layout.viewport_rect.w > before.viewport_rect.w);

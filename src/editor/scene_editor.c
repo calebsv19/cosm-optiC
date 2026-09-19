@@ -501,7 +501,7 @@ static void SceneEditorLayoutChrome(void) {
                                               sceneSettings.windowHeight);
     } else {
         int row_h = animation_config_scale_text_point_size(&animSettings, 14, 12) + 10;
-        g_scenePaneHost.workspace_header_height = row_h * 2 + 24;
+        g_scenePaneHost.workspace_header_height = row_h * 3 + 24;
         pane_ok = scene_editor_pane_host_rebuild(&g_scenePaneHost,
                                                  sceneSettings.windowWidth,
                                                  sceneSettings.windowHeight);

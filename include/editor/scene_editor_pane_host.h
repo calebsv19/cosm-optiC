@@ -11,6 +11,7 @@
 typedef struct SceneEditorPaneLayout {
     SDL_Rect workspace_header_rect;
     SDL_Rect workspace_actions_rect;
+    SDL_Rect viewport_tools_rect;
     SDL_Rect workspace_feedback_rect;
     bool viewport_expanded;
     SDL_Rect left_pane_rect;

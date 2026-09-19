@@ -24,26 +24,36 @@ void SceneEditorWorkspaceLayoutChrome(const SceneEditorPaneLayout* layout,
     if (!chrome) return;
     memset(chrome, 0, sizeof(*chrome));
     if (!layout || layout->workspace_header_rect.w <= 0) return;
-    SDL_Rect modes = layout->mode_router_rect;
-    static const int action_widths[] = {64, 52, 62, 72, 72, 58, 56, 86, 100};
-    static const int document_widths[]={180,76,96,46,46,54,58,64,58};
-    chrome->workspace=row_item(modes,0,9,document_widths);
-    chrome->frame_all=row_item(modes,1,9,document_widths);
-    chrome->frame_selected=row_item(modes,2,9,document_widths);
-    chrome->undo=row_item(modes,3,9,document_widths);
-    chrome->redo=row_item(modes,4,9,document_widths);
-    chrome->gizmo_label=row_item(modes,5,9,document_widths);
-    for (int i=0;i<3;++i) chrome->transforms[i]=row_item(modes,6+i,9,document_widths);
-    int menu_width=chrome->workspace.w;
-    for (int i = 0; i < SCENE_WORKSPACE_MODE_COUNT; ++i) {
-        chrome->modes[i] = (SDL_Rect){modes.x,modes.y+modes.h+4+i*(modes.h+4),
-                                      menu_width,modes.h+4};
-    }
-    chrome->expand = (SDL_Rect){modes.x + modes.w + 8, modes.y, 112, modes.h};
-    chrome->restore = (SDL_Rect){chrome->expand.x + chrome->expand.w + 6,
-                                modes.y, 112, modes.h};
-    for (int i = 0; i < SCENE_WORKSPACE_ACTION_COUNT; ++i) {
-        chrome->actions[i] = row_item(layout->workspace_actions_rect,
-                                      i, SCENE_WORKSPACE_ACTION_COUNT, action_widths);
-    }
+    SDL_Rect document = layout->mode_router_rect;
+    SDL_Rect workspaces = layout->workspace_actions_rect;
+    SDL_Rect tools = layout->viewport_tools_rect;
+    static const int document_widths[] = {420, 58, 58, 70, 74, 96};
+    static const int workspace_widths[] = {82, 72, 88, 76, 112, 72, 104, 96};
+    static const int tool_widths[] = {62, 52, 64, 62, 66, 62, 78, 104, 72, 62, 84};
+
+    chrome->document_identity = row_item(document, 0, 6, document_widths);
+    chrome->undo = row_item(document, 1, 6, document_widths);
+    chrome->redo = row_item(document, 2, 6, document_widths);
+    chrome->actions[6] = row_item(document, 3, 6, document_widths);
+    chrome->actions[3] = row_item(document, 4, 6, document_widths);
+    chrome->actions[8] = row_item(document, 5, 6, document_widths);
+
+    chrome->workspace = row_item(workspaces, 0, 8, workspace_widths);
+    for (int i = 0; i < SCENE_WORKSPACE_MODE_COUNT; ++i)
+        chrome->modes[i] = row_item(workspaces, i + 1, 8, workspace_widths);
+    chrome->expand = row_item(workspaces, 6, 8, workspace_widths);
+    chrome->restore = row_item(workspaces, 7, 8, workspace_widths);
+
+    chrome->actions[0] = row_item(tools, 0, 11, tool_widths);
+    chrome->actions[1] = row_item(tools, 1, 11, tool_widths);
+    chrome->actions[2] = row_item(tools, 2, 11, tool_widths);
+    chrome->transforms[0] = row_item(tools, 3, 11, tool_widths);
+    chrome->transforms[1] = row_item(tools, 4, 11, tool_widths);
+    chrome->transforms[2] = row_item(tools, 5, 11, tool_widths);
+    chrome->frame_all = row_item(tools, 6, 11, tool_widths);
+    chrome->frame_selected = row_item(tools, 7, 11, tool_widths);
+    chrome->actions[4] = row_item(tools, 8, 11, tool_widths);
+    chrome->actions[5] = row_item(tools, 9, 11, tool_widths);
+    chrome->actions[7] = row_item(tools, 10, 11, tool_widths);
+    chrome->gizmo_label = (SDL_Rect){0};
 }

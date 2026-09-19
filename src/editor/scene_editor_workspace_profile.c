@@ -19,13 +19,13 @@ bool SceneEditorWorkspaceProfileMenuOpen(void) { return menu_open; }
 SceneEditorWorkspaceProfile SceneEditorWorkspaceProfileGet(void) { return active; }
 void SceneEditorWorkspaceProfileReset(void) { SceneEditorObjectTransformModeSet(SCENE_EDITOR_OBJECT_TRANSFORM_MOVE); active = SCENE_WORKSPACE_SCENE; scene_nav_saved=false; menu_open=false; add_menu=false; SceneEditorObjectMoveGizmoReset(); SceneEditorLifecycleReset(); }
 const char* SceneEditorWorkspaceProfileLabel(int profile) {
-    static const char* labels[] = {"Scene", "Materials", "Surface", "Atmos / Water", "Render"};
+    static const char* labels[] = {"Scene", "Material", "Surface", "Environment", "Render"};
     return profile >= 0 && profile < SCENE_WORKSPACE_PROFILE_COUNT ? labels[profile] : "Scene";
 }
 void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspaceProfile profile) {
     if (!editor || profile < 0 || profile >= SCENE_WORKSPACE_PROFILE_COUNT) return;
     SceneEditorObjectMoveGizmoReset();
-    SceneEditorObjectMoveGizmoReset();
+    SceneEditorChromeShellSetActionFeedback("",0);
     int selected = ObjectEditorGetSelectedObjectIndex();
     bool entering_material=profile==SCENE_WORKSPACE_MATERIALS && active!=SCENE_WORKSPACE_MATERIALS;
     bool leaving_material=profile!=SCENE_WORKSPACE_MATERIALS && active==SCENE_WORKSPACE_MATERIALS;
@@ -82,9 +82,13 @@ bool SceneEditorWorkspaceProfileHandleEvent(SceneEditor* editor, const SDL_Event
          event->type==SDL_MOUSEWHEEL || event->type==SDL_TEXTINPUT || event->type==SDL_KEYUP);
     if (event->button.button!=SDL_BUTTON_LEFT) { bool consumed=menu_open; menu_open=false; return consumed; }
     SDL_Point point={event->button.x,event->button.y};
-    if (SDL_PointInRect(&point,&chrome.workspace)) {
-        if (SceneEditorTransformPanelInteractionActive()) return true;
-        menu_open=!menu_open; add_menu=false; menu_focus=active; return true;
+    for (int i=0;i<SCENE_WORKSPACE_PROFILE_COUNT;++i) {
+        if (SDL_PointInRect(&point,&chrome.modes[i])) {
+            if (SceneEditorTransformPanelInteractionActive()) return true;
+            menu_open=false; add_menu=false;
+            SceneEditorWorkspaceProfileSelect(editor,(SceneEditorWorkspaceProfile)i);
+            return true;
+        }
     }
     if (!menu_open && SDL_PointInRect(&point,&chrome.actions[1]) && editor->currentMode==EDITOR_MODE_OBJECT) {
         if (SceneEditorTransformPanelInteractionActive()) return true;
@@ -119,14 +123,15 @@ void SceneEditorWorkspaceProfileRenderOverlay(SDL_Renderer* renderer) {
     RayTracingThemePalette palette=SceneEditorChromeShellResolvePalette();
     SDL_Rect prior; SDL_bool clipped=SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer,&prior); SDL_RenderSetClipRect(renderer,NULL);
-    for (int i=0;i<(add_menu ? 2 : SCENE_WORKSPACE_PROFILE_COUNT);++i) {
+    if (!add_menu) return;
+    for (int i=0;i<2;++i) {
         SDL_Rect row=menu_row(&chrome,i);
         SDL_Color fill=i==menu_focus ? palette.button_active_fill : palette.panel_fill;
         SDL_SetRenderDrawColor(renderer,fill.r,fill.g,fill.b,255); SDL_RenderFillRect(renderer,&row);
         SDL_SetRenderDrawColor(renderer,palette.panel_border.r,palette.panel_border.g,palette.panel_border.b,255);
         SDL_RenderDrawRect(renderer,&row);
         row.x+=8; row.w-=16;
-        SceneEditorLabelLeft(renderer,row,add_menu ? (i==0 ? "Place from library" : "Import STL...") : SceneEditorWorkspaceProfileLabel(i),
+        SceneEditorLabelLeft(renderer,row,i==0 ? "Place from library" : "Import STL...",
             ray_tracing_theme_choose_button_text(fill,palette));
     }
     SDL_RenderSetClipRect(renderer,clipped ? &prior : NULL);

@@ -1,5 +1,33 @@
 # Editor workspace
 
+## September 19 U2.1 shell hierarchy checkpoint
+
+The Scene Editor chrome now has three stable rows. The document row owns scene
+identity, dirty state, Undo, Redo, Save, Preview and Leave. The second row is a
+direct segmented workspace navigator for Scene, Material, Surface, Environment
+and Render. The third row owns Select/Add/Delete, Move/Rotate/Scale, framing,
+Camera, Paths and Light keys. This removes the former workspace drop-down and
+keeps document actions in the same place in every workspace.
+
+The line below the tool row is the task-status surface. Scene reports the active
+transform, live axis value and units; Material, Surface, Environment and Render
+report their purpose when no newer action result is active. Workspace changes
+clear stale action feedback. `Atmos / Water` is now presented as Environment;
+the underlying compatibility enum and retained scene behavior are unchanged.
+
+The implementation only recomposes presentation owners. Workspace selection,
+framing and display changes remain view state and do not change document
+revision or dirty state. Existing Add/import, transform, material, save/reopen,
+unknown-field preservation and final headless-render paths remain on their
+retained command owners.
+
+Native acceptance uses the workspace driver documented below and now captures
+the direct workspace strip, import-start state and all five workspace profiles.
+The 1280x800 run verifies imported-mesh millimeter scale, Move/Rotate/Scale live
+preview and cancellation, workspace selection and preserved selection, pane
+expand/restore, Save/fresh reopen and a final headless render. Narrow-window
+drawer behavior and keyboard shortcut expansion remain later U2 boundaries.
+
 ## September 19 U1.3 transform usability checkpoint
 
 The Scene header keeps an explicit `Gizmo: Move | Rotate | Scale` control and a

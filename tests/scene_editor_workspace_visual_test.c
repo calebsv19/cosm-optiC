@@ -265,6 +265,8 @@ int main(int argc, char** argv) {
         SDL_Event drop = {0}; drop.type = SDL_DROPFILE;
         drop.drop.file = SDL_strdup(argv[3]);
         SceneEditorSessionRuntimeHandleEvent(&editor, &drop);
+        capture(&editor, "workspace_import_started.ppm");
+        assert(SceneEditorTransformPanelInteractionActive());
         Uint32 deadline = SDL_GetTicks() + 30000;
         while (SceneEditorTransformPanelInteractionActive() && SDL_GetTicks() < deadline) {
             SceneEditorTransformPanelPoll();
@@ -391,18 +393,10 @@ int main(int argc, char** argv) {
 
     SceneEditorWorkspaceChrome chrome;
     SceneEditorWorkspaceLayoutChrome(&before, &chrome);
-    click(&editor,chrome.workspace);
-    capture(&editor,"workspace_selector.ppm");
-    key(&editor,SDLK_ESCAPE);
+    capture(&editor,"workspace_navigation.ppm");
     assert(!SceneEditorWorkspaceProfileMenuOpen());
-    click(&editor,chrome.workspace);
-    click(&editor,expandViewportButton);
-    assert(!SceneEditorWorkspaceProfileMenuOpen());
-    assert(SceneEditorGetPaneLayout(&after) && !after.viewport_expanded);
     assert(SceneEditorDocumentRevision()==revision);
     for (int profile=0; profile<SCENE_WORKSPACE_PROFILE_COUNT; ++profile) {
-        click(&editor, chrome.workspace);
-        assert(SceneEditorWorkspaceProfileMenuOpen());
         click(&editor, chrome.modes[profile]);
         assert((int)SceneEditorWorkspaceProfileGet() == profile);
         assert(SceneEditorDocumentRevision() == revision);
@@ -410,7 +404,6 @@ int main(int argc, char** argv) {
         char capture_name[80]; snprintf(capture_name,sizeof(capture_name),"workspace_profile_%d.ppm",profile);
         capture(&editor,capture_name);
     }
-    click(&editor, chrome.workspace);
     click(&editor, chrome.modes[SCENE_WORKSPACE_SCENE]);
     click(&editor, expandViewportButton);
     assert(SceneEditorGetPaneLayout(&after) && after.viewport_expanded);

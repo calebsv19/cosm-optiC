@@ -52,12 +52,16 @@ toolbar; unselected objects remain wire context. Workspace switching preserves
 the scene view until the user explicitly frames a selection. This policy stays
 RayTracing-owned; shared viewport and mesh-preview libraries provide geometry.
 
-`scene_editor_workspace_layout.c` calculates the window-wide mode/action header.
+`scene_editor_workspace_layout.c` calculates the three-row document, workspace
+and viewport-tool header. The document row owns identity/history/save/output/
+leave, the workspace row is a direct five-segment navigator, and the tool row
+owns selection, creation, transforms, framing, camera, paths and lights.
 `scene_editor_pane_host.c` owns side-pane expansion/restoration and splitter state.
 `scene_editor_chrome_shell.c` renders and maps the header; chrome actions update
-layout without document commands. The retained document and transform inspector
-remain separate owners. See `docs/editor_workspace.md` for the bounded slice and
-open acceptance.
+layout without document commands and supplies the normalized task-status line.
+Workspace changes clear stale action results so non-Scene profiles can state
+their purpose. The retained document and transform inspector remain separate
+owners. See `docs/editor_workspace.md` for the bounded slice and acceptance.
 
 The E0/E1 continuation adds `scene_editor_workspace_profile.c` for the five task
 profiles and `scene_editor_sidebar.c` for clipped scroll containers, Objects/Library
@@ -70,8 +74,8 @@ escape a pane. No shared module was extended.
 The legacy-named object move gizmo owns Move/Rotate/Scale transient gesture state,
 stable object/document binding and one-command release. The transform handles
 module owns projection, picking and axis/ring rendering; transform preview owns
-read-only mesh/primitive copies and handle origins; transform feedback owns Op
-and inspector group labels. Rendering consumes these adapters without changing
+read-only mesh/primitive copies and handle origins; transform feedback owns the
+plain-language task status and inspector group labels. Rendering consumes these adapters without changing
 retained documents or runtime geometry. Workspace changes cancel the gesture.
 Native acceptance lives in `tests/scene_editor_move_acceptance.h` and
 `tests/scene_editor_transform_acceptance.h` within the workspace harness.

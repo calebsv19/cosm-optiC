@@ -5,6 +5,7 @@
 
 enum { SCENE_WORKSPACE_ACTION_COUNT = 9, SCENE_WORKSPACE_MODE_COUNT = 5 };
 typedef struct SceneEditorWorkspaceChrome {
+    SDL_Rect document_identity;
     SDL_Rect workspace;
     SDL_Rect frame_all, frame_selected, undo, redo;
     SDL_Rect gizmo_label;

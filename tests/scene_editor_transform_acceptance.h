@@ -53,7 +53,7 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
     char id[64];assert(runtime_scene_bridge_get_last_object_id_for_scene_index(selected,id,sizeof(id)));
     transform_mode_click(editor,SCENE_EDITOR_OBJECT_TRANSFORM_MOVE);
     capture(editor,"workspace_dense_move_idle.ppm");
-    assert(!SceneEditorTransformOperationLabel(selected,label,sizeof(label)) && strstr(label,"Op: Move"));
+    assert(!SceneEditorTransformOperationLabel(selected,label,sizeof(label)) && strstr(label,"Move |"));
     SceneEditorTransformGroupLabel(0,label,sizeof(label));assert(strstr(label,"Position") && strstr(label,"meters"));
     SceneEditorTransformGroupLabel(1,label,sizeof(label));assert(strstr(label,"Rotation (degrees)"));
     SceneEditorTransformGroupLabel(2,label,sizeof(label));assert(strstr(label,"Scale (unitless factor)"));
@@ -61,7 +61,7 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
     SceneEditorObjectTransformHandle h;int ex,ey;
     transform_handle(editor,selected,1,&h,&ex,&ey);
     move_pointer(editor,SDL_MOUSEBUTTONDOWN,h.x,h.y);move_pointer(editor,SDL_MOUSEMOTION,ex,ey);
-    assert(SceneEditorTransformOperationLabel(selected,label,sizeof(label)) && strstr(label,"Move X +") && strstr(label,"meters"));
+    assert(SceneEditorTransformOperationLabel(selected,label,sizeof(label)) && strstr(label,"Move X: +") && strstr(label,"meters"));
     capture(editor,"workspace_dense_move_active.ppm");key(editor,SDLK_ESCAPE);
     for (int mode=1;mode<=2;++mode) {
         unsigned long long revision=SceneEditorDocumentRevision();

@@ -328,3 +328,18 @@ Focused foundation, pane, navigation, viewport bridge, pick/scroll, outline,
 shading and startup discovery gates also pass. Full test-stable and hands-on
 operator acceptance are separate. Development packaging is checked separately;
 this pass does not refresh Desktop, adopt canonical main, or enter U2.
+
+## September 19 U2.1 shell hierarchy checkpoint
+
+U2.1 is implemented in this retained Main Edit lane. The editor uses stable
+document, workspace and viewport-tool rows plus one normalized task-status line.
+Workspace selection is direct and persistent; Environment replaces the visible
+`Atmos / Water` name while the compatible internal profile remains unchanged.
+The presentation change does not add document mutations.
+
+The forced Clang build, pane-host contract and isolated native workspace
+acceptance pass. The native pass covers Add/import, transform live preview and
+cancellation, all five direct workspace segments, view-only revision invariants,
+pane expand/restore, Save/fresh reopen and headless render. U2.2 must begin as a
+new bounded transform-ergonomics slice from this committed checkpoint; canonical
+adoption, VERSION changes and release remain separate.

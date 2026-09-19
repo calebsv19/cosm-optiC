@@ -427,22 +427,37 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     if (layout_valid && layout) {
         SceneEditorWorkspaceChrome chrome;
         SceneEditorWorkspaceLayoutChrome(layout, &chrome);
-        char workspace_label[80];
-        snprintf(workspace_label,sizeof(workspace_label),"Workspace: %s  v",
-                 SceneEditorWorkspaceProfileLabel(SceneEditorWorkspaceProfileGet()));
-        scene_editor_chrome_shell_render_button(renderer,chrome.workspace,workspace_label,
-            true,scene_editor_chrome_shell_button_hovered(&chrome.workspace),
-            SceneEditorWorkspaceProfileMenuOpen(),palette.button_fill,
-            disabledFill,borderColor,palette);
-        SDL_Rect tools[]={chrome.frame_all,chrome.frame_selected,chrome.undo,chrome.redo};
-        const char* labels[]={"Frame all","Frame selected","Undo","Redo"};
-        bool enabled[]={true,ObjectEditorGetSelectedObjectIndex()>=0,
-            SceneEditorDocumentCanUndo(),SceneEditorDocumentCanRedo()};
-        for (int i=0;i<4;++i)
-            scene_editor_chrome_shell_render_button(renderer,tools[i],labels[i],enabled[i],
-                scene_editor_chrome_shell_button_hovered(&tools[i]),false,palette.button_fill,
+        const char* path = SceneEditorDocumentPath();
+        const char* filename = path ? strrchr(path,'/') : NULL;
+        char document_label[256];
+        snprintf(document_label,sizeof(document_label),"%s%s",
+                 filename ? filename+1 : "Scene",
+                 SceneEditorDocumentIsDirty() ? "  • Unsaved" : "");
+        SceneEditorLabelLeft(renderer,chrome.document_identity,document_label,palette.text_primary);
+        scene_editor_chrome_shell_render_button(renderer,chrome.undo,"Undo",
+            SceneEditorDocumentCanUndo(),scene_editor_chrome_shell_button_hovered(&chrome.undo),
+            false,palette.button_fill,disabledFill,borderColor,palette);
+        scene_editor_chrome_shell_render_button(renderer,chrome.redo,"Redo",
+            SceneEditorDocumentCanRedo(),scene_editor_chrome_shell_button_hovered(&chrome.redo),
+            false,palette.button_fill,disabledFill,borderColor,palette);
+
+        SceneEditorLabelLeft(renderer,chrome.workspace,"Workspace",palette.text_muted);
+        for (int i=0;i<SCENE_WORKSPACE_MODE_COUNT;++i) {
+            bool active=i==(int)SceneEditorWorkspaceProfileGet();
+            scene_editor_chrome_shell_render_button(renderer,chrome.modes[i],
+                SceneEditorWorkspaceProfileLabel(i),true,
+                scene_editor_chrome_shell_button_hovered(&chrome.modes[i]),active,
+                active ? ray_tracing_theme_resolve_button_active_fill(palette) : palette.button_fill,
                 disabledFill,borderColor,palette);
-        SceneEditorLabelLeft(renderer,chrome.gizmo_label,"Gizmo:",palette.text_primary);
+        }
+
+        scene_editor_chrome_shell_render_button(renderer,chrome.frame_all,"Frame all",true,
+            scene_editor_chrome_shell_button_hovered(&chrome.frame_all),false,palette.button_fill,
+            disabledFill,borderColor,palette);
+        scene_editor_chrome_shell_render_button(renderer,chrome.frame_selected,"Frame selected",
+            ObjectEditorGetSelectedObjectIndex()>=0,
+            scene_editor_chrome_shell_button_hovered(&chrome.frame_selected),false,
+            palette.button_fill,disabledFill,borderColor,palette);
         const char* transform_labels[]={"Move","Rotate","Scale"};
         for (int i=0;i<3;++i) {
             bool enabled=SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE &&
@@ -578,22 +593,23 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     feedbackRect = layout_valid && layout ? layout->workspace_feedback_rect : (SDL_Rect){0};
     if (layout_valid && layout && SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE &&
         animSettings.editorMode==EDITOR_MODE_OBJECT) {
-        char operation[256],status[512];
+        char operation[256];
         bool live=SceneEditorTransformOperationLabel(ObjectEditorGetSelectedObjectIndex(),operation,sizeof(operation));
-        const char* path=SceneEditorDocumentPath();
-        const char* filename=path ? strrchr(path,'/') : NULL;
-        snprintf(status,sizeof(status),"%s%s%s",operation,live ? "" : " | ",
-            live ? "" : showFeedback ? g_sceneActionFeedbackText : filename ? filename+1 : "Scene");
-        SceneEditorLabelLeft(renderer,feedbackRect,status,live ? (SDL_Color){255,220,115,255} : palette.text_primary);
+        SceneEditorLabelLeft(renderer,feedbackRect,
+            (!live && showFeedback) ? g_sceneActionFeedbackText : operation,
+            live ? (SDL_Color){255,220,115,255} : palette.text_primary);
     } else if (showFeedback) {
         SceneEditorLabelLeft(renderer, feedbackRect, g_sceneActionFeedbackText, palette.text_primary);
     } else if (layout_valid && layout) {
-        const char* path = SceneEditorDocumentPath();
-        const char* name = path ? strrchr(path, '/') : NULL;
-        char status[256];
-        snprintf(status, sizeof(status), "%s%s", name ? name + 1 : "Scene workspace",
-                 SceneEditorDocumentIsDirty() ? "  • Unsaved changes" : "");
-        SceneEditorLabelLeft(renderer, feedbackRect, status, palette.text_primary);
+        const char* status = "Ready";
+        switch (SceneEditorWorkspaceProfileGet()) {
+            case SCENE_WORKSPACE_MATERIALS: status = "Material | Edit the selected object's appearance"; break;
+            case SCENE_WORKSPACE_SURFACE: status = "Surface | Inspect geometry and shading for the selected object"; break;
+            case SCENE_WORKSPACE_ENVIRONMENT: status = "Environment | Inspect atmosphere, volume and water resources"; break;
+            case SCENE_WORKSPACE_RENDER: status = "Render | Configure the camera and preview the scene"; break;
+            default: status = "Scene | Select, arrange and inspect scene objects"; break;
+        }
+        SceneEditorLabelLeft(renderer, feedbackRect, status, palette.text_muted);
     }
 
     if (layout_valid && layout) {
