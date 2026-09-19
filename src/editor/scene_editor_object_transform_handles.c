@@ -12,8 +12,15 @@ bool SceneEditorObjectTransformHandleProject(const SceneEditorDigestOverlayProje
     const RuntimeSceneBridge3DDigestState* digest,const double position[3],
     SceneEditorObjectTransformMode mode,SceneEditorBezier3DGizmoAxis axis,
     SceneEditorObjectTransformHandle* h) {
-    if (!p || !digest || !h || axis<1 || axis>3) return false;
+    if (!p || !digest || !h || axis<1 || axis>SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM) return false;
     *h=(SceneEditorObjectTransformHandle){0};
+    if (axis==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM) {
+        if (mode!=SCENE_EDITOR_OBJECT_TRANSFORM_SCALE ||
+            !SceneEditorDigestOverlayProjectPointF(p,position[0],position[1],position[2],&h->cx,&h->cy)) return false;
+        h->x=(int)lround(h->cx)+14;h->y=(int)lround(h->cy)+14;
+        h->ux=0.7071067811865476;h->uy=0.7071067811865476;h->pixels_per_unit=p->scale;
+        return true;
+    }
     if (mode!=SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE) {
         int ax,ay,bx,by; double ppu;
         SceneEditorBezier3DInteractionMetrics metrics=SceneEditorDigestOverlayResolveBezierMetrics(digest,p);
@@ -56,12 +63,14 @@ bool SceneEditorObjectTransformHandlePick(const SceneEditorDigestOverlayProjecto
     SceneEditorObjectTransformMode mode,int x,int y,
     SceneEditorBezier3DGizmoAxis* axis,SceneEditorObjectTransformHandle* picked) {
     double best=100.0;bool found=false;
-    for (int i=1;i<=3;++i) {
+    int last=mode==SCENE_EDITOR_OBJECT_TRANSFORM_SCALE ? SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM : 3;
+    for (int i=1;i<=last;++i) {
         SceneEditorObjectTransformHandle h;
         if (!SceneEditorObjectTransformHandleProject(p,digest,position,mode,(SceneEditorBezier3DGizmoAxis)i,&h)) continue;
         double distance=(x-h.x)*(double)(x-h.x)+(y-h.y)*(double)(y-h.y);
         /* Labeled endpoints take precedence over intersecting rings. */
-        if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE && distance<64) distance*=0.001;
+        if (i==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM && distance<100) distance*=0.0001;
+        else if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE && distance<64) distance*=0.001;
         else if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE) {
             distance=1e12;
             for (int j=0;j<96;++j) {
@@ -80,17 +89,19 @@ void SceneEditorObjectTransformHandlesRender(SDL_Renderer* renderer,
     const double position[3],SceneEditorObjectTransformMode mode,
     SceneEditorBezier3DGizmoAxis hover,SceneEditorBezier3DGizmoAxis active) {
     static const SDL_Color colors[3]={{235,105,105,255},{100,215,135,255},{105,155,240,255}};
-    static const char* labels[]={"X","Y","Z"};
-    for (int i=1;i<=3;++i) {
+    static const char* labels[]={"X","Y","Z","All"};
+    int last=mode==SCENE_EDITOR_OBJECT_TRANSFORM_SCALE ? SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM : 3;
+    for (int i=1;i<=last;++i) {
         SceneEditorObjectTransformHandle h;
         if (!SceneEditorObjectTransformHandleProject(p,digest,position,mode,(SceneEditorBezier3DGizmoAxis)i,&h)) continue;
-        SDL_Color color=(int)active==i ? (SDL_Color){255,220,115,255} : (int)hover==i ? (SDL_Color){255,255,255,255} : colors[i-1];
+        SDL_Color color=(int)active==i ? (SDL_Color){255,220,115,255} : (int)hover==i ? (SDL_Color){255,255,255,255} :
+            i==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM ? (SDL_Color){210,210,215,255} : colors[i-1];
         SDL_SetRenderDrawColor(renderer,color.r,color.g,color.b,255);
         if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE) {
             SDL_Point points[97];
             for (int j=0;j<=96;++j) { double x,y;ring_point(&h,tau*j/96.0,&x,&y);points[j]=(SDL_Point){(int)lround(x),(int)lround(y)}; }
             for (int j=1;j<=96;++j) SDL_RenderDrawLine(renderer,points[j-1].x,points[j-1].y,points[j].x,points[j].y);
-        } else {
+        } else if (i!=SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM) {
             SDL_RenderDrawLine(renderer,(int)h.cx,(int)h.cy,h.x,h.y);
             SDL_RenderDrawLine(renderer,(int)h.cx+1,(int)h.cy,h.x+1,h.y);
         }
@@ -98,6 +109,6 @@ void SceneEditorObjectTransformHandlesRender(SDL_Renderer* renderer,
         if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_SCALE) SDL_RenderDrawRect(renderer,&handle);
         else SDL_RenderFillRect(renderer,&handle);
         if ((int)active==i || (int)hover==i) { SDL_Rect ring={h.x-8,h.y-8,17,17};SDL_RenderDrawRect(renderer,&ring); }
-        SceneEditorLabel(renderer,(SDL_Rect){h.x+9,h.y-10,20,20},labels[i-1],color);
+        SceneEditorLabel(renderer,(SDL_Rect){h.x+9,h.y-10,i==4 ? 34 : 20,20},labels[i-1],color);
     }
 }

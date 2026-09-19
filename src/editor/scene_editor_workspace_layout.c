@@ -29,7 +29,7 @@ void SceneEditorWorkspaceLayoutChrome(const SceneEditorPaneLayout* layout,
     SDL_Rect tools = layout->viewport_tools_rect;
     static const int document_widths[] = {420, 58, 58, 70, 74, 96};
     static const int workspace_widths[] = {82, 72, 88, 76, 112, 72, 104, 96};
-    static const int tool_widths[] = {62, 52, 64, 62, 66, 62, 78, 104, 72, 62, 84};
+    static const int tool_widths[] = {58, 48, 58, 58, 62, 58, 62, 72, 72, 94, 66, 58, 78};
 
     chrome->document_identity = row_item(document, 0, 6, document_widths);
     chrome->undo = row_item(document, 1, 6, document_widths);
@@ -44,16 +44,18 @@ void SceneEditorWorkspaceLayoutChrome(const SceneEditorPaneLayout* layout,
     chrome->expand = row_item(workspaces, 6, 8, workspace_widths);
     chrome->restore = row_item(workspaces, 7, 8, workspace_widths);
 
-    chrome->actions[0] = row_item(tools, 0, 11, tool_widths);
-    chrome->actions[1] = row_item(tools, 1, 11, tool_widths);
-    chrome->actions[2] = row_item(tools, 2, 11, tool_widths);
-    chrome->transforms[0] = row_item(tools, 3, 11, tool_widths);
-    chrome->transforms[1] = row_item(tools, 4, 11, tool_widths);
-    chrome->transforms[2] = row_item(tools, 5, 11, tool_widths);
-    chrome->frame_all = row_item(tools, 6, 11, tool_widths);
-    chrome->frame_selected = row_item(tools, 7, 11, tool_widths);
-    chrome->actions[4] = row_item(tools, 8, 11, tool_widths);
-    chrome->actions[5] = row_item(tools, 9, 11, tool_widths);
-    chrome->actions[7] = row_item(tools, 10, 11, tool_widths);
+    chrome->actions[0] = row_item(tools, 0, 13, tool_widths);
+    chrome->actions[1] = row_item(tools, 1, 13, tool_widths);
+    chrome->actions[2] = row_item(tools, 2, 13, tool_widths);
+    chrome->transforms[0] = row_item(tools, 3, 13, tool_widths);
+    chrome->transforms[1] = row_item(tools, 4, 13, tool_widths);
+    chrome->transforms[2] = row_item(tools, 5, 13, tool_widths);
+    chrome->transform_space = row_item(tools, 6, 13, tool_widths);
+    chrome->transform_snap = row_item(tools, 7, 13, tool_widths);
+    chrome->frame_all = row_item(tools, 8, 13, tool_widths);
+    chrome->frame_selected = row_item(tools, 9, 13, tool_widths);
+    chrome->actions[4] = row_item(tools, 10, 13, tool_widths);
+    chrome->actions[5] = row_item(tools, 11, 13, tool_widths);
+    chrome->actions[7] = row_item(tools, 12, 13, tool_widths);
     chrome->gizmo_label = (SDL_Rect){0};
 }

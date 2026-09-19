@@ -10,6 +10,7 @@ typedef struct SceneEditorWorkspaceChrome {
     SDL_Rect frame_all, frame_selected, undo, redo;
     SDL_Rect gizmo_label;
     SDL_Rect transforms[3];
+    SDL_Rect transform_space, transform_snap;
     SDL_Rect modes[SCENE_WORKSPACE_MODE_COUNT];
     SDL_Rect actions[SCENE_WORKSPACE_ACTION_COUNT];
     SDL_Rect expand;

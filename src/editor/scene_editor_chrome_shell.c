@@ -3,6 +3,7 @@
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_workspace_profile.h"
+#include "editor/scene_editor_transform_ergonomics.h"
 #include "editor/scene_editor_chrome_shell.h"
 
 #include <SDL2/SDL_ttf.h>
@@ -467,6 +468,19 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                 scene_editor_chrome_shell_button_hovered(&chrome.transforms[i]),active,
                 active ? ray_tracing_theme_resolve_button_active_fill(palette) : palette.button_fill,
                 disabledFill,borderColor,palette);
+        }
+        {
+            bool enabled=SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE &&
+                         animSettings.editorMode==EDITOR_MODE_OBJECT;
+            scene_editor_chrome_shell_render_button(renderer,chrome.transform_space,
+                SceneEditorTransformSpaceLabel(),enabled,
+                scene_editor_chrome_shell_button_hovered(&chrome.transform_space),
+                SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_LOCAL,
+                palette.button_fill,disabledFill,borderColor,palette);
+            scene_editor_chrome_shell_render_button(renderer,chrome.transform_snap,
+                SceneEditorTransformSnapEnabled() ? "Snap on" : "Snap off",enabled,
+                scene_editor_chrome_shell_button_hovered(&chrome.transform_snap),
+                SceneEditorTransformSnapEnabled(),palette.button_fill,disabledFill,borderColor,palette);
         }
     }
     for (int i = 0; i < EDITOR_MODE_COUNT; i++) {

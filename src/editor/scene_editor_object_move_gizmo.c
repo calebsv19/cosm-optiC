@@ -8,6 +8,9 @@
 #include <string.h>
 #include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_transform_panel.h"
+#include "editor/scene_editor_transform_feedback.h"
+#include "editor/scene_editor_transform_ergonomics.h"
+#include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_sidebar.h"
 #include "editor/material_editor_authored_texture_binding.h"
 #include "editor/scene_editor_typography.h"
@@ -105,14 +108,20 @@ static void move_update(int x,int y) {
     double pixels=((double)x-s_drag.start_x)*s_drag.axis_screen_x +
                   ((double)y-s_drag.start_y)*s_drag.axis_screen_y;
     int component=(int)s_drag.axis-1;
+    bool uniform=s_drag.axis==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM;
     s_drag.preview=s_drag.original;
     if (s_drag.mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE) {
         double delta=pixels/(s_drag.pixels_per_unit*SceneEditorDocumentWorldScale());
+        delta=SceneEditorTransformSnapValue(s_drag.mode,delta);
         if (isfinite(delta)) s_drag.preview.position[component]+=delta;
     } else if (s_drag.mode==SCENE_EDITOR_OBJECT_TRANSFORM_SCALE) {
         if (fabs(pixels)>1e-9) {
-            double value=s_drag.original.scale[component]*exp(fmax(-20.0,fmin(20.0,pixels/96.0)));
-            if (isfinite(value)) s_drag.preview.scale[component]=fmax(1e-6,value);
+            double factor=exp(fmax(-20.0,fmin(20.0,pixels/96.0)));
+            factor=SceneEditorTransformSnapValue(s_drag.mode,factor);
+            if (isfinite(factor)) {
+                if (uniform) for (int i=0;i<3;++i) s_drag.preview.scale[i]=fmax(1e-6,s_drag.original.scale[i]*factor);
+                else s_drag.preview.scale[component]=fmax(1e-6,s_drag.original.scale[component]*factor);
+            }
         }
     } else {
         double angle;
@@ -120,7 +129,9 @@ static void move_update(int x,int y) {
             double step=remainder(angle-s_drag.last_angle,6.2831853071795864769);
             s_drag.accumulated_angle+=step;s_drag.last_angle=angle;
         } else if (!s_drag.angular_drag) s_drag.accumulated_angle=pixels*0.017453292519943295769;
-        s_drag.preview.rotation_degrees[component]+=s_drag.accumulated_angle*57.29577951308232;
+        double degrees=s_drag.accumulated_angle*57.29577951308232;
+        degrees=SceneEditorTransformSnapValue(s_drag.mode,degrees);
+        s_drag.preview.rotation_degrees[component]+=degrees;
     }
 }
 
@@ -149,6 +160,26 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
           event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED))) {
         SceneEditorObjectMoveGizmoReset();
         return false;
+    }
+    if (!s_drag.active && event->type==SDL_KEYDOWN && event->key.repeat==0 &&
+        move_available(selected) && (event->key.keysym.mod&(KMOD_CTRL|KMOD_GUI|KMOD_ALT))==0) {
+        if (event->key.keysym.sym==SDLK_q) {
+            SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
+            SceneEditorChromeShellSetActionFeedback("Select tool (Q)",1200);return true;
+        }
+        SceneEditorObjectTransformMode shortcut_mode;
+        bool shortcut=true;
+        if (event->key.keysym.sym==SDLK_w) shortcut_mode=SCENE_EDITOR_OBJECT_TRANSFORM_MOVE;
+        else if (event->key.keysym.sym==SDLK_r) shortcut_mode=SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE;
+        else if (event->key.keysym.sym==SDLK_e) shortcut_mode=SCENE_EDITOR_OBJECT_TRANSFORM_SCALE;
+        else shortcut=false;
+        if (shortcut) {
+            SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
+            SceneEditorObjectTransformModeSet(shortcut_mode);
+            SceneEditorChromeShellSetActionFeedback(shortcut_mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ? "Move tool (W)" :
+                shortcut_mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE ? "Rotate tool (R)" : "Scale tool (E)",1200);
+            return true;
+        }
     }
     if (event->type==SDL_MOUSEBUTTONDOWN && event->button.button==SDL_BUTTON_LEFT &&
         move_available(0) && SceneEditorGetPaneLayout(&layout)) {
@@ -185,7 +216,10 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
             double* after=s_drag.mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ? s_drag.preview.position :
                 s_drag.mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE ? s_drag.preview.rotation_degrees : s_drag.preview.scale;
             int component=(int)s_drag.axis-1;
-            bool moved=fabs(after[component]-before[component]) >
+            bool moved=false;
+            if (s_drag.axis==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM) {
+                for (int i=0;i<3;++i) moved |= fabs(after[i]-before[i])>1e-12;
+            } else moved=fabs(after[component]-before[component]) >
                 (s_drag.mode==SCENE_EDITOR_OBJECT_TRANSFORM_SCALE ? 1e-12 : 1e-6);
             bool ok=!moved || SceneEditorDocumentSetTransformForSceneIndex(s_drag.object_index,
                 &s_drag.preview,diagnostics,sizeof(diagnostics));
@@ -255,6 +289,15 @@ void SceneEditorObjectMoveGizmoRender(SDL_Renderer* renderer,
     SceneEditorObjectTransformHandleOrigin(selected_object_index,s_mode,position,origin);
     SceneEditorObjectTransformHandlesRender(renderer,projector,digest,origin,s_mode,s_hover,
         SceneEditorObjectMoveGizmoActiveAxis());
+    if (s_drag.active && s_drag.object_index==selected_object_index) {
+        char label[160]={0};
+        if (SceneEditorTransformOperationLabel(selected_object_index,label,sizeof(label))) {
+            SDL_Color badge={35,35,40,235},text={255,225,130,255};
+            SDL_Rect rect={s_drag.handle.x+14,s_drag.handle.y+14,300,24};
+            SDL_SetRenderDrawColor(renderer,badge.r,badge.g,badge.b,badge.a);SDL_RenderFillRect(renderer,&rect);
+            SceneEditorLabelLeft(renderer,rect,label,text);
+        }
+    }
     if (s_drag.active && s_drag.mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE && s_drag.object_index == selected_object_index) {
         int ax = 0, ay = 0, bx = 0, by = 0;
         const double world_scale = SceneEditorDocumentWorldScale();

@@ -556,6 +556,27 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
     char diagnostics[256] = {0};
     int selected = ObjectEditorGetSelectedObjectIndex();
     if (!event || !SceneEditorDocumentIsOpen() || !s_controls_active) return false;
+    if ((s_edit_field>=0 || s_edit_name) && event->type==SDL_KEYDOWN &&
+        (event->key.keysym.mod&(KMOD_CTRL|KMOD_GUI))!=0) {
+        if (event->key.keysym.sym==SDLK_c) {
+            SDL_SetClipboardText(s_edit_buffer);panel_status("Value copied",false);return true;
+        }
+        if (event->key.keysym.sym==SDLK_v) {
+            char* pasted=SDL_GetClipboardText();
+            if (pasted) {
+                if (s_edit_name) snprintf(s_edit_buffer,sizeof(s_edit_buffer),"%.127s",pasted);
+                else {
+                    size_t used=0;
+                    for (const char* p=pasted;*p && used+1<sizeof(s_edit_buffer);++p)
+                        if (isdigit((unsigned char)*p)||*p=='.'||*p=='-'||*p=='+'||*p=='e'||*p=='E')
+                            s_edit_buffer[used++]=*p;
+                    s_edit_buffer[used]='\0';
+                }
+                SDL_free(pasted);panel_status("Value pasted; Enter applies",false);
+            }
+            return true;
+        }
+    }
     if (event->type == SDL_KEYDOWN &&
         (event->key.keysym.mod & (KMOD_CTRL | KMOD_GUI)) != 0) {
         if (event->key.keysym.sym == SDLK_z && panel_mutation_allowed()) {
@@ -619,6 +640,12 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
                                                               diagnostics,
                                                               sizeof(diagnostics))) {
                 panel_status(diagnostics, true);
+                return true;
+            }
+            if (event->button.clicks>=2) {
+                *panel_transform_component(&transform,i)=i<6 ? 0.0 : 1.0;
+                bool ok=SceneEditorDocumentSetTransformForSceneIndex(selected,&transform,diagnostics,sizeof(diagnostics));
+                panel_status(ok ? "Transform component reset. Undo is available." : diagnostics,!ok);
                 return true;
             }
             s_edit_field = i;

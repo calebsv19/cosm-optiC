@@ -2,6 +2,7 @@
 #include "editor/scene_editor_object_transform_handles.h"
 #include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_transform_feedback.h"
+#include "editor/scene_editor_transform_ergonomics.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 
 static void transform_expected(const char* name,const SceneEditorDocumentTransform* t) {
@@ -51,6 +52,31 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
     SceneEditorDocumentTransform original,current,preview,baseline;
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&original,diagnostics,sizeof(diagnostics)));
     char id[64];assert(runtime_scene_bridge_get_last_object_id_for_scene_index(selected,id,sizeof(id)));
+    /* Mnemonic shortcuts select the conventional transform modes. */
+    key(editor,SDLK_r);assert(SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE);
+    key(editor,SDLK_e);assert(SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_SCALE);
+    key(editor,SDLK_w);assert(SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE);
+    SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_ADD);
+    key(editor,SDLK_q);assert(SceneEditorToolStateGetActive()==SCENE_EDITOR_TOOL_SELECT);
+    SceneEditorPaneLayout control_layout;SceneEditorWorkspaceChrome control_chrome;
+    assert(SceneEditorGetPaneLayout(&control_layout));
+    SceneEditorWorkspaceLayoutChrome(&control_layout,&control_chrome);
+    assert(SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_WORLD);
+    click(editor,control_chrome.transform_space);
+    assert(SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_LOCAL);
+    click(editor,control_chrome.transform_space);
+    assert(SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_WORLD);
+    assert(!SceneEditorTransformSnapEnabled());
+    click(editor,control_chrome.transform_snap);assert(SceneEditorTransformSnapEnabled());
+    key(editor,SDLK_r);
+    SceneEditorObjectTransformHandle snap_handle;int snap_x,snap_y;
+    transform_handle(editor,selected,1,&snap_handle,&snap_x,&snap_y);
+    move_pointer(editor,SDL_MOUSEBUTTONDOWN,snap_handle.x,snap_handle.y);
+    move_pointer(editor,SDL_MOUSEMOTION,snap_x,snap_y);
+    assert(SceneEditorObjectTransformPreview(selected,&baseline,&preview));
+    assert(fabs(remainder(preview.rotation_degrees[0]-baseline.rotation_degrees[0],15.0))<1e-8);
+    key(editor,SDLK_ESCAPE);
+    click(editor,control_chrome.transform_snap);assert(!SceneEditorTransformSnapEnabled());
     transform_mode_click(editor,SCENE_EDITOR_OBJECT_TRANSFORM_MOVE);
     capture(editor,"workspace_dense_move_idle.ppm");
     assert(!SceneEditorTransformOperationLabel(selected,label,sizeof(label)) && strstr(label,"Move |"));
@@ -166,6 +192,17 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
         assert(SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)));
     }
     transform_mode_click(editor,SCENE_EDITOR_OBJECT_TRANSFORM_SCALE);
+    /* The center All handle changes every scale component in one undoable command. */
+    unsigned long long uniform_revision=SceneEditorDocumentRevision();
+    transform_handle(editor,selected,SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_UNIFORM,&h,&ex,&ey);
+    move_pointer(editor,SDL_MOUSEBUTTONDOWN,h.x,h.y);move_pointer(editor,SDL_MOUSEMOTION,ex,ey);
+    assert(SceneEditorObjectTransformPreview(selected,&baseline,&preview));
+    double uniform_factor=preview.scale[0]/baseline.scale[0];
+    for (int i=1;i<3;++i) assert(fabs(preview.scale[i]/baseline.scale[i]-uniform_factor)<1e-9);
+    move_pointer(editor,SDL_MOUSEBUTTONUP,ex,ey);
+    assert(SceneEditorDocumentRevision()==uniform_revision+1);
+    assert(SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)));
+    assert(SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)));
     /* Extremely negative scale gestures remain positive and cancellable. */
     transform_handle(editor,selected,3,&h,&ex,&ey);
     move_pointer(editor,SDL_MOUSEBUTTONDOWN,h.x,h.y);
@@ -176,7 +213,7 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&current,diagnostics,sizeof(diagnostics)));
     transform_compare(&current,&original);assert(!SceneEditorDocumentIsDirty());
     transform_mode_click(editor,0);
-    puts("U1.3: readable modes, signed operation units, XYZ rotation/scale transactions and cancellation passed");
+    puts("U2.2: mnemonic shortcuts, visible transform state, snapping, uniform scale and transactions passed");
 }
 
 static RuntimeSceneBridgePrimitiveSeed transform_seed(int selected) {

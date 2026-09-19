@@ -1,5 +1,27 @@
 # Editor workspace
 
+## September 19 U2.2 transform ergonomics checkpoint
+
+The Scene tool row now exposes Move, Rotate and Scale alongside World/Local
+orientation state and an explicit Snap toggle. Keyboard access is mnemonic for
+this editor: `Q` Select, `W` Move, `R` Rotate, `E` Scale and `F` Frame selected.
+The complete binding and focus rules are recorded in `docs/KEYBINDS.md`.
+
+Snapping is opt-in and quantizes Move to 0.1 scene units, Rotate to 15 degrees
+and Scale to 0.1 factors. Scale adds an `All` handle that previews and commits
+all three components in one document command. Active gestures show a compact
+measurement beside the grabbed handle while retaining the bottom status line.
+World/Local is currently explicit presentation/tool state; local-axis basis math
+is reserved for the next transform extension and is not claimed by this checkpoint.
+
+Inspector fields retain click-to-type exact entry and now add copy/paste plus
+double-click reset (0 for position/rotation, 1 for scale). Each completed drag or
+reset is one undoable command; Escape and existing context-change cancellation
+remain exact. Label-drag numeric scrubbing is still open and is not claimed here.
+The native copied-scene acceptance covers shortcut selection, visible transform
+state, snapped rotation, uniform-scale preview/commit/undo, existing XYZ gestures,
+Save/fresh reopen and final headless rendering.
+
 ## September 19 U2.1 shell hierarchy checkpoint
 
 The Scene Editor chrome now has three stable rows. The document row owns scene

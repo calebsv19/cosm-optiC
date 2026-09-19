@@ -8,6 +8,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_transform_panel.h"
+#include "editor/scene_editor_transform_ergonomics.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/material_editor.h"
 static SceneEditorWorkspaceProfile active;
@@ -17,7 +18,7 @@ static bool scene_nav_saved;
 static SceneEditorDigestOverlayNavState scene_nav;
 bool SceneEditorWorkspaceProfileMenuOpen(void) { return menu_open; }
 SceneEditorWorkspaceProfile SceneEditorWorkspaceProfileGet(void) { return active; }
-void SceneEditorWorkspaceProfileReset(void) { SceneEditorObjectTransformModeSet(SCENE_EDITOR_OBJECT_TRANSFORM_MOVE); active = SCENE_WORKSPACE_SCENE; scene_nav_saved=false; menu_open=false; add_menu=false; SceneEditorObjectMoveGizmoReset(); SceneEditorLifecycleReset(); }
+void SceneEditorWorkspaceProfileReset(void) { SceneEditorObjectTransformModeSet(SCENE_EDITOR_OBJECT_TRANSFORM_MOVE); SceneEditorTransformErgonomicsReset(); active = SCENE_WORKSPACE_SCENE; scene_nav_saved=false; menu_open=false; add_menu=false; SceneEditorObjectMoveGizmoReset(); SceneEditorLifecycleReset(); }
 const char* SceneEditorWorkspaceProfileLabel(int profile) {
     static const char* labels[] = {"Scene", "Material", "Surface", "Environment", "Render"};
     return profile >= 0 && profile < SCENE_WORKSPACE_PROFILE_COUNT ? labels[profile] : "Scene";
@@ -89,6 +90,22 @@ bool SceneEditorWorkspaceProfileHandleEvent(SceneEditor* editor, const SDL_Event
             SceneEditorWorkspaceProfileSelect(editor,(SceneEditorWorkspaceProfile)i);
             return true;
         }
+    }
+    if (!menu_open && active==SCENE_WORKSPACE_SCENE && editor->currentMode==EDITOR_MODE_OBJECT &&
+        SDL_PointInRect(&point,&chrome.transform_space)) {
+        if (SceneEditorTransformPanelInteractionActive()) return true;
+        SceneEditorTransformSpaceToggle();
+        SceneEditorChromeShellSetActionFeedback(SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_LOCAL ?
+            "Local transform orientation" : "World transform orientation",1600);
+        return true;
+    }
+    if (!menu_open && active==SCENE_WORKSPACE_SCENE && editor->currentMode==EDITOR_MODE_OBJECT &&
+        SDL_PointInRect(&point,&chrome.transform_snap)) {
+        if (SceneEditorTransformPanelInteractionActive()) return true;
+        SceneEditorTransformSnapToggle();
+        SceneEditorChromeShellSetActionFeedback(SceneEditorTransformSnapEnabled() ?
+            "Snapping on: move 0.1, rotate 15°, scale 0.1" : "Transform snapping off",1800);
+        return true;
     }
     if (!menu_open && SDL_PointInRect(&point,&chrome.actions[1]) && editor->currentMode==EDITOR_MODE_OBJECT) {
         if (SceneEditorTransformPanelInteractionActive()) return true;
