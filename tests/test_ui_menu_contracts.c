@@ -1990,7 +1990,16 @@ static int test_menu_state_manifest_options_follow_configured_input_root(void) {
     snprintf(animSettings.inputRoot, sizeof(animSettings.inputRoot), "%s", tmp_root);
     animSettings.spaceMode = SPACE_MODE_3D;
     setenv("RAY_TRACING_INPUT_ROOT", animSettings.inputRoot, 1);
-    menu_state_refresh_manifest_options(&state);
+    menu_state_init(&state);
+    assert_true("menu_init_defers_filesystem_discovery", state.catalogRefreshPending);
+    for (int attempt = 0; attempt < 500; ++attempt) {
+        menu_state_poll_catalog(&state);
+        bool ready = false;
+        for (size_t i = 0; i < state.manifestOptionCount; ++i)
+            if (strcmp(state.manifestOptions[i].path, resolved_runtime_path) == 0) ready = true;
+        if (ready) break;
+        SDL_Delay(10);
+    }
     for (size_t i = 0; i < state.manifestOptionCount; ++i) {
         if (state.manifestOptions[i].source == SCENE_SOURCE_RUNTIME_SCENE &&
             strcmp(state.manifestOptions[i].path, resolved_runtime_path) == 0) {

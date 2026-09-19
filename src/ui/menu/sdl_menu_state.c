@@ -22,6 +22,7 @@
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_volume_3d_debug.h"
 #include "ui/scene_source_catalog.h"
+#include "ui/menu_catalog_discovery.h"
 #include "ui/scene_source_ui_labels.h"
 #include "ui/menu_environment_settings.h"
 #include "ui/volume_source_catalog.h"
@@ -377,53 +378,46 @@ bool menu_state_manifest_option_visible(const MenuRuntimeState* state,
 }
 
 void menu_state_refresh_manifest_options(MenuRuntimeState* state) {
-    SceneSourceCatalogEntry catalog_entries[SDL_MENU_MAX_MANIFEST_OPTIONS];
-    const char **roots = NULL;
-    size_t root_count = 0;
-    size_t catalog_entry_count = 0;
-    if (!state) return;
-    state->manifestOptionCount = 0;
-    root_count = ray_tracing_manifest_default_roots(&roots);
-    catalog_entry_count = scene_source_catalog_collect(catalog_entries,
-                                                       SDL_MENU_MAX_MANIFEST_OPTIONS,
-                                                       roots,
-                                                       root_count,
-                                                       animSettings.fluidManifest,
-                                                       animSettings.runtimeScenePath);
-    add_manifest_option_2d_config(state);
-    for (size_t i = 0; i < catalog_entry_count; ++i) {
-        add_manifest_option_from_catalog_entry(state, &catalog_entries[i]);
-    }
-    qsort(state->manifestOptions,
-          state->manifestOptionCount,
-          sizeof(state->manifestOptions[0]),
-          manifest_option_compare);
-    state->manifestScroll = 0.0f;
-    state->manifestMaxScroll = 0.0f;
+    if (state) state->catalogRefreshPending = true;
 }
 
 void menu_state_refresh_volume_options(MenuRuntimeState* state) {
-    VolumeSourceCatalogEntry catalog_entries[SDL_MENU_MAX_MANIFEST_OPTIONS];
-    const char **roots = NULL;
-    size_t root_count = 0;
-    size_t catalog_entry_count = 0;
-    if (!state) return;
-    state->volumeOptionCount = 0;
-    root_count = ray_tracing_manifest_default_roots(&roots);
-    catalog_entry_count = volume_source_catalog_collect(catalog_entries,
-                                                        SDL_MENU_MAX_MANIFEST_OPTIONS,
-                                                        roots,
-                                                        root_count,
-                                                        animSettings.volumeSourcePath);
-    for (size_t i = 0; i < catalog_entry_count; ++i) {
-        add_volume_option_from_catalog_entry(state, &catalog_entries[i]);
+    if (state) state->catalogRefreshPending = true;
+}
+
+bool menu_state_poll_catalog(MenuRuntimeState* state) {
+    SceneSourceCatalogEntry scenes[SDL_MENU_MAX_MANIFEST_OPTIONS];
+    VolumeSourceCatalogEntry volumes[SDL_MENU_MAX_MANIFEST_OPTIONS];
+    size_t scene_count = 0, volume_count = 0;
+    bool frames_ready = false;
+    RayTracingRenderExportStatus frames = {0};
+    if (!state) return false;
+    if (state->catalogRefreshPending) {
+        const char **roots = NULL;
+        size_t root_count = ray_tracing_manifest_default_roots(&roots);
+        char frame_dir[PATH_MAX], video_path[PATH_MAX];
+        ray_tracing_resolve_frame_output_dir(animSettings.frameDir, frame_dir, sizeof(frame_dir));
+        ray_tracing_resolve_video_output_path(animSettings.videoOutputRoot, video_path, sizeof(video_path));
+        menu_catalog_discovery_request(roots, root_count, animSettings.fluidManifest,
+                                       animSettings.runtimeScenePath, animSettings.volumeSourcePath,
+                                       frame_dir, video_path);
+        state->catalogRefreshPending = false;
     }
-    qsort(state->volumeOptions,
-          state->volumeOptionCount,
-          sizeof(state->volumeOptions[0]),
-          volume_option_compare);
-    state->volumeScroll = 0.0f;
-    state->volumeMaxScroll = 0.0f;
+    /* Do not move rows beneath an open dropdown while the user is selecting. */
+    if (state->manifestDropdownOpen || state->volumeDropdownOpen) return false;
+    if (!menu_catalog_discovery_read(&state->catalogRevision, scenes, &scene_count,
+                                     volumes, &volume_count, SDL_MENU_MAX_MANIFEST_OPTIONS,
+                                     &frames, &frames_ready)) return false;
+    if (frames_ready) { state->exportBatchStatus = frames; state->exportBatchPending = false; }
+    state->manifestOptionCount = state->volumeOptionCount = 0;
+    add_manifest_option_2d_config(state);
+    for (size_t i = 0; i < scene_count; ++i) add_manifest_option_from_catalog_entry(state, &scenes[i]);
+    for (size_t i = 0; i < volume_count; ++i) add_volume_option_from_catalog_entry(state, &volumes[i]);
+    qsort(state->manifestOptions, state->manifestOptionCount, sizeof(state->manifestOptions[0]), manifest_option_compare);
+    qsort(state->volumeOptions, state->volumeOptionCount, sizeof(state->volumeOptions[0]), volume_option_compare);
+    state->manifestScroll = state->manifestMaxScroll = 0.0f;
+    state->volumeScroll = state->volumeMaxScroll = 0.0f;
+    return true;
 }
 
 void menu_state_manifest_clamp_scroll(MenuRuntimeState* state) {

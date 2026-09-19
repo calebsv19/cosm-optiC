@@ -1841,3 +1841,14 @@ focused verification commands are collected in
 - Full phase-by-phase details and archived slices are in private docs:
   - `/Users/calebsv/Desktop/CodeWork/docs/private_program_docs/ray_tracing/`
 - This file is the compressed public current-state contract.
+
+### Main Edit startup discovery correction
+
+Menu startup no longer waits for optional scene/volume directory scans or the
+saved render-frame count. Bounded background discovery publishes completed roots
+independently; frame counts remain marked as scanning until available. The focused
+`test-menu-catalog-discovery` target covers blocked roots, stale completion,
+refresh bounds, and exit without waiting on a stuck filesystem call. See
+`main_edit_worktree.md` for normal packaged-launch evidence and the remaining
+explicit external-scene load limitation. Package self-test alone does not prove
+normal menu startup.

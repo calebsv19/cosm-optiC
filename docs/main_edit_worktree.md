@@ -243,3 +243,52 @@ path-specific retention/archive decision. Future builds recreate those roots.
 The installed Desktop Main Edit app has its own embedded identity. Source
 integration and worktree cleanup do not refresh or close that app; read its
 identity before using it as visual evidence for a new source checkpoint.
+
+### U1 startup-discovery acceptance correction (2026-09-19)
+
+The `2475269` editor candidate exposed a normal macOS app-launch blocker that
+package self-test did not exercise. A disposable package launched with `open -n`
+and an isolated home reproduced `opendir` stalling at the saved input root,
+`/Users/calebsv/Desktop/Simulations/scenes/`. The same binary launched from the
+terminal completed discovery. After removing that main-thread scan, sampling
+found a second startup scan in `menu_batch_panel_refresh`, counting frames under
+the saved external `frameDir`. The launch-context difference is observed;
+macOS privacy/filesystem mediation is a hypothesis, not a proven OS diagnosis.
+
+Menu initialization now requests asynchronous scene/volume discovery and frame
+summaries. Each root has independent copied inputs; the main thread polls completed
+snapshots. Forty process-lifetime slots bound outstanding work, repeated refresh
+reuses a blocked matching scan, obsolete results are ignored, and shutdown does
+not join filesystem calls. Completed slots are reclaimed on refresh. Frame counts
+show `scanning...` while pending; they are not reported as zero. Scan begin/end
+logs identify a stalled root. Opening a dropdown freezes its rows until it closes.
+
+Shared reuse review: `core_jobs` runs callbacks inline, while `core_workers`
+shutdown joins in-flight workers. Neither provides cancellable filesystem calls.
+Reuse is deferred for this small app-specific adapter; existing scene/volume
+collectors and render-export summary logic remain the owners of discovery rules.
+No shared API/version or program VERSION change is required.
+
+Regression target: `make BUILD_TOOLCHAIN=clang test-menu-catalog-discovery`.
+The test holds a root and frame-summary call indefinitely, proves independent
+healthy discovery, bounds duplicate work on refresh, rejects stale completion,
+and exits with a blocked call outstanding. `ui_menu_contracts` also exercises
+normal `menu_state_init` followed by asynchronous healthy-library readback.
+
+Acceptance boundary: normal packaged startup and tab interaction were observed
+with the copied failing configuration while external scans stayed pending.
+Explicitly opening that external scene subsequently stalled in
+`SceneEditorSessionBegin -> runtime_scene_bridge_apply_file_with_options ->
+core_io_read_all -> fopen`. This separate synchronous scene-load issue remains;
+startup recovery does not establish external-scene load acceptance. Do not promote
+this result as full user acceptance or broaden it into U1.3. Desktop refresh,
+canonical adoption, public release, and Registry changes remain separate actions.
+
+Final local acceptance also opened the bundled `optic_studio_starter_v1` scene
+through the normal packaged menu, showed all five scene objects and viewport
+geometry, and exited with launcher status 0. The U1.1/U1.2 native acceptance
+passed again with mesh/primitive live previews, committed-move reopen, cancelled
+preview isolation, and preserved unknown fields/source assets. Retained evidence
+is under `build/editor_ui_recovery/u11-u12-startup-final/` and the sibling
+`startup-blocker-evidence/` directory. These are development acceptance artifacts,
+not installed Desktop or external-scene acceptance.

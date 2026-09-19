@@ -117,6 +117,9 @@ typedef struct {
     int activeSceneSource;
     MenuSceneLibraryLane activeSceneLibraryLane;
 
+    bool exportBatchPending;
+    bool catalogRefreshPending;
+    uint64_t catalogRevision;
     ManifestOption manifestOptions[SDL_MENU_MAX_MANIFEST_OPTIONS];
     size_t manifestOptionCount;
     bool manifestDropdownOpen;
@@ -167,6 +170,7 @@ void menu_state_volume_clamp_scroll(MenuRuntimeState* state);
 void menu_state_volume_scroll_by(MenuRuntimeState* state, float delta);
 float menu_state_slider_clamp_scroll(float value, float maxScroll);
 
+bool menu_state_poll_catalog(MenuRuntimeState* state);
 void menu_state_refresh_manifest_options(MenuRuntimeState* state);
 void menu_state_refresh_volume_options(MenuRuntimeState* state);
 void menu_state_set_load_scene_enabled(MenuRuntimeState* state, bool enabled);

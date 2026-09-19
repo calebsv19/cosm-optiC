@@ -3455,3 +3455,10 @@ capture-smooth-mesh-connectivity-before: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	python3 tools/smooth_mesh_reflection/connectivity_contract.py --capture-known-defects --out "$$(mktemp -d $(BUILD_DIR)/smooth-connectivity-before-XXXXXX)/run"
 
 -include $(BUILD_DIR)/tests/scene_editor_workspace_visual_test.d $(BUILD_DIR)/tests/scene_editor_workspace_app.d
+
+.PHONY: test-menu-catalog-discovery
+$(BUILD_DIR)/tests/menu_catalog_discovery_test: tests/menu_catalog_discovery_test.c src/ui/menu/menu_catalog_discovery.c include/ui/menu_catalog_discovery.h
+	@mkdir -p $(dir $@)
+	$(CC) -std=c11 -Wall -Wextra -Werror -Iinclude -pthread tests/menu_catalog_discovery_test.c src/ui/menu/menu_catalog_discovery.c -o $@
+test-menu-catalog-discovery: $(BUILD_DIR)/tests/menu_catalog_discovery_test
+	@$<

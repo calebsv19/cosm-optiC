@@ -162,11 +162,13 @@ static void render_export_progress_bridge_emit(size_t current_frame,
     }
 }
 
-bool ray_tracing_render_export_describe_active(RayTracingRenderExportStatus *status) {
+bool ray_tracing_render_export_describe_paths(const char *frame_dir, const char *video_path,
+                                               RayTracingRenderExportStatus *status) {
     bool had_io_error = false;
     if (!status) return false;
     ray_tracing_render_export_status_reset(status);
-    if (!resolve_active_paths(status)) return false;
+    snprintf(status->frame_dir, sizeof(status->frame_dir), "%s", frame_dir ? frame_dir : "");
+    snprintf(status->video_output_path, sizeof(status->video_output_path), "%s", video_path ? video_path : "");
     status->frame_count = summarize_frames_in_dir(status->frame_dir,
                                                   &had_io_error,
                                                   &status->highest_frame_index);
@@ -178,6 +180,14 @@ bool ray_tracing_render_export_describe_active(RayTracingRenderExportStatus *sta
              "Frames ready: %zu",
              status->frame_count);
     return !had_io_error;
+}
+
+bool ray_tracing_render_export_describe_active(RayTracingRenderExportStatus *status) {
+    RayTracingRenderExportStatus paths = {0};
+    if (!status) return false;
+    ray_tracing_render_export_status_reset(&paths);
+    if (!resolve_active_paths(&paths)) { *status = paths; return false; }
+    return ray_tracing_render_export_describe_paths(paths.frame_dir, paths.video_output_path, status);
 }
 
 bool ray_tracing_render_export_count_active_frames(RayTracingRenderExportStatus *status) {

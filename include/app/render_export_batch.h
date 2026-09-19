@@ -34,6 +34,8 @@ typedef void (*RayTracingRenderExportProgressCallback)(const RayTracingRenderExp
                                                        void *user_data);
 
 void ray_tracing_render_export_status_reset(RayTracingRenderExportStatus *status);
+bool ray_tracing_render_export_describe_paths(const char *frame_dir, const char *video_path,
+                                               RayTracingRenderExportStatus *status);
 bool ray_tracing_render_export_describe_active(RayTracingRenderExportStatus *status);
 bool ray_tracing_render_export_count_active_frames(RayTracingRenderExportStatus *status);
 bool ray_tracing_render_export_clear_active_frames(RayTracingRenderExportStatus *status);

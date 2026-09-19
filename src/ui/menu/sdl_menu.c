@@ -560,6 +560,7 @@ bool RunMenu(void) {
     const uint64_t perf_freq = SDL_GetPerformanceFrequency();
 
     while (running) {
+        frame_dirty |= menu_state_poll_catalog(&menuState);
         uint64_t frame_begin_counter = SDL_GetPerformanceCounter();
         uint32_t wait_blocked_ms = 0u;
         uint32_t wait_call_count = 0u;

@@ -261,13 +261,9 @@ void menu_batch_panel_build_layout(TTF_Font* font,
 }
 
 void menu_batch_panel_refresh(MenuRuntimeState* state) {
-    RayTracingRenderExportStatus status = {0};
     if (!state) return;
-    if (!ray_tracing_render_export_describe_active(&status)) {
-        state->exportBatchStatus = status;
-        return;
-    }
-    state->exportBatchStatus = status;
+    state->catalogRefreshPending = true;
+    state->exportBatchPending = true;
 }
 
 bool menu_batch_panel_edit_active(const MenuRuntimeState* state) {
@@ -312,6 +308,10 @@ void menu_batch_panel_build_frame_count_label(const MenuRuntimeState* state,
     if (!out || out_size == 0u) return;
     if (!state) {
         snprintf(out, out_size, "Frames: ?");
+        return;
+    }
+    if (state->exportBatchPending) {
+        snprintf(out, out_size, "Frames: scanning...");
         return;
     }
     if (state->exportBatchStatus.code == RAY_TRACING_RENDER_EXPORT_FRAME_DIR_INVALID) {
