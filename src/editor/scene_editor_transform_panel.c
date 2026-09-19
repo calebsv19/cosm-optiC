@@ -1,3 +1,5 @@
+#include "editor/scene_editor_object_move_gizmo.h"
+#include "editor/scene_editor_transform_feedback.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "material/material_manager.h"
 #include "editor/scene_editor_typography.h"
@@ -124,7 +126,7 @@ static void panel_draw_button(SDL_Renderer* renderer,
 
 static const char* panel_field_label(int index) {
     static const char* labels[TRANSFORM_FIELD_COUNT] = {
-        "PX", "PY", "PZ", "RX", "RY", "RZ", "SX", "SY", "SZ"
+        "X", "Y", "Z", "X", "Y", "Z", "X", "Y", "Z"
     };
     return index >= 0 && index < TRANSFORM_FIELD_COUNT ? labels[index] : "";
 }
@@ -380,7 +382,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
 
     snprintf(line,
              sizeof(line),
-             "Selection%s",
+             SceneEditorObjectTransformPreview(selected,NULL,NULL) ? "Transform (before drag)%s" : "Transform%s",
              SceneEditorDocumentIsDirty() ? " *" : "");
     SceneEditorLabelLeft(renderer,
                         (SDL_Rect){bounds.x, y, bounds.w, 20},
@@ -394,6 +396,9 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
 
     if (has_transform) {
     for (int row = 0; row < 3; ++row) {
+        SceneEditorTransformGroupLabel(row,line,sizeof(line));
+        SceneEditorLabelLeft(renderer,(SDL_Rect){bounds.x,y,bounds.w,20},line,palette.text_primary);
+        y+=22;
         for (int column = 0; column < 3; ++column) {
             int index = row * 3 + column;
             double value = *panel_transform_component(&transform, index);
@@ -518,7 +523,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     }
     y += field_h + gap;
     }
-    if (s_status[0] && y < bottom_y) {
+    if (s_status[0] && y < bottom_y && !SceneEditorObjectTransformPreview(selected,NULL,NULL)) {
         SceneEditorLabelWrapped(renderer,
                                    (SDL_Rect){bounds.x, y, bounds.w, bottom_y - y},
                                    s_status,

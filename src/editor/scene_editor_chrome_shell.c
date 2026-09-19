@@ -1,3 +1,5 @@
+#include "editor/scene_editor_transform_feedback.h"
+#include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -440,6 +442,17 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
             scene_editor_chrome_shell_render_button(renderer,tools[i],labels[i],enabled[i],
                 scene_editor_chrome_shell_button_hovered(&tools[i]),false,palette.button_fill,
                 disabledFill,borderColor,palette);
+        SceneEditorLabelLeft(renderer,chrome.gizmo_label,"Gizmo:",palette.text_primary);
+        const char* transform_labels[]={"Move","Rotate","Scale"};
+        for (int i=0;i<3;++i) {
+            bool enabled=SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE &&
+                         animSettings.editorMode==EDITOR_MODE_OBJECT;
+            bool active=(int)SceneEditorObjectTransformModeGet()==i;
+            scene_editor_chrome_shell_render_button(renderer,chrome.transforms[i],transform_labels[i],enabled,
+                scene_editor_chrome_shell_button_hovered(&chrome.transforms[i]),active,
+                active ? ray_tracing_theme_resolve_button_active_fill(palette) : palette.button_fill,
+                disabledFill,borderColor,palette);
+        }
     }
     for (int i = 0; i < EDITOR_MODE_COUNT; i++) {
         if (modeSelectButtons[i].w <= 0) continue;
@@ -563,7 +576,16 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
     }
     showFeedback = (g_sceneActionFeedbackText[0] && g_sceneActionFeedbackUntilMs > SDL_GetTicks64());
     feedbackRect = layout_valid && layout ? layout->workspace_feedback_rect : (SDL_Rect){0};
-    if (showFeedback) {
+    if (layout_valid && layout && SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE &&
+        animSettings.editorMode==EDITOR_MODE_OBJECT) {
+        char operation[256],status[512];
+        bool live=SceneEditorTransformOperationLabel(ObjectEditorGetSelectedObjectIndex(),operation,sizeof(operation));
+        const char* path=SceneEditorDocumentPath();
+        const char* filename=path ? strrchr(path,'/') : NULL;
+        snprintf(status,sizeof(status),"%s%s%s",operation,live ? "" : " | ",
+            live ? "" : showFeedback ? g_sceneActionFeedbackText : filename ? filename+1 : "Scene");
+        SceneEditorLabelLeft(renderer,feedbackRect,status,live ? (SDL_Color){255,220,115,255} : palette.text_primary);
+    } else if (showFeedback) {
         SceneEditorLabelLeft(renderer, feedbackRect, g_sceneActionFeedbackText, palette.text_primary);
     } else if (layout_valid && layout) {
         const char* path = SceneEditorDocumentPath();

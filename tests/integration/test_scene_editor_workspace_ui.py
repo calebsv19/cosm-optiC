@@ -64,6 +64,28 @@ def main():
     with (out / 'committed-move-reopen.log').open('w') as log:
         subprocess.run([str(binary), str(out), str(scene)+'.committed-move.json', '--move-reopen'],
                        env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
+    transform_changes = {}
+    for mode in ('rotate', 'scale'):
+        for cancelled in (False, True):
+            suffix = mode+'-preview' if cancelled else mode
+            scene_suffix = f'.{mode}-preview.json' if cancelled else f'.committed-{mode}.json'
+            with (out / f'{suffix}-reopen.log').open('w') as log:
+                subprocess.run([str(binary),str(out),str(scene)+scene_suffix,'--'+suffix],
+                               env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=120)
+        tw,th,tbefore=ppm(out / f'workspace_{mode}_before.ppm')
+        tw2,th2,tlive=ppm(out / f'workspace_dense_{mode}_active.ppm')
+        assert (tw,th)==(tw2,th2)
+        pixels=sum(tbefore[i:i+3]!=tlive[i:i+3] for y in range(th//5,th-30)
+                   for i in range((y*tw+tw//4)*3,(y*tw+3*tw//4)*3,3))
+        assert pixels>2500, (mode,'No substantial live geometry preview',pixels)
+        transform_changes[mode]=pixels
+    scaled_scene = json.loads(scene.read_text())
+    scaled_scene['world_scale'] = 2.0
+    scaled_path = Path(str(scene)+'.world-scale.json')
+    scaled_path.write_text(json.dumps(scaled_scene))
+    with (out / 'world-scale.log').open('w') as log:
+        subprocess.run([str(binary),str(out),str(scaled_path),'--world-scale'],env=env,
+                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=120)
     preview_saved = json.loads(Path(str(scene)+'.preview-saved.json').read_text())
     assert abs(preview_saved['objects'][-1]['transform']['position']['x'] - 0.25) < 1e-9
     w, h, first = ppm(out / 'workspace_move_before.ppm')
@@ -107,7 +129,9 @@ def main():
                        stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
     frame = project / 'renders/e01_tlas_blas_parity/frames/frame_0000.bmp'
     assert frame.exists() and len(set(frame.read_bytes()[122:])) > 4
-    report = {'status': 'passed', 'live_preview_changed_pixels': changed,
+    report = {'status': 'passed', 'rotation_scale_live_pixels': transform_changes,
+              'rotation_scale_committed_and_cancelled_fresh_reopen': True,
+              'scene_unit_world_scale_conversion': True, 'live_preview_changed_pixels': changed,
               'primitive_preview_changed_pixels': primitive_changed,
               'transactional_move_fresh_reopen': True, 'cancelled_preview_not_serialized': True, 'source_stl_sha256': source_hash,
               'unknown_fields_preserved': True, 'original_objects_preserved': True,

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 
@@ -292,7 +293,7 @@ static bool scene_editor_mesh_preview_build_slot(
     const RayTracingRuntimeMeshAssetInstance* instance,
     const CoreMeshAssetRuntimeContract* contract,
     const CoreMeshPreviewLodMesh* lod,
-    int scene_object_index) {
+    int scene_object_index, bool context_wire) {
     SDL_FPoint* vertices = NULL;
     SDL_FPoint* wire_vertices = NULL;
     uint32_t* sorted_indices = NULL;
@@ -412,10 +413,10 @@ static bool scene_editor_mesh_preview_build_slot(
         vk_renderer_create_line_list_mesh(renderer,
                                           wire_vertices,
                                           (uint32_t)wire_vertex_count,
-                                          0.74f,
-                                          0.86f,
-                                          0.94f,
-                                          0.92f,
+                                          context_wire ? 0.32f : 0.74f,
+                                          context_wire ? 0.39f : 0.86f,
+                                          context_wire ? 0.43f : 0.94f,
+                                          context_wire ? 0.45f : 0.92f,
                                           &slot->wire_mesh) != VK_SUCCESS) {
         goto cleanup;
     }
@@ -593,6 +594,9 @@ bool SceneEditorMeshPreviewRenderGeometry(
         if (!instance) {
             continue;
         }
+        RayTracingRuntimeMeshAssetInstance display_instance;
+        SceneEditorObjectTransformPreviewMesh(instance,&display_instance);
+        instance=&display_instance;
         SceneEditorDigestOverlayProjector object_projector;
         SceneEditorObjectMoveGizmoPreviewProjector(instance->scene_object_index,projector,&object_projector);
         const bool context_wire = selected_object_index >= 0 &&
@@ -624,6 +628,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                             instance,
                                                             lod,
                                                             instance->scene_object_index);
+            signature=scene_editor_mesh_preview_hash_bytes(signature,&context_wire,sizeof(context_wire));
             if ((!slot->valid || slot->signature != signature) &&
                 !scene_editor_mesh_preview_build_slot(vk,
                                                       slot,
@@ -632,7 +637,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                       instance,
                                                       contract,
                                                       lod,
-                                                      instance->scene_object_index)) {
+                                                      instance->scene_object_index,context_wire)) {
                 continue;
             }
             if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || surface_rendered) {

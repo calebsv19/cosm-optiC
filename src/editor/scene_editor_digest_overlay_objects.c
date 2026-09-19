@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
 
@@ -581,6 +582,9 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     if (seeds.valid && seeds.primitive_count > 0) {
         for (i = 0; i < seeds.primitive_count; ++i) {
             const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds.primitives[i];
+            RuntimeSceneBridgePrimitiveSeed display_primitive;
+            SceneEditorObjectTransformPreviewPrimitive(primitive,&display_primitive);
+            primitive=&display_primitive;
             SDL_Color primitive_color =
                 SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
             bool is_selected = selected_object_index == primitive->scene_object_index;
@@ -593,6 +597,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                             ? (SDL_Color){255, 120, 70, 255}
                                             : (SDL_Color){84, 224, 255, 245};
             primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
+            if (selected_object_index>=0 && !is_selected && !is_hover) primitive_color=(SDL_Color){94,111,123,76};
             const SceneEditorMeshDisplayMode primitive_mode =
                 !is_selected
                     ? SCENE_EDITOR_MESH_DISPLAY_WIRE : preview_mode;
@@ -650,6 +655,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                             ? (SDL_Color){255, 120, 70, 255}
                                             : (SDL_Color){84, 224, 255, 245};
             primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
+            if (selected_object_index>=0 && !is_selected && !is_hover) primitive_color=(SDL_Color){94,111,123,76};
             /* Unselected objects remain as scene context in Materials. */
             if (!primitive->guide_only) continue;
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE && primitive->has_dimensions) {

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
@@ -359,6 +360,8 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
     SDL_RenderGetClipRect(renderer, &previous_clip);
     SDL_RenderSetClipRect(renderer, &projector.viewport);
     if (active_mode == EDITOR_MODE_OBJECT &&
+        SceneEditorObjectMoveGizmoActiveAxis()==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE &&
+        SceneEditorObjectMoveGizmoHoverAxis()==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE &&
         scene_editor_digest_overlay_point_in_rect(mouse_x, mouse_y, &projector.viewport)) {
         hover_object_index = SceneEditorMeshPreviewPickObjectIndex(&projector,
                                                                    active_mode,

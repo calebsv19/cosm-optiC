@@ -18,6 +18,7 @@ typedef enum {
 } ShapeMode;
 
 extern ShapeMode shapeMode;
+bool ObjectEditorTransformHandlesVisible(void);
 
 typedef enum ObjectEditorHitRegion {
     OBJECT_EDITOR_HIT_NONE = 0,

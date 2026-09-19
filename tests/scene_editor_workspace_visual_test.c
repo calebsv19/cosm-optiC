@@ -142,6 +142,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 }
 
 #include "scene_editor_move_acceptance.h"
+#include "scene_editor_transform_acceptance.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -174,6 +175,38 @@ int main(int argc, char** argv) {
         active_editor = NULL; TTF_Quit(); SDL_Quit();
         fprintf(stderr,"[editor lifecycle] review process exited normally\n");
         return 0;
+    }
+    if (argc==4 && strcmp(argv[3],"--world-scale")==0) {
+        int selected=sceneSettings.objectCount-1;char diagnostics[256],label[256];
+        SceneEditorDocumentTransform original,preview,baseline,current;
+        assert(SceneEditorDocumentWorldScale()==2.0 && strcmp(SceneEditorDocumentUnitLabel(),"meters")==0);
+        ObjectEditorSetSelectedObjectIndex(selected);assert(SceneEditorFrameViewport(true));
+        assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&original,diagnostics,sizeof(diagnostics)));
+        SceneEditorObjectTransformHandle h;int ex,ey;transform_handle(&editor,selected,1,&h,&ex,&ey);
+        move_pointer(&editor,SDL_MOUSEBUTTONDOWN,h.x,h.y);move_pointer(&editor,SDL_MOUSEMOTION,ex,ey);
+        assert(SceneEditorObjectTransformPreview(selected,&baseline,&preview));
+        double pixels=(ex-h.x)*h.ux+(ey-h.y)*h.uy;
+        assert(fabs(preview.position[0]-original.position[0]-pixels/(h.pixels_per_unit*2.0))<1e-9);
+        assert(SceneEditorTransformOperationLabel(selected,label,sizeof(label)) && strstr(label,"meters"));
+        capture(&editor,"workspace_world_scale_move.ppm");
+        move_pointer(&editor,SDL_MOUSEBUTTONUP,ex,ey);
+        assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&current,diagnostics,sizeof(diagnostics)));
+        transform_compare(&current,&preview);
+        assert(SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)));
+        active_editor=NULL;DestroySceneEditor(&editor);
+        assert(strcmp(SceneEditorDocumentUnitLabel(),"scene units")==0);
+        TTF_Quit();SDL_Quit();return 0;
+    }
+    if (argc==4 && (strcmp(argv[3],"--rotate")==0 || strcmp(argv[3],"--scale")==0 ||
+                    strcmp(argv[3],"--rotate-preview")==0 || strcmp(argv[3],"--scale-preview")==0)) {
+        int selected=sceneSettings.objectCount-1;char diagnostics[256],name[128];SceneEditorDocumentTransform actual,expected;
+        assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&actual,diagnostics,sizeof(diagnostics)));
+        snprintf(name,sizeof(name),"%s_expected.txt",argv[3]+2);FILE* f=fopen(name,"r");assert(f);
+        for (int i=0;i<3;++i) assert(fscanf(f,"%lf %lf %lf",&expected.position[i],&expected.rotation_degrees[i],&expected.scale[i])==3);
+        fclose(f);transform_compare(&actual,&expected);assert(!SceneEditorDocumentIsDirty());
+        ObjectEditorSetSelectedObjectIndex(selected);assert(SceneEditorFrameViewport(false));
+        snprintf(name,sizeof(name),"workspace_%s_reopen.ppm",argv[3]+2);capture(&editor,name);
+        active_editor=NULL;DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }
     if (argc==4 && strcmp(argv[3],"--move-reopen")==0) {
         int selected=sceneSettings.objectCount-1; char diagnostics[256];
@@ -261,7 +294,7 @@ int main(int argc, char** argv) {
     assert(SceneEditorToolStateGetActive()==SCENE_EDITOR_TOOL_SELECT && editor.running);
     assert(SceneEditorMeshPreviewStoreHasSceneObject(selected));
     int material_before=sceneSettings.sceneObjects[selected].material_id;
-    SDL_Rect material_field={before.right_content_rect.x+25,before.right_content_rect.y+23+5*29+8,1,1};
+    SDL_Rect material_field={before.right_content_rect.x+25,before.right_content_rect.y+23+5*29+66+8,1,1};
     click(&editor,material_field);
     capture(&editor,"workspace_inspector_materials.ppm");
     /* Mirror is the second preset; assignment stays in the selected-object inspector. */
@@ -404,7 +437,7 @@ int main(int argc, char** argv) {
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected, &original,
         diagnostics, sizeof(diagnostics)));
     SDL_Rect position_x = {after.right_content_rect.x,
-        after.right_content_rect.y + 25, (after.right_content_rect.w - 8) / 3, 25};
+        after.right_content_rect.y + 25 + 22, (after.right_content_rect.w - 8) / 3, 25};
     click(&editor, position_x);
     for (int i=0; i<32; ++i) key(&editor,SDLK_BACKSPACE);
     SDL_Event invalid_input={0}; invalid_input.type=SDL_TEXTINPUT;
@@ -488,6 +521,9 @@ int main(int argc, char** argv) {
     capture(&editor, "workspace_saved_edit.ppm");
     verify_move_acceptance(&editor,argv[2],selected);
     verify_primitive_move_preview(&editor,selected);
+    verify_transform_acceptance(&editor,argv[2],selected);
+    verify_primitive_transform_parity(&editor,selected);
+    verify_mesh_transform_parity(&editor,selected);
     revision = SceneEditorDocumentRevision();
     animSettings.textZoomStep = 2;
     SceneEditorWorkspaceProfileSelect(&editor, SCENE_WORKSPACE_SCENE);

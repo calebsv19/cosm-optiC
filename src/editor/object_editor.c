@@ -37,6 +37,7 @@ bool viewportPanDragging = false;
 int viewportPanLastMouseX = 0;
 int viewportPanLastMouseY = 0;
 bool renderHandles = true;
+bool ObjectEditorTransformHandlesVisible(void) { return renderHandles; }
 #define MAX_ASSET_LIST 128
 #define ASSET_PANEL_WIDTH 200
 #define ASSET_ROW_HEIGHT 22
@@ -535,7 +536,7 @@ int ObjectEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_boun
     if (cursor_y + button_h > bottom_y) return cursor_y;
 
     objectHandlesButton = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, button_h};
-    snprintf(label, sizeof(label), "Handles: %s", renderHandles ? "On" : "Off");
+    snprintf(label, sizeof(label), "Transform handles: %s", renderHandles ? "Shown" : "Hidden");
     ObjectEditorDrawPaneButton(renderer, objectHandlesButton, label, renderHandles);
     cursor_y += button_h + gap;
 

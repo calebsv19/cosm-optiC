@@ -875,3 +875,21 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
     }
     return document_apply_saved_file(diagnostics, diagnostics_size);
 }
+
+const char* SceneEditorDocumentUnitLabel(void) {
+    json_object* unit=NULL;
+    if (s_document.root && json_object_object_get_ex(s_document.root,"unit_system",&unit) &&
+        json_object_is_type(unit,json_type_string)) {
+        const char* label=json_object_get_string(unit);
+        if (label && label[0] && strcmp(label,"unitless")!=0 && strcmp(label,"unknown")!=0 && strcmp(label,"scene_units")!=0)
+            return label;
+    }
+    return "scene units";
+}
+double SceneEditorDocumentWorldScale(void) {
+    json_object* scale=NULL;
+    double value=1.0;
+    if (s_document.root && json_object_object_get_ex(s_document.root,"world_scale",&scale))
+        value=json_object_get_double(scale);
+    return isfinite(value) && value>0 ? value : 1.0;
+}

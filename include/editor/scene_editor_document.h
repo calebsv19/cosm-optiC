@@ -15,6 +15,8 @@ bool SceneEditorDocumentOpenActive(char* diagnostics, size_t diagnostics_size);
 void SceneEditorDocumentClose(void);
 bool SceneEditorDocumentIsOpen(void);
 bool SceneEditorDocumentIsDirty(void);
+const char* SceneEditorDocumentUnitLabel(void);
+double SceneEditorDocumentWorldScale(void);
 const char* SceneEditorDocumentPath(void);
 unsigned long long SceneEditorDocumentRevision(void);
 

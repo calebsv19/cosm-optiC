@@ -1,6 +1,42 @@
 # Editor workspace
 
-## September 19 U1.1/U1.2 source checkpoint
+## September 19 U1.3 transform usability checkpoint
+
+The Scene header keeps an explicit `Gizmo: Move | Rotate | Scale` control and a
+separate persistent `Op` readout. During a drag it reports the axis and signed
+scene-space distance, signed degrees, or scale factor; idle text explains the
+active tool. Inspector groups use Position (scene space, meters), Rotation
+(degrees), and Scale (unitless factor). During preview the inspector explicitly
+shows the transform before the drag; release updates the absolute values.
+Selected shaded geometry and its outline remain primary against softer wires.
+The Transform handles control now controls these gizmos as well.
+
+Move, Rotate and Scale share the retained transaction boundary: preview changes
+only copied presentation geometry, release commits one command, and Escape,
+focus loss, mode/workspace changes, resize and stale document context cancel.
+Undo/Redo and Save/fresh-process reopen use the existing document path. Undo's
+conservative dirty-state behavior is unchanged. Rotation edits Euler XYZ
+components; nearly edge-on rings use linear drag. Scale is per-axis with a
+positive minimum of 1e-6. Uniform scaling and snapping are not included.
+The importer currently admits meters; authored movement and its guide respect
+world_scale. This does not add other unit schemas.
+
+Existing kit projection, shading, mesh/primitive math and document commands are
+reused. Focused app-local handles, copied preview and feedback modules separate
+presentation from gesture state. No shared API or version changes are needed.
+The Gizmo/Op separation follows Sculpts' established interaction semantics.
+
+Native evidence is retained in ignored
+`build/editor_ui_recovery/u13-final-verified/`: dense idle/active captures,
+committed inspector captures, mesh and primitive preview checks, existing Move
+regressions, XYZ Rotate/Scale transactions, pretransformed mesh checks,
+non-default world scale, and fresh-process committed/cancelled snapshot reopen.
+Focused foundation, pane, navigation, viewport bridge, pick/scroll, outline,
+shading and startup discovery gates also pass. Full test-stable and hands-on
+operator acceptance are separate. Development packaging is checked separately;
+this pass does not refresh Desktop, adopt canonical main, or enter U2.
+
+## Historical: September 19 U1.1/U1.2 source checkpoint
 
 Selection and axis movement now use a live selected-object raster preview while
 surrounding geometry remains wire context. Selection uses the existing material

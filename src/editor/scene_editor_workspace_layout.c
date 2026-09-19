@@ -26,12 +26,14 @@ void SceneEditorWorkspaceLayoutChrome(const SceneEditorPaneLayout* layout,
     if (!layout || layout->workspace_header_rect.w <= 0) return;
     SDL_Rect modes = layout->mode_router_rect;
     static const int action_widths[] = {64, 52, 62, 72, 72, 58, 56, 86, 100};
-    static const int document_widths[]={190,80,100,48,48};
-    chrome->workspace=row_item(modes,0,5,document_widths);
-    chrome->frame_all=row_item(modes,1,5,document_widths);
-    chrome->frame_selected=row_item(modes,2,5,document_widths);
-    chrome->undo=row_item(modes,3,5,document_widths);
-    chrome->redo=row_item(modes,4,5,document_widths);
+    static const int document_widths[]={180,76,96,46,46,54,58,64,58};
+    chrome->workspace=row_item(modes,0,9,document_widths);
+    chrome->frame_all=row_item(modes,1,9,document_widths);
+    chrome->frame_selected=row_item(modes,2,9,document_widths);
+    chrome->undo=row_item(modes,3,9,document_widths);
+    chrome->redo=row_item(modes,4,9,document_widths);
+    chrome->gizmo_label=row_item(modes,5,9,document_widths);
+    for (int i=0;i<3;++i) chrome->transforms[i]=row_item(modes,6+i,9,document_widths);
     int menu_width=chrome->workspace.w;
     for (int i = 0; i < SCENE_WORKSPACE_MODE_COUNT; ++i) {
         chrome->modes[i] = (SDL_Rect){modes.x,modes.y+modes.h+4+i*(modes.h+4),

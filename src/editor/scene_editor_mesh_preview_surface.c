@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_mesh_preview_surface.h"
 
@@ -81,6 +82,9 @@ static uint64_t scene_editor_mesh_surface_signature(
     hash = scene_editor_mesh_surface_hash(hash, &selected_object_index,
                                           sizeof(selected_object_index));
     hash = scene_editor_mesh_surface_hash(hash, &mode, sizeof(mode));
+    SceneEditorDocumentTransform original,preview;
+    if (SceneEditorObjectTransformPreview(selected_object_index,&original,&preview))
+        hash=scene_editor_mesh_surface_hash(hash,&preview,sizeof(preview));
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
     hash = scene_editor_mesh_surface_hash(hash, &seeds.valid, sizeof(seeds.valid));
     hash = scene_editor_mesh_surface_hash(hash,
@@ -560,6 +564,9 @@ bool SceneEditorMeshPreviewSurfaceRender(
         runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
         for (int i = 0; seeds.valid && i < seeds.primitive_count; ++i) {
             const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds.primitives[i];
+            RuntimeSceneBridgePrimitiveSeed display_primitive;
+            SceneEditorObjectTransformPreviewPrimitive(primitive,&display_primitive);
+            primitive=&display_primitive;
             if (primitive->guide_only) continue;
             if (!scene_editor_mesh_surface_visible(active_editor_mode,
                                                    selected_object_index,
@@ -590,6 +597,9 @@ bool SceneEditorMeshPreviewSurfaceRender(
                                                    instance->scene_object_index)) {
                 continue;
             }
+            RayTracingRuntimeMeshAssetInstance display_instance;
+            SceneEditorObjectTransformPreviewMesh(instance,&display_instance);
+            instance=&display_instance;
             scene_editor_mesh_surface_rasterize(projector,
                                                 instance,
                                                 contract,

@@ -17,7 +17,7 @@ static bool scene_nav_saved;
 static SceneEditorDigestOverlayNavState scene_nav;
 bool SceneEditorWorkspaceProfileMenuOpen(void) { return menu_open; }
 SceneEditorWorkspaceProfile SceneEditorWorkspaceProfileGet(void) { return active; }
-void SceneEditorWorkspaceProfileReset(void) { active = SCENE_WORKSPACE_SCENE; scene_nav_saved=false; menu_open=false; add_menu=false; SceneEditorObjectMoveGizmoReset(); SceneEditorLifecycleReset(); }
+void SceneEditorWorkspaceProfileReset(void) { SceneEditorObjectTransformModeSet(SCENE_EDITOR_OBJECT_TRANSFORM_MOVE); active = SCENE_WORKSPACE_SCENE; scene_nav_saved=false; menu_open=false; add_menu=false; SceneEditorObjectMoveGizmoReset(); SceneEditorLifecycleReset(); }
 const char* SceneEditorWorkspaceProfileLabel(int profile) {
     static const char* labels[] = {"Scene", "Materials", "Surface", "Atmos / Water", "Render"};
     return profile >= 0 && profile < SCENE_WORKSPACE_PROFILE_COUNT ? labels[profile] : "Scene";

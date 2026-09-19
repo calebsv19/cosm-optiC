@@ -4,9 +4,18 @@
 #include <stdbool.h>
 #include <SDL2/SDL.h>
 #include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_document.h"
 
-/* Scene-only object translation. A drag previews in the viewport and commits
- * through the retained document once on release, yielding one Undo step. */
+typedef enum SceneEditorObjectTransformMode {
+    SCENE_EDITOR_OBJECT_TRANSFORM_MOVE,
+    SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE,
+    SCENE_EDITOR_OBJECT_TRANSFORM_SCALE
+} SceneEditorObjectTransformMode;
+SceneEditorObjectTransformMode SceneEditorObjectTransformModeGet(void);
+void SceneEditorObjectTransformModeSet(SceneEditorObjectTransformMode mode);
+bool SceneEditorObjectTransformPreview(int object_index,
+    SceneEditorDocumentTransform* original, SceneEditorDocumentTransform* preview);
+/* Legacy entry-point names retained for the shared Move/Rotate/Scale transaction. */
 bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* window);
 void SceneEditorObjectMoveGizmoRender(SDL_Renderer* renderer,
                                      const SceneEditorDigestOverlayProjector* projector,
