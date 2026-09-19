@@ -13,5 +13,10 @@ void SceneEditorObjectMoveGizmoRender(SDL_Renderer* renderer,
                                      const RuntimeSceneBridge3DDigestState* digest,
                                      int selected_object_index);
 void SceneEditorObjectMoveGizmoReset(void);
+SceneEditorBezier3DGizmoAxis SceneEditorObjectMoveGizmoActiveAxis(void);
+SceneEditorBezier3DGizmoAxis SceneEditorObjectMoveGizmoHoverAxis(void);
+/* Read-only presentation offset; never mutates the document or runtime geometry. */
+bool SceneEditorObjectMoveGizmoPreviewProjector(int object_index,
+    const SceneEditorDigestOverlayProjector* source, SceneEditorDigestOverlayProjector* display);
 
 #endif

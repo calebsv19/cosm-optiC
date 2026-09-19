@@ -1,6 +1,16 @@
 # optiC Current Truth
 
-Last updated: 2026-09-16
+Last updated: 2026-09-19
+
+## September 19 U1.1/U1.2 source verification
+
+Selected-object shading/outline, labeled hover/active axes and transactional live
+movement are source-verified. Pointer motion does not mutate the document; release
+is one command, cancellation is exact, and fresh-process saved-move acceptance
+passes. Wire scene context and the existing editor workflow remain covered.
+See `docs/editor_workspace.md` for proof paths and limits. This slice stops at a
+Main Edit source checkpoint; Desktop remains at `bf9811d`, canonical at `752d12b`,
+and version `0.16.0`. New hands-on acceptance and packaging remain separate.
 
 ## September 16 Main Edit cross-workspace scene reference
 

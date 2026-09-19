@@ -1,5 +1,16 @@
 # RayTracing Main Edit Worktree
 
+## September 19 U1.1/U1.2 ownership and stop
+
+The coordinating task explicitly transferred sole source-writer ownership of the
+bounded selection/live-move slice to the retained UI-overhaul task. Start state
+was clean `bf9811dc693e083a39f10a32f63ef2f3d555914f`, six ahead of canonical
+`752d12b`, with both versions at `0.16.0`. The source slice stops at one focused
+commit after the forced rebuild and copied-scene acceptance described in
+`docs/editor_workspace.md`. The implementation writer stops after reporting the
+checkpoint back; U1.3 and later work need their own sequential handoff. The installed
+Desktop package remains at the prior head and has not been refreshed or operated.
+
 ## September 16 editor checkpoints
 
 Main Edit committed the September 12 lifecycle/Add/material corrections as

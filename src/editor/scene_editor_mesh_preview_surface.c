@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_mesh_preview_surface.h"
 
 #include <math.h>
@@ -64,9 +65,8 @@ static uint64_t scene_editor_mesh_surface_hash(uint64_t hash,
 static bool scene_editor_mesh_surface_visible(int active_mode,
                                               int selected_object_index,
                                               int scene_object_index) {
-    return active_mode != EDITOR_MODE_MATERIAL ||
-           selected_object_index < 0 ||
-           selected_object_index == scene_object_index;
+    (void)active_mode;
+    return selected_object_index>=0 && selected_object_index==scene_object_index;
 }
 
 static uint64_t scene_editor_mesh_surface_signature(
@@ -530,6 +530,9 @@ bool SceneEditorMeshPreviewSurfaceRender(
          mode != SCENE_EDITOR_MESH_DISPLAY_MATERIAL)) {
         return false;
     }
+    SceneEditorDigestOverlayProjector display_projector;
+    SceneEditorObjectMoveGizmoPreviewProjector(selected_object_index,projector,&display_projector);
+    projector=&display_projector;
     signature = scene_editor_mesh_surface_signature(projector,
                                                     active_editor_mode,
                                                     selected_object_index,

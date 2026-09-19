@@ -1,6 +1,56 @@
 # Editor workspace
 
-## September 16 selected-object move checkpoint
+## September 19 U1.1/U1.2 source checkpoint
+
+Selection and axis movement now use a live selected-object raster preview while
+surrounding geometry remains wire context. Selection uses the existing material
+shading and selection-outline path; Materials retains its explicit display choice.
+X/Y/Z labels accompany the handles: idle uses axis colors, hover is white with a
+ring, and the active axis is gold. The origin-to-destination guide shows a drag.
+
+The gesture holds its original transform, document path/revision and stable object
+ID. Mouse movement changes only a display projector for the selected geometry;
+it does not mutate runtime geometry, document bytes, revision, or history. Release
+commits one retained transform command. No-op release, Escape, focus loss, resize,
+workspace changes and stale-document cancellation do not commit a move. Modal
+confirmations, pickers, active text edits, and active render work block new gestures.
+Undo/Redo use the existing retained-document path. The inspector displays the
+committed value until release; this slice does not expand inspector behavior.
+
+Validation is under ignored `build/editor_ui_recovery/u11-u12-final/`:
+
+- `forced-build.log`: forced Clang rebuild of app, native workspace harness and
+  headless renderer, retaining prior artifacts rather than deleting them.
+- `focused-gates.log`: Foundation A/managed mesh, pane host, navigation, viewport
+  bridge, picking/scrolling, selection outline and shading gates pass.
+- `acceptance.json`: existing copied-scene native workflow passes. The extracted
+  `tests/scene_editor_move_acceptance.h` helper covers X/Y/Z hover/active states,
+  live mesh and primitive images, one revision/Undo step per release, exact Escape
+  cancellation, no-op release, focus loss, modal blocking, revision conflicts,
+  workspace cancellation and dirty-state invariants. A direct save during preview
+  retains the committed transform; a separate fresh process verifies a committed
+  move. Existing import, material, workspace, save/reopen and render checks pass.
+
+The final render hash remains
+`1a51085bc5054083b534168b8afddd489d2ccaab84863bd444bd32750d86b977`.
+Captured live mesh and primitive image changes exceed the small gizmo footprint;
+selection/material appearance and live movement were inspected in native captures.
+No claim is made about large-scene latency or full `test-stable` acceptance.
+The full stable suite was not run for this bounded slice.
+
+Architecture: gesture policy stays in the focused object move module (under 300
+lines). Existing renderer siblings receive only presentation-offset and selected
+shading hooks. Existing kit_viewport3d outlines, core_font-backed labels and
+viewport projection helpers are reused; no shared library/version changes.
+No rotation, scaling, snapping, material redesign or later U1 slice is included.
+
+This is a source checkpoint only. The Desktop Main Edit identity remains at
+`bf9811dc693e083a39f10a32f63ef2f3d555914f`, version `0.16.0`. No packaging,
+refresh, canonical adoption or release operation was performed. Hands-on acceptance
+of this new slice remains for the coordinating task after separately authorized
+review preparation.
+
+## Historical: September 16 selected-object move checkpoint
 
 The Scene workspace now draws X/Y/Z move handles for a selected runtime object
 with an editable XYZ transform. Drag a square handle to preview the destination

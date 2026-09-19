@@ -66,3 +66,10 @@ never changes selected identity. `scene_editor_transform_panel.c` shares its man
 import between the picker and SDL file drop; no-selection import controls remain
 available. App-local label helpers intersect parent clips so scrolling cannot
 escape a pane. No shared module was extended.
+
+The object move gizmo owns transient gesture state, stable object/document binding,
+axis feedback, and one-command release. Its read-only preview-projector adapter
+is consumed by the existing mesh surface/wire and primitive drawing siblings;
+previewing never changes retained documents or runtime geometry. Workspace changes
+cancel the gesture. Native transaction acceptance lives in the focused
+`tests/scene_editor_move_acceptance.h` helper within the workspace harness.

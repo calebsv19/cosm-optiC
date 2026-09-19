@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 
 #include <float.h>
@@ -566,9 +567,9 @@ bool SceneEditorMeshPreviewRenderGeometry(
     bool surface_rendered = false;
     /* Scene context is always wire; the selected Material preview owns the
        session-only display choice. */
-    stats.mode = active_editor_mode == EDITOR_MODE_MATERIAL && selected_object_index >= 0
-                     ? SceneEditorMeshPreviewModeGet()
-                     : SCENE_EDITOR_MESH_DISPLAY_WIRE;
+    stats.mode = selected_object_index<0 ? SCENE_EDITOR_MESH_DISPLAY_WIRE :
+        active_editor_mode==EDITOR_MODE_MATERIAL ? SceneEditorMeshPreviewModeGet() :
+        SCENE_EDITOR_MESH_DISPLAY_MATERIAL;
     if (out_stats) *out_stats = stats;
     if (!renderer || !projector) return false;
 
@@ -592,8 +593,9 @@ bool SceneEditorMeshPreviewRenderGeometry(
         if (!instance) {
             continue;
         }
-        const bool context_wire = active_editor_mode == EDITOR_MODE_MATERIAL &&
-                                  selected_object_index >= 0 &&
+        SceneEditorDigestOverlayProjector object_projector;
+        SceneEditorObjectMoveGizmoPreviewProjector(instance->scene_object_index,projector,&object_projector);
+        const bool context_wire = selected_object_index >= 0 &&
                                   instance->scene_object_index != selected_object_index;
         const SceneEditorMeshDisplayMode instance_mode = context_wire
             ? SCENE_EDITOR_MESH_DISPLAY_WIRE : stats.mode;
@@ -602,7 +604,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
         if (!contract || !lod) continue;
         if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS) {
             scene_editor_mesh_preview_draw_bounds(renderer,
-                                                  projector,
+                                                  &object_projector,
                                                   contract,
                                                   instance,
                                                   (SDL_Color){112, 168, 220, 235});
@@ -618,7 +620,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                 slot_index = 0;
             }
             slot = &g_mesh_preview_gpu[i].slots[slot_index];
-            signature = scene_editor_mesh_preview_signature(projector,
+            signature = scene_editor_mesh_preview_signature(&object_projector,
                                                             instance,
                                                             lod,
                                                             instance->scene_object_index);
@@ -626,7 +628,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
                 !scene_editor_mesh_preview_build_slot(vk,
                                                       slot,
                                                       signature,
-                                                      projector,
+                                                      &object_projector,
                                                       instance,
                                                       contract,
                                                       lod,
@@ -665,7 +667,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
              instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE ||
              !surface_rendered)) {
             scene_editor_mesh_preview_draw_bounds(renderer,
-                                                  projector,
+                                                  &object_projector,
                                                   contract,
                                                   instance,
                                                   highlight);

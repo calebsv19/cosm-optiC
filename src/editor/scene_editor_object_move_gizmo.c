@@ -1,7 +1,13 @@
 #include "editor/scene_editor_object_move_gizmo.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
+#include "editor/scene_editor_lifecycle.h"
+#include "editor/scene_editor_transform_panel.h"
+#include "editor/scene_editor_sidebar.h"
+#include "editor/material_editor_authored_texture_binding.h"
+#include "editor/scene_editor_typography.h"
 
 #include "app/ray_tracing_deep_render_desktop_host.h"
 #include "editor/object_editor.h"
@@ -17,6 +23,9 @@ typedef struct ObjectMoveDrag {
     SceneEditorBezier3DGizmoAxis axis;
     SceneEditorDocumentTransform original;
     SceneEditorDocumentTransform preview;
+    unsigned long long revision;
+    char object_id[64];
+    char document_path[4096];
     int start_x;
     int start_y;
     double axis_screen_x;
@@ -25,13 +34,59 @@ typedef struct ObjectMoveDrag {
 } ObjectMoveDrag;
 
 static ObjectMoveDrag s_drag;
+static SceneEditorBezier3DGizmoAxis s_hover;
 
-void SceneEditorObjectMoveGizmoReset(void) { memset(&s_drag, 0, sizeof(s_drag)); }
+void SceneEditorObjectMoveGizmoReset(void) {
+    if (s_drag.active) (void)SDL_CaptureMouse(SDL_FALSE);
+    memset(&s_drag, 0, sizeof(s_drag));
+    s_hover=SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+}
+SceneEditorBezier3DGizmoAxis SceneEditorObjectMoveGizmoActiveAxis(void) {
+    return s_drag.active ? s_drag.axis : SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+}
+SceneEditorBezier3DGizmoAxis SceneEditorObjectMoveGizmoHoverAxis(void) { return s_hover; }
+
 
 static bool move_available(int selected) {
     return SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SCENE &&
+           animSettings.editorMode == EDITOR_MODE_OBJECT &&
            SceneEditorDocumentIsOpen() && selected >= 0 &&
+           !SceneEditorLifecycleClosePending() && !SceneEditorWorkspaceProfileMenuOpen() &&
+           !SceneEditorTransformPanelInteractionActive() && !SceneEditorSidebarTextActive() &&
+           !MaterialEditorAuthoredTextureBindingPickerActive() &&
            !RayTracingDeepRenderDesktopHost_HasActiveWork();
+}
+
+static bool move_transaction_valid(void) {
+    char id[64]={0};
+    return s_drag.active && move_available(s_drag.object_index) &&
+        ObjectEditorGetSelectedObjectIndex()==s_drag.object_index &&
+        SceneEditorDocumentRevision()==s_drag.revision &&
+        strcmp(SceneEditorDocumentPath(),s_drag.document_path)==0 &&
+        runtime_scene_bridge_get_last_object_id_for_scene_index(s_drag.object_index,id,sizeof(id)) &&
+        strcmp(id,s_drag.object_id)==0;
+}
+
+bool SceneEditorObjectMoveGizmoPreviewProjector(int object_index,
+    const SceneEditorDigestOverlayProjector* source, SceneEditorDigestOverlayProjector* display) {
+    if (!source || !display) return false;
+    *display=*source;
+    if (!move_transaction_valid() || s_drag.object_index!=object_index) return false;
+    /* Translation-only presentation: shift the view, never the live scene or document. */
+    display->center_x-=s_drag.preview.position[0]-s_drag.original.position[0];
+    display->center_y-=s_drag.preview.position[1]-s_drag.original.position[1];
+    display->center_z-=s_drag.preview.position[2]-s_drag.original.position[2];
+    return true;
+}
+
+static void move_update(int x,int y) {
+    double pixels=((double)x-s_drag.start_x)*s_drag.axis_screen_x +
+                  ((double)y-s_drag.start_y)*s_drag.axis_screen_y;
+    double delta=pixels/s_drag.pixels_per_unit;
+    if (!isfinite(delta)) return;
+    int component=(int)s_drag.axis-(int)SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
+    s_drag.preview=s_drag.original;
+    s_drag.preview.position[component]+=delta;
 }
 
 static bool move_project(const SceneEditorDigestOverlayProjector* projector,
@@ -98,7 +153,10 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
     switch (event->type) {
         case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: event_window = event->button.windowID; break;
         case SDL_MOUSEMOTION: event_window = event->motion.windowID; break;
-        case SDL_KEYDOWN: event_window = event->key.windowID; break;
+        case SDL_KEYDOWN: case SDL_KEYUP: event_window = event->key.windowID; break;
+        case SDL_TEXTINPUT: event_window=event->text.windowID; break;
+        case SDL_MOUSEWHEEL: event_window=event->wheel.windowID; break;
+        case SDL_DROPFILE: event_window=event->drop.windowID; break;
         case SDL_WINDOWEVENT: event_window = event->window.windowID; break;
         default: break;
     }
@@ -106,9 +164,15 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
     if (event->type == SDL_QUIT ||
         (event->type == SDL_WINDOWEVENT &&
          (event->window.event == SDL_WINDOWEVENT_FOCUS_LOST ||
-          event->window.event == SDL_WINDOWEVENT_CLOSE))) {
+          event->window.event == SDL_WINDOWEVENT_CLOSE ||
+          event->window.event == SDL_WINDOWEVENT_SIZE_CHANGED))) {
         SceneEditorObjectMoveGizmoReset();
         return false;
+    }
+    if (s_drag.active && !move_transaction_valid()) {
+        SceneEditorObjectMoveGizmoReset();
+        SceneEditorChromeShellSetActionFeedback("Move cancelled: editing context changed",2200);
+        return event->type==SDL_MOUSEMOTION || event->type==SDL_MOUSEBUTTONUP;
     }
     if (s_drag.active) {
         if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_ESCAPE) {
@@ -119,16 +183,12 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
         if (event->type == SDL_KEYDOWN || event->type == SDL_KEYUP ||
             event->type == SDL_TEXTINPUT) return true;
         if (event->type == SDL_MOUSEMOTION) {
-            double pixels = ((double)event->motion.x - s_drag.start_x) * s_drag.axis_screen_x +
-                            ((double)event->motion.y - s_drag.start_y) * s_drag.axis_screen_y;
-            double delta = pixels / s_drag.pixels_per_unit;
-            int component = (int)s_drag.axis - (int)SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
-            s_drag.preview = s_drag.original;
-            s_drag.preview.position[component] += delta;
+            move_update(event->motion.x,event->motion.y);
             return true;
         }
         if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_LEFT) {
             char diagnostics[256] = {0};
+            move_update(event->button.x,event->button.y);
             int component = (int)s_drag.axis - (int)SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
             bool moved = fabs(s_drag.preview.position[component] -
                               s_drag.original.position[component]) > 1e-6;
@@ -140,24 +200,35 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
             SceneEditorObjectMoveGizmoReset();
             return true;
         }
+        if (event->type==SDL_DROPFILE) { SDL_free(event->drop.file); return true; }
         return event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEWHEEL;
     }
-    if (event->type != SDL_MOUSEBUTTONDOWN || event->button.button != SDL_BUTTON_LEFT ||
+    bool hover=event->type==SDL_MOUSEMOTION;
+    if (!hover && (event->type!=SDL_MOUSEBUTTONDOWN || event->button.button!=SDL_BUTTON_LEFT)) return false;
+    s_hover=SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+    int x=hover ? event->motion.x : event->button.x;
+    int y=hover ? event->motion.y : event->button.y;
+    if ((SDL_GetModState() & (KMOD_ALT|KMOD_CTRL|KMOD_GUI)) ||
         !move_available(selected) || !SceneEditorGetPaneLayout(&layout) ||
-        !SDL_PointInRect(&(SDL_Point){event->button.x, event->button.y}, &layout.viewport_rect) ||
+        !SDL_PointInRect(&(SDL_Point){x,y},&layout.viewport_rect) ||
         !SceneEditorDigestOverlayResolve(&digest) ||
-        !SceneEditorDigestOverlayBuildProjector(&digest, &layout.viewport_rect,
-            SceneEditorGetViewportNavState(), &projector)) return false;
-    SceneEditorDocumentTransform transform = {0};
-    char diagnostics[256] = {0};
-    SceneEditorBezier3DGizmoAxis axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
-    double ux = 0.0, uy = 0.0, ppu = 0.0;
-    if (!SceneEditorDocumentGetTransformForSceneIndex(selected, &transform,
-            diagnostics, sizeof(diagnostics)) ||
-        !move_pick(&projector, &digest, transform.position,
-            event->button.x, event->button.y, &axis, &ux, &uy, &ppu)) return false;
+        !SceneEditorDigestOverlayBuildProjector(&digest,&layout.viewport_rect,
+            SceneEditorGetViewportNavState(),&projector)) return false;
+    SceneEditorDocumentTransform transform={0};
+    char diagnostics[256]={0}, object_id[64]={0};
+    SceneEditorBezier3DGizmoAxis axis=SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+    double ux=0.0,uy=0.0,ppu=0.0;
+    if (!SceneEditorDocumentGetTransformForSceneIndex(selected,&transform,diagnostics,sizeof(diagnostics)) ||
+        !runtime_scene_bridge_get_last_object_id_for_scene_index(selected,object_id,sizeof(object_id)) ||
+        !move_pick(&projector,&digest,transform.position,x,y,&axis,&ux,&uy,&ppu)) return false;
+    s_hover=axis;
+    if (hover) return false;
     s_drag.active = true;
     s_drag.object_index = selected;
+    s_drag.revision=SceneEditorDocumentRevision();
+    memcpy(s_drag.object_id,object_id,sizeof(object_id));
+    snprintf(s_drag.document_path,sizeof(s_drag.document_path),"%s",SceneEditorDocumentPath());
+    (void)SDL_CaptureMouse(SDL_TRUE);
     s_drag.axis = axis;
     s_drag.original = s_drag.preview = transform;
     s_drag.start_x = event->button.x;
@@ -181,6 +252,7 @@ void SceneEditorObjectMoveGizmoRender(SDL_Renderer* renderer,
     if (!renderer || !projector || !digest || !move_available(selected_object_index) ||
         !SceneEditorDocumentGetTransformForSceneIndex(selected_object_index, &transform,
             diagnostics, sizeof(diagnostics))) return;
+    if (s_drag.active && !move_transaction_valid()) SceneEditorObjectMoveGizmoReset();
     const double* position = s_drag.active && s_drag.object_index == selected_object_index
         ? s_drag.preview.position : transform.position;
     for (int axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X;
@@ -188,12 +260,22 @@ void SceneEditorObjectMoveGizmoRender(SDL_Renderer* renderer,
         int ax = 0, ay = 0, bx = 0, by = 0;
         if (!move_project(projector, digest, position,
                 (SceneEditorBezier3DGizmoAxis)axis, &ax, &ay, &bx, &by, NULL)) continue;
-        SDL_Color color = colors[axis - SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X];
+        bool active=s_drag.active && (int)s_drag.axis==axis;
+        bool hovered=!s_drag.active && (int)s_hover==axis;
+        SDL_Color color = active ? (SDL_Color){255,220,115,255} :
+                          hovered ? (SDL_Color){255,255,255,255} :
+                          colors[axis - SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X];
         SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 255);
         SDL_RenderDrawLine(renderer, ax, ay, bx, by);
         SDL_RenderDrawLine(renderer, ax + 1, ay, bx + 1, by);
         SDL_Rect handle = {bx - 5, by - 5, 11, 11};
         SDL_RenderFillRect(renderer, &handle);
+        if (active || hovered) {
+            SDL_Rect ring={bx-8,by-8,17,17}; SDL_RenderDrawRect(renderer,&ring);
+        }
+        const char* labels[]={"X","Y","Z"};
+        SDL_Rect label={bx+9,by-10,20,20};
+        SceneEditorLabel(renderer,label,labels[axis-SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X],color);
     }
     if (s_drag.active && s_drag.object_index == selected_object_index) {
         int ax = 0, ay = 0, bx = 0, by = 0;
@@ -206,30 +288,6 @@ void SceneEditorObjectMoveGizmoRender(SDL_Renderer* renderer,
             SDL_RenderDrawLine(renderer, ax, ay, bx, by);
             SDL_Rect ghost = {bx - 8, by - 8, 16, 16};
             SDL_RenderDrawRect(renderer, &ghost);
-        }
-        double bounds[6] = {0};
-        if (SceneEditorDigestOverlayResolveObjectExtents(digest, selected_object_index,
-                &bounds[0], &bounds[1], &bounds[2],
-                &bounds[3], &bounds[4], &bounds[5], NULL)) {
-            double offset[3] = {
-                position[0] - s_drag.original.position[0],
-                position[1] - s_drag.original.position[1],
-                position[2] - s_drag.original.position[2]
-            };
-            SDL_Color ghost_color = {245, 220, 150, 180};
-            for (int axis = 0; axis < 3; ++axis) {
-                int other_a = (axis + 1) % 3, other_b = (axis + 2) % 3;
-                for (int bits = 0; bits < 4; ++bits) {
-                    double a[3], b[3];
-                    for (int k = 0; k < 3; ++k) a[k] = bounds[k] + offset[k];
-                    a[other_a] = bounds[(bits & 1) ? other_a + 3 : other_a] + offset[other_a];
-                    a[other_b] = bounds[(bits & 2) ? other_b + 3 : other_b] + offset[other_b];
-                    b[0] = a[0]; b[1] = a[1]; b[2] = a[2];
-                    b[axis] = bounds[axis + 3] + offset[axis];
-                    SceneEditorDigestOverlayDrawLine3(renderer, projector,
-                        a[0], a[1], a[2], b[0], b[1], b[2], ghost_color);
-                }
-            }
         }
     }
 }

@@ -141,6 +141,8 @@ static void verify_viewport_gestures(SceneEditor* editor) {
     SceneEditorSessionRuntimeRender(editor);
 }
 
+#include "scene_editor_move_acceptance.h"
+
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
@@ -172,6 +174,18 @@ int main(int argc, char** argv) {
         active_editor = NULL; TTF_Quit(); SDL_Quit();
         fprintf(stderr,"[editor lifecycle] review process exited normally\n");
         return 0;
+    }
+    if (argc==4 && strcmp(argv[3],"--move-reopen")==0) {
+        int selected=sceneSettings.objectCount-1; char diagnostics[256];
+        SceneEditorDocumentTransform transform;
+        assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&transform,diagnostics,sizeof(diagnostics)));
+        FILE* expected=fopen("move_expected.txt","r"); assert(expected);
+        for (int i=0;i<3;++i) { double value; assert(fscanf(expected,"%lf",&value)==1); assert(fabs(value-transform.position[i])<1e-9); }
+        fclose(expected);
+        assert(!SceneEditorDocumentIsDirty());
+        ObjectEditorSetSelectedObjectIndex(selected); assert(SceneEditorFrameViewport(true));
+        capture(&editor,"workspace_committed_move_reopen.ppm");
+        active_editor=NULL; DestroySceneEditor(&editor); TTF_Quit(); SDL_Quit(); return 0;
     }
     if (reopen_only) {
         int selected = sceneSettings.objectCount-1;
@@ -472,78 +486,8 @@ int main(int argc, char** argv) {
         diagnostics, sizeof(diagnostics)));
     assert(fabs(reopened.position[0] - edited.position[0]) < 1e-6);
     capture(&editor, "workspace_saved_edit.ppm");
-    /* A visible X handle moves the selected object through one document command. */
-    SceneEditorWorkspaceProfileSelect(&editor, SCENE_WORKSPACE_SCENE);
-    assert(SceneEditorFrameViewport(true));
-    SceneEditorSessionRuntimeRender(&editor);
-    SceneEditorPaneLayout move_layout;
-    RuntimeSceneBridge3DDigestState move_digest={0};
-    SceneEditorDigestOverlayProjector move_projector;
-    assert(SceneEditorGetPaneLayout(&move_layout));
-    assert(SceneEditorDigestOverlayResolve(&move_digest));
-    assert(SceneEditorDigestOverlayBuildProjector(&move_digest,&move_layout.viewport_rect,
-        SceneEditorGetViewportNavState(),&move_projector));
-    SceneEditorBezier3DInteractionMetrics move_metrics=
-        SceneEditorDigestOverlayResolveBezierMetrics(&move_digest,&move_projector);
-    int handle_ax,handle_ay,handle_bx,handle_by;
-    double move_ppu=0.0;
-    assert(SceneEditorDigestOverlayProjectGizmoAxisAtWorldPoint(&move_projector,
-        reopened.position[0],reopened.position[1],reopened.position[2],
-        SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X,move_metrics.gizmo_world_length,
-        &handle_ax,&handle_ay,&handle_bx,&handle_by,&move_ppu));
-    assert(SceneEditorDigestOverlayProjectGizmoAxisAtWorldPoint(&move_projector,
-        reopened.position[0],reopened.position[1],reopened.position[2],
-        SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_X,72.0/move_ppu,
-        &handle_ax,&handle_ay,&handle_bx,&handle_by,&move_ppu));
-    int start_x=handle_bx;
-    int start_y=handle_by;
-    double handle_len=hypot((double)handle_bx-handle_ax,(double)handle_by-handle_ay);
-    int end_x=start_x+(int)lround(32.0*((double)handle_bx-handle_ax)/handle_len);
-    int end_y=start_y+(int)lround(32.0*((double)handle_by-handle_ay)/handle_len);
-    unsigned long long before_move_revision=SceneEditorDocumentRevision();
-    SDL_Event cancel_event={0}; cancel_event.type=SDL_MOUSEBUTTONDOWN;
-    cancel_event.button.button=SDL_BUTTON_LEFT;
-    cancel_event.button.x=start_x; cancel_event.button.y=start_y;
-    SceneEditorSessionRuntimeHandleEvent(&editor,&cancel_event);
-    cancel_event=(SDL_Event){0}; cancel_event.type=SDL_MOUSEMOTION;
-    cancel_event.motion.state=SDL_BUTTON_LMASK;
-    cancel_event.motion.x=end_x; cancel_event.motion.y=end_y;
-    SceneEditorSessionRuntimeHandleEvent(&editor,&cancel_event);
-    key(&editor,SDLK_ESCAPE);
-    assert(SceneEditorDocumentRevision()==before_move_revision);
-    assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&reopened,diagnostics,sizeof(diagnostics)));
-    assert(fabs(reopened.position[0]-edited.position[0])<1e-6);
-    SDL_Event move_event={0};
-    move_event.type=SDL_MOUSEBUTTONDOWN; move_event.button.button=SDL_BUTTON_LEFT;
-    move_event.button.x=start_x; move_event.button.y=start_y;
-    SceneEditorSessionRuntimeHandleEvent(&editor,&move_event);
-    move_event=(SDL_Event){0}; move_event.type=SDL_MOUSEMOTION;
-    move_event.motion.state=SDL_BUTTON_LMASK;
-    move_event.motion.x=end_x; move_event.motion.y=end_y;
-    SceneEditorSessionRuntimeHandleEvent(&editor,&move_event);
-    capture(&editor,"workspace_move_preview.ppm");
-    move_event=(SDL_Event){0}; move_event.type=SDL_MOUSEBUTTONUP;
-    move_event.button.button=SDL_BUTTON_LEFT;
-    move_event.button.x=end_x; move_event.button.y=end_y;
-    SceneEditorSessionRuntimeHandleEvent(&editor,&move_event);
-    SceneEditorSessionRuntimeRender(&editor);
-    SceneEditorDocumentTransform moved={0};
-    assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&moved,diagnostics,sizeof(diagnostics)));
-    assert(fabs(moved.position[0]-reopened.position[0])>1e-5);
-    assert(SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)));
-    assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&moved,diagnostics,sizeof(diagnostics)));
-    assert(fabs(moved.position[0]-reopened.position[0])<1e-6);
-    assert(SceneEditorDocumentRedo(diagnostics,sizeof(diagnostics)));
-    assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&moved,diagnostics,sizeof(diagnostics)));
-    click(&editor,saveButton);
-    assert(SceneEditorDocumentOpen(argv[2],diagnostics,sizeof(diagnostics)));
-    assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&reopened,diagnostics,sizeof(diagnostics)));
-    assert(fabs(reopened.position[0]-moved.position[0])<1e-6);
-    /* Restore the established fixture value for the separate reopen assertion. */
-    reopened.position[0]=edited.position[0];
-    assert(SceneEditorDocumentSetTransformForSceneIndex(selected,&reopened,diagnostics,sizeof(diagnostics)));
-    click(&editor,saveButton);
-    assert(SceneEditorDocumentOpen(argv[2],diagnostics,sizeof(diagnostics)));
+    verify_move_acceptance(&editor,argv[2],selected);
+    verify_primitive_move_preview(&editor,selected);
     revision = SceneEditorDocumentRevision();
     animSettings.textZoomStep = 2;
     SceneEditorWorkspaceProfileSelect(&editor, SCENE_WORKSPACE_SCENE);

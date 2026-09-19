@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
 
 #include <math.h>
@@ -502,9 +503,8 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     bool material_focus_mode = (active_mode == EDITOR_MODE_MATERIAL);
     bool material_preview_rendered = false;
     bool preview_surface_composed = false;
-    SceneEditorMeshDisplayMode preview_mode = active_mode == EDITOR_MODE_MATERIAL &&
-                                              selected_object_index >= 0
-        ? SceneEditorMeshPreviewModeGet() : SCENE_EDITOR_MESH_DISPLAY_WIRE;
+    SceneEditorMeshDisplayMode preview_mode = selected_object_index<0 ? SCENE_EDITOR_MESH_DISPLAY_WIRE :
+        active_mode==EDITOR_MODE_MATERIAL ? SceneEditorMeshPreviewModeGet() : SCENE_EDITOR_MESH_DISPLAY_MATERIAL;
     SceneEditorMaterialPreviewTriangleAddress selected_triangles
         [SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES];
     int selected_triangle_count = 0;
@@ -584,6 +584,9 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
             SDL_Color primitive_color =
                 SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
             bool is_selected = selected_object_index == primitive->scene_object_index;
+            SceneEditorDigestOverlayProjector display_projector;
+            SceneEditorObjectMoveGizmoPreviewProjector(primitive->scene_object_index,projector,&display_projector);
+            const SceneEditorDigestOverlayProjector* object_projector=&display_projector;
             bool is_hover = (active_mode == EDITOR_MODE_OBJECT &&
                              hover_object_index == primitive->scene_object_index);
             SDL_Color highlight_color = is_selected
@@ -591,12 +594,12 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                             : (SDL_Color){84, 224, 255, 245};
             primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
             const SceneEditorMeshDisplayMode primitive_mode =
-                material_focus_mode && !is_selected
+                !is_selected
                     ? SCENE_EDITOR_MESH_DISPLAY_WIRE : preview_mode;
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
                 if (primitive->guide_only) {
                     scene_editor_digest_overlay_draw_seed_plane_guide(renderer,
-                                                                      projector,
+                                                                      object_projector,
                                                                       primitive,
                                                                       primitive_color);
                 } else if ((!material_preview_rendered || (material_focus_mode && !is_selected)) &&
@@ -605,14 +608,14 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                primitive->guide_only,
                                preview_surface_composed)) {
                     scene_editor_digest_overlay_draw_seed_plane(renderer,
-                                                                projector,
+                                                                object_projector,
                                                                 primitive,
                                                                 primitive_color);
                 }
             } else {
                 if (primitive->guide_only) {
                     scene_editor_digest_overlay_draw_seed_prism_guide(renderer,
-                                                                      projector,
+                                                                      object_projector,
                                                                       primitive,
                                                                       primitive_color);
                 } else if ((!material_preview_rendered || (material_focus_mode && !is_selected)) &&
@@ -621,14 +624,14 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                primitive->guide_only,
                                preview_surface_composed)) {
                     scene_editor_digest_overlay_draw_seed_prism(renderer,
-                                                                projector,
+                                                                object_projector,
                                                                 primitive,
                                                                 primitive_color);
                 }
             }
             if (is_selected || is_hover) {
                 scene_editor_digest_overlay_draw_seed_selection_marker(renderer,
-                                                                       projector,
+                                                                       object_projector,
                                                                        primitive,
                                                                        highlight_color);
             }
@@ -638,6 +641,9 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
             SDL_Color primitive_color =
                 SceneEditorDigestOverlayResolvePrimitiveColor(primitive->scene_object_index);
             bool is_selected = selected_object_index == primitive->scene_object_index;
+            SceneEditorDigestOverlayProjector display_projector;
+            SceneEditorObjectMoveGizmoPreviewProjector(primitive->scene_object_index,projector,&display_projector);
+            const SceneEditorDigestOverlayProjector* object_projector=&display_projector;
             bool is_hover = (active_mode == EDITOR_MODE_OBJECT &&
                              hover_object_index == primitive->scene_object_index);
             SDL_Color highlight_color = is_selected
@@ -650,33 +656,33 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                 double half_w = fmax(0.05, fabs(primitive->width) * 0.5);
                 double half_h = fmax(0.05, fabs(primitive->height) * 0.5);
                 scene_editor_digest_overlay_draw_dashed_line3(renderer,
-                                                              projector,
+                                                              object_projector,
                                                               primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
                                                               primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
                                                               primitive_color);
                 scene_editor_digest_overlay_draw_dashed_line3(renderer,
-                                                              projector,
+                                                              object_projector,
                                                               primitive->origin_x + half_w, primitive->origin_y - half_h, primitive->origin_z,
                                                               primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
                                                               primitive_color);
                 scene_editor_digest_overlay_draw_dashed_line3(renderer,
-                                                              projector,
+                                                              object_projector,
                                                               primitive->origin_x + half_w, primitive->origin_y + half_h, primitive->origin_z,
                                                               primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
                                                               primitive_color);
                 scene_editor_digest_overlay_draw_dashed_line3(renderer,
-                                                              projector,
+                                                              object_projector,
                                                               primitive->origin_x - half_w, primitive->origin_y + half_h, primitive->origin_z,
                                                               primitive->origin_x - half_w, primitive->origin_y - half_h, primitive->origin_z,
                                                               primitive_color);
             } else {
                 SceneEditorDigestOverlayDrawPrismGuide(renderer,
-                                                       projector,
+                                                       object_projector,
                                                        primitive,
                                                        primitive_color);
             }
             if (is_selected || is_hover) {
-                SceneEditorDigestOverlayDrawSelectionMarker(renderer, projector, primitive, highlight_color);
+                SceneEditorDigestOverlayDrawSelectionMarker(renderer, object_projector, primitive, highlight_color);
             }
         }
         return;

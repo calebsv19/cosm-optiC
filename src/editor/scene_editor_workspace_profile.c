@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -23,6 +24,7 @@ const char* SceneEditorWorkspaceProfileLabel(int profile) {
 }
 void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspaceProfile profile) {
     if (!editor || profile < 0 || profile >= SCENE_WORKSPACE_PROFILE_COUNT) return;
+    SceneEditorObjectMoveGizmoReset();
     SceneEditorObjectMoveGizmoReset();
     int selected = ObjectEditorGetSelectedObjectIndex();
     bool entering_material=profile==SCENE_WORKSPACE_MATERIALS && active!=SCENE_WORKSPACE_MATERIALS;

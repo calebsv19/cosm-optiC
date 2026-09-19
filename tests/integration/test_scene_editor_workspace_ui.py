@@ -61,6 +61,25 @@ def main():
         with (out / f'{stage}.log').open('w') as log:
             subprocess.run([str(binary), str(out), str(scene), argument], env=env,
                            stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
+    with (out / 'committed-move-reopen.log').open('w') as log:
+        subprocess.run([str(binary), str(out), str(scene)+'.committed-move.json', '--move-reopen'],
+                       env=env, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
+    preview_saved = json.loads(Path(str(scene)+'.preview-saved.json').read_text())
+    assert abs(preview_saved['objects'][-1]['transform']['position']['x'] - 0.25) < 1e-9
+    w, h, first = ppm(out / 'workspace_move_before.ppm')
+    w2, h2, live = ppm(out / 'workspace_move_preview.ppm')
+    assert (w,h)==(w2,h2)
+    # Selected shaded geometry must move, not merely the small gizmo/outline.
+    changed=sum(first[i:i+3]!=live[i:i+3] for y in range(h//5,h-30)
+                for i in range((y*w+w//4)*3,(y*w+3*w//4)*3,3))
+    assert changed > 2500, ('No substantial live geometry preview',changed)
+    pw,ph,primitive_before=ppm(out / 'workspace_primitive_before.ppm')
+    pw2,ph2,primitive_live=ppm(out / 'workspace_primitive_preview.ppm')
+    assert (pw,ph)==(pw2,ph2)
+    primitive_changed=sum(primitive_before[i:i+3]!=primitive_live[i:i+3] for y in range(ph//5,ph-30)
+                          for i in range((y*pw+pw//4)*3,(y*pw+3*pw//4)*3,3))
+    assert primitive_changed>2500, ('No substantial primitive preview',primitive_changed)
+
     after = json.loads(scene.read_text())
     assert after['extensions']['e0_preservation_probe'] == probe
     assert len(after['objects']) == len(before['objects']) + 1
@@ -88,7 +107,9 @@ def main():
                        stdout=log, stderr=subprocess.STDOUT, check=True, timeout=120)
     frame = project / 'renders/e01_tlas_blas_parity/frames/frame_0000.bmp'
     assert frame.exists() and len(set(frame.read_bytes()[122:])) > 4
-    report = {'status': 'passed', 'source_stl_sha256': source_hash,
+    report = {'status': 'passed', 'live_preview_changed_pixels': changed,
+              'primitive_preview_changed_pixels': primitive_changed,
+              'transactional_move_fresh_reopen': True, 'cancelled_preview_not_serialized': True, 'source_stl_sha256': source_hash,
               'unknown_fields_preserved': True, 'original_objects_preserved': True,
               'source_unit_scale': recipe['import']['source_to_asset_scale'],
               'imported_object_id': imported['object_id'], 'fresh_process_reopen': True,
