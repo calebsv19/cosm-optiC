@@ -220,4 +220,8 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                    const SceneEditorBezier3DGizmoState* bezier_gizmo_state,
                                    const SceneEditorCamera3DGizmoState* camera_gizmo_state);
 
+/* One depth-ranked geometry query for viewport hover and clicks. */
+int SceneEditorViewportPickObject(const SceneEditorDigestOverlayProjector* projector,
+    int screen_x, int screen_y);
+
 #endif

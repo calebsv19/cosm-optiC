@@ -359,21 +359,12 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
     clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
     SDL_RenderGetClipRect(renderer, &previous_clip);
     SDL_RenderSetClipRect(renderer, &projector.viewport);
-    if (active_mode == EDITOR_MODE_OBJECT &&
+    if ((active_mode == EDITOR_MODE_OBJECT || (active_mode == EDITOR_MODE_MATERIAL &&
+         MaterialEditorGetViewMode()==MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT)) &&
         SceneEditorObjectMoveGizmoActiveAxis()==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE &&
         SceneEditorObjectMoveGizmoHoverAxis()==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE &&
         scene_editor_digest_overlay_point_in_rect(mouse_x, mouse_y, &projector.viewport)) {
-        hover_object_index = SceneEditorMeshPreviewPickObjectIndex(&projector,
-                                                                   active_mode,
-                                                                   -1,
-                                                                   mouse_x,
-                                                                   mouse_y);
-        if (hover_object_index < 0) {
-            hover_object_index = SceneEditorDigestOverlayPickObjectIndex(&projector,
-                                                                         &digest,
-                                                                         mouse_x,
-                                                                         mouse_y);
-        }
+        hover_object_index = SceneEditorViewportPickObject(&projector,mouse_x,mouse_y);
     }
 
     SceneEditorDigestOverlayRenderObjectLayer(renderer,
@@ -454,9 +445,7 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                       projector.center_z + projector.span_max * 0.15,
                                       (SDL_Color){120, 170, 240, 240});
 
-    if (active_mode == EDITOR_MODE_MATERIAL) {
-        SceneEditorMeshPreviewRenderToolbar(renderer, &projector.viewport);
-    }
+
 
     if (clip_was_enabled) {
         SDL_RenderSetClipRect(renderer, &previous_clip);

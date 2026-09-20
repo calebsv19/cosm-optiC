@@ -1,3 +1,4 @@
+#include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -501,7 +502,7 @@ static void SceneEditorLayoutChrome(void) {
                                               sceneSettings.windowHeight);
     } else {
         int row_h = animation_config_scale_text_point_size(&animSettings, 14, 12) + 10;
-        g_scenePaneHost.workspace_header_height = row_h * 3 + 24;
+        g_scenePaneHost.workspace_header_height = row_h + 8;
         pane_ok = scene_editor_pane_host_rebuild(&g_scenePaneHost,
                                                  sceneSettings.windowWidth,
                                                  sceneSettings.windowHeight);
@@ -1061,6 +1062,7 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 
 void DestroySceneEditor(SceneEditor* editor) {
+    SceneEditorRenameCancel();
     if (!editor) {
         return;
     }

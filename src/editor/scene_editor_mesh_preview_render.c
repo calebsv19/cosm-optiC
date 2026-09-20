@@ -566,11 +566,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
     SceneEditorMeshPreviewFrameStats* out_stats) {
     SceneEditorMeshPreviewFrameStats stats = {0};
     bool surface_rendered = false;
-    /* Scene context is always wire; the selected Material preview owns the
-       session-only display choice. */
-    stats.mode = selected_object_index<0 ? SCENE_EDITOR_MESH_DISPLAY_WIRE :
-        active_editor_mode==EDITOR_MODE_MATERIAL ? SceneEditorMeshPreviewModeGet() :
-        SCENE_EDITOR_MESH_DISPLAY_MATERIAL;
+    stats.mode = SceneEditorMeshPreviewModeGet();
     if (out_stats) *out_stats = stats;
     if (!renderer || !projector) return false;
 
@@ -599,10 +595,8 @@ bool SceneEditorMeshPreviewRenderGeometry(
         instance=&display_instance;
         SceneEditorDigestOverlayProjector object_projector;
         SceneEditorObjectMoveGizmoPreviewProjector(instance->scene_object_index,projector,&object_projector);
-        const bool context_wire = selected_object_index >= 0 &&
-                                  instance->scene_object_index != selected_object_index;
-        const SceneEditorMeshDisplayMode instance_mode = context_wire
-            ? SCENE_EDITOR_MESH_DISPLAY_WIRE : stats.mode;
+        const bool context_wire = false;
+        const SceneEditorMeshDisplayMode instance_mode = stats.mode;
         contract = SceneEditorMeshPreviewStoreGetContract(instance->asset_index);
         lod = SceneEditorMeshPreviewStoreGet(instance->asset_index);
         if (!contract || !lod) continue;
@@ -679,7 +673,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
         }
     }
     if (out_stats) *out_stats = stats;
-    return stats.rendered_instances > 0;
+    return surface_rendered || stats.rendered_instances > 0;
 }
 
 void SceneEditorMeshPreviewRenderToolbar(SDL_Renderer* renderer, const SDL_Rect* viewport) {
@@ -707,67 +701,16 @@ void SceneEditorMeshPreviewRenderToolbar(SDL_Renderer* renderer, const SDL_Rect*
     }
 }
 
-static bool scene_editor_mesh_preview_point_in_triangle(double px,
-                                                        double py,
-                                                        SDL_FPoint a,
-                                                        SDL_FPoint b,
-                                                        SDL_FPoint c) {
-    const double d1 = (px - b.x) * (a.y - b.y) - (a.x - b.x) * (py - b.y);
-    const double d2 = (px - c.x) * (b.y - c.y) - (b.x - c.x) * (py - c.y);
-    const double d3 = (px - a.x) * (c.y - a.y) - (c.x - a.x) * (py - a.y);
-    const bool has_neg = d1 < 0.0 || d2 < 0.0 || d3 < 0.0;
-    const bool has_pos = d1 > 0.0 || d2 > 0.0 || d3 > 0.0;
-    return !(has_neg && has_pos);
-}
-
-static bool scene_editor_mesh_preview_pick_bounds(
-    const SceneEditorDigestOverlayProjector* projector,
-    const CoreMeshAssetRuntimeContract* contract,
-    const RayTracingRuntimeMeshAssetInstance* instance,
-    int screen_x,
-    int screen_y,
-    double* out_area) {
-    SceneEditorMeshPreviewPoint3 points[8];
-    int min_x = 0;
-    int min_y = 0;
-    int max_x = 0;
-    int max_y = 0;
-    bool seeded = false;
-    scene_editor_mesh_preview_bounds_points(contract, instance, points);
-    for (int i = 0; i < 8; ++i) {
-        SDL_FPoint projected;
-        if (!scene_editor_mesh_preview_project(projector, points[i], &projected)) continue;
-        if (!seeded) {
-            min_x = max_x = (int)projected.x;
-            min_y = max_y = (int)projected.y;
-            seeded = true;
-        } else {
-            if ((int)projected.x < min_x) min_x = (int)projected.x;
-            if ((int)projected.x > max_x) max_x = (int)projected.x;
-            if ((int)projected.y < min_y) min_y = (int)projected.y;
-            if ((int)projected.y > max_y) max_y = (int)projected.y;
-        }
-    }
-    if (!seeded || screen_x < min_x - 5 || screen_x > max_x + 5 ||
-        screen_y < min_y - 5 || screen_y > max_y + 5) {
-        return false;
-    }
-    if (out_area) *out_area = (double)(max_x - min_x + 11) * (double)(max_y - min_y + 11);
-    return true;
-}
-
-int SceneEditorMeshPreviewPickObjectIndex(
+int SceneEditorMeshPreviewPickObjectHit(
     const SceneEditorDigestOverlayProjector* projector,
     int active_editor_mode,
     int selected_object_index,
     int screen_x,
-    int screen_y) {
+    int screen_y, double* out_depth) {
     int picked = -1;
     double picked_depth = -DBL_MAX;
-    double picked_area = DBL_MAX;
-    if (!projector ||
-        (active_editor_mode == EDITOR_MODE_MATERIAL &&
-         SceneEditorMeshPreviewModeButtonAtPoint(&projector->viewport, screen_x, screen_y) >= 0)) {
+    if(out_depth) *out_depth=-DBL_MAX;
+    if (!projector) {
         return -1;
     }
     for (int i = 0; i < SceneEditorMeshPreviewStoreInstanceCount(); ++i) {
@@ -784,19 +727,6 @@ int SceneEditorMeshPreviewPickObjectIndex(
         contract = SceneEditorMeshPreviewStoreGetContract(instance->asset_index);
         lod = SceneEditorMeshPreviewStoreGet(instance->asset_index);
         if (!contract || !lod) continue;
-        if (SceneEditorMeshPreviewModeGet() == SCENE_EDITOR_MESH_DISPLAY_BOUNDS) {
-            double area = 0.0;
-            if (scene_editor_mesh_preview_pick_bounds(projector,
-                                                      contract,
-                                                      instance,
-                                                      screen_x,
-                                                      screen_y,
-                                                      &area) && area < picked_area) {
-                picked = instance->scene_object_index;
-                picked_area = area;
-            }
-            continue;
-        }
         for (size_t t = 0u; t < lod->triangle_count; ++t) {
             const uint32_t ia = lod->indices[t * 3u + 0u];
             const uint32_t ib = lod->indices[t * 3u + 1u];
@@ -816,18 +746,27 @@ int SceneEditorMeshPreviewPickObjectIndex(
             wc = scene_editor_mesh_preview_world_point(lod->vertices[ic], contract, instance);
             if (!scene_editor_mesh_preview_project(projector, wa, &a) ||
                 !scene_editor_mesh_preview_project(projector, wb, &b) ||
-                !scene_editor_mesh_preview_project(projector, wc, &c) ||
-                !scene_editor_mesh_preview_point_in_triangle(screen_x, screen_y, a, b, c)) {
-                continue;
-            }
-            depth = (scene_editor_mesh_preview_view_depth(projector, wa) +
-                     scene_editor_mesh_preview_view_depth(projector, wb) +
-                     scene_editor_mesh_preview_view_depth(projector, wc)) / 3.0;
+                !scene_editor_mesh_preview_project(projector, wc, &c)) continue;
+            double denom=(b.y-c.y)*(a.x-c.x)+(c.x-b.x)*(a.y-c.y);
+            if(fabs(denom)<1e-9) continue;
+            double u=((b.y-c.y)*(screen_x+0.5-c.x)+(c.x-b.x)*(screen_y+0.5-c.y))/denom;
+            double v=((c.y-a.y)*(screen_x+0.5-c.x)+(a.x-c.x)*(screen_y+0.5-c.y))/denom;
+            double w=1-u-v;
+            if(u<0 || v<0 || w<0) continue;
+            depth=u*scene_editor_mesh_preview_view_depth(projector,wa)+
+                  v*scene_editor_mesh_preview_view_depth(projector,wb)+
+                  w*scene_editor_mesh_preview_view_depth(projector,wc);
             if (picked < 0 || depth > picked_depth) {
                 picked = instance->scene_object_index;
                 picked_depth = depth;
             }
         }
     }
+    if(out_depth) *out_depth=picked_depth;
     return picked;
+}
+
+int SceneEditorMeshPreviewPickObjectIndex(const SceneEditorDigestOverlayProjector* projector,
+    int mode,int selected,int x,int y) {
+    return SceneEditorMeshPreviewPickObjectHit(projector,mode,selected,x,y,NULL);
 }

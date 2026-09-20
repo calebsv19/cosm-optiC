@@ -25,37 +25,28 @@ void SceneEditorWorkspaceLayoutChrome(const SceneEditorPaneLayout* layout,
     memset(chrome, 0, sizeof(*chrome));
     if (!layout || layout->workspace_header_rect.w <= 0) return;
     SDL_Rect document = layout->mode_router_rect;
-    SDL_Rect workspaces = layout->workspace_actions_rect;
     SDL_Rect tools = layout->viewport_tools_rect;
-    static const int document_widths[] = {420, 58, 58, 70, 74, 96};
-    static const int workspace_widths[] = {82, 72, 88, 76, 112, 72, 104, 96};
-    static const int tool_widths[] = {58, 48, 58, 58, 62, 58, 62, 72, 72, 94, 66, 58, 78};
-
-    chrome->document_identity = row_item(document, 0, 6, document_widths);
-    chrome->undo = row_item(document, 1, 6, document_widths);
-    chrome->redo = row_item(document, 2, 6, document_widths);
-    chrome->actions[6] = row_item(document, 3, 6, document_widths);
-    chrome->actions[3] = row_item(document, 4, 6, document_widths);
-    chrome->actions[8] = row_item(document, 5, 6, document_widths);
-
-    chrome->workspace = row_item(workspaces, 0, 8, workspace_widths);
-    for (int i = 0; i < SCENE_WORKSPACE_MODE_COUNT; ++i)
-        chrome->modes[i] = row_item(workspaces, i + 1, 8, workspace_widths);
-    chrome->expand = row_item(workspaces, 6, 8, workspace_widths);
-    chrome->restore = row_item(workspaces, 7, 8, workspace_widths);
-
-    chrome->actions[0] = row_item(tools, 0, 13, tool_widths);
-    chrome->actions[1] = row_item(tools, 1, 13, tool_widths);
-    chrome->actions[2] = row_item(tools, 2, 13, tool_widths);
-    chrome->transforms[0] = row_item(tools, 3, 13, tool_widths);
-    chrome->transforms[1] = row_item(tools, 4, 13, tool_widths);
-    chrome->transforms[2] = row_item(tools, 5, 13, tool_widths);
-    chrome->transform_space = row_item(tools, 6, 13, tool_widths);
-    chrome->transform_snap = row_item(tools, 7, 13, tool_widths);
-    chrome->frame_all = row_item(tools, 8, 13, tool_widths);
-    chrome->frame_selected = row_item(tools, 9, 13, tool_widths);
-    chrome->actions[4] = row_item(tools, 10, 13, tool_widths);
-    chrome->actions[5] = row_item(tools, 11, 13, tool_widths);
-    chrome->actions[7] = row_item(tools, 12, 13, tool_widths);
-    chrome->gizmo_label = (SDL_Rect){0};
+    int h=document.h;
+    int menu_w=50*h/24;
+    for (int i=0;i<3;++i) chrome->menus[i]=(SDL_Rect){document.x+i*menu_w,document.y,menu_w-4,h};
+    chrome->actions[3]=(SDL_Rect){document.x+document.w-90*h/24,document.y,90*h/24,h};
+    chrome->document_identity=(SDL_Rect){document.x+3*menu_w+12,document.y,
+        document.w-3*menu_w-90*h/24-24,h};
+    int display_w=84*h/24;
+    chrome->display_mode=(SDL_Rect){tools.x+tools.w-display_w,tools.y,display_w,h};
+    tools.w-=display_w+8;
+    /* The center header owns workspace and transform tools. Extra settings live in View. */
+    static const int widths[]={112,48,48,54,48};
+    chrome->workspace=row_item(tools,0,5,widths);
+    int context_x=chrome->workspace.x+chrome->workspace.w+6;
+    int context_w=(tools.x+tools.w-context_x-4)/2;
+    if(context_w>90*h/24) context_w=90*h/24;
+    for(int i=0;i<2;++i) chrome->context_views[i]=(SDL_Rect){context_x+i*(context_w+4),tools.y,context_w,h};
+    chrome->actions[0]=row_item(tools,1,5,widths);
+    for(int i=0;i<3;++i) chrome->transforms[i]=row_item(tools,i+2,5,widths);
+    if (!layout->viewport_expanded)
+        chrome->actions[1]=(SDL_Rect){layout->left_pane_rect.x+layout->left_pane_rect.w-60,
+            tools.y,50,h};
+    /* Popup row geometry is stable for keyboard and native interaction tests. */
+    for(int i=0;i<5;++i) chrome->modes[i]=(SDL_Rect){chrome->workspace.x,tools.y+h+4+i*(h+4),210,h+4};
 }

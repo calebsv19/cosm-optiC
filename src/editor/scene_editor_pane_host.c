@@ -55,7 +55,7 @@ static float pane_host_clamp_float(float value, float min_value, float max_value
 
 static CorePaneRect scene_editor_pane_host_bounds_rect(const SceneEditorPaneHost* host, float width, float height) {
     float top = (float)host->workspace_header_height;
-    return (CorePaneRect){0.0f, top, width, height - top};
+    return (CorePaneRect){0.0f, top, width, height - top - 22};
 }
 
 static SDL_Rect pane_host_inset_rect(SDL_Rect rect, int inset) {
@@ -131,7 +131,7 @@ static bool scene_editor_pane_host_assign_layout(SceneEditorPaneHost* host) {
     int chrome_row_h = 0;
 
     if (!host) return false;
-    chrome_row_h = (host->workspace_header_height - 24) / 3;
+    chrome_row_h = host->workspace_header_height - 8;
     if ((!host->viewport_expanded &&
          (!scene_editor_pane_host_find_rect_for_pane_id(host, SCENE_EDITOR_PANE_ID_LEFT, &left_rect) ||
           !scene_editor_pane_host_find_rect_for_pane_id(host, SCENE_EDITOR_PANE_ID_RIGHT, &right_rect))) ||
@@ -161,29 +161,27 @@ static bool scene_editor_pane_host_assign_layout(SceneEditorPaneHost* host) {
     host->layout.left_content_rect =
         pane_host_reserve_top_space(pane_host_inset_rect(host->layout.left_pane_rect,
                                                          SCENE_EDITOR_CONTENT_PADDING),
-                                    SCENE_EDITOR_PANE_HEADER_HEIGHT);
+                                    host->workspace_header_height);
     host->layout.center_content_rect =
         pane_host_reserve_top_space(pane_host_inset_rect(host->layout.center_pane_rect,
                                                          SCENE_EDITOR_CONTENT_PADDING),
-                                    SCENE_EDITOR_PANE_HEADER_HEIGHT);
+                                    host->workspace_header_height);
     host->layout.right_content_rect =
         pane_host_reserve_top_space(pane_host_inset_rect(host->layout.right_pane_rect,
                                                          SCENE_EDITOR_CONTENT_PADDING),
-                                    SCENE_EDITOR_PANE_HEADER_HEIGHT);
+                                    host->workspace_header_height);
 
     host->layout.workspace_header_rect = (SDL_Rect){0, 0, (int)host->bounds_width,
                                                                   host->workspace_header_height};
-    host->layout.mode_router_rect = (SDL_Rect){10, 2, (int)host->bounds_width - 20, chrome_row_h};
-    host->layout.workspace_actions_rect = (SDL_Rect){10, 4 + chrome_row_h,
-                                                     (int)host->bounds_width - 20, chrome_row_h};
-    host->layout.viewport_tools_rect = (SDL_Rect){10, 6 + 2 * chrome_row_h,
-                                                  (int)host->bounds_width - 20, chrome_row_h};
-    host->layout.workspace_feedback_rect = (SDL_Rect){10, 8 + 3 * chrome_row_h,
-                                                      (int)host->bounds_width - 20, 16};
+    host->layout.mode_router_rect = (SDL_Rect){8, 4, (int)host->bounds_width - 16, chrome_row_h};
+    host->layout.viewport_tools_rect = (SDL_Rect){center_rect.x+8, center_rect.y+4,
+        center_rect.width-16, chrome_row_h};
+    host->layout.workspace_feedback_rect = (SDL_Rect){10,(int)host->bounds_height-20,
+        (int)host->bounds_width-20,18};
 
     viewport = pane_host_inset_rect(scene_editor_pane_rect_to_sdl(center_rect),
                                     SCENE_EDITOR_CONTENT_PADDING);
-    viewport = pane_host_reserve_top_space(viewport, SCENE_EDITOR_PANE_HEADER_HEIGHT);
+    viewport = pane_host_reserve_top_space(viewport, host->workspace_header_height);
     if (viewport.h < 0) viewport.h = 0;
     host->layout.viewport_rect = viewport;
     return true;
@@ -372,7 +370,7 @@ bool scene_editor_pane_host_rebuild(SceneEditorPaneHost* host, int width, int he
         int timeline_h = pane_host_clamp_int(host->target_timeline_height,
                                              SCENE_EDITOR_MIN_TIMELINE_HEIGHT,
                                              SCENE_EDITOR_MAX_TIMELINE_HEIGHT);
-        int content_h = height - host->workspace_header_height;
+        int content_h = height - host->workspace_header_height - 22;
         int max_timeline_h = content_h - SCENE_EDITOR_MIN_VIEWPORT_HEIGHT;
         if (max_timeline_h < SCENE_EDITOR_MIN_TIMELINE_HEIGHT) {
             scene_editor_pane_host_set_error(host,
@@ -392,7 +390,7 @@ bool scene_editor_pane_host_rebuild(SceneEditorPaneHost* host, int width, int he
 bool scene_editor_pane_host_init(SceneEditorPaneHost* host, int width, int height) {
     if (!host) return false;
     memset(host, 0, sizeof(*host));
-    host->workspace_header_height = 108;
+    host->workspace_header_height = 32;
     host->target_left_width = 286;
     host->target_right_width = 312;
     host->target_timeline_height = SCENE_EDITOR_DEFAULT_TIMELINE_HEIGHT;

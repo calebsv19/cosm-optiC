@@ -1,3 +1,6 @@
+#include "editor/editor_mode_router.h"
+#include <float.h>
+#include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
 
 #include <math.h>
@@ -147,4 +150,48 @@ int SceneEditorDigestOverlayPickObjectIndex(const SceneEditorDigestOverlayProjec
         &g_object_pick_index, (double)mx, (double)my, &pick);
     if (result.code != CORE_OK || !pick.found) return -1;
     return (int)pick.payload;
+}
+
+/* Reuse the viewport projector and loaded preview geometry. Origins and last-frame
+   hover are deliberately excluded: neither proves that geometry is under a click. */
+int SceneEditorViewportPickObject(const SceneEditorDigestOverlayProjector* projector,int mx,int my) {
+    if(!projector || mx<projector->viewport.x || my<projector->viewport.y ||
+       mx>=projector->viewport.x+projector->viewport.w || my>=projector->viewport.y+projector->viewport.h) return -1;
+    double best=-DBL_MAX;
+    int picked=SceneEditorMeshPreviewPickObjectHit(projector,EDITOR_MODE_OBJECT,-1,mx,my,&best);
+    RuntimeSceneBridge3DPrimitiveSeedState seeds={0};
+    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
+    if(!seeds.valid) return picked;
+    static const int faces[12][3]={{0,1,3},{0,3,2},{4,6,7},{4,7,5},
+        {0,4,5},{0,5,1},{2,3,7},{2,7,6},{0,2,6},{0,6,4},{1,5,7},{1,7,3}};
+    for(int i=0;i<seeds.primitive_count;++i) {
+        const RuntimeSceneBridgePrimitiveSeed* seed=&seeds.primitives[i];
+        bool plane=seed->kind==RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE;
+        if(!seed->has_dimensions || seed->scene_object_index<0 || seed->guide_only ||
+           (!plane && seed->kind!=RUNTIME_SCENE_BRIDGE_PRIMITIVE_RECT_PRISM && seed->kind!=RUNTIME_SCENE_BRIDGE_PRIMITIVE_BOX)) continue;
+        double x[8],y[8],z[8]; bool valid=true;
+        for(int corner=0;corner<8;++corner) {
+            double u=(corner&4 ? 1 : -1)*fmax(.05,fabs(seed->width)*.5);
+            double v=(corner&2 ? 1 : -1)*fmax(.05,fabs(seed->height)*.5);
+            double n=plane ? 0 : (corner&1 ? 1 : -1)*fmax(.05,fabs(seed->depth)*.5);
+            double wx=seed->origin_x+u*seed->axis_u_x+v*seed->axis_v_x+n*seed->normal_x;
+            double wy=seed->origin_y+u*seed->axis_u_y+v*seed->axis_v_y+n*seed->normal_y;
+            double wz=seed->origin_z+u*seed->axis_u_z+v*seed->axis_v_z+n*seed->normal_z;
+            valid &= SceneEditorDigestOverlayProjectPointF(projector,wx,wy,wz,&x[corner],&y[corner]);
+            z[corner]=SceneEditorDigestOverlayViewDepth(projector,wx,wy,wz);
+        }
+        if(!valid) continue;
+        for(int face=0;face<12;++face) {
+            int a=faces[face][0],b=faces[face][1],c=faces[face][2];
+            double denom=(y[b]-y[c])*(x[a]-x[c])+(x[c]-x[b])*(y[a]-y[c]);
+            if(fabs(denom)<1e-9) continue;
+            double u=((y[b]-y[c])*(mx+.5-x[c])+(x[c]-x[b])*(my+.5-y[c]))/denom;
+            double v=((y[c]-y[a])*(mx+.5-x[c])+(x[a]-x[c])*(my+.5-y[c]))/denom;
+            double w=1-u-v;
+            if(u<0 || v<0 || w<0) continue;
+            double depth=u*z[a]+v*z[b]+w*z[c];
+            if(depth>best) {best=depth;picked=seed->scene_object_index;}
+        }
+    }
+    return picked;
 }

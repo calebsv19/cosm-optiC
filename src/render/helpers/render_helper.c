@@ -380,7 +380,8 @@ static int RenderTextBlockWithColor(SDL_Renderer* renderer,
                                     int maxFontSize,
                                     bool wrapped,
                                     bool center_horizontal,
-                                    bool center_vertical) {
+                                    bool center_vertical,
+                                    bool fit_width) {
     int minFontSize = 10;  // Minimum readable font size
     int baseFontSize = 0;
     int chosenPointSize = 0;
@@ -395,7 +396,7 @@ static int RenderTextBlockWithColor(SDL_Renderer* renderer,
     baseFontSize = animation_config_scale_text_point_size(&animSettings, maxFontSize, minFontSize);
     if (baseFontSize < minFontSize) baseFontSize = minFontSize;
     chosenPointSize = baseFontSize;
-    if (!wrapped) {
+    if (!wrapped && fit_width) {
         while (chosenPointSize > minFontSize) {
             int draw_width = 0;
             TTF_Font* tempFont = RenderHelperOpenUIFontAtPointSize(renderer, chosenPointSize, minFontSize);
@@ -457,7 +458,21 @@ int RenderSizedText(SDL_Renderer* renderer, SDL_Rect area, const char* text,
     if (clipped) SDL_IntersectRect(&prior, &area, &visible);
     SDL_RenderSetClipRect(renderer, &visible);
     int height = RenderTextBlockWithColor(renderer, area, text, color, point_size,
-                                          wrapped, centered, centered);
+                                          wrapped, centered, centered, true);
+    SDL_RenderSetClipRect(renderer, clipped ? &prior : NULL);
+    return height;
+}
+
+int RenderFixedSizedText(SDL_Renderer* renderer, SDL_Rect area, const char* text,
+                    SDL_Color color, int point_size, bool wrapped, bool centered) {
+    if (!renderer || area.w <= 0 || area.h <= 0) return 0;
+    SDL_Rect prior, visible = area;
+    SDL_bool clipped = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer, &prior);
+    if (clipped) SDL_IntersectRect(&prior, &area, &visible);
+    SDL_RenderSetClipRect(renderer, &visible);
+    int height = RenderTextBlockWithColor(renderer, area, text, color, point_size,
+                                          wrapped, centered, centered, false);
     SDL_RenderSetClipRect(renderer, clipped ? &prior : NULL);
     return height;
 }
@@ -470,7 +485,7 @@ static void RenderTextWithColor(SDL_Renderer* renderer, SDL_Rect button, const c
                                    maxFontSize,
                                    false,
                                    true,
-                                   true);
+                                   true, true);
 }
 
 void RenderButtonText(SDL_Renderer* renderer, SDL_Rect button, const char* text) {
@@ -523,7 +538,7 @@ int RenderLabelTextLeft(SDL_Renderer* renderer, SDL_Rect area, const char* text,
                                            16,
                                            false,
                                            false,
-                                           false);
+                                           false, true);
     if (clip_was_enabled) {
         SDL_RenderSetClipRect(renderer, &previous_clip);
     } else {
@@ -551,7 +566,7 @@ int RenderLabelTextWrappedLeft(SDL_Renderer* renderer, SDL_Rect area, const char
                                            16,
                                            true,
                                            false,
-                                           false);
+                                           false, true);
     if (clip_was_enabled) {
         SDL_RenderSetClipRect(renderer, &previous_clip);
     } else {

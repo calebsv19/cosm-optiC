@@ -54,38 +54,12 @@ static int material_editor_draw_response_controls(SDL_Renderer* renderer,
         }
         cursor_y += MATERIAL_EDITOR_BUTTON_HEIGHT + MATERIAL_EDITOR_BUTTON_GAP;
     }
-    {
-        int grid_y = cursor_y;
-        int drawn_rows = 0;
-        int col_count = 4;
-        int col_w = (bounds.w - MATERIAL_EDITOR_CONTROL_GAP * (col_count - 1)) / col_count;
-        if (material_editor_has_room_for_optional_control(cursor_y,
-                                                           15 + MATERIAL_EDITOR_KNOB_HEIGHT,
-                                                           bottom_y)) {
-            MATERIAL_EDITOR_SECTION_LABEL(renderer, bounds, cursor_y, "Response Parameters", palette);
-            cursor_y += 15;
-            grid_y = cursor_y;
-        }
-        for (int i = 0; i < MATERIAL_EDITOR_PARAM_SLIDER_COUNT; ++i) {
-            MaterialEditorTextureParamKind kind = (MaterialEditorTextureParamKind)(i + 1);
-            int col = i % col_count;
-            int row = i / col_count;
-            int x = bounds.x + col * (col_w + MATERIAL_EDITOR_CONTROL_GAP);
-            int y = grid_y + row * (MATERIAL_EDITOR_KNOB_HEIGHT + MATERIAL_EDITOR_CONTROL_GAP);
-            int w = (col == col_count - 1) ? bounds.x + bounds.w - x : col_w;
-            if (!material_editor_has_room_for_optional_control(y,
-                                                               MATERIAL_EDITOR_KNOB_HEIGHT,
-                                                               bottom_y)) {
-                break;
-            }
-            MaterialEditorDrawParamSlider(renderer,
-                                          (SDL_Rect){x, y, w, MATERIAL_EDITOR_KNOB_HEIGHT},
-                                          kind,
-                                          obj,
-                                          palette);
-            if (drawn_rows < row + 1) drawn_rows = row + 1;
-        }
-        cursor_y += drawn_rows * (MATERIAL_EDITOR_KNOB_HEIGHT + MATERIAL_EDITOR_CONTROL_GAP);
+    int row_h=animation_config_scale_text_point_size(&animSettings,30,30);
+    for(int i=0;i<MATERIAL_EDITOR_PARAM_SLIDER_COUNT;++i) {
+        if(cursor_y+row_h>bottom_y) break;
+        MaterialEditorDrawParamSlider(renderer,(SDL_Rect){bounds.x,cursor_y,bounds.w,row_h-4},
+            (MaterialEditorTextureParamKind)(i+1),obj,palette);
+        cursor_y+=row_h;
     }
     return cursor_y;
 }
@@ -96,7 +70,6 @@ static int material_editor_draw_response_readback_grid(SDL_Renderer* renderer,
                                                        int bottom_y,
                                                        RayTracingThemePalette palette) {
     MaterialEditorResponseReadback readback = {0};
-    char line[192];
     if (!renderer) return cursor_y;
     if (!MaterialEditorBuildResponseReadback(&readback)) {
         return cursor_y;
@@ -104,77 +77,34 @@ static int material_editor_draw_response_readback_grid(SDL_Renderer* renderer,
     if (!material_editor_has_room_for_optional_control(cursor_y, 84, bottom_y)) {
         return cursor_y;
     }
-    MATERIAL_EDITOR_SECTION_LABEL(renderer, bounds, cursor_y, readback.title, palette);
-    cursor_y += 15;
-    RenderLabelTextWrappedLeft(renderer,
-                               (SDL_Rect){bounds.x, cursor_y, bounds.w, 30},
-                               readback.subtitle,
-                               palette.text_muted);
-    cursor_y += 32;
-    if (cursor_y + 16 <= bottom_y) {
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
-                            readback.route_label,
-                            palette.text_muted);
-        cursor_y += 18;
-    }
-    {
-        int col_count = 2;
-        int row_h = 34;
-        int col_w = (bounds.w - MATERIAL_EDITOR_CONTROL_GAP) / col_count;
-        for (int i = 0; i < readback.row_count; ++i) {
-            const MaterialEditorResponseRow* row = &readback.rows[i];
-            int col = i % col_count;
-            int grid_row = i / col_count;
-            int x = bounds.x + col * (col_w + MATERIAL_EDITOR_CONTROL_GAP);
-            int y = cursor_y + grid_row * row_h;
-            int w = col == col_count - 1 ? bounds.x + bounds.w - x : col_w;
-            int action_w = 18;
-            SDL_Color value_color = row->state == MATERIAL_EDITOR_RESPONSE_FIELD_GUARDED
-                                        ? palette.text_muted
-                                        : palette.text_primary;
-            if (y + row_h > bottom_y) break;
-            s_response_action_fields[i] = row->field;
-            snprintf(line, sizeof(line), "%s %s", row->label, row->value);
-            RenderLabelTextLeft(renderer,
-                                (SDL_Rect){x, y, w - 2 * action_w - 4, 16},
-                                line,
-                                value_color);
-            if (row->state == MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE &&
-                row->field != MATERIAL_EDITOR_RESPONSE_FIELD_NONE) {
-                s_response_action_rects[i][0] =
-                    (SDL_Rect){x + w - 2 * action_w - 2, y, action_w, 16};
-                s_response_action_rects[i][1] =
-                    (SDL_Rect){x + w - action_w, y, action_w, 16};
-                MaterialEditorDrawButton(renderer,
-                                         s_response_action_rects[i][0],
-                                         "-",
-                                         false,
-                                         palette);
-                MaterialEditorDrawButton(renderer,
-                                         s_response_action_rects[i][1],
-                                         "+",
-                                         false,
-                                         palette);
-            }
-            snprintf(line,
-                     sizeof(line),
-                     "%s | %s",
-                     MaterialEditorResponseFieldStateLabel(row->state),
-                     row->note);
-            RenderLabelTextLeft(renderer,
-                                (SDL_Rect){x, y + 16, w, 16},
-                                line,
-                                palette.text_muted);
+    int row_h=animation_config_scale_text_point_size(&animSettings,30,30);
+    for(int i=0;i<readback.row_count;++i) {
+        const MaterialEditorResponseRow* row=&readback.rows[i];
+        if(row->field==MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_DOMINANCE ||
+           row->field==MATERIAL_EDITOR_RESPONSE_FIELD_MIRROR_BASE ||
+           row->field==MATERIAL_EDITOR_RESPONSE_FIELD_DIFFUSE_BASE) continue;
+        if(cursor_y+row_h>bottom_y) break;
+        int label_w=bounds.w*45/100;
+        int action_w=22;
+        bool editable=row->state==MATERIAL_EDITOR_RESPONSE_FIELD_EDITABLE && row->field!=MATERIAL_EDITOR_RESPONSE_FIELD_NONE;
+        MaterialEditorTextLeft(renderer,(SDL_Rect){bounds.x,cursor_y,label_w-4,row_h-4},(row->field==MATERIAL_EDITOR_RESPONSE_FIELD_ROUGHNESS ? "Roughness" :
+            row->field==MATERIAL_EDITOR_RESPONSE_FIELD_REFLECTIVITY ? "Reflection" :
+            row->field==MATERIAL_EDITOR_RESPONSE_FIELD_SPECULAR ? "Specular" :
+            row->field==MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION ? "Transmission" : row->label),palette.text_muted);
+        SDL_Rect value_rect={bounds.x+label_w,cursor_y,bounds.w-label_w-(editable ? 2*action_w+4 : 0),row_h-4};
+        double red,green,blue;
+        if(row->field==MATERIAL_EDITOR_RESPONSE_FIELD_TINT && sscanf(row->value,"%lf %lf %lf",&red,&green,&blue)==3) {
+            SDL_SetRenderDrawColor(renderer,(Uint8)(material_editor_clamp01(red)*255),
+                (Uint8)(material_editor_clamp01(green)*255),(Uint8)(material_editor_clamp01(blue)*255),255);
+            SDL_RenderFillRect(renderer,&value_rect);
+        } else MaterialEditorTextLeft(renderer,value_rect,row->value,palette.text_primary);
+        s_response_action_fields[i]=row->field;
+        if(editable) for(int action=0;action<2;++action) {
+            SDL_Rect rect={bounds.x+bounds.w-(2-action)*action_w,cursor_y,action_w-2,row_h-4};
+            s_response_action_rects[i][action]=rect;
+            MaterialEditorDrawButton(renderer,rect,action ? "+" : "-",false,palette);
         }
-        cursor_y += ((readback.row_count + col_count - 1) / col_count) * row_h;
-    }
-    if (readback.has_guarded_fields && cursor_y + 18 <= bottom_y) {
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
-                            "Guarded rows are readback until their owner route is promoted.",
-                            palette.text_muted);
-        cursor_y += 20;
+        cursor_y+=row_h;
     }
     return cursor_y + MATERIAL_EDITOR_BUTTON_GAP;
 }
@@ -418,37 +348,24 @@ int MaterialEditorDrawCompactResponsePane(SDL_Renderer* renderer,
                                           int bottom_y,
                                           const SceneObject* obj,
                                           RayTracingThemePalette palette) {
-    cursor_y = material_editor_draw_active_layer_context(renderer,
-                                                         bounds,
-                                                         cursor_y,
-                                                         bottom_y,
-                                                         palette);
-    cursor_y = material_editor_draw_glass_overlay_shortcuts(renderer,
-                                                            bounds,
-                                                            cursor_y,
-                                                            bottom_y,
-                                                            obj,
-                                                            palette);
-    cursor_y = material_editor_draw_layer_blend_controls(renderer,
-                                                         bounds,
-                                                         cursor_y,
-                                                         bottom_y,
-                                                         palette);
-    cursor_y = material_editor_draw_layer_influence_controls(renderer,
-                                                             bounds,
-                                                             cursor_y,
-                                                             bottom_y,
-                                                             palette);
-    cursor_y = material_editor_draw_response_readback_grid(renderer,
-                                                           bounds,
-                                                           cursor_y,
-                                                           bottom_y,
-                                                           palette);
-    cursor_y = material_editor_draw_response_controls(renderer,
-                                                      bounds,
-                                                      cursor_y,
-                                                      bottom_y,
-                                                      obj,
-                                                      palette);
+    (void)obj;
+    cursor_y = material_editor_draw_response_readback_grid(renderer,bounds,cursor_y,bottom_y,palette);
     return cursor_y;
+}
+
+/* Deeper controls stay attached to the section whose data they edit. */
+int MaterialEditorDrawPatternParameters(SDL_Renderer* renderer, SDL_Rect bounds, int y, int bottom,
+                                        const SceneObject* obj, RayTracingThemePalette palette) {
+    return material_editor_draw_response_controls(renderer,bounds,y,bottom,obj,palette);
+}
+int MaterialEditorDrawLayerComposition(SDL_Renderer* renderer, SDL_Rect bounds, int y, int bottom,
+                                       RayTracingThemePalette palette) {
+
+    y=material_editor_draw_glass_overlay_shortcuts(renderer,bounds,y,bottom,material_editor_focused_object(),palette);
+    y=material_editor_draw_layer_blend_controls(renderer,bounds,y,bottom,palette);
+    return material_editor_draw_layer_influence_controls(renderer,bounds,y,bottom,palette);
+}
+
+int MaterialEditorDrawLayerDiagnostics(SDL_Renderer* r, SDL_Rect b, int y, int bottom, RayTracingThemePalette p) {
+    return material_editor_draw_active_layer_context(r,b,y,bottom,p);
 }

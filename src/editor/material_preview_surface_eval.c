@@ -101,6 +101,15 @@ static bool material_preview_surface_eval_apply_face_override_to_stack(
     return true;
 }
 
+bool MaterialPreviewSurfacePrepareObject(const SceneObject* object, int index,
+    RuntimeMaterialTextureStack* stack, RuntimeMaterialSurfaceEval* base) {
+    if (!object || !stack || !base) return false;
+    *base=material_preview_surface_eval_base(object);
+    if (!SceneEditorMaterialStackGetEffectiveObjectStack(object,index,stack))
+        RuntimeMaterialTextureStackBuildLegacyFromObject(object,stack);
+    return true;
+}
+
 bool MaterialPreviewSurfaceEvaluateObject(const SceneObject* object,
                                           int scene_object_index,
                                           const RuntimeMaterialTextureLayer* preview_overlay,

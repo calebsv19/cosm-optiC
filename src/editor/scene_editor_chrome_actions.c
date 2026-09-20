@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_list.h"
 #include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_pointer_event.h"
 #include "editor/scene_editor_sidebar.h"
@@ -328,20 +329,7 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
     metrics = SceneEditorDigestOverlayResolveBezierMetrics(&digest, &projector);
     plane_z = SceneEditorDigestOverlayResolveEditPlaneZ(&digest, &projector);
 
-    pick = SceneEditorMeshPreviewPickObjectIndex(&projector,
-                                                 EDITOR_MODE_OBJECT,
-                                                 -1,
-                                                 command->event->button.x,
-                                                 command->event->button.y);
-    if (pick < 0) {
-        pick = SceneEditorDigestOverlayPickObjectIndex(&projector,
-                                                       &digest,
-                                                       command->event->button.x,
-                                                       command->event->button.y);
-    }
-    if (pick < 0) {
-        pick = *env->digest_hover_object_index;
-    }
+    pick = SceneEditorViewportPickObject(&projector,command->event->button.x,command->event->button.y);
     if (pick >= 0) {
         if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
             return ObjectEditorDeleteObjectIndex(pick);
@@ -679,7 +667,6 @@ static bool scene_editor_dispatch_material_canvas_command(
         return false;
     }
     focused_object_index = MaterialEditorResolveFocusedObjectIndex();
-    if (focused_object_index < 0) return false;
     if (!SceneEditorDigestOverlayResolve(&digest)) return false;
     focused_origin = MaterialEditorGetViewMode() == MATERIAL_EDITOR_VIEW_FOCUSED_ORIGIN;
     if (!SceneEditorDigestOverlayBuildObjectProjector(&digest,
@@ -690,10 +677,13 @@ static bool scene_editor_dispatch_material_canvas_command(
                                                       &projector)) {
         return false;
     }
-    if (SceneEditorMeshPreviewHandleModeClick(&projector.viewport,
-                                              command->event->button.x,
-                                              command->event->button.y)) {
-        return true;
+    if(!focused_origin) {
+        int hit=SceneEditorViewportPickObject(&projector,command->event->button.x,command->event->button.y);
+        if(hit!=focused_object_index) {
+            MaterialEditorClearTriangleSelection();
+            ObjectEditorSetSelectedObjectIndex(hit);
+            return true;
+        }
     }
     additive = (SDL_GetModState() & KMOD_SHIFT) != 0;
     return MaterialEditorHandleCanvasPointerDown(&projector,
@@ -760,6 +750,19 @@ void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
         return;
     }
 
+    if (contract.activeMode==EDITOR_MODE_MATERIAL && env->pane_layout &&
+        !env->pane_layout->viewport_expanded && command->event->type==SDL_MOUSEBUTTONDOWN) {
+        SDL_Point point={command->event->button.x,command->event->button.y};
+        if(SDL_PointInRect(&point,&env->pane_layout->left_content_rect)) {
+            result->consumed=SceneEditorObjectListHandleClick(point.x,point.y);
+            return;
+        }
+        if(SDL_PointInRect(&point,&env->pane_layout->right_content_rect)) {
+            HandleMaterialEditorEvents(command->event);
+            result->consumed=true;
+            return;
+        }
+    }
     canvas_allowed_for_target = scene_editor_contract_canvas_allowed_for_target(&contract, command->target);
     if (command->kind != SCENE_EDITOR_PANE_COMMAND_KEY &&
         command->pane_hit_region != SCENE_EDITOR_PANE_HIT_CONTROLS &&

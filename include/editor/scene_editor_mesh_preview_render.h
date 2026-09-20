@@ -45,3 +45,8 @@ int SceneEditorMeshPreviewPickObjectIndex(
     int selected_object_index,
     int screen_x,
     int screen_y);
+
+/* Closest displayed mesh surface, with interpolated depth at the cursor. */
+int SceneEditorMeshPreviewPickObjectHit(const SceneEditorDigestOverlayProjector* projector,
+    int active_editor_mode, int selected_object_index, int screen_x, int screen_y,
+    double* out_depth);

@@ -4,13 +4,13 @@ MaterialEditorCompactLayoutRects s_material_editor_compact_layout_rects;
 
 const char* MaterialEditorSubPaneLabel(MaterialEditorSubPane pane) {
     pane = MaterialEditorSubPaneClamp(pane);
-    if (pane == MATERIAL_EDITOR_SUBPANE_STACK) return "Layer Stack";
-    if (pane == MATERIAL_EDITOR_SUBPANE_RESPONSE) return "Surface Response";
-    if (pane == MATERIAL_EDITOR_SUBPANE_TEXTURES) return "Textures & Channels";
-    if (pane == MATERIAL_EDITOR_SUBPANE_FACE) return "Face / Region";
-    if (pane == MATERIAL_EDITOR_SUBPANE_GRAPH) return "Node Graph";
-    if (pane == MATERIAL_EDITOR_SUBPANE_PROOF) return "Preview & Proof";
-    return "Layer Stack";
+    if (pane == MATERIAL_EDITOR_SUBPANE_STACK) return "Layers";
+    if (pane == MATERIAL_EDITOR_SUBPANE_RESPONSE) return "Appearance";
+    if (pane == MATERIAL_EDITOR_SUBPANE_TEXTURES) return "Pattern & mapping";
+    if (pane == MATERIAL_EDITOR_SUBPANE_FACE) return "Face assignments";
+    if (pane == MATERIAL_EDITOR_SUBPANE_GRAPH) return "Graph";
+    if (pane == MATERIAL_EDITOR_SUBPANE_PROOF) return "Preview & diagnostics";
+    return "Layers";
 }
 
 const char* MaterialEditorSubPaneCompactLabel(MaterialEditorSubPane pane) {
@@ -39,6 +39,7 @@ MaterialEditorSubPane MaterialEditorGetActiveSubPane(void) {
 
 void MaterialEditorSetActiveSubPane(MaterialEditorSubPane pane) {
     s_material_editor_active_subpane = MaterialEditorSubPaneClamp(pane);
+    s_material_editor_section_open = true;
 }
 
 bool MaterialEditorIdentityPopoverOpen(void) {

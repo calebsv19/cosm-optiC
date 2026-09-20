@@ -1,3 +1,4 @@
+#include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_mesh_preview_render.h"
@@ -62,8 +63,12 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
+    if (SceneEditorRenameActive() && SceneEditorRenameHandleEvent(event)) return;
+    if (editor->currentMode==EDITOR_MODE_MATERIAL && MaterialEditorHandlePopupEvent(event)) return;
+    if (SceneEditorWorkspaceProfileMenuOpen() && SceneEditorWorkspaceProfileHandleEvent(editor,event)) return;
     if (SceneEditorObjectMoveGizmoHandleEvent(event, editor->window)) return;
     if (SceneEditorLifecycleHandleEvent(editor,event)) return;
+    if (SceneEditorRenameHandleEvent(event)) return;
     if (event->type == SDL_DROPFILE) {
         if (!SceneEditorTransformPanelInteractionActive())
             (void)SceneEditorTransformPanelImportSTL(event->drop.file);
@@ -154,6 +159,7 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     }
     SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
     SceneEditorLifecycleRender(editor->renderer);
+    SceneEditorRenameRender(editor->renderer);
     render_end_frame();
 }
 
@@ -278,6 +284,7 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
 
             SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
             SceneEditorLifecycleRender(editor->renderer);
+    SceneEditorRenameRender(editor->renderer);
             render_end_frame();
             frame_dirty = false;
             last_render_ms = SDL_GetTicks();

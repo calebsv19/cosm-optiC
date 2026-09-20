@@ -187,7 +187,8 @@ void SceneEditorControlSurfaceBuild(const SceneEditorControlSurfaceInput* input,
             contract.laneCanvasEditEnabled = contract.laneCameraCanvasEditEnabled;
             break;
         case EDITOR_MODE_MATERIAL:
-            contract.laneCanvasEditEnabled = input->hasSelectedObject;
+            /* Object picking must work before material/face editing has a target. */
+            contract.laneCanvasEditEnabled = controlled_3d_lane || input->hasSelectedObject;
             break;
         default:
             contract.laneCanvasEditEnabled = false;

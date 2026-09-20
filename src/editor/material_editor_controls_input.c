@@ -66,11 +66,6 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
         }
         if (MaterialEditorGetRecipeMenuAxis() != MATERIAL_EDITOR_RECIPE_AXIS_NONE) {
             MaterialEditorSetRecipeMenuAxis(MATERIAL_EDITOR_RECIPE_AXIS_NONE);
-        }
-        if (material_editor_point_in_rect(mx,
-                                          my,
-                                          &s_material_editor_compact_layout_rects.identity_header)) {
-            MaterialEditorToggleIdentityPopover();
             return;
         }
         if (s_material_editor_compact_layout_rects.identity_popover_visible) {
@@ -86,7 +81,9 @@ void HandleMaterialEditorEvents(SDL_Event* event) {
             if (material_editor_point_in_rect(mx,
                                               my,
                                               &s_material_editor_compact_layout_rects.tab_rects[i])) {
+                bool was_open=s_material_editor_section_open && MaterialEditorGetActiveSubPane()==(MaterialEditorSubPane)i;
                 MaterialEditorSetActiveSubPane((MaterialEditorSubPane)i);
+                s_material_editor_section_open=!was_open;
                 MaterialEditorSetIdentityPopoverOpen(false);
                 return;
             }
@@ -416,4 +413,23 @@ MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my) {
         }
     }
     return MATERIAL_EDITOR_HIT_CANVAS;
+}
+
+bool MaterialEditorHandlePopupEvent(SDL_Event* event) {
+    if(!event || MaterialEditorGetRecipeMenuAxis()==MATERIAL_EDITOR_RECIPE_AXIS_NONE) return false;
+    if(event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE) {
+        MaterialEditorSetRecipeMenuAxis(MATERIAL_EDITOR_RECIPE_AXIS_NONE);return true;
+    }
+    if(event->type==SDL_MOUSEBUTTONDOWN) {
+        if(event->button.button==SDL_BUTTON_LEFT) HandleMaterialEditorEvents(event);
+        else MaterialEditorSetRecipeMenuAxis(MATERIAL_EDITOR_RECIPE_AXIS_NONE);
+        return true;
+    }
+    return false;
+}
+
+bool MaterialEditorScrollListAtPoint(int x, int y, int delta) {
+    if(material_editor_point_in_rect(x,y,&s_group_list_rect)) return material_editor_scroll_group_list(delta);
+    if(material_editor_point_in_rect(x,y,&s_layer_list_rect)) return material_editor_scroll_layer_list(delta);
+    return false;
 }

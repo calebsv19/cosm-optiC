@@ -6,6 +6,9 @@
 
 #include "render/runtime_material_texture_stack_3d.h"
 
+bool MaterialPreviewSurfacePrepareObject(const SceneObject* object, int scene_object_index,
+    RuntimeMaterialTextureStack* stack, RuntimeMaterialSurfaceEval* base);
+
 bool MaterialPreviewSurfaceEvaluateObject(const SceneObject* object,
                                           int scene_object_index,
                                           const RuntimeMaterialTextureLayer* preview_overlay,

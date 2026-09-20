@@ -12,6 +12,21 @@
 #include "render/render_helper.h"
 #include "scene/object_manager.h"
 #include "ui/shared_theme_font_adapter.h"
+#include "editor/scene_editor_typography.h"
+
+/* Fixed point-size material text, clipped to its row; no per-label shrinking. */
+static inline int MaterialEditorTextLeft(SDL_Renderer* r, SDL_Rect a, const char* t, SDL_Color c) {
+    return RenderFixedSizedText(r,a,t,c,13,false,false);
+}
+static inline int MaterialEditorTextWrapped(SDL_Renderer* r, SDL_Rect a, const char* t, SDL_Color c) {
+    return RenderFixedSizedText(r,a,t,c,13,true,false);
+}
+static inline void MaterialEditorTextCentered(SDL_Renderer* r, SDL_Rect a, const char* t, SDL_Color c) {
+    (void)RenderFixedSizedText(r,a,t,c,13,false,true);
+}
+#define RenderLabelTextLeft MaterialEditorTextLeft
+#define RenderLabelTextWrappedLeft MaterialEditorTextWrapped
+#define RenderButtonTextWithColor MaterialEditorTextCentered
 
 #define MATERIAL_EDITOR_BUTTON_HEIGHT 22
 #define MATERIAL_EDITOR_BUTTON_GAP 5
@@ -41,7 +56,7 @@
 #define MATERIAL_EDITOR_RESPONSE_ACTION_COUNT 2
 #define MATERIAL_EDITOR_GLASS_OVERLAY_ACTION_COUNT 5
 #define MATERIAL_EDITOR_LAYER_INFLUENCE_CONTROL_COUNT 5
-#define MATERIAL_EDITOR_COMPACT_HEADER_HEIGHT 24
+#define MATERIAL_EDITOR_COMPACT_HEADER_HEIGHT 102
 #define MATERIAL_EDITOR_COMPACT_TAB_HEIGHT 20
 #define MATERIAL_EDITOR_COMPACT_MIN_TAB_WIDTH 42
 #define MATERIAL_EDITOR_IDENTITY_POPOVER_HEIGHT 154
@@ -398,6 +413,7 @@ extern char s_material_editor_proof_readback_status[MATERIAL_EDITOR_PROOF_TEXT_C
 extern MaterialEditorSubPane s_material_editor_active_subpane;
 extern bool s_material_editor_identity_popover_open;
 extern MaterialEditorRecipeAxis s_material_editor_recipe_menu_axis;
+extern bool s_material_editor_section_open;
 extern MaterialEditorCompactLayoutRects s_material_editor_compact_layout_rects;
 
 SceneEditorMaterialTextureParamField material_editor_texture_param_field(

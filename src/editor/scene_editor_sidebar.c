@@ -1,3 +1,6 @@
+#include "editor/scene_editor_chrome_shell.h"
+#include "editor/scene_editor_surfaces.h"
+#include "editor/material_editor.h"
 #include "editor/scene_editor_document.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_pointer_event.h"
@@ -117,10 +120,12 @@ bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
             float delta = event->wheel.preciseY;
             if (delta == 0) delta = (float)event->wheel.y;
             if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) delta = -delta;
+            if(i==1 && animSettings.editorMode==EDITOR_MODE_MATERIAL &&
+               MaterialEditorScrollListAtPoint(x,y,delta>0 ? 1 : delta<0 ? -1 : 0)) return true;
             /* The outliner owns its rows; other sidebar space scrolls the pane. */
-            if (i == 0 && animSettings.editorMode == EDITOR_MODE_OBJECT &&
+            if (i == 0 && (animSettings.editorMode == EDITOR_MODE_OBJECT || animSettings.editorMode == EDITOR_MODE_MATERIAL) &&
                 SceneEditorWorkspaceProfileGet() != SCENE_WORKSPACE_ENVIRONMENT &&
-                (!library_active || SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SURFACE) &&
+                (!library_active || animSettings.editorMode == EDITOR_MODE_MATERIAL || SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SURFACE) &&
                 SceneEditorObjectListContainsPoint(x,y) &&
                 SceneEditorObjectListHandleWheel(x,y,delta)) return true;
             KitUiScrollResult result = kit_ui_eval_scroll(
@@ -136,6 +141,7 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
     const SceneEditorControlSurfaceContract* contract, SDL_Color title, SDL_Color body) {
     if(library_active || contract->activeMode!=EDITOR_MODE_OBJECT || SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_SCENE)
         SceneEditorObjectListClearHits();
+    RayTracingThemePalette surfaces=SceneEditorChromeShellResolvePalette();
     diagnostics_button=(SDL_Rect){0};
     if (!layout->viewport_expanded) {
         diagnostics_button=(SDL_Rect){layout->right_pane_rect.x+layout->right_pane_rect.w-88,
@@ -156,7 +162,8 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
             for (int tab=0;tab<2;++tab) {
                 tabs[tab]=(SDL_Rect){pane->viewport.x+tab*(pane->viewport.w/2),pane->viewport.y,
                     pane->viewport.w/2-4,row_height};
-                SDL_SetRenderDrawColor(renderer,body.r,body.g,body.b,library_active==tab ? 180 : 70);
+                SDL_Color tab_fill=library_active==tab ? surfaces.button_fill : surfaces.panel_fill;
+                SDL_SetRenderDrawColor(renderer,tab_fill.r,tab_fill.g,tab_fill.b,255);
                 SDL_RenderFillRect(renderer,&tabs[tab]);
                 SceneEditorButtonText(renderer,tabs[tab],tab ? "Assets" : "Scene",title);
             }
@@ -164,7 +171,8 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
             search_box=(SDL_Rect){0};
             if (!library_active) {
                 search_box=(SDL_Rect){pane->viewport.x,pane->viewport.y,pane->viewport.w-14,row_height};
-                SDL_SetRenderDrawColor(renderer,body.r,body.g,body.b,90);
+                SceneEditorSurfaceFill(renderer,search_box,surfaces.background_fill);
+                SDL_SetRenderDrawColor(renderer,surfaces.panel_border.r,surfaces.panel_border.g,surfaces.panel_border.b,255);
                 SDL_RenderDrawRect(renderer,&search_box);
                 char label[128]; snprintf(label,sizeof(label),"%s%s",search_active ? "> " : "",
                     search_text[0] ? search_text : "Search name, ID or type");
@@ -199,8 +207,8 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
         content.y -= (int)lroundf(pane->offset);
         /* Finite measure space; actual content end sets the scroll range. */
         content.h = animation_config_scale_text_point_size(&animSettings, 1400, 1400);
-        if (i==0 && contract->activeMode==EDITOR_MODE_OBJECT && !library_active &&
-            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE) {
+        if (i==0 && (contract->activeMode==EDITOR_MODE_MATERIAL || (contract->activeMode==EDITOR_MODE_OBJECT && !library_active &&
+            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE))) {
             pane->offset=0;
             content.y=pane->viewport.y;
             content.h=pane->viewport.h;
@@ -209,6 +217,9 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
         SDL_bool clipped = SDL_RenderIsClipEnabled(renderer);
         SDL_RenderGetClipRect(renderer, &old_clip);
         SDL_RenderSetClipRect(renderer, &pane->viewport);
+        SDL_Rect surface=pane->viewport;
+        surface.w-=14;
+        SceneEditorSurfaceFill(renderer,surface,SceneEditorSurfaceGroup(surfaces));
         int end;
         if (i == 0) {
             virtual_layout.left_content_rect = content;
@@ -219,8 +230,8 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
                 content.y+content.h,title,body);
         }
         pane->content = end - content.y + 8;
-        if (i==0 && contract->activeMode==EDITOR_MODE_OBJECT && !library_active &&
-            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE)
+        if (i==0 && (contract->activeMode==EDITOR_MODE_MATERIAL || (contract->activeMode==EDITOR_MODE_OBJECT && !library_active &&
+            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE)))
             pane->content=pane->viewport.h;
         SDL_RenderSetClipRect(renderer, clipped ? &old_clip : NULL);
         if (pane->content > pane->viewport.h) {

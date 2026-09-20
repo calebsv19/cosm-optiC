@@ -504,8 +504,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     bool material_focus_mode = (active_mode == EDITOR_MODE_MATERIAL);
     bool material_preview_rendered = false;
     bool preview_surface_composed = false;
-    SceneEditorMeshDisplayMode preview_mode = selected_object_index<0 ? SCENE_EDITOR_MESH_DISPLAY_WIRE :
-        active_mode==EDITOR_MODE_MATERIAL ? SceneEditorMeshPreviewModeGet() : SCENE_EDITOR_MESH_DISPLAY_MATERIAL;
+    SceneEditorMeshDisplayMode preview_mode = SceneEditorMeshPreviewModeGet();
     SceneEditorMaterialPreviewTriangleAddress selected_triangles
         [SCENE_EDITOR_MATERIAL_PREVIEW_MAX_TRIANGLES];
     int selected_triangle_count = 0;
@@ -568,7 +567,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                 selected_triangle_count += 1;
             }
         }
-        material_preview_rendered = (preview_mode == SCENE_EDITOR_MESH_DISPLAY_SOLID ||
+        material_preview_rendered = !preview_surface_composed && (preview_mode == SCENE_EDITOR_MESH_DISPLAY_SOLID ||
                                      preview_mode == SCENE_EDITOR_MESH_DISPLAY_MATERIAL) &&
             SceneEditorMaterialPreviewRenderFocusedObjectWithSelection(
                 renderer,
@@ -598,9 +597,7 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
                                             : (SDL_Color){84, 224, 255, 245};
             primitive_color.a = is_selected ? 210u : (is_hover ? 160u : 88u);
             if (selected_object_index>=0 && !is_selected && !is_hover) primitive_color=(SDL_Color){94,111,123,76};
-            const SceneEditorMeshDisplayMode primitive_mode =
-                !is_selected
-                    ? SCENE_EDITOR_MESH_DISPLAY_WIRE : preview_mode;
+            const SceneEditorMeshDisplayMode primitive_mode = preview_mode;
             if (primitive->kind == RUNTIME_SCENE_BRIDGE_PRIMITIVE_PLANE) {
                 if (primitive->guide_only) {
                     scene_editor_digest_overlay_draw_seed_plane_guide(renderer,

@@ -45,10 +45,16 @@ typedef struct ObjectMoveDrag {
 
 static ObjectMoveDrag s_drag;
 static SceneEditorObjectTransformMode s_mode;
+static bool s_selection_only;
+bool SceneEditorObjectSelectionOnly(void) { return s_selection_only; }
+void SceneEditorObjectSelectTool(void) {
+    SceneEditorObjectMoveGizmoReset();s_selection_only=true;
+    SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
+}
 SceneEditorObjectTransformMode SceneEditorObjectTransformModeGet(void) { return s_mode; }
 void SceneEditorObjectTransformModeSet(SceneEditorObjectTransformMode mode) {
     if (mode<0 || mode>SCENE_EDITOR_OBJECT_TRANSFORM_SCALE) return;
-    SceneEditorObjectMoveGizmoReset(); s_mode=mode;
+    SceneEditorObjectMoveGizmoReset(); s_mode=mode;s_selection_only=false;
 }
 static SceneEditorBezier3DGizmoAxis s_hover;
 
@@ -165,7 +171,7 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
     if (!s_drag.active && event->type==SDL_KEYDOWN && event->key.repeat==0 &&
         move_available(selected) && (event->key.keysym.mod&(KMOD_CTRL|KMOD_GUI|KMOD_ALT))==0) {
         if (event->key.keysym.sym==SDLK_q) {
-            SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
+            SceneEditorObjectSelectTool();
             SceneEditorChromeShellSetActionFeedback("Select tool (Q)",1200);return true;
         }
         SceneEditorObjectTransformMode shortcut_mode;
@@ -237,7 +243,7 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
     int x=hover ? event->motion.x : event->button.x;
     int y=hover ? event->motion.y : event->button.y;
     if ((SDL_GetModState() & (KMOD_ALT|KMOD_CTRL|KMOD_GUI)) ||
-        !ObjectEditorTransformHandlesVisible() || !move_available(selected) || !SceneEditorGetPaneLayout(&layout) ||
+        s_selection_only || !ObjectEditorTransformHandlesVisible() || !move_available(selected) || !SceneEditorGetPaneLayout(&layout) ||
         !SDL_PointInRect(&(SDL_Point){x,y},&layout.viewport_rect) ||
         !SceneEditorDigestOverlayResolve(&digest) ||
         !SceneEditorDigestOverlayBuildProjector(&digest,&layout.viewport_rect,
@@ -280,7 +286,7 @@ void SceneEditorObjectMoveGizmoRender(SDL_Renderer* renderer,
                                      int selected_object_index) {
     SceneEditorDocumentTransform transform = {0};
     char diagnostics[256] = {0};
-    if (!renderer || !projector || !digest || !ObjectEditorTransformHandlesVisible() || !move_available(selected_object_index) ||
+    if (!renderer || !projector || !digest || s_selection_only || !ObjectEditorTransformHandlesVisible() || !move_available(selected_object_index) ||
         !SceneEditorDocumentGetTransformForSceneIndex(selected_object_index, &transform,
             diagnostics, sizeof(diagnostics))) return;
     if (s_drag.active && !move_transaction_valid()) SceneEditorObjectMoveGizmoReset();

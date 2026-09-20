@@ -242,14 +242,17 @@ int MaterialEditorDrawGroupList(SDL_Renderer* renderer,
     }
     cursor_y += header_h;
     list_h = bottom_y - cursor_y;
+    int desired_h=(group_count<6 ? group_count : 6)*row_stride;
+    if(list_h>desired_h) list_h=desired_h;
     if (group_count <= 0 || list_h < MATERIAL_EDITOR_GROUP_ROW_HEIGHT) {
-        if (list_h > 18) {
+        if (bottom_y-cursor_y > 18) {
             RenderLabelTextWrappedLeft(renderer,
-                                       (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, list_h},
+                                       (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, 36},
                                        "No focused-object faces available.",
                                        palette.text_muted);
         }
-        return bottom_y;
+        s_group_panel_rect=(SDL_Rect){0};
+        return cursor_y+40;
     }
     visible_capacity = list_h / row_stride;
     if (visible_capacity < 1) visible_capacity = 1;
@@ -327,221 +330,51 @@ int MaterialEditorDrawGroupList(SDL_Renderer* renderer,
                                255);
         SDL_RenderFillRect(renderer, &thumb);
     }
-    return bottom_y;
+    s_group_panel_rect.h=header_h+list_h;
+    return cursor_y+list_h+6;
 }
 
-int MaterialEditorDrawLayerList(SDL_Renderer* renderer,
-                                SDL_Rect content_bounds,
-                                int cursor_y,
-                                int bottom_y,
-                                const SceneObject* obj,
-                                RayTracingThemePalette palette) {
-    RuntimeMaterialTextureStack stack = RuntimeMaterialTextureStackEmpty();
-    int focused_object_index = MaterialEditorResolveFocusedObjectIndex();
-    int active_index = 0;
-    int header_h = 18;
-    int action_h = 20;
-    int guard_h = 18;
-    int row_stride = MATERIAL_EDITOR_LAYER_ROW_HEIGHT + MATERIAL_EDITOR_LAYER_ROW_GAP;
-    int row_capacity = 0;
-    int panel_h = 0;
-    int action_w = 0;
-    int scrollbar_w = 0;
-    const char* action_labels[MATERIAL_EDITOR_LAYER_ACTION_COUNT] = {
-        "+", "Mute", "Up", "Down", "Del"
-    };
-    MaterialEditorLayerStructureReadback readback;
-    if (!renderer || !obj || content_bounds.w <= 0 || cursor_y >= bottom_y) return cursor_y;
+int MaterialEditorDrawLayerList(SDL_Renderer* renderer, SDL_Rect bounds, int y, int bottom,
+                                 const SceneObject* obj, RayTracingThemePalette palette) {
+    RuntimeMaterialTextureStack stack=RuntimeMaterialTextureStackEmpty();
+    int focused=MaterialEditorResolveFocusedObjectIndex();
     MaterialEditorResetLayerListLayout();
-    if (!MaterialEditorLayerModelGetEffectiveStack(obj, focused_object_index, &stack) ||
-        stack.layerCount <= 0) {
-        return cursor_y;
+    if(!renderer || !obj || !MaterialEditorLayerModelGetEffectiveStack(obj,focused,&stack)) return y;
+    int active=MaterialEditorLayerModelGetActiveIndex(obj,focused);
+    MaterialEditorLayerStructureReadback state;
+    MaterialEditorBuildLayerStructureReadback(&stack,active,
+        SceneEditorMaterialStackHasObjectStack(focused),SceneEditorMaterialGraphHasObjectGraph(focused),&state);
+    int row_h=animation_config_scale_text_point_size(&animSettings,28,28);
+    const char* labels[]={"Add",state.active_muted ? "Enable" : "Mute","Up","Down","Delete"};
+    const bool enabled[]={state.can_add,state.can_toggle,state.can_move_up,state.can_move_down,state.can_delete};
+    int width=(bounds.w-16)/5;
+    for(int i=0;i<5;++i) {
+        SDL_Rect r={bounds.x+i*(width+4),y,width,row_h-4};
+        if(enabled[i]) {s_layer_action_rects[i]=r;MaterialEditorDrawButton(renderer,r,labels[i],false,palette);}
+        else MaterialEditorTextCentered(renderer,r,labels[i],palette.text_muted);
     }
-    active_index = MaterialEditorLayerModelGetActiveIndex(obj, focused_object_index);
-    MaterialEditorBuildLayerStructureReadback(
-        &stack,
-        active_index,
-        SceneEditorMaterialStackHasObjectStack(focused_object_index),
-        SceneEditorMaterialGraphHasObjectGraph(focused_object_index),
-        &readback);
-    row_capacity = stack.layerCount < MATERIAL_EDITOR_MAX_LAYER_ROWS
-                       ? stack.layerCount
-                       : MATERIAL_EDITOR_MAX_LAYER_ROWS;
-    if (row_capacity < 1) row_capacity = 1;
-    panel_h = header_h + action_h + guard_h + MATERIAL_EDITOR_BUTTON_GAP +
-              row_capacity * row_stride;
-    if (!material_editor_has_room_for_optional_control(cursor_y, panel_h, bottom_y)) {
-        return cursor_y;
+    y+=row_h+6;
+    int capacity=stack.layerCount<MATERIAL_EDITOR_MAX_LAYER_ROWS ? stack.layerCount : MATERIAL_EDITOR_MAX_LAYER_ROWS;
+    if(s_layer_scroll_offset>stack.layerCount-capacity)s_layer_scroll_offset=stack.layerCount-capacity;
+    if(s_layer_scroll_offset<0)s_layer_scroll_offset=0;
+    s_layer_total_count=stack.layerCount;s_layer_visible_capacity=capacity;
+    s_layer_list_rect=(SDL_Rect){bounds.x,y,bounds.w,capacity*row_h};
+    s_layer_panel_rect=s_layer_list_rect;
+    for(int i=0;i<capacity && y+row_h<=bottom;++i) {
+        int index=i+s_layer_scroll_offset;
+        const RuntimeMaterialTextureLayer* layer=&stack.layers[index];
+        SDL_Rect row={bounds.x,y,bounds.w,row_h-2};
+        SDL_Color fill=index==active ? palette.button_fill : palette.panel_fill;
+        SDL_SetRenderDrawColor(renderer,fill.r,fill.g,fill.b,255);SDL_RenderFillRect(renderer,&row);
+        if(index==active) {SDL_SetRenderDrawColor(renderer,palette.accent_primary.r,palette.accent_primary.g,palette.accent_primary.b,255);SDL_RenderFillRect(renderer,(&(SDL_Rect){row.x,row.y,2,row.h}));}
+        char name[96];snprintf(name,sizeof(name),"%s%s",index==0 ? "Base: " : "",layer->displayName[0] ? layer->displayName : RuntimeMaterialTextureLayerKindDisplayName(layer->kind));
+        MaterialEditorTextLeft(renderer,(SDL_Rect){row.x+8,row.y,row.w-55,row.h},name,palette.text_primary);
+        s_layer_toggle_rects[i]=(SDL_Rect){row.x+row.w-42,row.y,42,row.h};
+        MaterialEditorDrawButton(renderer,s_layer_toggle_rects[i],layer->enabled ? "On" : "Off",false,palette);
+        s_layer_row_rects[i]=row;s_layer_row_indices[i]=index;s_layer_row_count++;
+        y+=row_h;
     }
-    s_layer_panel_rect = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, panel_h};
-    s_layer_total_count = stack.layerCount;
-    s_layer_visible_capacity = row_capacity;
-    if (s_layer_scroll_offset > stack.layerCount - row_capacity) {
-        s_layer_scroll_offset = stack.layerCount - row_capacity;
-    }
-    if (s_layer_scroll_offset < 0) s_layer_scroll_offset = 0;
-
-    RenderLabelTextLeft(renderer,
-                        (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, header_h},
-                        readback.header_label,
-                        palette.text_primary);
-    cursor_y += header_h;
-
-    action_w = (content_bounds.w - MATERIAL_EDITOR_BUTTON_GAP * (MATERIAL_EDITOR_LAYER_ACTION_COUNT - 1)) /
-               MATERIAL_EDITOR_LAYER_ACTION_COUNT;
-    for (int i = 0; i < MATERIAL_EDITOR_LAYER_ACTION_COUNT; ++i) {
-        int x = content_bounds.x + i * (action_w + MATERIAL_EDITOR_BUTTON_GAP);
-        int w = (i == MATERIAL_EDITOR_LAYER_ACTION_COUNT - 1)
-                    ? content_bounds.x + content_bounds.w - x
-                    : action_w;
-        bool active = false;
-        const char* label = action_labels[i];
-        if (i == 1 && active_index >= 0 && active_index < stack.layerCount) {
-            active = !stack.layers[active_index].enabled;
-            label = active ? "Unmute" : "Mute";
-        }
-        s_layer_action_rects[i] = (SDL_Rect){x, cursor_y, w, action_h};
-        MaterialEditorDrawButton(renderer, s_layer_action_rects[i], label, active, palette);
-    }
-    cursor_y += action_h + MATERIAL_EDITOR_BUTTON_GAP;
-    RenderLabelTextLeft(renderer,
-                        (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, guard_h},
-                        readback.guard_label,
-                        palette.text_muted);
-    cursor_y += guard_h;
-
-    scrollbar_w = stack.layerCount > row_capacity ? 8 : 0;
-    s_layer_list_rect = (SDL_Rect){content_bounds.x,
-                                   cursor_y,
-                                   content_bounds.w,
-                                   row_capacity * row_stride};
-    for (int i = 0; i < row_capacity; ++i) {
-        int layer_index = i + s_layer_scroll_offset;
-        RuntimeMaterialTextureLayer* layer = &stack.layers[layer_index];
-        MaterialEditorLayerStructureReadback row_readback;
-        SDL_Rect row = {content_bounds.x,
-                        cursor_y + i * row_stride,
-                        content_bounds.w - scrollbar_w - 4,
-                        MATERIAL_EDITOR_LAYER_ROW_HEIGHT};
-        int toggle_w = 38;
-        int row_action_w = 0;
-        int row_action_gap = 3;
-        int row_action_total_w = 0;
-        int row_label_w = 0;
-        SDL_Rect toggle = {row.x + row.w - toggle_w - 3,
-                           row.y + 3,
-                           toggle_w,
-                           row.h - 6};
-        bool row_active = layer_index == active_index;
-        SDL_Color fill = row_active ? ray_tracing_theme_resolve_button_active_fill(palette)
-                                    : palette.panel_fill;
-        SDL_Color text = row_active ? ray_tracing_theme_choose_button_text(fill, palette)
-                                    : layer->enabled ? palette.text_primary : palette.text_muted;
-        const char* role = RuntimeMaterialTextureLayerKindIsBase(layer->kind) ? "B" : "O";
-        const char* state = layer->enabled ? "On" : "Muted";
-        char channel_intent[40];
-        MaterialEditorFormatLayerChannelIntent(layer, channel_intent, sizeof(channel_intent));
-        MaterialEditorBuildLayerStructureReadback(
-            &stack,
-            layer_index,
-            readback.persisted_stack,
-            readback.graph_backed,
-            &row_readback);
-        if (row_active && !row_readback.active_base) {
-            row_action_w = 24;
-            row_action_total_w = row_action_w * MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT +
-                                 row_action_gap * (MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT - 1);
-        }
-        s_layer_row_rects[i] = row;
-        s_layer_toggle_rects[i] = toggle;
-        s_layer_row_indices[i] = layer_index;
-        snprintf(s_layer_row_labels[i],
-                 sizeof(s_layer_row_labels[i]),
-                 "#%d %s %.28s %s%s%s",
-                 layer_index,
-                 role,
-                 layer->displayName[0] ? layer->displayName
-                                       : RuntimeMaterialTextureLayerKindDisplayName(layer->kind),
-                 state,
-                 channel_intent[0] ? " " : "",
-                 channel_intent);
-        s_layer_row_count += 1;
-        row_label_w = row.w - toggle_w - row_action_total_w - 24;
-        if (row_label_w < 24) row_label_w = 24;
-        SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, row_active ? 255 : 210);
-        SDL_RenderFillRect(renderer, &row);
-        SDL_SetRenderDrawColor(renderer,
-                               row_active ? palette.accent_primary.r : palette.panel_border.r,
-                               row_active ? palette.accent_primary.g : palette.panel_border.g,
-                               row_active ? palette.accent_primary.b : palette.panel_border.b,
-                               255);
-        SDL_RenderDrawRect(renderer, &row);
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){row.x + 6,
-                                       row.y + 3,
-                                       row_label_w,
-                                       16},
-                            s_layer_row_labels[i],
-                            text);
-        if (row_action_total_w > 0) {
-            const char* row_action_labels[MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT] = {
-                "Up", "Dn", "Del"
-            };
-            bool row_action_enabled[MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT] = {
-                row_readback.can_move_up,
-                row_readback.can_move_down,
-                row_readback.can_delete
-            };
-            int action_x = toggle.x - row_action_gap - row_action_total_w;
-            for (int action_index = 0;
-                 action_index < MATERIAL_EDITOR_LAYER_ROW_ACTION_COUNT;
-                 ++action_index) {
-                SDL_Rect action_rect = {action_x +
-                                            action_index * (row_action_w + row_action_gap),
-                                        row.y + 3,
-                                        row_action_w,
-                                        row.h - 6};
-                if (row_action_enabled[action_index]) {
-                    s_layer_row_action_rects[i][action_index] = action_rect;
-                }
-                MaterialEditorDrawButton(renderer,
-                                         action_rect,
-                                         row_action_labels[action_index],
-                                         false,
-                                         palette);
-            }
-        }
-        MaterialEditorDrawButton(renderer, toggle, layer->enabled ? "On" : "Off", layer->enabled, palette);
-    }
-    if (scrollbar_w > 0) {
-        int track_h = row_capacity * row_stride - MATERIAL_EDITOR_LAYER_ROW_GAP;
-        int thumb_h = (track_h * row_capacity) / stack.layerCount;
-        int max_offset = stack.layerCount - row_capacity;
-        int thumb_travel = 0;
-        SDL_Rect track = {content_bounds.x + content_bounds.w - scrollbar_w,
-                          cursor_y,
-                          4,
-                          track_h};
-        SDL_Rect thumb = track;
-        if (thumb_h < 16) thumb_h = 16;
-        if (thumb_h > track_h) thumb_h = track_h;
-        thumb_travel = track_h - thumb_h;
-        thumb.h = thumb_h;
-        thumb.y = track.y + (max_offset > 0 ? (thumb_travel * s_layer_scroll_offset) / max_offset : 0);
-        SDL_SetRenderDrawColor(renderer,
-                               palette.panel_border.r,
-                               palette.panel_border.g,
-                               palette.panel_border.b,
-                               180);
-        SDL_RenderFillRect(renderer, &track);
-        SDL_SetRenderDrawColor(renderer,
-                               palette.accent_primary.r,
-                               palette.accent_primary.g,
-                               palette.accent_primary.b,
-                               255);
-        SDL_RenderFillRect(renderer, &thumb);
-    }
-    return s_layer_panel_rect.y + s_layer_panel_rect.h + MATERIAL_EDITOR_BUTTON_GAP;
+    return y+10;
 }
 
 int MaterialEditorDrawLayerKindButtons(SDL_Renderer* renderer,
@@ -667,9 +500,12 @@ void MaterialEditorDrawParamSlider(SDL_Renderer* renderer,
     int slot = material_editor_texture_param_slot(kind);
     if (!renderer || slot < 0) return;
     s_param_sections[slot] = bounds;
-    MaterialEditorKnobDraw(renderer,
-                           bounds,
-                           material_editor_label_for_param(obj, kind),
-                           normalized,
-                           palette);
+    int label_w=bounds.w*45/100;
+    MaterialEditorTextLeft(renderer,(SDL_Rect){bounds.x,bounds.y,label_w-4,bounds.h},
+        material_editor_label_for_param(obj,kind),palette.text_muted);
+    SDL_Rect field={bounds.x+label_w,bounds.y,bounds.w-label_w,bounds.h};
+    SDL_SetRenderDrawColor(renderer,palette.button_fill.r,palette.button_fill.g,palette.button_fill.b,255);
+    SDL_RenderFillRect(renderer,&field);
+    char value[40];snprintf(value,sizeof(value),"%.2f  ↕",normalized);
+    MaterialEditorTextLeft(renderer,(SDL_Rect){field.x+8,field.y,field.w-16,field.h},value,palette.text_primary);
 }

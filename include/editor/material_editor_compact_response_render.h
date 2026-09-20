@@ -14,4 +14,7 @@ int MaterialEditorDrawCompactResponsePane(SDL_Renderer* renderer,
                                           const SceneObject* obj,
                                           RayTracingThemePalette palette);
 
+int MaterialEditorDrawPatternParameters(SDL_Renderer*, SDL_Rect, int, int, const SceneObject*, RayTracingThemePalette);
+int MaterialEditorDrawLayerComposition(SDL_Renderer*, SDL_Rect, int, int, RayTracingThemePalette);
+int MaterialEditorDrawLayerDiagnostics(SDL_Renderer*, SDL_Rect, int, int, RayTracingThemePalette);
 #endif

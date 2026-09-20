@@ -7,14 +7,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class SceneEditorMeshPickScrollContractTest(unittest.TestCase):
-    def test_geometry_pick_precedes_origin_fallback_for_click_and_hover(self):
+    def test_hover_and_click_share_geometry_query_without_origin_fallback(self):
+        for name in ("scene_editor_chrome_actions.c", "scene_editor_digest_overlay.c"):
+            source = (ROOT / "src/editor" / name).read_text()
+            self.assertIn("SceneEditorViewportPickObject", source)
+            self.assertNotIn("SceneEditorDigestOverlayPickObjectIndex", source)
         chrome = (ROOT / "src/editor/scene_editor_chrome_actions.c").read_text()
-        overlay = (ROOT / "src/editor/scene_editor_digest_overlay.c").read_text()
-        for source in (chrome, overlay):
-            geometry = source.find("SceneEditorMeshPreviewPickObjectIndex")
-            origin = source.find("SceneEditorDigestOverlayPickObjectIndex", geometry)
-            self.assertGreaterEqual(geometry, 0)
-            self.assertGreater(origin, geometry)
+        self.assertNotIn("pick = *env->digest_hover_object_index", chrome)
 
     def test_object_list_uses_shared_scroll_contract_and_clipped_hit_rows(self):
         object_list = (ROOT / "src/editor/scene_editor_object_list.c").read_text()

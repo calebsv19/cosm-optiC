@@ -146,7 +146,17 @@ def main():
                        stdout=log,stderr=subprocess.STDOUT,check=True,timeout=120)
     hidden_frame=project/'renders/u23_hidden_tlas_blas_parity/frames/frame_0000.bmp'
     assert hidden_frame.exists() and digest(hidden_frame)!=digest(frame), 'Hidden mesh still renders identically'
-    report = {'status': 'passed', 'stable_id_selection_and_lock': True, 'visibility_lock_fresh_reopen': True, 'hidden_mesh_render_differs': True, 'rotation_scale_live_pixels': transform_changes,
+    # Document commands must remain visible and stationary in every workspace.
+    header_reference = None
+    for profile in range(5):
+        hw, hh, pixels = ppm(out / f'workspace_profile_{profile}.ppm')
+        header = pixels[:hw * round(32 * hw / 1280) * 3]
+        assert sum(channel > 90 for channel in header) > 1000, 'Document bar disappeared'
+        if header_reference is None:
+            header_reference = header
+        else:
+            assert header == header_reference, 'Workspace changed document bar rendering'
+    report = {'status': 'passed', 'viewport_geometry_selection_scene_and_material': True, 'document_bar_stable_all_workspaces': True, 'workspace_menu_dismissal_and_keyboard': True, 'stable_id_selection_and_lock': True, 'visibility_lock_fresh_reopen': True, 'hidden_mesh_render_differs': True, 'rotation_scale_live_pixels': transform_changes,
               'rotation_scale_committed_and_cancelled_fresh_reopen': True,
               'scene_unit_world_scale_conversion': True, 'live_preview_changed_pixels': changed,
               'primitive_preview_changed_pixels': primitive_changed,

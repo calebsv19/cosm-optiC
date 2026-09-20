@@ -75,6 +75,8 @@ int MaterialEditorRenderRightPanePreview(SDL_Renderer* renderer,
                                          int top_y,
                                          int bottom_y);
 void HandleMaterialEditorEvents(SDL_Event* event);
+bool MaterialEditorHandlePopupEvent(SDL_Event* event);
+bool MaterialEditorScrollListAtPoint(int x, int y, int delta);
 MaterialEditorHitRegion MaterialEditorHitRegionAtPoint(int mx, int my);
 bool MaterialEditorHandleCanvasPointerDown(const SceneEditorDigestOverlayProjector* projector,
                                            int mx,

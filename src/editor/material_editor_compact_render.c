@@ -1,3 +1,4 @@
+#include "editor/scene_editor_surfaces.h"
 #include "editor/material_editor_internal.h"
 
 #include <stdio.h>
@@ -46,7 +47,7 @@ static void material_editor_draw_panel_frame(SDL_Renderer* renderer,
                            palette.panel_fill.r,
                            palette.panel_fill.g,
                            palette.panel_fill.b,
-                           235);
+                           255);
     SDL_RenderFillRect(renderer, &rect);
     SDL_SetRenderDrawColor(renderer,
                            palette.panel_border.r,
@@ -60,79 +61,22 @@ static void material_editor_draw_shell(SDL_Renderer* renderer,
                                        const SceneObject* obj,
                                        int focused_index,
                                        RayTracingThemePalette palette) {
-    MaterialEditorMaterialReadback material = {0};
+    (void)focused_index;
     MaterialEditorRecipeReadback recipe = {0};
-    const char* source_label = "Preset";
-    char line[160];
-    char chip_label[3][80];
-    SDL_Rect header_text = s_material_editor_compact_layout_rects.identity_header;
-    SDL_Rect recipe_area = s_material_editor_compact_layout_rects.identity_header;
-    if (!renderer) return;
-    if (obj && MaterialEditorBuildMaterialReadback(&material) && material.graph_backed) {
-        source_label = "Graph";
-    } else if (material.custom_stack || material.authored_texture_bound) {
-        source_label = "Custom";
-    } else if (focused_index >= 0 && SceneEditorMaterialStackHasObjectStack(focused_index)) {
-        source_label = "Custom";
-    }
-    material_editor_draw_panel_frame(renderer,
-                                     s_material_editor_compact_layout_rects.identity_header,
-                                     palette);
-    header_text.x += 6;
-    header_text.w -= s_material_editor_compact_layout_rects.identity_disclosure.w + 12;
-    recipe_area.x += 6;
-    recipe_area.y += 2;
-    recipe_area.w -= s_material_editor_compact_layout_rects.identity_disclosure.w + 14;
-    recipe_area.h = MATERIAL_EDITOR_BUTTON_HEIGHT;
-    if (obj) {
-        if (MaterialEditorBuildRecipeReadback(&recipe)) {
-            snprintf(chip_label[0], sizeof(chip_label[0]), "%s v", recipe.family_label);
-            snprintf(chip_label[1], sizeof(chip_label[1]), "%s v", recipe.surface_label);
-            snprintf(chip_label[2], sizeof(chip_label[2]), "%s v", recipe.finish_label);
-            for (int i = 0; i < MATERIAL_EDITOR_RECIPE_ACTION_COUNT; ++i) {
-                int chip_w = (recipe_area.w - MATERIAL_EDITOR_BUTTON_GAP * 2) /
-                             MATERIAL_EDITOR_RECIPE_ACTION_COUNT;
-                int chip_x = recipe_area.x + i * (chip_w + MATERIAL_EDITOR_BUTTON_GAP);
-                if (i == MATERIAL_EDITOR_RECIPE_ACTION_COUNT - 1) {
-                    chip_w = recipe_area.x + recipe_area.w - chip_x;
-                }
-                s_recipe_action_rects[i] =
-                    (SDL_Rect){chip_x, recipe_area.y, chip_w, recipe_area.h};
-                MaterialEditorDrawButton(
-                    renderer,
-                    s_recipe_action_rects[i],
-                    chip_label[i],
-                    MaterialEditorGetRecipeMenuAxis() == (MaterialEditorRecipeAxis)i,
-                    palette);
-            }
-            line[0] = '\0';
-        } else {
-            snprintf(line,
-                     sizeof(line),
-                     "Mat Obj #%d  id=%d  %s",
-                     focused_index,
-                     obj->material_id,
-                     source_label);
-        }
-    } else {
-        snprintf(line, sizeof(line), "Mat no object");
-    }
-    if (line[0]) {
-        RenderLabelTextLeft(renderer, header_text, line, palette.text_primary);
-    }
-    MaterialEditorDrawButton(renderer,
-                             s_material_editor_compact_layout_rects.identity_disclosure,
-                             MaterialEditorIdentityPopoverOpen() ? "^" : "v",
-                             MaterialEditorIdentityPopoverOpen(),
-                             palette);
-    for (int i = 0; i < MATERIAL_EDITOR_SUBPANE_COUNT; ++i) {
-        SDL_Rect tab = s_material_editor_compact_layout_rects.tab_rects[i];
-        if (tab.w <= 0 || tab.h <= 0) continue;
-        MaterialEditorDrawButton(renderer,
-                                 tab,
-                                 MaterialEditorSubPaneCompactLabel((MaterialEditorSubPane)i),
-                                 MaterialEditorGetActiveSubPane() == (MaterialEditorSubPane)i,
-                                 palette);
+    SDL_Rect area = s_material_editor_compact_layout_rects.identity_header;
+    s_material_editor_compact_layout_rects.identity_disclosure = (SDL_Rect){0};
+    if (!obj || !MaterialEditorBuildRecipeReadback(&recipe)) return;
+    const char* labels[] = {"Material", "Pattern", "Finish"};
+    const char* values[] = {recipe.family_label, recipe.surface_label, recipe.finish_label};
+    int row_h = animation_config_scale_text_point_size(&animSettings, 30, 30);
+    int label_w = area.w * 32 / 100;
+    for (int i=0; i<3; ++i) {
+        SDL_Rect row = {area.x, area.y + i*row_h, label_w-6, row_h-4};
+        MaterialEditorTextLeft(renderer,row,labels[i],palette.text_muted);
+        s_recipe_action_rects[i]=(SDL_Rect){area.x+label_w,row.y,area.w-label_w,row.h};
+        char value[100]; snprintf(value,sizeof(value),"%s  v",values[i]);
+        MaterialEditorDrawButton(renderer,s_recipe_action_rects[i],value,
+            MaterialEditorGetRecipeMenuAxis()==(MaterialEditorRecipeAxis)i,palette);
     }
 }
 
@@ -546,31 +490,12 @@ static int material_editor_draw_graph_readback(SDL_Renderer* renderer,
                         line,
                         palette.text_primary);
     cursor_y += 18;
-    snprintf(line,
-             sizeof(line),
-             "Route %s",
-             readback.evaluator_route);
-    RenderLabelTextLeft(renderer,
-                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
-                        line,
-                        palette.text_muted);
-    cursor_y += 18;
-    snprintf(line,
-             sizeof(line),
-             "Nodes %d  Stack %d  Channels %d",
-             readback.graph_node_count,
-             readback.compiled_stack_layer_count,
-             readback.channel_ref_count);
-    RenderLabelTextLeft(renderer,
-                        (SDL_Rect){bounds.x, cursor_y, bounds.w, 16},
-                        line,
-                        palette.text_muted);
-    cursor_y += 18;
-    RenderLabelTextWrappedLeft(renderer,
-                               (SDL_Rect){bounds.x, cursor_y, bounds.w, 42},
-                               readback.integration_status,
-                               palette.text_muted);
-    cursor_y += 42;
+    snprintf(line,sizeof(line),"%d layers · %d texture outputs",readback.compiled_stack_layer_count,readback.channel_ref_count);
+    RenderLabelTextLeft(renderer,(SDL_Rect){bounds.x,cursor_y,bounds.w,22},line,palette.text_muted);
+    cursor_y+=26;
+    RenderLabelTextWrappedLeft(renderer,(SDL_Rect){bounds.x,cursor_y,bounds.w,42},
+        "Layer-based graph. Connected node editing is not available yet.",palette.text_muted);
+    cursor_y+=48;
     if (readback.has_graph &&
         SceneEditorMaterialGraphGetObjectGraph(readback.scene_object_index, &graph) &&
         material_editor_has_room_for_optional_control(cursor_y, 20, bottom_y)) {
@@ -729,6 +654,11 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
         snprintf(edit_text, sizeof(edit_text), "Object defaults");
     }
 
+    int row_h = animation_config_scale_text_point_size(&animSettings,30,30);
+    s_material_editor_compact_layout_rects.identity_header.h = row_h*3;
+    s_material_editor_compact_layout_rects.content.y = shell_bounds.y + row_h*3 + 8;
+    s_material_editor_compact_layout_rects.content.h = bottom_y - s_material_editor_compact_layout_rects.content.y;
+    memset(s_material_editor_compact_layout_rects.tab_rects,0,sizeof(s_material_editor_compact_layout_rects.tab_rects));
     material_editor_draw_shell(renderer, obj, focused_index, palette);
     pane_bounds = s_material_editor_compact_layout_rects.content;
     cursor_y = pane_bounds.y;
@@ -737,7 +667,7 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
     if (!obj) {
         RenderLabelTextWrappedLeft(renderer,
                                    pane_bounds,
-                                   "No object selected. Select an object in Objects mode first.",
+                                   "No object selected. Click an object in the viewport.",
                                    palette.text_muted);
         material_editor_draw_identity_popover(renderer,
                                               obj,
@@ -747,15 +677,45 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
                                               edit_text,
                                               palette);
         material_editor_draw_recipe_menu(renderer, palette);
-        return bottom_y;
+        return cursor_y+60;
     }
 
+    const MaterialEditorSubPane order[] = {MATERIAL_EDITOR_SUBPANE_RESPONSE,
+        MATERIAL_EDITOR_SUBPANE_TEXTURES, MATERIAL_EDITOR_SUBPANE_STACK,
+        MATERIAL_EDITOR_SUBPANE_FACE, MATERIAL_EDITOR_SUBPANE_GRAPH, MATERIAL_EDITOR_SUBPANE_PROOF};
+    const int disclosure_h=animation_config_scale_text_point_size(&animSettings,24,24);
+    for (int section=0; section<MATERIAL_EDITOR_SUBPANE_COUNT; ++section) {
+        MaterialEditorSubPane pane=order[section];
+        bool opened=s_material_editor_section_open && MaterialEditorGetActiveSubPane()==pane;
+        SDL_Rect header={pane_bounds.x,cursor_y,pane_bounds.w,disclosure_h};
+        s_material_editor_compact_layout_rects.tab_rects[pane]=header;
+        SceneEditorSurfaceFill(renderer,header,palette.button_fill);
+        SDL_SetRenderDrawColor(renderer,palette.panel_border.r,palette.panel_border.g,palette.panel_border.b,255);
+        SDL_RenderDrawLine(renderer,header.x,header.y,header.x+header.w,header.y);
+        SDL_Color label_color=opened ? palette.text_primary : palette.text_muted;
+        SDL_SetRenderDrawColor(renderer,label_color.r,label_color.g,label_color.b,255);
+        int cx=header.x+10,cy=header.y+header.h/2;
+        SDL_Point chevron[3];
+        if(opened) {
+            chevron[0]=(SDL_Point){cx-3,cy-2};chevron[1]=(SDL_Point){cx,cy+1};chevron[2]=(SDL_Point){cx+3,cy-2};
+        } else {
+            chevron[0]=(SDL_Point){cx-2,cy-3};chevron[1]=(SDL_Point){cx+1,cy};chevron[2]=(SDL_Point){cx-2,cy+3};
+        }
+        SDL_RenderDrawLine(renderer,chevron[0].x,chevron[0].y,chevron[1].x,chevron[1].y);
+        SDL_RenderDrawLine(renderer,chevron[1].x,chevron[1].y,chevron[2].x,chevron[2].y);
+        MaterialEditorTextLeft(renderer,(SDL_Rect){header.x+22,header.y,header.w-30,header.h},
+            MaterialEditorSubPaneLabel(pane),label_color);
+        cursor_y += disclosure_h;
+        if(!opened) continue;
+        cursor_y+=8;
+        pane_bounds.x+=8; pane_bounds.w-=16;
     if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_STACK) {
         cursor_y = MaterialEditorDrawLayerList(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
         if (material_editor_use_object_layer_controls(obj)) {
             cursor_y =
                 MaterialEditorDrawLayerKindButtons(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
         }
+        cursor_y = MaterialEditorDrawLayerComposition(renderer,pane_bounds,cursor_y,pane_bottom,palette);
     } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_RESPONSE) {
         cursor_y = MaterialEditorDrawCompactResponsePane(renderer,
                                                          pane_bounds,
@@ -764,12 +724,6 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
                                                          obj,
                                                          palette);
     } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_TEXTURES) {
-        cursor_y = material_editor_draw_texture_channel_readback(renderer,
-                                                                 pane_bounds,
-                                                                 cursor_y,
-                                                                 pane_bottom,
-                                                                 focused_index,
-                                                                 palette);
         cursor_y = MaterialEditorAuthoredTextureBindingRenderPaneControls(renderer,
                                                                           pane_bounds,
                                                                           cursor_y,
@@ -780,6 +734,7 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
             material_editor_draw_texture_kind_buttons(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
         cursor_y =
             material_editor_draw_placement_controls(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
+        cursor_y = MaterialEditorDrawPatternParameters(renderer,pane_bounds,cursor_y,pane_bottom,obj,palette);
     } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_FACE) {
         cursor_y = material_editor_draw_face_controls(renderer,
                                                       pane_bounds,
@@ -796,9 +751,14 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
                                                        pane_bottom,
                                                        palette);
     } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_PROOF) {
+        cursor_y=MaterialEditorDrawLayerDiagnostics(renderer,pane_bounds,cursor_y,pane_bottom,palette);
+        cursor_y=material_editor_draw_texture_channel_readback(renderer,pane_bounds,cursor_y,pane_bottom,focused_index,palette);
         cursor_y = material_editor_draw_proof_controls(renderer, pane_bounds, cursor_y, pane_bottom, palette);
     }
 
+        pane_bounds.x-=8; pane_bounds.w+=16;
+        cursor_y+=8;
+    }
     (void)cursor_y;
     material_editor_draw_identity_popover(renderer,
                                           obj,
@@ -808,5 +768,5 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
                                           edit_text,
                                           palette);
     material_editor_draw_recipe_menu(renderer, palette);
-    return bottom_y;
+    return cursor_y;
 }

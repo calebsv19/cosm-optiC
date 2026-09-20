@@ -23,9 +23,9 @@ static void test_pane_host_solves_left_center_right_shell(void) {
     assert(layout->center_pane_rect.w >= 360);
     assert(layout->center_pane_rect.w > layout->left_pane_rect.w);
     assert(layout->center_pane_rect.w > layout->right_pane_rect.w);
-    assert(layout->left_pane_rect.h == 760 - host.workspace_header_height);
-    assert(layout->center_pane_rect.h == 760 - host.workspace_header_height);
-    assert(layout->right_pane_rect.h == 760 - host.workspace_header_height);
+    assert(layout->left_pane_rect.h == 760 - host.workspace_header_height - 22);
+    assert(layout->center_pane_rect.h == 760 - host.workspace_header_height - 22);
+    assert(layout->right_pane_rect.h == 760 - host.workspace_header_height - 22);
 }
 
 static void test_pane_host_rebuild_respects_targets_and_minima(void) {
@@ -121,28 +121,24 @@ static void test_workspace_expand_restore_and_chrome_reachability(void) {
         assert(scene_editor_pane_host_rebuild(&host, sizes[i][0], sizes[i][1]));
         SceneEditorPaneLayout before = host.layout;
         SceneEditorWorkspaceLayoutChrome(&host.layout, &chrome);
-        for (int j = 0; j < SCENE_WORKSPACE_ACTION_COUNT; ++j) {
-            SDL_Rect r = chrome.actions[j];
-            assert(r.w >= 44 && r.h >= 24);
-            assert(r.x >= 0 && r.x + r.w <= sizes[i][0]);
-            assert(r.y + r.h < before.viewport_rect.y);
+        SDL_Rect document_controls[]={chrome.menus[0],chrome.menus[1],chrome.menus[2],
+            chrome.document_identity,chrome.actions[3]};
+        for (int j=0;j<5;++j) {
+            SDL_Rect rect=document_controls[j];
+            assert(rect.w>=44 && rect.h>=24);
+            assert(rect.y+rect.h<=before.workspace_header_rect.h);
+            if(j) assert(rect.x>document_controls[j-1].x+document_controls[j-1].w);
         }
-        assert(chrome.restore.x + chrome.restore.w <= sizes[i][0]);
-        SDL_Rect document_controls[]={chrome.document_identity,chrome.undo,chrome.redo,
-            chrome.actions[6],chrome.actions[3],chrome.actions[8]};
-        for (int j=0;j<6;++j) {
-            SDL_Rect r=document_controls[j];
-            assert(r.w>=44 && r.h>=24);
-            if (j) assert(r.x>document_controls[j-1].x+document_controls[j-1].w);
-        }
-        assert(chrome.workspace.x < chrome.modes[0].x);
-        for (int j=0;j<SCENE_WORKSPACE_MODE_COUNT;++j) {
-            assert(chrome.modes[j].x>=0 && chrome.modes[j].x+chrome.modes[j].w<=sizes[i][0]);
-            assert(chrome.modes[j].y+chrome.modes[j].h<=sizes[i][1]);
-            if (j) assert(chrome.modes[j].x>chrome.modes[j-1].x+chrome.modes[j-1].w);
-        }
-        assert(chrome.modes[SCENE_WORKSPACE_MODE_COUNT-1].x+
-               chrome.modes[SCENE_WORKSPACE_MODE_COUNT-1].w<chrome.expand.x);
+        assert(chrome.display_mode.x>chrome.transforms[2].x+chrome.transforms[2].w);
+        assert(chrome.display_mode.x+chrome.display_mode.w<=before.center_pane_rect.x+before.center_pane_rect.w);
+        assert(chrome.display_mode.y==chrome.workspace.y);
+        assert(chrome.workspace.x>=before.center_pane_rect.x);
+        assert(chrome.workspace.y>=before.center_pane_rect.y);
+        assert(chrome.transforms[2].x+chrome.transforms[2].w<=before.center_pane_rect.x+before.center_pane_rect.w);
+        assert(chrome.workspace.y+chrome.workspace.h<before.viewport_rect.y);
+        assert(chrome.actions[1].x+chrome.actions[1].w<=before.left_pane_rect.x+before.left_pane_rect.w);
+        assert(chrome.actions[6].w==0 && chrome.actions[8].w==0);
+        assert(before.workspace_feedback_rect.y>=before.center_pane_rect.y+before.center_pane_rect.h);
         assert(scene_editor_pane_host_set_viewport_expanded(&host, true));
         assert(host.layout.left_pane_rect.w == 0 && host.layout.right_pane_rect.w == 0);
         assert(host.layout.viewport_rect.w > before.viewport_rect.w);
@@ -155,7 +151,7 @@ static void test_workspace_expand_restore_and_chrome_reachability(void) {
         host.workspace_header_height = 160;
         assert(scene_editor_pane_host_rebuild(&host, sizes[i][0], sizes[i][1]));
         assert(host.layout.viewport_rect.y >= 160);
-        assert(host.layout.workspace_feedback_rect.y + host.layout.workspace_feedback_rect.h <= 160);
+        assert(host.layout.workspace_feedback_rect.y + host.layout.workspace_feedback_rect.h <= sizes[i][1]);
     }
 }
 

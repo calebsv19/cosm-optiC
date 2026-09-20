@@ -1,3 +1,7 @@
+#include "editor/scene_editor_material_stack.h"
+#include "editor/scene_editor_viewport_material.h"
+#include "editor/scene_editor_document.h"
+#include <stddef.h>
 #include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_mesh_preview_surface.h"
@@ -66,8 +70,8 @@ static uint64_t scene_editor_mesh_surface_hash(uint64_t hash,
 static bool scene_editor_mesh_surface_visible(int active_mode,
                                               int selected_object_index,
                                               int scene_object_index) {
-    (void)active_mode;
-    return selected_object_index>=0 && selected_object_index==scene_object_index;
+    (void)active_mode; (void)selected_object_index;
+    return scene_object_index>=0;
 }
 
 static uint64_t scene_editor_mesh_surface_signature(
@@ -82,6 +86,17 @@ static uint64_t scene_editor_mesh_surface_signature(
     hash = scene_editor_mesh_surface_hash(hash, &selected_object_index,
                                           sizeof(selected_object_index));
     hash = scene_editor_mesh_surface_hash(hash, &mode, sizeof(mode));
+    if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL) {
+        unsigned long long revision=SceneEditorDocumentRevision();
+        hash=scene_editor_mesh_surface_hash(hash,&revision,sizeof(revision));
+        for(int i=0;i<sceneSettings.objectCount;++i) {
+            const SceneObject* object=&sceneSettings.sceneObjects[i];
+            hash=scene_editor_mesh_surface_hash(hash,&object->color,offsetof(SceneObject,dirty)-offsetof(SceneObject,color));
+            RuntimeMaterialTextureStack stack={0};
+            if(SceneEditorMaterialStackGetEffectiveObjectStack(object,i,&stack))
+                hash=scene_editor_mesh_surface_hash(hash,&stack,sizeof(stack));
+        }
+    }
     SceneEditorDocumentTransform original,preview;
     if (SceneEditorObjectTransformPreview(selected_object_index,&original,&preview))
         hash=scene_editor_mesh_surface_hash(hash,&preview,sizeof(preview));
@@ -257,10 +272,36 @@ static SDL_Color scene_editor_mesh_surface_base_color(SceneEditorMeshDisplayMode
                        255u};
 }
 
+/* Stable object-space box projection for mesh assets without authored UVs.
+ * Choose the projection once per face, never from the changing camera. */
+static void material_uv(SceneEditorMeshSurfacePoint3 p,SceneEditorMeshPreviewShadeNormal normal,double* u,double* v) {
+    if(fabs(normal.z)>=fabs(normal.x) && fabs(normal.z)>=fabs(normal.y)) {*u=p.x;*v=p.y;}
+    else if(fabs(normal.y)>=fabs(normal.x)) {*u=p.x;*v=p.z;}
+    else {*u=p.y;*v=p.z;}
+}
+static SceneEditorMeshPreviewShadeNormal material_view(const SceneEditorDigestOverlayProjector* p) {
+    return (SceneEditorMeshPreviewShadeNormal){sin(p->pitch_rad)*sin(p->yaw_rad),sin(p->pitch_rad)*cos(p->yaw_rad),cos(p->pitch_rad)};
+}
+static SceneEditorMeshSurfacePoint3 primitive_local(SceneEditorMeshSurfacePoint3 p,const RuntimeSceneBridgePrimitiveSeed* seed) {
+    p.x-=seed->origin_x;p.y-=seed->origin_y;p.z-=seed->origin_z;
+    return (SceneEditorMeshSurfacePoint3){
+        0.5+(p.x*seed->axis_u_x+p.y*seed->axis_u_y+p.z*seed->axis_u_z)/fmax(fabs(seed->width),0.1),
+        0.5+(p.x*seed->axis_v_x+p.y*seed->axis_v_y+p.z*seed->axis_v_z)/fmax(fabs(seed->height),0.1),
+        0.5+(p.x*seed->normal_x+p.y*seed->normal_y+p.z*seed->normal_z)/fmax(fabs(seed->depth),0.1)};
+}
+static SceneEditorMeshSurfacePoint3 mesh_local(CoreObjectVec3 p,const CoreMeshAssetRuntimeContract* c) {
+    return (SceneEditorMeshSurfacePoint3){
+        (p.x-c->local_bounds.min.x)/fmax(c->local_bounds.max.x-c->local_bounds.min.x,1e-9),
+        (p.y-c->local_bounds.min.y)/fmax(c->local_bounds.max.y-c->local_bounds.min.y,1e-9),
+        (p.z-c->local_bounds.min.z)/fmax(c->local_bounds.max.z-c->local_bounds.min.z,1e-9)};
+}
+
 static void scene_editor_primitive_surface_rasterize_triangle(
     const SceneEditorDigestOverlayProjector* projector,
     const SceneEditorPrimitivePreviewTriangle* triangle,
     int scene_object_index,
+    const RuntimeSceneBridgePrimitiveSeed* primitive,
+    const SceneEditorViewportMaterial* material,
     SceneEditorMeshDisplayMode mode,
     double scale,
     SceneEditorMeshPreviewFrameStats* stats) {
@@ -298,6 +339,13 @@ static void scene_editor_primitive_surface_rasterize_triangle(
     if (max_x >= g_surface.width) max_x = g_surface.width - 1;
     if (max_y >= g_surface.height) max_y = g_surface.height - 1;
     normal = scene_editor_mesh_surface_normal(wa, wb, wc);
+    double ua=0,va=0,ub=0,vb=0,uc=0,vc=0;
+    SceneEditorMeshPreviewShadeNormal view=material_view(projector);
+    if(material) {
+        SceneEditorMeshSurfacePoint3 la=primitive_local(wa,primitive),lb=primitive_local(wb,primitive),lc=primitive_local(wc,primitive);
+        SceneEditorMeshPreviewShadeNormal face=scene_editor_mesh_surface_normal(la,lb,lc);
+        material_uv(la,face,&ua,&va);material_uv(lb,face,&ub,&vb);material_uv(lc,face,&uc,&vc);
+    }
     for (int y = min_y; y <= max_y; ++y) {
         for (int x = min_x; x <= max_x; ++x) {
             const double px = (double)x + 0.5;
@@ -311,7 +359,8 @@ static void scene_editor_primitive_surface_rasterize_triangle(
             if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
             depth = w0 * a.depth + w1 * b.depth + w2 * c.depth;
             if (!SceneEditorMeshPreviewDepthWins(depth, g_surface.depth[pixel])) continue;
-            color = SceneEditorMeshPreviewShadeColor(base, normal);
+            color = material ? SceneEditorViewportMaterialShade(material,normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
+                             : SceneEditorMeshPreviewShadeColor(base, normal);
             g_surface.depth[pixel] = depth;
             g_surface.owner[pixel] = scene_object_index;
             g_surface.rgba[pixel * 4u + 0u] = color.r;
@@ -338,10 +387,12 @@ static void scene_editor_primitive_surface_rasterize(
                                                    &triangle_count)) {
         return;
     }
+    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorViewportMaterialPrepare(primitive->scene_object_index) : NULL;
     for (size_t i = 0u; i < triangle_count; ++i) {
         scene_editor_primitive_surface_rasterize_triangle(projector,
                                                           &triangles[i],
                                                           primitive->scene_object_index,
+                                                          primitive, material,
                                                           mode,
                                                           scale,
                                                           stats);
@@ -361,6 +412,8 @@ static void scene_editor_mesh_surface_rasterize(
     const SDL_Color base = scene_editor_mesh_surface_base_color(
         mode,
         instance->scene_object_index);
+    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
+    SceneEditorMeshPreviewShadeNormal view=material_view(projector);
     for (size_t triangle = 0u; triangle < lod->triangle_count; ++triangle) {
         const uint32_t ia = lod->indices[triangle * 3u + 0u];
         const uint32_t ib = lod->indices[triangle * 3u + 1u];
@@ -424,6 +477,12 @@ static void scene_editor_mesh_surface_rasterize(
                 normal_c = scene_editor_mesh_surface_world_normal(local_normal, instance);
             }
         }
+        double ua=0,va=0,ub=0,vb=0,uc=0,vc=0;
+        if(material) {
+            SceneEditorMeshSurfacePoint3 la=mesh_local(lod->vertices[ia],contract),lb=mesh_local(lod->vertices[ib],contract),lc=mesh_local(lod->vertices[ic],contract);
+            SceneEditorMeshPreviewShadeNormal face=scene_editor_mesh_surface_normal(la,lb,lc);
+            material_uv(la,face,&ua,&va);material_uv(lb,face,&ub,&vb);material_uv(lc,face,&uc,&vc);
+        }
         for (int y = min_y; y <= max_y; ++y) {
             for (int x = min_x; x <= max_x; ++x) {
                 const double px = (double)x + 0.5;
@@ -436,11 +495,10 @@ static void scene_editor_mesh_surface_rasterize(
                 if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
                 depth = w0 * a.depth + w1 * b.depth + w2 * c.depth;
                 if (!SceneEditorMeshPreviewDepthWins(depth, g_surface.depth[pixel])) continue;
-                color = SceneEditorMeshPreviewShadeColor(
-                    base,
-                    (SceneEditorMeshPreviewShadeNormal){w0 * normal_a.x + w1 * normal_b.x + w2 * normal_c.x,
-                                                         w0 * normal_a.y + w1 * normal_b.y + w2 * normal_c.y,
-                                                         w0 * normal_a.z + w1 * normal_b.z + w2 * normal_c.z});
+                SceneEditorMeshPreviewShadeNormal shading_normal={w0*normal_a.x+w1*normal_b.x+w2*normal_c.x,
+                    w0*normal_a.y+w1*normal_b.y+w2*normal_c.y,w0*normal_a.z+w1*normal_b.z+w2*normal_c.z};
+                color=material ? SceneEditorViewportMaterialShade(material,shading_normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
+                               : SceneEditorMeshPreviewShadeColor(base,shading_normal);
                 g_surface.depth[pixel] = depth;
                 g_surface.owner[pixel] = instance->scene_object_index;
                 g_surface.rgba[pixel * 4u + 0u] = color.r;
@@ -534,9 +592,7 @@ bool SceneEditorMeshPreviewSurfaceRender(
          mode != SCENE_EDITOR_MESH_DISPLAY_MATERIAL)) {
         return false;
     }
-    SceneEditorDigestOverlayProjector display_projector;
-    SceneEditorObjectMoveGizmoPreviewProjector(selected_object_index,projector,&display_projector);
-    projector=&display_projector;
+
     signature = scene_editor_mesh_surface_signature(projector,
                                                     active_editor_mode,
                                                     selected_object_index,
@@ -573,7 +629,9 @@ bool SceneEditorMeshPreviewSurfaceRender(
                                                    primitive->scene_object_index)) {
                 continue;
             }
-            scene_editor_primitive_surface_rasterize(projector,
+            SceneEditorDigestOverlayProjector object_projector;
+            SceneEditorObjectMoveGizmoPreviewProjector(primitive->scene_object_index,projector,&object_projector);
+            scene_editor_primitive_surface_rasterize(&object_projector,
                                                      primitive,
                                                      mode,
                                                      scale,
@@ -600,7 +658,9 @@ bool SceneEditorMeshPreviewSurfaceRender(
             RayTracingRuntimeMeshAssetInstance display_instance;
             SceneEditorObjectTransformPreviewMesh(instance,&display_instance);
             instance=&display_instance;
-            scene_editor_mesh_surface_rasterize(projector,
+            SceneEditorDigestOverlayProjector object_projector;
+            SceneEditorObjectMoveGizmoPreviewProjector(instance->scene_object_index,projector,&object_projector);
+            scene_editor_mesh_surface_rasterize(&object_projector,
                                                 instance,
                                                 contract,
                                                 lod,
@@ -632,6 +692,7 @@ bool SceneEditorMeshPreviewSurfaceRender(
 }
 
 void SceneEditorMeshPreviewSurfaceReset(SDL_Renderer* renderer) {
+    SceneEditorViewportMaterialReset();
     VkRenderer* vk = (VkRenderer*)renderer;
     if (g_surface.texture_valid && vk) {
         vk_renderer_wait_idle(vk);

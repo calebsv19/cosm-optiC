@@ -1,3 +1,4 @@
+#include "editor/scene_editor_surfaces.h"
 #include "editor/material_editor.h"
 #include "editor/material_editor_internal.h"
 
@@ -87,7 +88,8 @@ double s_material_editor_param_drag_start_value = 0.0;
 MaterialEditorProofReadback s_material_editor_proof_readback;
 bool s_material_editor_proof_readback_valid = false;
 char s_material_editor_proof_readback_status[MATERIAL_EDITOR_PROOF_TEXT_CAPACITY];
-MaterialEditorSubPane s_material_editor_active_subpane = MATERIAL_EDITOR_SUBPANE_STACK;
+MaterialEditorSubPane s_material_editor_active_subpane = MATERIAL_EDITOR_SUBPANE_RESPONSE;
+bool s_material_editor_section_open = true;
 bool s_material_editor_identity_popover_open = false;
 MaterialEditorRecipeAxis s_material_editor_recipe_menu_axis = MATERIAL_EDITOR_RECIPE_AXIS_NONE;
 
@@ -226,7 +228,7 @@ RayTracingThemePalette material_editor_palette(void) {
         palette.text_muted = (SDL_Color){210, 210, 215, 255};
         palette.accent_primary = (SDL_Color){120, 200, 255, 255};
     }
-    return palette;
+    return SceneEditorSurfacePalette(palette);
 }
 
 double material_editor_value_for_slider(const SceneObject* obj, MaterialEditorSliderKind kind) {
@@ -332,7 +334,7 @@ static RuntimeMaterialTextureLayerKind material_editor_active_layer_kind_for_lab
 
 const char* material_editor_label_for_param(const SceneObject* obj,
                                             MaterialEditorTextureParamKind kind) {
-    static const char* generic_labels[] = {"Coverage", "Grain", "Edge", "Contrast", "Flow", "Color", "Damage"};
+    static const char* generic_labels[] = {"Coverage", "Grain", "Edge softness", "Contrast", "Flow", "Color depth", "Damage"};
     static const char* fog_labels[] = {"Density", "Drift", "Soft", "Fade", "Flow", "Tint", "Haze"};
     static const char* grime_labels[] = {"Cover", "Streak", "Edge", "Dark", "Run", "Tint", "Dirt"};
     static const char* oil_labels[] = {"Film", "Gloss", "Edge", "Sheen", "Smear", "Tint", "Break"};
@@ -508,7 +510,7 @@ int MaterialEditorRenderPaneControls(SDL_Renderer* renderer,
 
     if (!obj) {
         SDL_Rect label = {content_bounds.x, cursor_y, content_bounds.w, bottom_y - cursor_y};
-        RenderLabelTextWrappedLeft(renderer, label, "No object selected. Select an object in Objects mode first.", palette.text_muted);
+        RenderLabelTextWrappedLeft(renderer, label, "No object selected. Click an object in the viewport.", palette.text_muted);
         return bottom_y;
     }
 
@@ -758,7 +760,7 @@ int MaterialEditorRenderRightPanePreview(SDL_Renderer* renderer,
         SDL_Rect label = {content_bounds.x, top_y, content_bounds.w, bottom_y - top_y};
         RenderLabelTextWrappedLeft(renderer,
                                    label,
-                                   "No object selected. Select an object in Objects mode first.",
+                                   "No object selected. Click an object in the viewport.",
                                    palette.text_muted);
         return bottom_y;
     }

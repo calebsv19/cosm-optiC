@@ -2678,17 +2678,17 @@ static int test_material_editor_focuses_last_selected_and_updates_texture_fields
                 (MaterialEditorSetSolidFacesEnabled(true), MaterialEditorGetSolidFacesEnabled()));
     assert_true("material_editor_focuses_last_selected",
                 MaterialEditorResolveFocusedObjectIndex() == 1);
-    assert_true("material_editor_subpane_default_stack",
-                MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_STACK &&
+    assert_true("material_editor_subpane_default_appearance",
+                MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_RESPONSE &&
                     strcmp(MaterialEditorSubPaneLabel(MATERIAL_EDITOR_SUBPANE_STACK),
-                           "Layer Stack") == 0 &&
+                           "Layers") == 0 &&
                     strcmp(MaterialEditorSubPaneCompactLabel(MATERIAL_EDITOR_SUBPANE_STACK),
                            "Stack") == 0);
     MaterialEditorSetActiveSubPane(MATERIAL_EDITOR_SUBPANE_TEXTURES);
     assert_true("material_editor_subpane_switches_textures",
                 MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_TEXTURES &&
                     strcmp(MaterialEditorSubPaneLabel(MATERIAL_EDITOR_SUBPANE_TEXTURES),
-                           "Textures & Channels") == 0 &&
+                           "Pattern & mapping") == 0 &&
                     strcmp(MaterialEditorSubPaneCompactLabel(MATERIAL_EDITOR_SUBPANE_TEXTURES),
                            "Tex") == 0);
     MaterialEditorSetActiveSubPane((MaterialEditorSubPane)999);
@@ -7170,8 +7170,8 @@ static int test_scene_editor_control_surface_material_mode_contract(void) {
     input.selectedObjectIndex = -1;
     memset(&contract, 0, sizeof(contract));
     SceneEditorControlSurfaceBuild(&input, &contract);
-    assert_true("surface_material_mode_canvas_disabled_without_selection",
-                !contract.laneCanvasEditEnabled);
+    assert_true("surface_material_mode_canvas_enabled_without_selection",
+                contract.laneCanvasEditEnabled);
     return 0;
 }
 

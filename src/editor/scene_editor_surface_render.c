@@ -311,7 +311,8 @@ int SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
             body_color,true,8);
     }
     if (contract->activeMode == EDITOR_MODE_MATERIAL) {
-        return MaterialEditorRenderPaneControls(renderer, bounds, cursor_y, bottom_y);
+        return SceneEditorObjectListRender(renderer,bounds,cursor_y,bottom_y,
+            ObjectEditorGetSelectedObjectIndex(),title_color,body_color);
     }
 
     if (contract->activeMode == EDITOR_MODE_OBJECT &&
@@ -484,13 +485,7 @@ int SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
                                                    status_bottom);
     }
     if (contract->activeMode == EDITOR_MODE_MATERIAL) {
-        int preview_bottom = MaterialEditorRenderRightPanePreview(renderer,
-                                                                  bounds,
-                                                                  cursor_y,
-                                                                  status_bottom);
-        if (preview_bottom > cursor_y) {
-            cursor_y = preview_bottom + 8;
-        }
+        return MaterialEditorRenderPaneControls(renderer,bounds,cursor_y,status_bottom);
     }
     if (!SceneEditorSidebarDiagnosticsVisible()) return cursor_y;
     cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_rename.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_transform_feedback.h"
@@ -672,9 +673,7 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
         panel_point_in_rect(event->button.x, event->button.y, &s_name_field) &&
         panel_mutation_allowed()) {
         s_edit_field = -1;
-        s_edit_name = true;
-        s_edit_buffer[0] = '\0';
-        SDL_StartTextInput();
+        SceneEditorRenameBegin();
         return true;
     }
     if (panel_point_in_rect(event->button.x,event->button.y,&s_material_expand)) {

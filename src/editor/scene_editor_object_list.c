@@ -1,3 +1,4 @@
+#include "editor/scene_editor_surfaces.h"
 #include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_object_commands.h"
@@ -57,6 +58,7 @@ static bool filter_matches(const SceneEditorDocumentObjectInfo* info) {
 }
 
 static void draw_scrollbar(SDL_Renderer* renderer) {
+    RayTracingThemePalette surfaces=SceneEditorChromeShellResolvePalette();
     SDL_Rect track = {0, 0, 0, 0};
     SDL_Rect thumb = {0, 0, 0, 0};
     int content_height = (int)ceilf(g_content_height);
@@ -73,9 +75,9 @@ static void draw_scrollbar(SDL_Renderer* renderer) {
                        track.y + ((int)lroundf(g_scroll_offset) * travel) / max_offset,
                        track.w,
                        thumb_height};
-    SDL_SetRenderDrawColor(renderer, 48, 54, 60, 220);
+    SDL_SetRenderDrawColor(renderer, surfaces.panel_fill.r, surfaces.panel_fill.g, surfaces.panel_fill.b, 255);
     SDL_RenderFillRect(renderer, &track);
-    SDL_SetRenderDrawColor(renderer, 150, 168, 188, 255);
+    SDL_SetRenderDrawColor(renderer, surfaces.text_muted.r, surfaces.text_muted.g, surfaces.text_muted.b, 255);
     SDL_RenderFillRect(renderer, &thumb);
 }
 
@@ -141,7 +143,7 @@ void SceneEditorObjectListReset(void) {
 }
 
 bool SceneEditorObjectListHandleClick(int x,int y) {
-    if(animSettings.editorMode!=EDITOR_MODE_OBJECT || (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE && SceneEditorSidebarLibraryActive())) return false;
+    if((animSettings.editorMode!=EDITOR_MODE_OBJECT && animSettings.editorMode!=EDITOR_MODE_MATERIAL) || (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE && SceneEditorSidebarLibraryActive())) return false;
     for(int i=0;i<hit_count;++i) {
         ObjectRowHit* hit=&row_hits[i];
         bool visibility=point_in_rect(x,y,&hit->visibility), lock=point_in_rect(x,y,&hit->lock);
@@ -167,7 +169,8 @@ bool SceneEditorObjectListHandleClick(int x,int y) {
 int SceneEditorObjectListRender(SDL_Renderer* renderer,SDL_Rect bounds,int cursor_y,int bottom_y,
     int selected_index,SDL_Color title_color,SDL_Color body_color) {
     (void)selected_index;
-    const int pitch=32;
+    RayTracingThemePalette surfaces=SceneEditorChromeShellResolvePalette();
+    const int pitch=animation_config_scale_text_point_size(&animSettings,24,24);
     int matches[MAX_OBJECTS],count=0,selected_row=-1;
     static char line[180];
     hit_count=0; ObjectEditorClearObjectListRows();
@@ -186,13 +189,13 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,SDL_Rect bounds,int curso
     SceneEditorButtonText(renderer,(SDL_Rect){bounds.x+bounds.w-88,title_y,36,22},"View",body_color);
     SceneEditorButtonText(renderer,(SDL_Rect){bounds.x+bounds.w-48,title_y,36,22},"Lock",body_color);
     g_viewport=(SDL_Rect){bounds.x,cursor_y,bounds.w,bottom_y-cursor_y};
-    if(g_viewport.h<28) {g_viewport.h=0;return cursor_y;}
-    g_content_height=count ? count*pitch-4 : 0;
+    if(g_viewport.h<pitch) {g_viewport.h=0;return cursor_y;}
+    g_content_height=count*pitch;
     g_scroll_offset=clamp_offset(g_scroll_offset);
     if(selected_row>=0 && selected_row!=g_last_selected) {
         float top=selected_row*pitch;
         if(top<g_scroll_offset) g_scroll_offset=top;
-        if(top+28>g_scroll_offset+g_viewport.h) g_scroll_offset=top+28-g_viewport.h;
+        if(top+pitch>g_scroll_offset+g_viewport.h) g_scroll_offset=top+pitch-g_viewport.h;
         g_scroll_offset=clamp_offset(g_scroll_offset);
     }
     g_last_selected=selected_row;
@@ -203,21 +206,24 @@ int SceneEditorObjectListRender(SDL_Renderer* renderer,SDL_Rect bounds,int curso
     for(int row=(int)(g_scroll_offset/pitch);row<count;++row) {
         SceneEditorDocumentObjectInfo info;
         SceneEditorDocumentObjectAt(matches[row],&info);
-        SDL_Rect rect={bounds.x,cursor_y+row*pitch-(int)g_scroll_offset,bounds.w-12,28};
+        SDL_Rect rect={bounds.x,cursor_y+row*pitch-(int)g_scroll_offset,bounds.w-12,pitch};
         if(rect.y>=cursor_y+g_viewport.h) break;
         bool selected=strcmp(info.id,selected_id)==0;
-        SDL_SetRenderDrawColor(renderer,selected ? 78 : 20,selected ? 94 : 23,selected ? 108 : 26,255);
+        SDL_Color row_fill=selected ? SceneEditorSurfaceBlend(surfaces.button_fill,surfaces.accent_primary,22) : SceneEditorSurfaceGroup(surfaces);
+        SDL_SetRenderDrawColor(renderer,row_fill.r,row_fill.g,row_fill.b,255);
         SDL_RenderFillRect(renderer,&rect);
-        if(selected) {SDL_SetRenderDrawColor(renderer,188,198,208,255);SDL_RenderDrawRect(renderer,&rect);}
+        if(selected) {SDL_SetRenderDrawColor(renderer,surfaces.accent_primary.r,surfaces.accent_primary.g,surfaces.accent_primary.b,255);SDL_RenderDrawLine(renderer,rect.x,rect.y,rect.x,rect.y+rect.h-1);}
         ObjectRowHit* hit=&row_hits[hit_count++];
         snprintf(hit->id,sizeof(hit->id),"%s",info.id);
-        hit->visibility=(SDL_Rect){rect.x+rect.w-76,rect.y,36,28};
-        hit->lock=(SDL_Rect){rect.x+rect.w-36,rect.y,36,28};
-        hit->select=(SDL_Rect){rect.x,rect.y,rect.w-80,28};
+        hit->visibility=(SDL_Rect){rect.x+rect.w-76,rect.y,36,pitch};
+        hit->lock=(SDL_Rect){rect.x+rect.w-36,rect.y,36,pitch};
+        hit->select=(SDL_Rect){rect.x,rect.y,rect.w-80,pitch};
         snprintf(hit->label,sizeof(hit->label),"[%c] %s",SceneEditorDocumentTypeLabel(info.type)[0],info.name);
-        SceneEditorLabelLeft(renderer,hit->select,hit->label,body_color);
-        SDL_SetRenderDrawColor(renderer,90,105,118,255);
-        SDL_RenderDrawRect(renderer,&hit->visibility);SDL_RenderDrawRect(renderer,&hit->lock);
+        SDL_Rect label=hit->select;label.x+=6;label.w-=12;
+        RenderFixedSizedText(renderer,label,hit->label,selected ? title_color : body_color,13,false,false);
+        SDL_SetRenderDrawColor(renderer,surfaces.panel_border.r,surfaces.panel_border.g,surfaces.panel_border.b,255);
+        SDL_RenderDrawLine(renderer,hit->visibility.x-2,rect.y,hit->visibility.x-2,rect.y+rect.h-1);
+        SDL_RenderDrawLine(renderer,hit->lock.x-2,rect.y,hit->lock.x-2,rect.y+rect.h-1);
         SceneEditorButtonText(renderer,hit->visibility,info.visible ? "On" : "Off",body_color);
         SceneEditorButtonText(renderer,hit->lock,info.locked ? "Yes" : "No",body_color);
         SDL_IntersectRect(&hit->select,&clip,&hit->select);

@@ -11,6 +11,8 @@ typedef enum SceneEditorObjectTransformMode {
     SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE,
     SCENE_EDITOR_OBJECT_TRANSFORM_SCALE
 } SceneEditorObjectTransformMode;
+bool SceneEditorObjectSelectionOnly(void);
+void SceneEditorObjectSelectTool(void);
 SceneEditorObjectTransformMode SceneEditorObjectTransformModeGet(void);
 void SceneEditorObjectTransformModeSet(SceneEditorObjectTransformMode mode);
 bool SceneEditorObjectTransformPreview(int object_index,

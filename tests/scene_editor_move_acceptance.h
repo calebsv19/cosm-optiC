@@ -114,7 +114,7 @@ static void verify_move_acceptance(SceneEditor* editor,const char* scene_path,in
         assert(SceneEditorDocumentRevision()==revision && SceneEditorDocumentIsDirty()==dirty);
         if (component!=0) continue;
         /* Pending lifecycle confirmation must take priority over a handle behind it. */
-        click(editor,backToMenuButton);
+        choose_menu(editor,0,1);
         assert(SceneEditorLifecycleClosePending());
         move_pointer(editor,SDL_MOUSEBUTTONDOWN,bx,by);
         assert(SceneEditorObjectMoveGizmoActiveAxis()==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE);

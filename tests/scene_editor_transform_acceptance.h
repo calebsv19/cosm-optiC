@@ -62,12 +62,12 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
     assert(SceneEditorGetPaneLayout(&control_layout));
     SceneEditorWorkspaceLayoutChrome(&control_layout,&control_chrome);
     assert(SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_WORLD);
-    click(editor,control_chrome.transform_space);
+    choose_menu(editor,2,4);
     assert(SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_LOCAL);
-    click(editor,control_chrome.transform_space);
+    choose_menu(editor,2,4);
     assert(SceneEditorTransformSpaceGet()==SCENE_EDITOR_TRANSFORM_SPACE_WORLD);
     assert(!SceneEditorTransformSnapEnabled());
-    click(editor,control_chrome.transform_snap);assert(SceneEditorTransformSnapEnabled());
+    choose_menu(editor,2,5);assert(SceneEditorTransformSnapEnabled());
     key(editor,SDLK_r);
     SceneEditorObjectTransformHandle snap_handle;int snap_x,snap_y;
     transform_handle(editor,selected,1,&snap_handle,&snap_x,&snap_y);
@@ -76,7 +76,7 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
     assert(SceneEditorObjectTransformPreview(selected,&baseline,&preview));
     assert(fabs(remainder(preview.rotation_degrees[0]-baseline.rotation_degrees[0],15.0))<1e-8);
     key(editor,SDLK_ESCAPE);
-    click(editor,control_chrome.transform_snap);assert(!SceneEditorTransformSnapEnabled());
+    choose_menu(editor,2,5);assert(!SceneEditorTransformSnapEnabled());
     transform_mode_click(editor,SCENE_EDITOR_OBJECT_TRANSFORM_MOVE);
     capture(editor,"workspace_dense_move_idle.ppm");
     assert(!SceneEditorTransformOperationLabel(selected,label,sizeof(label)) && strstr(label,"Move |"));
@@ -184,7 +184,7 @@ static void verify_transform_acceptance(SceneEditor* editor,const char* scene_pa
         assert(SceneEditorDocumentRevision()==revision+1);
         assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&current,diagnostics,sizeof(diagnostics)));
         transform_compare(&current,&newer);
-        click(editor,backToMenuButton);assert(SceneEditorLifecycleClosePending());
+        choose_menu(editor,0,1);assert(SceneEditorLifecycleClosePending());
         move_pointer(editor,SDL_MOUSEBUTTONDOWN,h.x,h.y);
         assert(SceneEditorObjectMoveGizmoActiveAxis()==SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE);
         key(editor,SDLK_ESCAPE);
