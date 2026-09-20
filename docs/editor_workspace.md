@@ -1,5 +1,182 @@
 # Editor workspace
 
+## Shared Material viewport display
+
+Material in the Bounds/Wire/Solid/Material selector now shades imported mesh LODs
+and primitive surfaces with authored object-level procedural stacks and response
+parameters. This path is shared across all five workspaces. The Material workspace
+edits properties; it does not own viewport shading. The existing Preview window
+and final renderer are unchanged.
+
+A bounded 32-slot cache stores 128x128 bilinearly sampled material evaluations,
+reusing the material evaluator and stack placement rules. Camera changes reuse
+these samples. Material parameters, stacks, and document revisions invalidate
+viewport pixels. Object-space box projection supplies inspection coordinates on
+meshes without UV data; primitive axes supply stable local coordinates. Fixed
+studio lights produce view-dependent highlights and analytic environment
+reflections whose sharpness follows roughness. This is an inspection approximation,
+not scene-object reflection, refraction, physically calibrated lighting, authored
+UV parity, anisotropic reflection, or face-specific placement parity. Fine
+procedural detail is limited by the sample grid; microdetail normals and external
+image/node-graph evaluation are not added by this pass.
+
+Material stays active during orbit. The existing reduced-resolution interaction
+path and full-resolution settling remain in use; no automatic Solid switch is
+introduced. Existing depth, selection, and outline behavior is retained. Native
+acceptance captures exercise every workspace, stationary material changes,
+procedural wood/brick, and orbit timing with zero material rebakes.
+
+## Object rename
+
+Select an object and press F2, double-click its name in the object list, or click
+the Scene Inspector name field. The rename dialog initially selects the full
+name. Enter applies one undoable stable-ID command; Escape cancels. The field
+supports mouse caret placement and drag selection, arrows with Shift, Home/End,
+Option/Ctrl word movement, Command-left/right, select-all, copy/cut/paste,
+Backspace and forward Delete. Long names scroll horizontally to keep the caret
+visible; UTF-8 code points are never split by navigation or deletion.
+
+Empty names and names exceeding the existing 96-byte document limit are rejected
+without closing the dialog. Locked objects and active renders retain the normal
+mutation guards. Rename captures input so scene shortcuts cannot alter geometry
+while editing. Shared font/theme and existing document undo APIs are reused; no
+shared caret-editing API was present in the current core/kit checkout.
+
+## Theme surface hierarchy
+
+Editor chrome uses opaque, core-theme-derived surfaces: the viewport retains
+SURFACE_0, sidebars blend SURFACE_1 and SURFACE_2, inset content receives a
+separate group fill, and Material controls and section rows receive a raised
+fill. Borders and object-list selection also derive from theme colors. The same
+sidebar/content hierarchy applies across Scene, Material, Surface, Environment,
+and Render. Light themes follow their own surface palette rather than forcing
+black. This pass preserves layout dimensions, disclosure behavior, hit targets,
+and scene rendering. Object rows now use contiguous, text-scale-aware 24-point rows with aligned
+visibility and lock columns and fixed-size clipped labels. Material disclosure
+headers use the same base height, drawn chevrons, full-row click targets, and
+8-point content insets and section padding. Closing a section removes its body
+from the measured scroll range. The existing single-open-section behavior is
+preserved. Native acceptance captures include midnight_contrast, standard_grey,
+and soft_light.
+
+## Material inspector framework — September 2026
+
+Material workspace now keeps scene objects in the left pane and a single material
+inspector in the right pane. Selection works from either the list or viewport.
+The inspector starts with labeled Material, Pattern, and Finish selectors, then
+vertically arranged expandable sections: Appearance, Pattern & mapping, Layers,
+Face assignments, Graph, and Preview & diagnostics. One section is expanded at a
+time; clicking its header collapses it. These are session-local presentation
+choices and do not dirty the scene.
+
+Appearance uses aligned label/value rows, preserving the existing response
+mutation adapters where supported. Pattern parameters use consistent numeric
+rows (drag vertically to adjust, indicated by the arrow); placement retains its
+existing sliders. Layer rows show names, enable state, and a restrained selection
+marker. Unsupported structural actions have no hit target. Technical channel and
+layer readback is placed under Preview & diagnostics. The Graph section retains
+the existing limited graph actions; this pass does not add a connected node
+canvas, color picker, gradient evaluator, or new material semantics.
+
+All material widgets reuse the font runtime and shared palette through a fixed-size
+text adapter with rectangle clipping (no per-label shrinking). Appearance shows
+tint as a swatch and omits calculated mirror/base contributions from Appearance.
+Content height is measured from the last section instead of returning the full
+virtual measurement surface, eliminating the artificial empty scroll range.
+Material menus consume outside dismissal and Escape before viewport routing.
+
+Extension points: the compact renderer owns section layout; response and pattern
+render adapters own property rows; existing mutation APIs remain separate. Future
+color/source widgets can replace the corresponding row adapters, and a graph
+workspace can launch from Graph without reorganizing the material inspector.
+No shared module or version changes: theme/font/scroll reuse is adopted through
+the existing adapters; material-specific organization remains application policy.
+
+Native regression coverage opens/collapses all six sections, checks selection
+and document revision preservation, dismisses menus, switches objects through
+the Material outliner, and captures compact and enlarged-text layouts. Source
+captures and acceptance receipts are under
+`build/editor_ui_recovery/material-framework-06/`.
+
+
+## Shared viewport display mode
+
+The right end of the center-pane header has a compact display dropdown with
+Bounds, Wire, Solid and Material. It is available in Scene and every other
+workspace. The choice is session presentation state and survives workspace
+switches; it does not dirty or serialize the scene document. The former floating
+Material-only toolbar is no longer rendered or hit-tested.
+
+The selected mode applies to all loaded mesh-preview instances and supported
+primitive surfaces, including unselected objects. This supersedes the earlier
+selected-object shading and forced wire-context descriptions below. Transform
+preview uses each object's projector so moving one shaded object does not move
+its surroundings. These are viewport modes, not final-render quality settings.
+
+Native evidence: `build/editor_ui_recovery/display-mode-02/`; all four choices
+were exercised through the header across all five workspaces. Selection,
+document revision, picking, transforms, save/reopen and baseline render checks
+passed. `viewport_display_0.ppm` through `viewport_display_3.ppm` show the modes.
+
+
+## Viewport geometry selection correction
+
+Viewport clicks and hover now share a geometry query. Mesh triangles use
+interpolated depth at the cursor, and retained plane/box faces compete in the
+same depth order. Object-origin proximity and last-frame hover are no longer
+fallbacks for a click. Empty space clears selection. Bounds display does not
+make the empty interior of a mesh bounding rectangle selectable.
+
+In Material / In scene, clicking another object switches the inspected object;
+clicking the current object retains face selection. Object view retains its
+focused face-editing behavior. Select / Q now suppresses transform handles;
+Move / Rotate / Scale re-enable the chosen handles. The Scene list is unchanged.
+
+This fixes the viewport selection path for the current mesh-preview LOD and
+retained plane/box geometry. It is not a renderer or text-layout rewrite, and
+does not add curve picking or full-resolution mesh picking beyond the displayed
+preview LOD. Shared viewport projection and mesh-preview geometry are reused;
+no shared API/version or scene schema changes are involved.
+
+Native copied-scene evidence: `build/editor_ui_recovery/viewport-pick-05/`.
+Tests click known sphere positions and an off-origin floor point in Scene and
+Material at normal and narrow sizes, reject stale selection on empty clicks,
+and check that a floor viewed from below occludes the mesh above it. Existing
+transform, lock/visibility, save/reopen and baseline-render checks still pass.
+
+
+## Document bar and pane header reorganization
+
+The window now has one document bar: File, Edit, View, scene filename/dirty state,
+and Preview. Preview retains the existing embedded preview action; it is not a
+new final-render queue or job monitor. File contains Save and Leave editor;
+Edit contains Undo/Redo. View contains framing, expand/restore, layout reset,
+existing transform presentation/snapping controls, Paths, and light keyframes.
+
+The center pane owns a compact workspace dropdown (Scene, Material, Surface,
+Environment, Render). Scene shows Select/Move/Rotate/Scale in that header;
+Material shows In scene/Object using the existing material view modes. Other
+workspaces retain their existing pane content without disabled Scene toolbar
+buttons. Add belongs to the Scene list header. Inspector properties stay on the
+right. One-pixel pane/header separators and a quiet bottom status line replace
+the three full-width toolbar rows. The viewport no longer has a second inset
+border. Popups consume dismissal clicks and support Escape, arrow keys and Enter.
+
+This supersedes older descriptions of always-visible workspace tabs and global
+transform/tool rows below. Existing material panel internals, resource-authoring
+limits and the presentation-only World/Local setting are unchanged. No renderer,
+scene schema, shared UI API, package or installed Desktop app change is part of
+this pass.
+
+Verification: forced Clang build, pane-host/foundation/navigation/3D-bridge
+contracts, and native copied-scene UI acceptance. The native run covers workspace
+menus, contextual material views, dismissal without selection changes, transforms,
+undo/redo, save/fresh reopen, hidden/locked objects and unchanged baseline render.
+Local evidence: `build/editor_ui_recovery/menu-reorg-final/`. Screenshots cover
+normal/small/large-text windows. Source verification is separate from operator
+acceptance of an installed package.
+
+
 ## U2.3 selection, Scene list and Inspector checkpoint
 
 The Scene tab now lists retained document objects, including hidden objects,
@@ -373,12 +550,13 @@ mutate the document and can be canceled with Escape.
 `kit_pane` and `kit_ui` remain the sizing/splitter/scroll mechanisms. No shared
 module API, version or adoption change is introduced.
 
-The current Main Edit viewport keeps a wire scene reference in Scene, Surface,
-Atmos / Water and Render. Materials retains the other objects as wire context
-around its selected-object preview. Bounds/Wire/Solid/Material buttons are
-Material-only session view controls. Entering Materials preserves scene
-placement; Frame selected is explicit. These view changes do not issue document
-commands or alter final render content.
+Bounds/Wire/Solid/Material is a compact viewport-header display selector shared
+across Scene, Material, Surface, Environment and Render. Its selection persists
+across workspace changes. Entering Material preserves scene placement; Frame
+selected is explicit. These view changes do not issue document commands or alter
+final render content. Material display is approximate: the measured coordinate,
+seed and face-override gaps are recorded in
+[Material viewport parity](material_viewport_parity.md).
 
 ## Reproduce source acceptance
 
@@ -414,7 +592,7 @@ of an STL path to open an interactive editor on a copied scene. It accepts
 and a separate scene copy for review; do not point the test at a scene you need
 preserved unchanged.
 
-## Review and regression limits
+## Historical E0/E1 review and regression limits
 
 E0/E1 source implementation and automated acceptance are complete; operator visual
 acceptance is the next step. The system file-picker selection itself remains part

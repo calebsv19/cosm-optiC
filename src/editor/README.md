@@ -1,5 +1,15 @@
 # src › editor
 
+
+The current shell separates document menus from pane controls.
+`scene_editor_workspace_layout.c` computes document-bar and center-header bounds;
+`scene_editor_workspace_profile.c` owns workspace/document/Add popup focus and
+routes commands through existing editor callbacks. `scene_editor_pane_host.c`
+reserves one document bar and a bottom status strip, including timeline sizing.
+The shell draws pane separators and mode-specific header controls. Popup input
+is consumed before viewport tools to prevent click-through. Changes to the
+chrome-layout struct require rebuilding all consumers before native acceptance.
+
 Interactive tooling for shaping the scene.
 
 - `bezier_editor.c` – Adds/removes Bézier control points, manipulates velocity handles, and renders the path using the current camera margin so edits match the live viewport.

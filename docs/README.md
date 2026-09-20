@@ -2,6 +2,11 @@
 
 Start here for public repository documentation.
 
+Editor UI closeout and the next material lane (September 20, 2026):
+- [Editor workspace behavior](editor_workspace.md)
+- [Measured viewport/render material parity gaps](material_viewport_parity.md)
+- [Cohesive surface material mapping plan](surface_material_mapping_plan.md)
+
 Public identity:
 - packaged desktop product: `optiC`
 - repository/program key: `ray_tracing`

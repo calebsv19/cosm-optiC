@@ -1,5 +1,32 @@
 # optiC Current Truth
 
+## September 20 UI source closeout
+
+The current source includes the compact document bar and pane headers, shared
+viewport display selector, geometry-based Scene/Material picking, compact object
+list, themed panel hierarchy, material disclosure inspector, and undoable object
+rename. Material display adds a cached procedural/studio approximation; it is
+not final-render mapping parity. The eight-case diagnostic exposes physical
+coordinate/seed differences and missing viewport face overrides. See
+[Editor workspace](editor_workspace.md), [parity evidence](material_viewport_parity.md)
+and [next surface-mapping lane](surface_material_mapping_plan.md).
+
+The operator authorized committing this work and fast-forwarding main without a
+version update. VERSION remains 0.16.0; WORKER_VERSION remains 0.7.1. This is source
+closeout, not a package release or a claim that all E2–E7 functionality is done.
+Earlier dated checkpoint/adoption statements below are historical.
+
+
+## Document bar and pane header reorganization
+
+Main Edit replaces three global toolbar rows with File/Edit/View and document
+identity above a pane-local workspace selector. Scene transform tools and
+Material In scene/Object controls live in the center header; Add lives with the
+Scene list. Pane separators are visible and feedback moves to the bottom.
+See [Editor workspace](editor_workspace.md) for commands, limits and source
+verification under `build/editor_ui_recovery/menu-reorg-final/`. No package refresh
+or canonical adoption is included in this source pass.
+
 ## U2.3 selection, Scene list and Inspector checkpoint
 
 The Scene tab now lists retained document objects, including hidden objects,

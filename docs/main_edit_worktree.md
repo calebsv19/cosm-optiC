@@ -1,5 +1,45 @@
 # RayTracing Main Edit Worktree
 
+## September 20 UI source closeout
+
+The current source includes the compact document bar and pane headers, shared
+viewport display selector, geometry-based Scene/Material picking, compact object
+list, themed panel hierarchy, material disclosure inspector, and undoable object
+rename. Material display adds a cached procedural/studio approximation; it is
+not final-render mapping parity. The eight-case diagnostic exposes physical
+coordinate/seed differences and missing viewport face overrides. See
+[Editor workspace](editor_workspace.md), [parity evidence](material_viewport_parity.md)
+and [next surface-mapping lane](surface_material_mapping_plan.md).
+
+The operator authorized committing this work and fast-forwarding main without a
+version update. VERSION remains 0.16.0; WORKER_VERSION remains 0.7.1. This is source
+closeout, not a package release or a claim that all E2–E7 functionality is done.
+Earlier dated checkpoint/adoption statements below are historical.
+
+Closeout validation: Clang application/test build; foundation/document and managed
+mesh tests; pane, runtime bridge, navigation, viewport bridge, pick/scroll,
+outline, shading, primitive and startup-discovery gates all pass. Native acceptance
+at `build/editor_ui_recovery/ui-closeout-20260920/acceptance.json` passes, including
+rename, workspace/picking, transforms, persistence and fresh headless render.
+Reference render SHA-256 remains
+`c46886820bca87c35c59892929d4f7db59549dc3903af89a3ff2a2eb0c7d793d`.
+The full stable suite was not rerun; older broad-suite failures remain historical
+unresolved evidence, not a current all-green claim. The material-parity diagnostic
+is intentionally retained as a failing-fidelity baseline. Ignored build outputs
+are retained. No installed app was closed or rebuilt for this source closeout.
+
+
+
+## Document bar and pane header reorganization
+
+Main Edit replaces three global toolbar rows with File/Edit/View and document
+identity above a pane-local workspace selector. Scene transform tools and
+Material In scene/Object controls live in the center header; Add lives with the
+Scene list. Pane separators are visible and feedback moves to the bottom.
+See [Editor workspace](editor_workspace.md) for commands, limits and source
+verification under `build/editor_ui_recovery/menu-reorg-final/`. No package refresh
+or canonical adoption is included in this source pass.
+
 ## U2.3 selection, Scene list and Inspector checkpoint
 
 The Scene tab now lists retained document objects, including hidden objects,

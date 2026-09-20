@@ -6,6 +6,15 @@ Last updated: 2026-08-23
 
 Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped native `3D` RGB ladder as the current product truth, not as a future experiment.
 
+## Surface material mapping follow-up — September 20, 2026
+
+The UI closeout is followed by a planned cohesive surface-coordinate lane.
+[Surface material mapping](surface_material_mapping_plan.md) defines the sphere,
+prism and imported-mesh proof sequence and the required shared viewport/runtime
+contract. The current [parity diagnostic](material_viewport_parity.md) is a known
+failure baseline, not acceptance. Preview-window changes and release/version
+work are separate.
+
 ## Near-Term Intent
 
 `RT-MIRROR-1` is the active proof-first renderer fix plan. Preserve a
