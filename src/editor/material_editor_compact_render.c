@@ -1,3 +1,4 @@
+#include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_surfaces.h"
 #include "render/runtime_surface_mapping.h"
 #include "editor/material_editor_internal.h"
@@ -633,9 +634,8 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
     if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return bottom_y;
 
     if(RuntimeSurfaceMappingActive(focused_index)) {
-        RenderLabelTextWrappedLeft(renderer,(SDL_Rect){content_bounds.x,top_y,content_bounds.w,100},
-            "Edit surface mapping in Scene > Inspector. Source layers and regions are not editable here yet.",palette.text_primary);
-        return top_y+104;
+        return SceneEditorSurfaceMaterialPanelRender(renderer,
+            (SDL_Rect){content_bounds.x,top_y,content_bounds.w,bottom_y-top_y},focused_index);
     }
     if (obj && s_material_editor_active_face_group_index >= 0) {
         RuntimeMaterialTextureLayer active_layer = {0};

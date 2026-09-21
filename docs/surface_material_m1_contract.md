@@ -1,5 +1,8 @@
 # Surface material M1: common planar sampling
 
+Historical checkpoint: [M3](surface_material_m3_contract.md) now adds retained
+source editing and primitive face regions; restrictions below describe this phase.
+
 This records the M1 checkpoint. [M2](surface_material_m2_contract.md) adds explicit
 axial mesh mapping and retained inspector controls without replacing v1 behavior.
 

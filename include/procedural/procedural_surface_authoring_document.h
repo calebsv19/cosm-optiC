@@ -35,6 +35,7 @@ typedef struct ProceduralSurfaceAuthoringDocumentV1 {
     char source_mesh_digest_sha256[
         PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_DIGEST_CAPACITY];
     ProceduralSurfaceAuthoringDocumentRef material_graph;
+    ProceduralSurfaceAuthoringDocumentRef surface_mapping;
     ProceduralSurfaceAuthoringDocumentRef surface_field_graph;
     ProceduralSurfaceAuthoringDocumentRef face_region_selector;
     size_t attachment_count;
@@ -53,6 +54,8 @@ typedef struct ProceduralSurfaceAuthoringDocumentCompilePlan {
     uint32_t output_domains;
     uint32_t attachment_count;
     bool material_graph_bound;
+    bool surface_mapping_bound;
+    ProceduralSurfaceAuthoringDocumentRef surface_mapping;
     bool surface_field_graph_bound;
     bool face_region_selector_bound;
 } ProceduralSurfaceAuthoringDocumentCompilePlan;

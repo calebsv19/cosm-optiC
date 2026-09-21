@@ -568,6 +568,92 @@ bool SceneEditorDocumentSetSurfaceMappingForSceneIndex(int index,const char* map
     return document_finish_command(diagnostic,size);
 }
 
+static json_object* document_member(json_object* o,const char* key) {
+    json_object* v=NULL;if(o) json_object_object_get_ex(o,key,&v);return v;
+}
+static json_object* document_material_row(int index) {
+    json_object* object=document_object_for_scene_index(index,NULL,0);
+    const char* id=json_object_get_string(document_member(object,"object_id"));
+    json_object* rows=document_member(document_member(document_member(document_member(s_document.root,"extensions"),"ray_tracing"),"authoring"),"object_materials");
+    for(size_t i=0;id && rows && i<json_object_array_length(rows);++i) {
+        json_object* row=json_object_array_get_idx(rows,i);
+        const char* other=json_object_get_string(document_member(row,"object_id"));
+        if(other && !strcmp(id,other)) return row;
+    }
+    return NULL;
+}
+bool SceneEditorDocumentGetSurfaceMaterialJSON(int index,char* out,size_t size) {
+    json_object* row=document_material_row(index);
+    if(!row || !out || !size) return false;
+    const char* text=json_object_to_json_string_ext(row,JSON_C_TO_STRING_PLAIN);
+    if(strlen(text)>=size) return false;
+    snprintf(out,size,"%s",text);return true;
+}
+bool SceneEditorDocumentSetSurfaceBinding(int index,const char* binding_json,unsigned long long revision,char* diagnostic,size_t size) {
+    if(revision!=s_document.revision || !SceneEditorDocumentObjectEditable(index,diagnostic,size)) {
+        document_diag(diagnostic,size,"stale or locked material edit");return false;
+    }
+    json_object* row=document_material_row(index);
+    json_object* binding=binding_json?json_tokener_parse(binding_json):NULL;
+    if(!row || !json_object_is_type(binding,json_type_object)) {
+        if(binding) json_object_put(binding);document_diag(diagnostic,size,"invalid surface material binding");return false;
+    }
+    if(!document_begin_command(diagnostic,size)) {json_object_put(binding);return false;}
+    json_object_object_add(row,"surface_material_binding",binding);
+    return document_finish_command(diagnostic,size);
+}
+bool SceneEditorDocumentSetSurfaceLayerValue(int index,const char* layer_id,
+    const char* group,const char* property,double value,unsigned long long revision,
+    char* diagnostic,size_t size) {
+    if(revision!=s_document.revision || !isfinite(value) || !layer_id || !group || !property ||
+       !SceneEditorDocumentObjectEditable(index,diagnostic,size)) {
+        document_diag(diagnostic,size,"stale or invalid material edit");return false;
+    }
+    bool allowed=(!strcmp(group,"placement") &&
+        (!strcmp(property,"offset_u") || !strcmp(property,"offset_v") ||
+         !strcmp(property,"scale") || !strcmp(property,"rotation") || !strcmp(property,"strength"))) ||
+        (!strcmp(group,"parameters") && (!strcmp(property,"grain") || !strcmp(property,"seed") ||
+         !strcmp(property,"coverage") || !strcmp(property,"contrast"))) ||
+        (!group[0] && (!strcmp(property,"opacity") || !strcmp(property,"roughness_influence") ||
+         !strcmp(property,"reflectivity_influence") || !strcmp(property,"specular_influence") ||
+         !strcmp(property,"diffuse_influence")));
+    if(!allowed || ((!strcmp(property,"opacity") || strstr(property,"influence") ||
+        !strcmp(property,"strength") || !strcmp(property,"coverage") || !strcmp(property,"contrast")) &&
+        (value<(strstr(property,"influence")?-1:0) || value>1)) || (!strcmp(property,"scale") && value<=0) ||
+        (!strcmp(property,"seed") && (value<0 || value>16777215 || floor(value)!=value))) {
+        document_diag(diagnostic,size,"unsupported material property or value");return false;
+    }
+    json_object* object=document_object_for_scene_index(index,diagnostic,size);
+    json_object *id=NULL,*ext=NULL,*ray=NULL,*authoring=NULL,*rows=NULL,*layer=NULL;
+    if(!object || !json_object_object_get_ex(object,"object_id",&id) ||
+       !json_object_object_get_ex(s_document.root,"extensions",&ext) ||
+       !json_object_object_get_ex(ext,"ray_tracing",&ray) ||
+       !json_object_object_get_ex(ray,"authoring",&authoring) ||
+       !json_object_object_get_ex(authoring,"object_materials",&rows)) return false;
+    for(size_t i=0;i<json_object_array_length(rows);++i) {
+        json_object* row=json_object_array_get_idx(rows,i);json_object *rid=NULL,*source=NULL,*items=NULL,*binding=NULL;
+        if(!json_object_object_get_ex(row,"object_id",&rid) ||
+           strcmp(json_object_get_string(rid),json_object_get_string(id))) continue;
+        if(!json_object_object_get_ex(row,"surface_material_binding",&binding)) {
+            document_diag(diagnostic,size,"material source is not enabled for M3 editing");return false;
+        }
+        bool graph=json_object_object_get_ex(row,"material_graph",&source) || json_object_object_get_ex(row,"materialGraph",&source);
+        if(!graph) json_object_object_get_ex(row,"material_texture_stack",&source);
+        if(!source || !json_object_object_get_ex(source,graph?"nodes":"layers",&items)) return false;
+        for(size_t j=0;j<json_object_array_length(items);++j) {
+            json_object* candidate=json_object_array_get_idx(items,j);json_object* lid=NULL;
+            if(graph && !json_object_object_get_ex(candidate,"layer",&candidate)) continue;
+            if(json_object_object_get_ex(candidate,"id",&lid) && !strcmp(json_object_get_string(lid),layer_id)) layer=candidate;
+        }
+    }
+    if(!layer) {document_diag(diagnostic,size,"material layer reference is missing");return false;}
+    if(!document_begin_command(diagnostic,size)) return false;
+    json_object* target=group[0]?document_get_or_add_object(layer,group):layer;
+    if(!target) {document_rollback_command();return false;}
+    json_object_object_add(target,property,!strcmp(property,"seed")?json_object_new_int64((int64_t)value):json_object_new_double(value));
+    return document_finish_command(diagnostic,size);
+}
+
 static bool document_make_unique_id(json_object* objects,
                                     const char* source_id,
                                     char* out_id,

@@ -40,6 +40,7 @@ static json_object *graph_json(
     json_object_object_add(binding, "binding_digest_sha256",
         json_object_new_string(graph->authored_binding_digest_sha256));
     json_object_object_add(root, "authored_binding", binding);
+    if(graph->surface_mapping_ref[0]) json_object_object_add(root,"surface_mapping_ref",json_object_new_string(graph->surface_mapping_ref));
     for (size_t i = 0u; i < graph->node_count; ++i) {
         const ProceduralSolidMaterialNodeV1 *node = &graph->nodes[i];
         json_object *item = json_object_new_object();
@@ -204,6 +205,7 @@ bool ProceduralSolidMaterialGraphV1_LoadJsonFile(
                   sizeof(graph.authored_binding_digest_sha256), true) ||
         !object_get(root, "nodes", json_type_array, &nodes) ||
         !object_get(root, "layers", json_type_array, &layers)) goto invalid;
+    if(!text_get(root,"surface_mapping_ref",graph.surface_mapping_ref,sizeof(graph.surface_mapping_ref),false)) goto invalid;
     graph.node_count = json_object_array_length(nodes);
     graph.layer_count = json_object_array_length(layers);
     if (graph.node_count > PROCEDURAL_SOLID_MATERIAL_GRAPH_MAX_NODES ||

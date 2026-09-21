@@ -1,5 +1,8 @@
 # Surface material M2: editable axial brick mapping
 
+Historical checkpoint: [M3](surface_material_m3_contract.md) now adds retained
+source editing and primitive face regions; restrictions below describe this phase.
+
 M2 completes the first curved-surface checkpoint. An agent-authored axial mapping
 can be edited in the Scene inspector, saved, and reopened. The viewport and ray
 renderer use the same position-based coordinates and brick/material response.

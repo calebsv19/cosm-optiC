@@ -25,3 +25,10 @@ bool RuntimeSurfaceMaterialPrimitiveIslandForSeed(const RuntimeSceneBridgePrimit
 bool RuntimeSurfaceMappingDefinition(int index,CoreAuthoredSurfaceMapping* out);
 bool RuntimeSurfaceMappingEvaluateTiles(int index,double u,double v,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out);
 void RuntimeSurfaceMappingBlendPole(const RuntimeMaterialSurfaceEval* base,double weight,RuntimeMaterialSurfaceEval* out);
+
+bool RuntimeSurfaceMappingEvaluateReferencedStack(const HitInfo3D* hit,const char* reference,
+    const RuntimeMaterialTextureStack* stack,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out);
+
+bool RuntimeSurfaceMaterialCompileSource(json_object* source,RuntimeMaterialTextureStack* out);
+
+bool RuntimeSurfaceMappingPreviewSupported(int index);

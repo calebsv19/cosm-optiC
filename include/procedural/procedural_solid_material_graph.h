@@ -68,6 +68,8 @@ typedef struct ProceduralSolidMaterialLayerV1 {
 typedef struct ProceduralSolidMaterialGraphV1 {
     uint32_t schema_version;
     char graph_id[PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
+    /* Optional M3 reference resolved by the owning scene material binding. */
+    char surface_mapping_ref[PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
     char authored_binding_id[PROCEDURAL_SOLID_MATERIAL_GRAPH_ID_CAPACITY];
     char authored_binding_digest_sha256[
         PROCEDURAL_SOLID_MATERIAL_GRAPH_DIGEST_CAPACITY];

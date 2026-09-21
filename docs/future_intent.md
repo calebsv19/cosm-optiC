@@ -6,14 +6,21 @@ Last updated: 2026-08-23
 
 Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped native `3D` RGB ladder as the current product truth, not as a future experiment.
 
-## Surface material mapping follow-up — September 20, 2026
+## Surface material mapping follow-up — September 21, 2026
 
-The UI closeout is followed by a planned cohesive surface-coordinate lane.
-[Surface material mapping](surface_material_mapping_plan.md) defines the sphere,
-prism and imported-mesh proof sequence and the required shared viewport/runtime
-contract. The current [parity diagnostic](material_viewport_parity.md) is a known
-failure baseline, not acceptance. Preview-window changes and release/version
-work are separate.
+The isolated surface-material lane completes M0–M3. The
+[M3 document/region contract](surface_material_m3_contract.md) records retained
+source editing, face overrides, persistence and capability limits. The original
+[parity diagnostic](material_viewport_parity.md) remains the historical failure
+baseline; current mapped acceptance and unchanged legacy behavior have separate
+proof. Main Edit adoption is a distinct integration step.
+
+M4 is next: per-corner UVs/UV-set identity and tangents across import, compilation,
+pack storage, preview and LOD. M5 follows with footprint filtering, color spaces,
+normal/bump fidelity and measured orbit cost. M6 broadens typed graph editing,
+3D/triplanar sources and producer tools. Solid-graph preview attribute preservation
+must be explicit in M4; M3 reports that preview as unavailable. Preview-window
+redesign and release/version work remain separate.
 
 ## Near-Term Intent
 

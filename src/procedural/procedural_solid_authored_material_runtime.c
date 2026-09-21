@@ -1,3 +1,5 @@
+#include "render/runtime_surface_mapping.h"
+#include <stdio.h>
 #include "procedural/procedural_solid_authored_material_runtime.h"
 #include "procedural/procedural_solid_material_runtime_program.h"
 #include "procedural/procedural_solid_material_texture_runtime.h"
@@ -50,7 +52,7 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
     RuntimeMaterialPayload3D *payload) {
     const ProceduralSolidAuthoredMaterialSurfaceV1 *surface;
     ProceduralSolidAuthoredMaterialSurfaceV1 wood_surface;
-    ProceduralSolidMaterialRuntimeSampleV1 runtime_sample;
+    ProceduralSolidMaterialRuntimeSampleV1 runtime_sample = {0};
     ProceduralSolidMaterialGraphReport graph_report;
     ProceduralSolidMaterialWeightedTextureV1 fallback_texture;
     const ProceduralSolidMaterialWeightedTextureV1 *textures = NULL;
@@ -85,6 +87,10 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
                 runtime_sample.wood_grain.roughness_delta);
             surface = &wood_surface;
         }
+    } else if (hit->proceduralSolidMaterialRuntimeProgram &&
+               hit->proceduralSolidMaterialRuntimeProgram->graph.surface_mapping_ref[0]) {
+        payload->valid = false;
+        return false;
     } else if (surface->texture.enabled) {
         memset(&fallback_texture, 0, sizeof(fallback_texture));
         fallback_texture.texture = surface->texture;
@@ -105,7 +111,22 @@ bool ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
     base_eval.active = true;
     final_eval = base_eval;
 
-    if (texture_count > 0u) {
+    const ProceduralSolidMaterialRuntimeProgramV1* program=hit->proceduralSolidMaterialRuntimeProgram;
+    if(texture_count>0 && program && program->graph.surface_mapping_ref[0]) {
+        RuntimeMaterialTextureStack mapped;
+        if(!ProceduralSolidMaterialWeightedTextures_BuildStack(textures,texture_count,&mapped)) {payload->valid=false;return false;}
+        for(size_t i=0;i<texture_count;++i) {
+            size_t layer=textures[i].graph_layer_index;
+            if(layer>=program->graph.layer_count || strlen(program->graph.layers[layer].material_id)>=sizeof(mapped.layers[i].layerId) || textures[i].texture.microdetail_normal_strength>0 ||
+               (mapped.layers[i].kind!=RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK && mapped.layers[i].kind!=RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID)) {
+                payload->valid=false;return false;
+            }
+            /* Mapping owns metric frequency; keep the graph's stable material identity. */
+            mapped.layers[i].placement.scale=1;
+            snprintf(mapped.layers[i].layerId,sizeof(mapped.layers[i].layerId),"%.31s",program->graph.layers[layer].material_id);
+        }
+        if(!RuntimeSurfaceMappingEvaluateReferencedStack(hit,program->graph.surface_mapping_ref,&mapped,&base_eval,&final_eval)) {payload->valid=false;return false;}
+    } else if (texture_count > 0u) {
         if (!resolve_uv(hit, &u, &v) ||
             !ProceduralSolidMaterialWeightedTextures_EvaluateMicrodetailPlacedUV(
                 textures, texture_count, object, u, v,

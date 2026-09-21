@@ -242,6 +242,7 @@ bool ProceduralSolidMaterialGraphV1_Validate(
     if (!graph ||
         graph->schema_version != PROCEDURAL_SOLID_MATERIAL_GRAPH_SCHEMA_VERSION ||
         !stable_id(graph->graph_id, sizeof(graph->graph_id)) ||
+        (graph->surface_mapping_ref[0] && !stable_id(graph->surface_mapping_ref,sizeof(graph->surface_mapping_ref))) ||
         !stable_id(graph->authored_binding_id,
                    sizeof(graph->authored_binding_id)) ||
         strlen(graph->authored_binding_digest_sha256) != 64u ||
@@ -284,6 +285,7 @@ bool ProceduralSolidMaterialGraphV1_Validate(
     for (size_t i = 0u; i < graph->layer_count; ++i) {
         const ProceduralSolidMaterialLayerV1 *layer = &graph->layers[i];
         if (!stable_id(layer->material_id, sizeof(layer->material_id)) ||
+            (graph->surface_mapping_ref[0] && strlen(layer->material_id) >= 32u) ||
             find_node(graph, layer->weight_node_id) < 0) {
             report_set(report, PROCEDURAL_SOLID_MATERIAL_GRAPH_STATUS_MATERIAL,
                        "layers", "layer material or weight node is invalid");

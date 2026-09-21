@@ -56,6 +56,7 @@ typedef struct RuntimeMaterialAuthoredTextureFaceMetadata {
         channelRefs[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_CHANNEL_REFS];
 } RuntimeMaterialAuthoredTextureFaceMetadata;
 
+bool RuntimeMaterialAuthoredTextureGetMappingReference(int index,char* out,size_t size);
 void RuntimeMaterialAuthoredTextureResetAll(void);
 unsigned long long RuntimeMaterialAuthoredTextureRevision(void);
 bool RuntimeMaterialAuthoredTextureClearBindingForObject(int scene_object_index);

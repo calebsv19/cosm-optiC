@@ -61,4 +61,8 @@ bool RuntimeMaterialPayload3D_ApplyShadingNormal(
     const RuntimeMaterialPayload3D* payload,
     HitInfo3D* io_hit);
 
+/* Reuse the legacy authored base/overlay response policy in mapped sampling. */
+void RuntimeMaterialSurfaceApplyAuthoredIntent(RuntimeMaterialSurfaceEval* eval,
+    RuntimeMaterialTextureLayerKind kind,double alpha,bool overlay);
+
 #endif

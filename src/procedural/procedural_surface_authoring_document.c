@@ -120,7 +120,10 @@ bool ProceduralSurfaceAuthoringDocumentV1_Validate(
                    "document", "document identity or source is invalid");
         return false;
     }
-    if (!ref_validate(&document->material_graph,
+    if (!ref_validate(&document->surface_mapping,
+                      PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_OUTPUT_MATERIAL,
+                      report, "surface_mapping") ||
+        !ref_validate(&document->material_graph,
                       PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_OUTPUT_MATERIAL |
                           PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_OUTPUT_MICRODETAIL_NORMAL,
                       report, "material_graph") ||
@@ -245,6 +248,10 @@ bool ProceduralSurfaceAuthoringDocumentV1_CanonicalJson(
                    "canonical", "canonical output buffer is too small");
         return false;
     }
+    if(ref_present(&document->surface_mapping)) {
+        APPEND(",\"surface_mapping\":");
+        if(!append_ref(out_json,out_capacity,&used,&document->surface_mapping)) return false;
+    }
     APPEND("}");
 #undef APPEND
     return true;
@@ -287,6 +294,8 @@ bool ProceduralSurfaceAuthoringDocumentV1_Compile(
              document->source_mesh_digest_sha256);
     plan.attachment_count = (uint32_t)document->attachment_count;
     plan.material_graph_bound = ref_present(&document->material_graph);
+    plan.surface_mapping_bound = ref_present(&document->surface_mapping);
+    plan.surface_mapping = document->surface_mapping;
     plan.surface_field_graph_bound = ref_present(&document->surface_field_graph);
     plan.face_region_selector_bound = ref_present(&document->face_region_selector);
     if (plan.material_graph_bound)
@@ -311,6 +320,7 @@ static ProceduralSurfaceAuthoringDocumentRef *document_field_ref(
     ProceduralSurfaceAuthoringDocumentV1 *document, const char *field) {
     if (!document || !field) return NULL;
     if (strcmp(field, "material_graph") == 0) return &document->material_graph;
+    if (strcmp(field, "surface_mapping") == 0) return &document->surface_mapping;
     if (strcmp(field, "surface_field_graph") == 0) return &document->surface_field_graph;
     if (strcmp(field, "face_region_selector") == 0) return &document->face_region_selector;
     if (strncmp(field, "attachment:", 11u) == 0) {
@@ -510,6 +520,8 @@ bool ProceduralSurfaceAuthoringDocumentV1_LoadJsonFile(
                    "schema", "unsupported document schema");
         return false;
     }
+    if (json_object_object_get_ex(root,"surface_mapping",&value) &&
+        !parse_ref(value,&document.surface_mapping)) goto invalid;
     if (json_object_object_get_ex(root, "material_graph", &value) &&
         !parse_ref(value, &document.material_graph)) goto invalid;
     if (json_object_object_get_ex(root, "surface_field_graph", &value) &&

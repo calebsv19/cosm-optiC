@@ -773,14 +773,18 @@ static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
 /* Versioned cell-domain adapter. Legacy placement and kernels above are unchanged.
  * Layer offsets are cell units, rotation is about the cell origin; no fract of
  * the whole coordinate. Stable uint32 identity never includes array position. */
-bool RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(const RuntimeMaterialTextureStack* stack,
-    double u, double v, uint32_t seed, int period, const RuntimeMaterialSurfaceEval* base,
+bool RuntimeMaterialTextureStackEvaluateMappedSamples(const RuntimeMaterialTextureStack* stack,
+    const RuntimeMaterialMappedLayerSample* samples,const RuntimeMaterialSurfaceEval* base,
     RuntimeMaterialSurfaceEval* out) {
-    if (!stack || !base || !out || !isfinite(u) || !isfinite(v)) return false;
+    if (!stack || !samples || !base || !out) return false;
     RuntimeMaterialTextureStack normalized=RuntimeMaterialTextureStackNormalize(*stack);
     RuntimeMaterialSurfaceEval eval=*base;
     for (int i=0;i<normalized.layerCount;++i) {
         const RuntimeMaterialTextureLayer* layer=&normalized.layers[i];
+        const RuntimeMaterialMappedLayerSample* query=&samples[i];
+        double u=query->u,v=query->v;uint32_t seed=query->seed;int period=query->period;
+        if(!isfinite(u) || !isfinite(v) || !isfinite(query->source_weight) || query->source_weight<0 || query->source_weight>1) return false;
+        RuntimeMaterialSurfaceEval before=eval;
         if (layer->kind!=RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK &&
             layer->kind!=RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID) return false;
         if (!layer->enabled) continue;
@@ -799,11 +803,22 @@ bool RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(const RuntimeMaterial
             runtime_material_surface_eval_apply_base_sample(&eval,&sample,amount,i);
         }
         runtime_material_surface_eval_apply_layer_influences(&eval,layer,amount);
+#define MAP_WEIGHT(f) if(query->source_weight<1) eval.f=before.f+(eval.f-before.f)*query->source_weight
+        MAP_WEIGHT(colorR);MAP_WEIGHT(colorG);MAP_WEIGHT(colorB);MAP_WEIGHT(roughness);
+        MAP_WEIGHT(reflectivity);MAP_WEIGHT(specWeight);MAP_WEIGHT(diffuseWeight);MAP_WEIGHT(transparency);
+#undef MAP_WEIGHT
     }
     if (eval.transparency>base->transparency) eval.transparency=base->transparency;
     runtime_material_surface_eval_refresh(&eval);
     *out=eval;
     return true;
+}
+
+bool RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(const RuntimeMaterialTextureStack* stack,
+    double u,double v,uint32_t seed,int period,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out) {
+    RuntimeMaterialMappedLayerSample samples[RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS];
+    for(int i=0;i<RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS;++i) samples[i]=(RuntimeMaterialMappedLayerSample){u,v,1,seed,period};
+    return RuntimeMaterialTextureStackEvaluateMappedSamples(stack,samples,base,out);
 }
 
 bool RuntimeMaterialTextureStackEvaluateBrickCells(const RuntimeMaterialTextureStack* stack,

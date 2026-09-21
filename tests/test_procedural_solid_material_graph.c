@@ -56,10 +56,17 @@ static void test_named_selector_node(void) {
     graph.nodes[0].kind = PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR;
     snprintf(graph.nodes[0].region_kind, sizeof(graph.nodes[0].region_kind),
              "upper");
+    snprintf(graph.surface_mapping_ref,sizeof(graph.surface_mapping_ref),"brick-chart");
     assert(ProceduralSolidMaterialGraphV1_SaveJsonFileAtomic(
         "/tmp/named_selector_graph.json", &graph, &report));
     assert(ProceduralSolidMaterialGraphV1_LoadJsonFile(
         "/tmp/named_selector_graph.json", &loaded, &report));
+    assert(!strcmp(loaded.surface_mapping_ref,"brick-chart"));
+    char original_id[sizeof(loaded.layers[0].material_id)];
+    snprintf(original_id,sizeof(original_id),"%s",loaded.layers[0].material_id);
+    snprintf(loaded.layers[0].material_id,sizeof(loaded.layers[0].material_id),"too_long_to_fit_a_stable_stack_layer_identity");
+    assert(!ProceduralSolidMaterialGraphV1_Validate(&loaded,&report));
+    snprintf(loaded.layers[0].material_id,sizeof(loaded.layers[0].material_id),"%s",original_id);
     assert(loaded.nodes[0].kind == PROCEDURAL_SOLID_MATERIAL_NODE_NAMED_SELECTOR);
     assert(strcmp(loaded.nodes[0].region_kind, "upper") == 0);
     assert(ProceduralSolidAuthoredMaterialV1_FromTemplate(

@@ -352,3 +352,9 @@ bool RuntimeMaterialAuthoredTextureSampleOverlayFace(int scene_object_index,
                                                                v,
                                                                out_sample);
 }
+
+bool RuntimeMaterialAuthoredTextureGetMappingReference(int index,char* out,size_t size) {
+    RuntimeMaterialAuthoredTextureBinding* b=runtime_material_authored_texture_binding_at(index);
+    if(!b || !b->active || !out || !size || !b->surfaceMappingRef[0]) return false;
+    snprintf(out,size,"%s",b->surfaceMappingRef);return true;
+}

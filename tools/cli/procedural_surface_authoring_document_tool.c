@@ -113,13 +113,14 @@ static void plan_json(const ProceduralSurfaceAuthoringDocumentCompilePlan *plan)
            "\"source_object_id\":\"%s\",\"source_mesh_digest_sha256\":\"%s\","
            "\"output_domains\":%u,\"attachment_count\":%u,"
            "\"material_graph_bound\":%s,\"surface_field_graph_bound\":%s,"
-           "\"face_region_selector_bound\":%s}",
+           "\"face_region_selector_bound\":%s,\"surface_mapping_bound\":%s,\"surface_mapping_id\":\"%s\"}",
            plan->valid ? "true" : "false", plan->document_id,
            plan->document_digest_sha256, plan->source_object_id,
            plan->source_mesh_digest_sha256, plan->output_domains,
            plan->attachment_count, plan->material_graph_bound ? "true" : "false",
            plan->surface_field_graph_bound ? "true" : "false",
-           plan->face_region_selector_bound ? "true" : "false");
+           plan->face_region_selector_bound ? "true" : "false",
+           plan->surface_mapping_bound ? "true" : "false",plan->surface_mapping.id);
 }
 
 static int inspect_document(const char *operation,
@@ -185,6 +186,10 @@ static int canvas_document(const ProceduralSurfaceAuthoringDocumentV1 *document)
                                   540, 80, document->material_graph.digest_sha256,
                                   document->material_graph.output_domains);
     }
+    if(document->surface_mapping.id[0]) {
+        printf(",");canvas_node("surface_mapping","lane","surface_mapping",260,650,NULL,0);
+        printf(",");canvas_node("ref:surface_mapping","reference",document->surface_mapping.id,540,650,document->surface_mapping.digest_sha256,document->surface_mapping.output_domains);
+    }
     if (document->surface_field_graph.id[0]) {
         printf(","); canvas_node("ref:surface_field_graph", "reference", document->surface_field_graph.id,
                                   540, 210, document->surface_field_graph.digest_sha256,
@@ -208,6 +213,7 @@ static int canvas_document(const ProceduralSurfaceAuthoringDocumentV1 *document)
     printf(","); canvas_edge("source_mesh", "face_region_selector");
     printf(","); canvas_edge("source_mesh", "attachment_graph");
     if (document->material_graph.id[0]) { printf(","); canvas_edge("material_graph", "ref:material_graph"); }
+    if(document->surface_mapping.id[0]) {printf(",");canvas_edge("source_mesh","surface_mapping");printf(",");canvas_edge("surface_mapping","ref:surface_mapping");}
     if (document->surface_field_graph.id[0]) { printf(","); canvas_edge("surface_field_graph", "ref:surface_field_graph"); }
     if (document->face_region_selector.id[0]) { printf(","); canvas_edge("face_region_selector", "ref:face_region_selector"); }
     for (size_t i = 0u; i < document->attachment_count; ++i) {
@@ -264,6 +270,7 @@ static int create_document(int argc, char **argv) {
 static ProceduralSurfaceAuthoringDocumentRef *field_ref(
     ProceduralSurfaceAuthoringDocumentV1 *document, const char *field) {
     if (strcmp(field, "material_graph") == 0) return &document->material_graph;
+    if (strcmp(field,"surface_mapping")==0) return &document->surface_mapping;
     if (strcmp(field, "surface_field_graph") == 0) return &document->surface_field_graph;
     if (strcmp(field, "face_region_selector") == 0) return &document->face_region_selector;
     if (strncmp(field, "attachment:", 11u) == 0) {

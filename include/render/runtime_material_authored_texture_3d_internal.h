@@ -23,6 +23,7 @@ typedef struct RuntimeMaterialAuthoredTextureBinding {
     int baseFaceCount;
     int overlayFaceCount;
     char objectId[64];
+    char surfaceMappingRef[64];
     char manifestPath[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
     char resolvedManifestPath[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
     char bindingMode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];

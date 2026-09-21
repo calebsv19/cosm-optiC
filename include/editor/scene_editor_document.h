@@ -87,5 +87,12 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
 
 
 bool SceneEditorDocumentGetSurfaceMappingJSON(int index,char* out,size_t size);
+bool SceneEditorDocumentGetSurfaceMaterialJSON(int index,char* out,size_t size);
+bool SceneEditorDocumentSetSurfaceBinding(int index,const char* binding_json,unsigned long long revision,char* diagnostic,size_t size);
+/* M3 source edits address stable layer IDs in retained graphs/stacks. A stale
+ * revision or unsupported property is rejected before any mutation. */
+bool SceneEditorDocumentSetSurfaceLayerValue(int index,const char* layer_id,
+    const char* group,const char* property,double value,unsigned long long revision,
+    char* diagnostic,size_t size);
 
 #endif

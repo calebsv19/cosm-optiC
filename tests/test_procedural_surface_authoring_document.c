@@ -36,6 +36,7 @@ static void test_document_contract(void) {
     set_ref(&document.face_region_selector, "top_face",
             PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_OUTPUT_ATTACHED_ASSET,
             'd');
+    set_ref(&document.surface_mapping,"brick-chart",PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_OUTPUT_MATERIAL,'f');
     document.attachment_count = 1u;
     set_ref(&document.attachments[0], "grass_asset",
             PROCEDURAL_SURFACE_AUTHORING_DOCUMENT_OUTPUT_ATTACHED_ASSET, 'e');
@@ -52,7 +53,12 @@ static void test_document_contract(void) {
     assert(strcmp(digest, digest_repeat) == 0);
     assert(ProceduralSurfaceAuthoringDocumentV1_Compile(
         &document, &plan, &report));
-    assert(plan.valid);
+    assert(plan.valid && plan.surface_mapping_bound);
+    assert(!strcmp(plan.surface_mapping.id,"brick-chart"));
+    assert(ProceduralSurfaceAuthoringDocumentV1_SaveJsonFileAtomic("/tmp/m3-document-roundtrip.json",&document,&report));
+    assert(ProceduralSurfaceAuthoringDocumentV1_LoadJsonFile("/tmp/m3-document-roundtrip.json",&reordered,&report));
+    assert(!memcmp(&reordered.surface_mapping,&document.surface_mapping,sizeof(document.surface_mapping)));
+    unlink("/tmp/m3-document-roundtrip.json");
     assert(strcmp(plan.document_digest_sha256, digest) == 0);
     assert(plan.attachment_count == 1u);
     assert((plan.output_domains &

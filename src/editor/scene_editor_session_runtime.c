@@ -1,3 +1,4 @@
+#include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_mesh_preview_store.h"
@@ -63,6 +64,8 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
+    if(SceneEditorSurfaceMaterialPanelActive() &&
+       SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex())) return;
     if (SceneEditorRenameActive() && SceneEditorRenameHandleEvent(event)) return;
     if (editor->currentMode==EDITOR_MODE_MATERIAL && MaterialEditorHandlePopupEvent(event)) return;
     if (SceneEditorWorkspaceProfileMenuOpen() && SceneEditorWorkspaceProfileHandleEvent(editor,event)) return;

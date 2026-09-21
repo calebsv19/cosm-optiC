@@ -2,13 +2,34 @@
 #include "import/runtime_scene_bridge.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_material_face_placement.h"
+#include "render/runtime_material_graph_3d.h"
+#include "render/runtime_material_payload_3d.h"
+#include "app/ray_tracing_sha256.h"
+#include "render/runtime_material_authored_texture_3d.h"
 #include "config/config_manager.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+typedef struct LayerMappings {
+    bool active[8];
+    CoreAuthoredSurfaceMapping maps[8];
+} LayerMappings;
+
+typedef struct RegionBinding {
+    bool active, has_map, has_stack;
+    CoreAuthoredSurfaceMapping map;
+    RuntimeMaterialTextureStack stack;
+    LayerMappings layers;
+} RegionBinding;
+
 typedef struct Binding {
-    bool active, mesh;
+    bool active, mesh, authored, asset_graph;
+    RegionBinding regions[6];
+    LayerMappings layers;
+    int mapping_count;
+    char mapping_ids[16][64];
+    CoreAuthoredSurfaceMapping mappings[16];
     double position[3],scale[3],basis[3][3];
     CoreAuthoredSurfaceMapping map;
     RuntimeSceneBridgePrimitiveSeed primitive;
@@ -91,6 +112,97 @@ static bool frame_supported(json_object* object) {
         (basis[0][0]*basis[1][1]-basis[0][1]*basis[1][0])*basis[2][2];
     return handedness>0;
 }
+/* Validate the original graph before the legacy compiler can normalize, skip,
+ * truncate or synthesize identifiers. The retained JSON remains authoring truth. */
+static json_object* source_layers(json_object* row) {
+    json_object* graph=field(row,"material_graph");
+    if(!graph) graph=field(row,"materialGraph");
+    if(!graph) return json_object_get(field(field(row,"material_texture_stack"),"layers"));
+    if(field(row,"material_graph") && field(row,"materialGraph")) return NULL;
+    if(field(row,"material_texture_stack") || field(row,"materialTextureStack")) return NULL;
+    json_object* schema=field(graph,"schema_version");if(!schema) schema=field(graph,"schemaVersion");
+    json_object* graph_id=field(graph,"graph_id");if(!graph_id) graph_id=field(graph,"graphId");
+    if(!json_object_is_type(schema,json_type_int) || json_object_get_int(schema)!=1 ||
+       !json_object_is_type(graph_id,json_type_string) || !json_object_get_string(graph_id)[0] ||
+       strlen(json_object_get_string(graph_id))>=RUNTIME_MATERIAL_GRAPH_ID_CAPACITY) return NULL;
+    json_object* nodes=field(graph,"nodes");
+    if(!json_object_is_type(nodes,json_type_array) || !json_object_array_length(nodes) ||
+       json_object_array_length(nodes)>8) return NULL;
+    json_object* layers=json_object_new_array();
+    for(size_t i=0;i<json_object_array_length(nodes);++i) {
+        json_object* node=json_object_array_get_idx(nodes,i);
+        json_object* id=field(node,"node_id");if(!id) id=field(node,"nodeId");
+        if(!json_object_is_type(id,json_type_string) || !json_object_get_string(id)[0] ||
+           strlen(json_object_get_string(id))>=RUNTIME_MATERIAL_GRAPH_NODE_ID_CAPACITY ||
+           (!token(node,"node_kind","layer") && !token(node,"nodeKind","layer")) ||
+           !json_object_is_type(field(node,"layer"),json_type_object)) goto invalid;
+        for(size_t j=0;j<i;++j) {
+            json_object* other=json_object_array_get_idx(nodes,j);
+            if(token(other,"node_id",json_object_get_string(id)) || token(other,"nodeId",json_object_get_string(id))) goto invalid;
+        }
+        json_object_array_add(layers,json_object_get(field(node,"layer")));
+    }
+    RuntimeMaterialGraphDocument document;RuntimeMaterialGraphCompileResult compiled;
+    if(!RuntimeMaterialGraphDocumentFromJsonObject(graph,&document) ||
+       !RuntimeMaterialGraphCompileToStack(&document,&compiled) || compiled.channelRefCount ||
+       compiled.stack.layerCount!=(int)json_object_array_length(layers)) goto invalid;
+    return layers;
+invalid:
+    json_object_put(layers);return NULL;
+}
+static bool source_supported(json_object* row,bool axial) {
+        if(!json_object_is_type(row,json_type_object)) return false;
+        json_object* layers=source_layers(row);
+        if(!layers || !json_object_is_type(layers,json_type_array) ||
+           json_object_array_length(layers)==0 || json_object_array_length(layers)>8) {if(layers) json_object_put(layers);return false;}
+        bool supported=true;
+        for(size_t j=0;j<json_object_array_length(layers);++j) {
+            json_object* layer=json_object_array_get_idx(layers,j);
+            if(field(layer,"enabled") && !json_object_is_type(field(layer,"enabled"),json_type_boolean)) supported=false;
+            const char* property_groups[]={"","placement","parameters"};
+            const char* properties[][9]={
+                {"opacity","roughness_influence","reflectivity_influence","specular_influence","diffuse_influence","transparency_influence",NULL},
+                {"offset_u","offset_v","scale","rotation","strength",NULL},
+                {"grain","coverage","contrast","edge_softness","flow","color_depth","surface_damage","seed",NULL}};
+            for(int g=0;g<3;++g) {
+                json_object* owner=g?field(layer,property_groups[g]):layer;
+                if(owner && !json_object_is_type(owner,json_type_object)) supported=false;
+                for(int k=0;properties[g][k];++k) {
+                    const char* key=properties[g][k];char camel[64];size_t length=0;
+                    for(size_t c=0;key[c];++c) {
+                        if(key[c]=='_' && key[c+1]) {++c;camel[length++]=(char)(key[c]-'a'+'A');}
+                        else camel[length++]=key[c];
+                    }
+                    camel[length]=0;
+                    json_object* values[2]={field(owner,key),strcmp(camel,key)?field(owner,camel):NULL};
+                    for(int alias=0;alias<2;++alias) {
+                        double n;if(!values[alias]) continue;
+                        if(!number(values[alias],&n)) {supported=false;continue;}
+                        if(!strcmp(key,"scale")) {if(n<=0 || n>1e6) supported=false;}
+                        else if(!strcmp(key,"offset_u") || !strcmp(key,"offset_v") || !strcmp(key,"rotation")) {if(fabs(n)>1e6) supported=false;}
+                        else if(!strcmp(key,"seed")) {if(n<0 || n>16777215 || floor(n)!=n) supported=false;}
+                        else if(n<(strstr(key,"influence")?-1:0) || n>1) supported=false;
+                    }
+                }
+            }
+            if(axial) {
+                json_object* placement=field(layer,"placement");
+                const char* keys[]={"scale","rotation"};
+                const double expected[]={1,0};
+                for(int k=0;k<2;++k) {
+                    double n=expected[k];
+                    if(field(placement,keys[k]) && (!number(field(placement,keys[k]),&n) || n!=expected[k])) supported=false;
+                }
+            }
+            if(!token(layer,"kind","brick") && !token(layer,"kind","solid")) supported=false;
+            if(!field(layer,"id") || !json_object_is_type(field(layer,"id"),json_type_string) ||
+               !json_object_get_string(field(layer,"id"))[0] ||
+               strlen(json_object_get_string(field(layer,"id")))>=RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE) {supported=false;continue;}
+            for(size_t k=0;k<j;++k)
+                if(token(json_object_array_get_idx(layers,k),"id",json_object_get_string(field(layer,"id")))) supported=false;
+        }
+        json_object_put(layers);return supported;
+}
 static bool layers_supported(json_object* root,const char* id,bool axial) {
     json_object* rows=field(field(field(field(root,"extensions"),"ray_tracing"),"authoring"),"object_materials");
     if(!rows || !json_object_is_type(rows,json_type_array)) return false;
@@ -99,37 +211,221 @@ static bool layers_supported(json_object* root,const char* id,bool axial) {
         if(!token(row,"object_id",id)) continue;
         for(size_t k=i+1;k<json_object_array_length(rows);++k)
             if(token(json_object_array_get_idx(rows,k),"object_id",id)) return false;
-        /* M1 does not reinterpret graph/image/face source documents. */
+        /* Graph integration is explicit; M1/M2 documents retain their gate. */
+        json_object* binding=field(row,"surface_material_binding");
+        bool m3=binding && token(binding,"required_capability","optic.surface_material_v3") &&
+            json_object_is_type(field(binding,"version"),json_type_int) && json_object_get_int(field(binding,"version"))==1;
+        if(binding && !m3) return false;
         json_object* placements=field(field(row,"procedural_texture"),"face_placements");
-        if(field(row,"material_graph") || field(row,"materialGraph") || field(row,"authored_texture") ||
+        if((!m3 && (field(row,"material_graph") || field(row,"materialGraph") || field(row,"authored_texture"))) ||
            (placements && (!json_object_is_type(placements,json_type_array) || json_object_array_length(placements)>0))) return false;
-        json_object* layers=field(field(row,"material_texture_stack"),"layers");
-        if(!layers || !json_object_is_type(layers,json_type_array) ||
-           json_object_array_length(layers)==0 || json_object_array_length(layers)>8) return false;
-        for(size_t j=0;j<json_object_array_length(layers);++j) {
-            json_object* layer=json_object_array_get_idx(layers,j);
-            if(axial) {
-                json_object* placement=field(layer,"placement");
-                const char* keys[]={"scale","rotation"};
-                const double expected[]={1,0};
-                for(int k=0;k<2;++k) {
-                    double n=expected[k];
-                    if(field(placement,keys[k]) && (!number(field(placement,keys[k]),&n) || n!=expected[k])) return false;
-                }
-            }
-            if(!token(layer,"kind","brick") && !token(layer,"kind","solid")) return false;
-            if(!field(layer,"id") || !json_object_is_type(field(layer,"id"),json_type_string) ||
-               !json_object_get_string(field(layer,"id"))[0] ||
-               strlen(json_object_get_string(field(layer,"id")))>=RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE) return false;
-            for(size_t k=0;k<j;++k)
-                if(token(json_object_array_get_idx(layers,k),"id",json_object_get_string(field(layer,"id")))) return false;
-        }
-        return true;
+        return source_supported(row,axial);
     }
     return false;
 }
+static json_object* material_row(json_object* root,const char* id) {
+    json_object* rows=field(field(field(field(root,"extensions"),"ray_tracing"),"authoring"),"object_materials");
+    for(size_t i=0;json_object_is_type(rows,json_type_array) && i<json_object_array_length(rows);++i) {
+        json_object* row=json_object_array_get_idx(rows,i);
+        if(token(row,"object_id",id)) return row;
+    }
+    return NULL;
+}
+static int region_face(json_object* region) {
+    const char* roles[]={"front","back","left","right","top","bottom"};
+    for(int i=0;i<6;++i) if(token(region,"face_role",roles[i])) return i;
+    return -1;
+}
+static json_object* resolve_mapping(json_object* binding,json_object* reference) {
+    if(!json_object_is_type(reference,json_type_string)) return NULL;
+    const char* id=json_object_get_string(reference);
+    json_object* maps=field(binding,"mappings");
+    for(size_t i=0;json_object_is_type(maps,json_type_array) && i<json_object_array_length(maps);++i) {
+        json_object* entry=json_object_array_get_idx(maps,i);
+        if(token(entry,"id",id)) return field(entry,"definition");
+    }
+    return NULL;
+}
+static bool layer_maps(json_object* source,json_object* binding,bool mesh,LayerMappings* out) {
+    if(out) memset(out,0,sizeof(*out));
+    json_object* layers=source_layers(source);if(!layers) return false;
+    bool valid=true;
+    for(size_t i=0;i<json_object_array_length(layers);++i) {
+        json_object* layer=json_object_array_get_idx(layers,i),*ref=field(layer,"mapping_ref");
+        if(!ref) continue;
+        CoreAuthoredSurfaceMapping map;
+        if(mesh || !parse(resolve_mapping(binding,ref),&map)) {valid=false;break;}
+        /* A per-layer projection must obey the same source-placement constraints. */
+        if(map.version==2) {
+            json_object* placement=field(layer,"placement");double scale=1,rotation=0;
+            if((field(placement,"scale") && !number(field(placement,"scale"),&scale)) ||
+               (field(placement,"rotation") && !number(field(placement,"rotation"),&rotation))) valid=false;
+            if(scale!=1 || rotation!=0) valid=false;
+        }
+        if(out && i<8) {out->active[i]=true;out->maps[i]=map;}
+    }
+    json_object_put(layers);return valid;
+}
+/* Resource dependencies are verified once during preparation, never per ray.
+ * A source document selects a named mapping; its bytes and mapping bytes are
+ * separately pinned so editing either invalidates a stale authoring reference. */
+static bool source_documents_supported(json_object* binding,const char* object_id) {
+    json_object* docs=field(binding,"source_documents");
+    if(!docs) return true;
+    if(!json_object_is_type(docs,json_type_array) || json_object_array_length(docs)>16) return false;
+    for(size_t i=0;i<json_object_array_length(docs);++i) {
+        json_object* item=json_object_array_get_idx(docs,i);
+        const char* path=json_object_get_string(field(item,"path"));
+        const char* expected=json_object_get_string(field(item,"sha256"));char digest[65];
+        if(!path || path[0]!='/' || !ray_tracing_sha256_is_valid_hex(expected) ||
+           !ray_tracing_sha256_file(path,digest) || strcmp(digest,expected)) return false;
+        json_object* doc=json_object_from_file(path);if(!doc) return false;
+        bool valid=false;json_object* ref=NULL;
+        if(token(item,"kind","surface_authoring_document") && token(doc,"schema","ray_tracing.surface_authoring_document")) {
+            ref=field(field(doc,"surface_mapping"),"id");
+            const char* expected_map=json_object_get_string(field(field(doc,"surface_mapping"),"digest_sha256"));
+            json_object* maps=field(binding,"mappings");
+            for(size_t j=0;ref && maps && j<json_object_array_length(maps);++j) {
+                json_object* map=json_object_array_get_idx(maps,j);
+                if(token(map,"id",json_object_get_string(ref)) && expected_map && token(map,"sha256",expected_map) && token(doc,"source_object_id",object_id)) valid=true;
+            }
+        } else if(token(item,"kind","solid_graph") && token(doc,"schema","ray_tracing.procedural_solid_material_composition_graph")) {
+            ref=field(doc,"surface_mapping_ref");valid=true;
+        } else if(token(item,"kind","authored_manifest") && field(doc,"export_binding_kind")) {
+            ref=field(doc,"surface_mapping_ref");valid=token(doc,"source_object_id",object_id);
+        } else if(token(item,"kind","layer_graph") && field(doc,"nodes")) {
+            ref=field(doc,"surface_mapping_ref");valid=true;
+        }
+        valid=valid && ref && resolve_mapping(binding,ref);
+        json_object_put(doc);if(!valid) return false;
+    }
+    return true;
+}
+static bool external_mapping_supported(json_object* row,json_object* object,json_object* binding) {
+    if(field(row,"authored_texture") && token(object,"object_type","mesh_asset_instance")) return false;
+    json_object* sources[2]={field(row,"authored_texture"),field(object,"procedural_solid_material_ref")};
+    const char* keys[2]={"manifest_path","graph_path"};
+    for(int i=0;i<2;++i) {
+        json_object* value=field(sources[i],keys[i]);if(!value) continue;
+        const char* path=json_object_get_string(value);
+        if(!path || path[0]!='/') return false;
+        json_object* doc=json_object_from_file(path);if(!doc) return false;
+        json_object* reference=NULL;
+        bool has_reference=json_object_object_get_ex(doc,"surface_mapping_ref",&reference);
+        bool valid=(!has_reference && i==0) || resolve_mapping(binding,reference)!=NULL;
+        if(i==0) valid=valid && token(doc,"source_object_id",json_object_get_string(field(object,"object_id")));
+        json_object_put(doc);if(!valid) return false;
+    }
+    return true;
+}
+static bool regions_supported(json_object* row,json_object* object,const CoreAuthoredSurfaceMapping* map) {
+    json_object* binding=field(row,"surface_material_binding");
+    if(!binding) return layer_maps(row,NULL,token(object,"object_type","mesh_asset_instance"),NULL);
+    json_object* maps=field(binding,"mappings");
+    if(maps && (!json_object_is_type(maps,json_type_array) || json_object_array_length(maps)>16)) return false;
+    for(size_t i=0;maps && i<json_object_array_length(maps);++i) {
+        json_object* entry=json_object_array_get_idx(maps,i),*id=field(entry,"id");CoreAuthoredSurfaceMapping parsed;
+        if(!json_object_is_type(id,json_type_string) || !json_object_get_string(id)[0] || strlen(json_object_get_string(id))>=64 ||
+           !parse(field(entry,"definition"),&parsed)) return false;
+        for(size_t j=0;j<i;++j) if(token(json_object_array_get_idx(maps,j),"id",json_object_get_string(id))) return false;
+        if(field(entry,"path") || field(entry,"sha256")) {
+            const char* path=json_object_get_string(field(entry,"path"));
+            const char* expected=json_object_get_string(field(entry,"sha256"));char digest[65];
+            if(!path || path[0]!='/' || !ray_tracing_sha256_is_valid_hex(expected) ||
+               !ray_tracing_sha256_file(path,digest) || strcmp(expected,digest)) return false;
+            json_object* definition=json_object_from_file(path);
+            bool same=definition && json_object_equal(definition,field(entry,"definition"));
+            if(definition) json_object_put(definition);if(!same) return false;
+        }
+    }
+    if(!source_documents_supported(binding,json_object_get_string(field(object,"object_id"))) ||
+       !external_mapping_supported(row,object,binding) ||
+       !layer_maps(row,binding,token(object,"object_type","mesh_asset_instance"),NULL)) return false;
+    json_object* regions=field(binding,"regions");
+    if(!regions) return true;
+    if(!json_object_is_type(regions,json_type_array) || json_object_array_length(regions)>6 ||
+       token(object,"object_type","mesh_asset_instance")) return false;
+    bool used[6]={false};
+    for(size_t i=0;i<json_object_array_length(regions);++i) {
+        json_object* region=json_object_array_get_idx(regions,i);int face=region_face(region);
+        json_object* id=field(region,"id");
+        if(face<0 || used[face] || (token(object,"object_type","plane_primitive") && face!=0) ||
+           !json_object_is_type(id,json_type_string) || !json_object_get_string(id)[0] || strlen(json_object_get_string(id))>=64) return false;
+        used[face]=true;
+        for(size_t j=0;j<i;++j) if(token(json_object_array_get_idx(regions,j),"id",json_object_get_string(id))) return false;
+        CoreAuthoredSurfaceMapping effective=*map;
+        json_object* region_map=field(region,"mapping");
+        if(field(region,"mapping_ref")) {
+            if(region_map) return false;
+            region_map=resolve_mapping(binding,field(region,"mapping_ref"));if(!region_map) return false;
+        }
+        if(region_map && !parse(region_map,&effective)) return false;
+        if(field(region,"source") && !source_supported(field(region,"source"),effective.version==2)) return false;
+        if(!layer_maps(field(region,"source")?field(region,"source"):row,binding,false,NULL)) return false;
+        /* An inherited source must also fit an overridden projection. */
+        if(!field(region,"source") && !source_supported(row,effective.version==2)) return false;
+    }
+    return true;
+}
+bool RuntimeSurfaceMaterialCompileSource(json_object* row,RuntimeMaterialTextureStack* out) {
+    json_object* graph=field(row,"material_graph");if(!graph) graph=field(row,"materialGraph");
+    json_object* owned=NULL;
+    if(!graph) {
+        json_object* layers=source_layers(row);if(!layers) return false;
+        owned=json_object_new_object();graph=owned;
+        json_object_object_add(graph,"graph_id",json_object_new_string("prepared-source"));
+        json_object_object_add(graph,"schema_version",json_object_new_int(1));
+        json_object* nodes=json_object_new_array();json_object_object_add(graph,"nodes",nodes);
+        for(size_t i=0;i<json_object_array_length(layers);++i) {
+            json_object* layer=json_object_array_get_idx(layers,i),*node=json_object_new_object();
+            json_object_object_add(node,"node_id",json_object_get(field(layer,"id")));
+            json_object_object_add(node,"node_kind",json_object_new_string("layer"));
+            json_object_object_add(node,"layer",json_object_get(layer));json_object_array_add(nodes,node);
+        }
+        json_object_put(layers);
+    }
+    RuntimeMaterialGraphDocument document;RuntimeMaterialGraphCompileResult compiled;
+    bool ok=RuntimeMaterialGraphDocumentFromJsonObject(graph,&document) && RuntimeMaterialGraphCompileToStack(&document,&compiled);
+    if(ok) *out=compiled.stack;
+    if(owned) json_object_put(owned);return ok;
+}
+static void prepare_regions(Binding* b,json_object* row) {
+    json_object* binding=field(row,"surface_material_binding");
+    b->authored=field(row,"authored_texture")!=NULL;
+    layer_maps(row,binding,b->mesh,&b->layers);
+    json_object* maps=field(binding,"mappings");
+    for(size_t i=0;json_object_is_type(maps,json_type_array) && i<json_object_array_length(maps) && i<16;++i) {
+        json_object* entry=json_object_array_get_idx(maps,i);
+        if(parse(field(entry,"definition"),&b->mappings[i])) {
+            snprintf(b->mapping_ids[i],sizeof(b->mapping_ids[i]),"%s",json_object_get_string(field(entry,"id")));b->mapping_count++;
+        }
+    }
+    json_object* regions=field(binding,"regions");
+    for(size_t i=0;json_object_is_type(regions,json_type_array) && i<json_object_array_length(regions);++i) {
+        json_object* region=json_object_array_get_idx(regions,i);int face=region_face(region);
+        if(face<0) continue;
+        RegionBinding* r=&b->regions[face];r->active=true;
+        json_object* m=field(region,"mapping");if(!m) m=resolve_mapping(binding,field(region,"mapping_ref"));
+        r->has_map=m && parse(m,&r->map);
+        layer_maps(field(region,"source")?field(region,"source"):row,binding,b->mesh,&r->layers);
+        r->has_stack=field(region,"source") && RuntimeSurfaceMaterialCompileSource(field(region,"source"),&r->stack);
+    }
+}
 bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_t size) {
     json_object* objects=field(root,"objects");
+    json_object* rows=field(field(field(field(root,"extensions"),"ray_tracing"),"authoring"),"object_materials");
+    for(size_t i=0;json_object_is_type(rows,json_type_array) && i<json_object_array_length(rows);++i) {
+        json_object* row=json_object_array_get_idx(rows,i),*binding=NULL;
+        if(!json_object_object_get_ex(row,"surface_material_binding",&binding)) continue;
+        bool found=false;const char* id=json_object_get_string(field(row,"object_id"));
+        for(size_t j=0;id && json_object_is_type(objects,json_type_array) && j<json_object_array_length(objects);++j) {
+            json_object* object=json_object_array_get_idx(objects,j);
+            if(token(object,"object_id",id) && mapping(object)) found=true;
+        }
+        if(!found || !json_object_is_type(binding,json_type_object)) {
+            snprintf(diagnostic,size,"surface_mapping: M3 material binding needs a mapped object");return false;
+        }
+    }
     for(size_t i=0;json_object_is_type(objects,json_type_array) && i<json_object_array_length(objects);++i) {
         json_object* object=json_object_array_get_idx(objects,i); json_object* m=NULL;
         json_object* ray=field(field(object,"extensions"),"ray_tracing");
@@ -141,7 +437,8 @@ bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_
             field(object,"object_id") && json_object_is_type(field(object,"object_id"),json_type_string) &&
             strlen(json_object_get_string(field(object,"object_id")))>0 && strlen(json_object_get_string(field(object,"object_id")))<64 &&
             parse(m,&parsed) && (!mesh || parsed.version==2) &&
-            layers_supported(root,json_object_get_string(field(object,"object_id")),token(m,"method","axial_height"));
+            layers_supported(root,json_object_get_string(field(object,"object_id")),token(m,"method","axial_height")) &&
+            regions_supported(material_row(root,json_object_get_string(field(object,"object_id"))),object,&parsed);
         const char* object_id=json_object_get_string(field(object,"object_id"));
         for(size_t other=0;object_id && other<json_object_array_length(objects);++other)
             if(other!=i && token(json_object_array_get_idx(objects,other),"object_id",object_id)) valid=false;
@@ -167,7 +464,7 @@ bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_
                (!isfinite(size) || size<0.1)) valid=false;
         }
         if(!valid) {
-            snprintf(diagnostic,size,"surface_mapping object %zu: unsupported/invalid surface contract, geometry, scale or source (requires brick/solid stack)",i);
+            snprintf(diagnostic,size,"surface_mapping object %zu: invalid surface mapping, geometry, source, region or resource reference",i);
             return false;
         }
     }
@@ -186,6 +483,8 @@ void RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
                 char id[64]={0};runtime_scene_bridge_get_last_object_id_for_scene_index(index,id,sizeof(id));
                 if(!token(object,"object_id",id)) continue;
                 Binding* b=&bindings[index];b->active=parse(m,&b->map);b->mesh=true;b->world_scale=world_scale;
+                b->asset_graph=field(field(object,"procedural_solid_material_ref"),"graph_path")!=NULL;
+                prepare_regions(b,material_row(root,id));
                 json_object* transform=field(object,"transform");double angles[3]={0};
                 for(int a=0;a<3;++a) {
                     char key[]={"xyz"[a],0};b->scale[a]=1;
@@ -208,15 +507,16 @@ void RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
             Binding* b=&bindings[p->scene_object_index];
             b->active=parse(m,&b->map) && dimensions(object,b->source_size);
             b->primitive=*p; b->world_scale=world_scale;
+            prepare_regions(b,material_row(root,p->object_id));
         }
     }
 }
 bool RuntimeSurfaceMappingActive(int i) { return animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE && i>=0 && i<MAX_OBJECTS && bindings[i].active; }
 unsigned long long RuntimeSurfaceMappingRevision(void) {return revision;}
-bool RuntimeSurfaceMappingCoordinates(const HitInfo3D* hit,CoreAuthoredSurfaceCoordinates* out) {
+static bool coordinates_for(const HitInfo3D* hit,const CoreAuthoredSurfaceMapping* m,CoreAuthoredSurfaceCoordinates* out) {
     if(out) memset(out,0,sizeof(*out));
     if(!hit || !out || !RuntimeSurfaceMappingActive(hit->sceneObjectIndex)) return false;
-    const Binding* b=&bindings[hit->sceneObjectIndex]; const CoreAuthoredSurfaceMapping* m=&b->map;
+    const Binding* b=&bindings[hit->sceneObjectIndex];
     const RuntimeSceneBridgePrimitiveSeed* p=&b->primitive;
     double point[3]={hit->position.x/b->world_scale,hit->position.y/b->world_scale,hit->position.z/b->world_scale};
     if(m->space==CORE_AUTHORED_SURFACE_OBJECT_REST && b->mesh) {
@@ -229,6 +529,10 @@ bool RuntimeSurfaceMappingCoordinates(const HitInfo3D* hit,CoreAuthoredSurfaceCo
         point[2]=p->depth>1e-12 ? (d.x*p->normal_x+d.y*p->normal_y+d.z*p->normal_z)*b->source_size[2]/p->depth : 0;
     }
     return core_authored_surface_coordinates(m,point,out);
+}
+bool RuntimeSurfaceMappingCoordinates(const HitInfo3D* hit,CoreAuthoredSurfaceCoordinates* out) {
+    if(!hit || !RuntimeSurfaceMappingActive(hit->sceneObjectIndex)) return false;
+    return coordinates_for(hit,&bindings[hit->sceneObjectIndex].map,out);
 }
 bool RuntimeSurfaceMappingDefinition(int index,CoreAuthoredSurfaceMapping* out) {
     if(!out || !RuntimeSurfaceMappingActive(index)) return false;
@@ -253,9 +557,83 @@ bool RuntimeSurfaceMappingEvaluateTiles(int index,double u,double v,const Runtim
 bool RuntimeSurfaceMappingEvaluate(const SceneObject* object,const HitInfo3D* hit,
     const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out) {
     CoreAuthoredSurfaceCoordinates coordinates;
-    (void)object;
-    if(!RuntimeSurfaceMappingCoordinates(hit,&coordinates) ||
-       !RuntimeSurfaceMappingEvaluateTiles(hit->sceneObjectIndex,coordinates.uv_tiles[0],coordinates.uv_tiles[1],base,out)) return false;
+    if(!hit || !RuntimeSurfaceMappingActive(hit->sceneObjectIndex)) return false;
+    const Binding* binding=&bindings[hit->sceneObjectIndex];
+    const CoreAuthoredSurfaceMapping* map=&binding->map;
+    const LayerMappings* layers=&binding->layers;
+    RuntimeMaterialSurfaceEval substrate=*base;
+    if(binding->authored) {
+        int face;double u,v;char reference[64];
+        if(binding->mesh || !RuntimeSurfaceMaterialPrimitiveIsland(hit->sceneObjectIndex,hit->position,hit->geometricNormal,&face,&u,&v)) return false;
+        if(RuntimeMaterialAuthoredTextureGetMappingReference(hit->sceneObjectIndex,reference,sizeof(reference))) {
+            bool found=false;
+            for(int i=0;i<binding->mapping_count;++i) if(!strcmp(reference,binding->mapping_ids[i])) {
+                CoreAuthoredSurfaceCoordinates q;if(!coordinates_for(hit,&binding->mappings[i],&q)) return false;
+                u=q.uv_tiles[0]-floor(q.uv_tiles[0]);v=q.uv_tiles[1]-floor(q.uv_tiles[1]);found=true;break;
+            }
+            if(!found) return false;
+        }
+        RuntimeMaterialAuthoredTextureFaceMetadata metadata={0};
+        RuntimeMaterialAuthoredTextureGetFaceMetadata(hit->sceneObjectIndex,face,&metadata);
+        RuntimeMaterialAuthoredTextureSample image;
+        if(!RuntimeMaterialAuthoredTextureSampleFace(hit->sceneObjectIndex,face,u,v,&image)) return false;
+        substrate.colorR+=(image.colorR-substrate.colorR)*image.alpha;
+        substrate.colorG+=(image.colorG-substrate.colorG)*image.alpha;
+        substrate.colorB+=(image.colorB-substrate.colorB)*image.alpha;
+        RuntimeMaterialSurfaceApplyAuthoredIntent(&substrate,RuntimeMaterialTextureLayerKindFromStableId(metadata.baseMaterialIntentKind),image.alpha,false);
+        if(RuntimeMaterialAuthoredTextureSampleOverlayFace(hit->sceneObjectIndex,face,u,v,&image)) {
+            substrate.colorR+=(image.colorR-substrate.colorR)*image.alpha;
+            substrate.colorG+=(image.colorG-substrate.colorG)*image.alpha;
+            substrate.colorB+=(image.colorB-substrate.colorB)*image.alpha;
+            if(!metadata.overlayMaterialIntentKind[0]) RuntimeMaterialAuthoredTextureGetOverlayMaterialIntent(hit->sceneObjectIndex,metadata.overlayMaterialIntentKind,sizeof(metadata.overlayMaterialIntentKind));
+            RuntimeMaterialSurfaceApplyAuthoredIntent(&substrate,RuntimeMaterialTextureLayerKindFromStableId(metadata.overlayMaterialIntentKind),image.alpha,true);
+        }
+        base=&substrate;
+    }
+    RuntimeMaterialTextureStack stack;
+    if(!SceneEditorMaterialStackGetEffectiveObjectStack(object,hit->sceneObjectIndex,&stack)) return false;
+    if(!binding->mesh) {
+        int face;double u,v;
+        if(!RuntimeSurfaceMaterialPrimitiveIsland(hit->sceneObjectIndex,hit->position,hit->geometricNormal,&face,&u,&v)) return false;
+        const RegionBinding* region=&binding->regions[face];
+        if(region->active) {
+            if(region->has_map) map=&region->map;
+            if(region->has_stack) stack=region->stack;
+            layers=&region->layers;
+        }
+    }
+    bool mapped_layers=false;for(int i=0;i<stack.layerCount;++i) mapped_layers|=layers->active[i];
+    if(mapped_layers) {
+        RuntimeMaterialMappedLayerSample samples[8];
+        for(int i=0;i<stack.layerCount;++i) {
+            const CoreAuthoredSurfaceMapping* lm=layers->active[i]?&layers->maps[i]:map;
+            if(!coordinates_for(hit,lm,&coordinates)) return false;
+            int repeats=lm->version==2?(int)round(6.2831853071795864769*lm->reference_radius_m/lm->tile_m[0]):0;
+            samples[i]=(RuntimeMaterialMappedLayerSample){coordinates.uv_tiles[0],coordinates.uv_tiles[1],coordinates.source_weight,lm->seed,repeats};
+        }
+        return RuntimeMaterialTextureStackEvaluateMappedSamples(&stack,samples,base,out);
+    }
+    if(!coordinates_for(hit,map,&coordinates)) return false;
+    int repeats=map->version==2?(int)round(6.2831853071795864769*map->reference_radius_m/map->tile_m[0]):0;
+    if(!RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(&stack,coordinates.uv_tiles[0],coordinates.uv_tiles[1],map->seed,repeats,base,out)) return false;
     RuntimeSurfaceMappingBlendPole(base,coordinates.source_weight,out);
     return true;
+}
+
+bool RuntimeSurfaceMappingEvaluateReferencedStack(const HitInfo3D* hit,const char* reference,
+    const RuntimeMaterialTextureStack* stack,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out) {
+    if(!hit || !reference || !reference[0] || !RuntimeSurfaceMappingActive(hit->sceneObjectIndex)) return false;
+    const Binding* b=&bindings[hit->sceneObjectIndex];
+    for(int i=0;i<b->mapping_count;++i) if(!strcmp(reference,b->mapping_ids[i])) {
+        const CoreAuthoredSurfaceMapping* m=&b->mappings[i];CoreAuthoredSurfaceCoordinates q;
+        if(!coordinates_for(hit,m,&q)) return false;
+        int repeats=m->version==2?(int)round(6.2831853071795864769*m->reference_radius_m/m->tile_m[0]):0;
+        if(!RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(stack,q.uv_tiles[0],q.uv_tiles[1],m->seed,repeats,base,out)) return false;
+        RuntimeSurfaceMappingBlendPole(base,q.source_weight,out);return true;
+    }
+    return false;
+}
+
+bool RuntimeSurfaceMappingPreviewSupported(int index) {
+    return RuntimeSurfaceMappingActive(index) && !bindings[index].asset_graph;
 }

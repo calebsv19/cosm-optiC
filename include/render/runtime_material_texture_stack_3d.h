@@ -178,4 +178,14 @@ bool RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(
 bool RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(const RuntimeMaterialTextureStack* stack,
     double u,double v,uint32_t seed,int period,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out);
 
+/* Prepared per-layer coordinates preserve one ordered stack evaluation. */
+typedef struct RuntimeMaterialMappedLayerSample {
+    double u,v,source_weight;
+    uint32_t seed;
+    int period;
+} RuntimeMaterialMappedLayerSample;
+bool RuntimeMaterialTextureStackEvaluateMappedSamples(const RuntimeMaterialTextureStack* stack,
+    const RuntimeMaterialMappedLayerSample* samples,const RuntimeMaterialSurfaceEval* base,
+    RuntimeMaterialSurfaceEval* out);
+
 #endif

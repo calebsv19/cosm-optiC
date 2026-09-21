@@ -412,8 +412,9 @@ static void scene_editor_mesh_surface_rasterize(
     const SDL_Color base = scene_editor_mesh_surface_base_color(
         mode,
         instance->scene_object_index);
+    bool unsupported_mapping=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && RuntimeSurfaceMappingActive(instance->scene_object_index) && !RuntimeSurfaceMappingPreviewSupported(instance->scene_object_index);
     const SceneEditorSurfaceMappingCache* mapped=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorSurfaceMappingCachePrepare(instance->scene_object_index) : NULL;
-    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !mapped ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
+    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !mapped && !unsupported_mapping ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
     SceneEditorMeshPreviewShadeNormal view=material_view(projector);
     for (size_t triangle = 0u; triangle < lod->triangle_count; ++triangle) {
         const uint32_t ia = lod->indices[triangle * 3u + 0u];
@@ -500,6 +501,7 @@ static void scene_editor_mesh_surface_rasterize(
                     w0*normal_a.y+w1*normal_b.y+w2*normal_c.y,w0*normal_a.z+w1*normal_b.z+w2*normal_c.z};
                 color=material ? SceneEditorViewportMaterialShade(material,shading_normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
                                : SceneEditorMeshPreviewShadeColor(base,shading_normal);
+                if(unsupported_mapping) color=((x/12+y/12)%2)?(SDL_Color){92,70,92,255}:(SDL_Color){142,115,142,255};
                 if(mapped) {
                     Vec3 world=vec3(w0*wa.x+w1*wb.x+w2*wc.x,w0*wa.y+w1*wb.y+w2*wc.y,w0*wa.z+w1*wb.z+w2*wc.z);
                     CoreObjectVec3 la=lod->vertices[ia],lb=lod->vertices[ib],lc=lod->vertices[ic];

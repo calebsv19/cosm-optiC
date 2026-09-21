@@ -940,6 +940,41 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
             json_object_object_add(overlay_ray, "managed_mesh_assets", json_object_get(managed));
         }
     }
+    /* Mapped materials are edited through retained document commands. Exported
+       runtime stacks are derived caches and must never replace their graphs,
+       region bindings or producer fields when the workspace saves its overlay. */
+    {
+        json_object *extensions=NULL,*ray=NULL,*authoring=NULL,*rows=NULL;
+        json_object *oe=NULL,*orr=NULL,*oa=NULL,*orows=NULL,*objects=NULL;
+        if(json_object_object_get_ex(runtime_root,"extensions",&extensions) &&
+           json_object_object_get_ex(extensions,"ray_tracing",&ray) &&
+           json_object_object_get_ex(ray,"authoring",&authoring) &&
+           json_object_object_get_ex(authoring,"object_materials",&rows) &&
+           json_object_object_get_ex(overlay_root,"extensions",&oe) &&
+           json_object_object_get_ex(oe,"ray_tracing",&orr) &&
+           json_object_object_get_ex(orr,"authoring",&oa) &&
+           json_object_object_get_ex(oa,"object_materials",&orows) &&
+           json_object_is_type(rows,json_type_array) && json_object_is_type(orows,json_type_array) &&
+           json_object_object_get_ex(runtime_root,"objects",&objects)) {
+            for(size_t i=0;i<json_object_array_length(objects);++i) {
+                json_object *o=json_object_array_get_idx(objects,i),*id=NULL,*e=NULL,*r=NULL,*m=NULL;
+                if(!json_object_object_get_ex(o,"object_id",&id) || !json_object_object_get_ex(o,"extensions",&e) ||
+                   !json_object_object_get_ex(e,"ray_tracing",&r) || !json_object_object_get_ex(r,"surface_mapping",&m)) continue;
+                for(size_t j=0;j<json_object_array_length(rows);++j) {
+                    json_object *row=json_object_array_get_idx(rows,j),*rid=NULL;
+                    if(!json_object_object_get_ex(row,"object_id",&rid) || strcmp(json_object_get_string(id),json_object_get_string(rid))) continue;
+                    bool replaced=false;
+                    for(size_t k=0;k<json_object_array_length(orows);++k) {
+                        json_object *candidate=json_object_array_get_idx(orows,k),*cid=NULL;
+                        if(json_object_object_get_ex(candidate,"object_id",&cid) && !strcmp(json_object_get_string(id),json_object_get_string(cid))) {
+                            json_object_array_put_idx(orows,k,json_object_get(row));replaced=true;
+                        }
+                    }
+                    if(!replaced) json_object_array_add(orows,json_object_get(row));
+                }
+            }
+        }
+    }
     if (!core_scene_overlay_merge_apply(runtime_root,
                                         overlay_root,
                                         "ray_tracing",

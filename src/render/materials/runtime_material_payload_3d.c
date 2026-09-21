@@ -240,6 +240,22 @@ static void runtime_material_payload_3d_refresh_derived(RuntimeMaterialPayload3D
     }
 }
 
+void RuntimeMaterialSurfaceApplyAuthoredIntent(RuntimeMaterialSurfaceEval* eval,
+    RuntimeMaterialTextureLayerKind kind,double alpha,bool overlay) {
+    if(!eval) return;
+    RuntimeMaterialPayload3D payload={0};
+    payload.baseColorR=eval->colorR;payload.baseColorG=eval->colorG;payload.baseColorB=eval->colorB;
+    payload.bsdf.roughness=eval->roughness;payload.bsdf.reflectivity=eval->reflectivity;
+    payload.bsdf.specWeight=eval->specWeight;payload.bsdf.diffuseWeight=eval->diffuseWeight;
+    payload.transparency=eval->transparency;
+    if(overlay) runtime_material_payload_3d_apply_authored_overlay_material(&payload,kind,alpha);
+    else {payload.transparency*=1-runtime_material_payload_3d_clamp01(alpha);runtime_material_payload_3d_apply_authored_base_material(&payload,kind,alpha);}
+    runtime_material_payload_3d_refresh_derived(&payload);
+    eval->roughness=payload.bsdf.roughness;eval->reflectivity=payload.bsdf.reflectivity;
+    eval->specWeight=payload.bsdf.specWeight;eval->diffuseWeight=payload.bsdf.diffuseWeight;
+    eval->transparency=payload.transparency;
+}
+
 static void runtime_material_payload_3d_apply_surface_eval(
     RuntimeMaterialPayload3D* payload,
     const RuntimeMaterialSurfaceEval* surface_eval) {

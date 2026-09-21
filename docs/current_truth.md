@@ -1,5 +1,17 @@
 # optiC Current Truth
 
+## September 21 surface-material M3 source checkpoint
+
+The isolated surface-material lane now completes M0–M3: common planar/axial
+mapping, retained source edits, named mapping references, reversible primitive
+face regions and normal-save graph/provenance preservation. M3 native round trips
+and six-face renderer parity pass, with M1/M2 and frozen legacy regressions.
+See the [M3 contract](surface_material_m3_contract.md) for supported document
+adapters and evidence commands. Solid-graph mapping remains renderer-only with
+an explicit unavailable preview; arbitrary mesh regions and authored UV assets
+are not included. Main Edit adoption, installed builds and publication remain
+separate. Desktop/worker versions and shared core 0.4.0 are unchanged.
+
 ## September 20 UI source closeout
 
 The current source includes the compact document bar and pane headers, shared

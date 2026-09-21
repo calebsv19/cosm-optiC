@@ -1,3 +1,5 @@
+#include "editor/scene_editor_surface_material_panel.h"
+#include "render/runtime_surface_mapping.h"
 #include "editor/material_editor_internal.h"
 
 #include "editor/material_editor_authored_texture_binding.h"
@@ -39,6 +41,9 @@ static double material_editor_slider_value_from_x(const SDL_Rect* track, int mx)
 
 void HandleMaterialEditorEvents(SDL_Event* event) {
     if (!event) return;
+    if(RuntimeSurfaceMappingActive(MaterialEditorResolveFocusedObjectIndex())) {
+        SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex());return;
+    }
     if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
         int mx = event->button.x;
         int my = event->button.y;

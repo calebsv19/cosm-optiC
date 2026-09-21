@@ -227,6 +227,7 @@ static bool ray_tracing_workspace_authoring_document_target(
     if (!document || !field || !out_target) return false;
     *out_target = NULL;
     if (strcmp(field, "material_graph") == 0) *out_target = &document->material_graph;
+    else if (strcmp(field, "surface_mapping") == 0) *out_target = &document->surface_mapping;
     else if (strcmp(field, "surface_field_graph") == 0) *out_target = &document->surface_field_graph;
     else if (strcmp(field, "face_region_selector") == 0) *out_target = &document->face_region_selector;
     else if (strncmp(field, "attachment:", 11u) == 0) {
@@ -369,6 +370,8 @@ static bool ray_tracing_workspace_authoring_selected_field(
     if (strncmp(snapshot.nodes[selected].id, "ref:", 4u) != 0) return false;
     if (strcmp(snapshot.nodes[selected].id, "ref:material_graph") == 0) {
         snprintf(out_field, out_capacity, "material_graph");
+    } else if (strcmp(snapshot.nodes[selected].id, "ref:surface_mapping") == 0) {
+        snprintf(out_field,out_capacity,"surface_mapping");
     } else if (strcmp(snapshot.nodes[selected].id, "ref:surface_field_graph") == 0) {
         snprintf(out_field, out_capacity, "surface_field_graph");
     } else if (strcmp(snapshot.nodes[selected].id, "ref:face_region_selector") == 0) {

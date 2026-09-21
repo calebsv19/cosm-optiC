@@ -37,7 +37,7 @@ const SceneEditorSurfaceMappingCache* SceneEditorSurfaceMappingCachePrepare(int 
     CoreAuthoredSurfaceMapping map;
     RuntimeMaterialPayload3D payload;
     RuntimeMaterialTextureStack stack;
-    if(!RuntimeSurfaceMappingDefinition(index,&map) || map.version!=2 ||
+    if(!RuntimeSurfaceMappingPreviewSupported(index) || !RuntimeSurfaceMappingDefinition(index,&map) || map.version!=2 ||
        !RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(index,&payload) ||
        !SceneEditorMaterialStackGetEffectiveObjectStack(&sceneSettings.sceneObjects[index],index,&stack)) return NULL;
     RuntimeMaterialSurfaceEval base=RuntimeMaterialSurfaceEvalMakeBase(payload.baseColorR,payload.baseColorG,payload.baseColorB,

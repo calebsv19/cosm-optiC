@@ -750,6 +750,13 @@ bool RuntimeMaterialAuthoredTextureBindManifestForObject(int scene_object_index,
         failure_reason = "source object mismatch";
         goto cleanup;
     }
+    if(json_object_object_get_ex(manifest_root,"surface_mapping_ref",&field)) {
+        if(!json_object_is_type(field,json_type_string) || !json_object_get_string(field)[0] ||
+           strlen(json_object_get_string(field))>=sizeof(binding->surfaceMappingRef)) {
+            failure_reason="invalid surface mapping reference";goto cleanup;
+        }
+        snprintf(binding->surfaceMappingRef,sizeof(binding->surfaceMappingRef),"%s",json_object_get_string(field));
+    }
     binding->primitiveKind = manifest_contract.primitive_kind;
     binding->sceneObjectIndex = scene_object_index;
     runtime_material_authored_texture_copy_text(binding->objectId,
