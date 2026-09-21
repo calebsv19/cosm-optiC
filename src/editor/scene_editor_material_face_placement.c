@@ -118,7 +118,11 @@ static SceneEditorMaterialFacePlacement scene_editor_material_face_placement_def
     return placement;
 }
 
+static unsigned long long s_placement_revision;
+unsigned long long SceneEditorMaterialFacePlacementRevision(void) { return s_placement_revision; }
+
 void SceneEditorMaterialFacePlacementResetAll(void) {
+    ++s_placement_revision;
     memset(s_face_placements, 0, sizeof(s_face_placements));
 }
 
@@ -128,6 +132,7 @@ void SceneEditorMaterialFacePlacementResetObject(int scene_object_index) {
         if (s_face_placements[i].hasOverride &&
             s_face_placements[i].sceneObjectIndex == scene_object_index) {
             memset(&s_face_placements[i], 0, sizeof(s_face_placements[i]));
+            ++s_placement_revision;
         }
     }
 }
@@ -136,6 +141,7 @@ bool SceneEditorMaterialFacePlacementResetFace(int scene_object_index, int face_
     int index = scene_editor_material_face_placement_find(scene_object_index, face_group_index);
     if (index < 0) return false;
     memset(&s_face_placements[index], 0, sizeof(s_face_placements[index]));
+    ++s_placement_revision;
     return true;
 }
 
@@ -148,6 +154,7 @@ bool SceneEditorMaterialFacePlacementResetFaceLayer(int scene_object_index,
                                                         layer_id);
     if (index < 0) return false;
     memset(&s_face_placements[index], 0, sizeof(s_face_placements[index]));
+    ++s_placement_revision;
     return true;
 }
 
@@ -197,6 +204,7 @@ bool SceneEditorMaterialFacePlacementSetOverride(
     stored.strength = scene_editor_material_face_placement_clamp01(stored.strength);
     stored.params = RuntimeMaterialTexture3DNormalizeParams(stored.params);
     s_face_placements[index] = stored;
+    ++s_placement_revision;
     return true;
 }
 
@@ -333,6 +341,7 @@ bool SceneEditorMaterialFacePlacementApplyNormalizedValue(const SceneObject* obj
         return false;
     }
     s_face_placements[index] = effective;
+    ++s_placement_revision;
     return true;
 }
 
@@ -355,6 +364,7 @@ bool SceneEditorMaterialFacePlacementApplyTextureKind(const SceneObject* object,
     effective.faceGroupIndex = face_group_index;
     effective.textureId = scene_editor_material_face_placement_clamp_texture_id(texture_id);
     s_face_placements[index] = effective;
+    ++s_placement_revision;
     return true;
 }
 
@@ -397,6 +407,7 @@ bool SceneEditorMaterialFacePlacementApplyTextureParamNormalizedValue(
     }
     effective.params = RuntimeMaterialTexture3DNormalizeParams(effective.params);
     s_face_placements[index] = effective;
+    ++s_placement_revision;
     return true;
 }
 
@@ -419,6 +430,7 @@ bool SceneEditorMaterialFacePlacementApplyTextureParamPatternMode(
     effective.params.patternMode = pattern_mode;
     effective.params = RuntimeMaterialTexture3DNormalizeParams(effective.params);
     s_face_placements[index] = effective;
+    ++s_placement_revision;
     return true;
 }
 

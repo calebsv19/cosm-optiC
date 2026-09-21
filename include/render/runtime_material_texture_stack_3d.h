@@ -2,11 +2,13 @@
 #define RENDER_RUNTIME_MATERIAL_TEXTURE_STACK_3D_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "render/runtime_material_texture_3d.h"
 #include "scene/object_manager.h"
 
 #define RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS 8
+/* Explicit new source domain: one brick cell per coordinate unit. */
 #define RUNTIME_MATERIAL_TEXTURE_LAYER_ID_SIZE 32
 #define RUNTIME_MATERIAL_TEXTURE_LAYER_NAME_SIZE 48
 
@@ -148,6 +150,10 @@ bool RuntimeMaterialTextureStackEvaluatePlacedUV(
     int seed_key,
     const RuntimeMaterialSurfaceEval* base_eval,
     RuntimeMaterialSurfaceEval* out_eval);
+
+bool RuntimeMaterialTextureStackEvaluateBrickCells(const RuntimeMaterialTextureStack* stack,
+    double u, double v, uint32_t seed, const RuntimeMaterialSurfaceEval* base,
+    RuntimeMaterialSurfaceEval* out);
 
 bool RuntimeMaterialTextureStackEvaluatePhysicalChannelsPlacedUV(
     const RuntimeMaterialTextureStack* stack,

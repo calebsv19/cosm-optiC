@@ -1,4 +1,7 @@
 #include "editor/scene_editor_material_stack.h"
+#include "render/runtime_surface_mapping.h"
+#include "render/runtime_material_authored_texture_3d.h"
+#include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_viewport_material.h"
 #include "editor/scene_editor_document.h"
 #include <stddef.h>
@@ -87,8 +90,9 @@ static uint64_t scene_editor_mesh_surface_signature(
                                           sizeof(selected_object_index));
     hash = scene_editor_mesh_surface_hash(hash, &mode, sizeof(mode));
     if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL) {
-        unsigned long long revision=SceneEditorDocumentRevision();
-        hash=scene_editor_mesh_surface_hash(hash,&revision,sizeof(revision));
+        unsigned long long revisions[]={SceneEditorDocumentRevision(),RuntimeSurfaceMappingRevision(),
+            RuntimeMaterialAuthoredTextureRevision(),SceneEditorMaterialFacePlacementRevision()};
+        hash=scene_editor_mesh_surface_hash(hash,revisions,sizeof(revisions));
         for(int i=0;i<sceneSettings.objectCount;++i) {
             const SceneObject* object=&sceneSettings.sceneObjects[i];
             hash=scene_editor_mesh_surface_hash(hash,&object->color,offsetof(SceneObject,dirty)-offsetof(SceneObject,color));
@@ -282,13 +286,6 @@ static void material_uv(SceneEditorMeshSurfacePoint3 p,SceneEditorMeshPreviewSha
 static SceneEditorMeshPreviewShadeNormal material_view(const SceneEditorDigestOverlayProjector* p) {
     return (SceneEditorMeshPreviewShadeNormal){sin(p->pitch_rad)*sin(p->yaw_rad),sin(p->pitch_rad)*cos(p->yaw_rad),cos(p->pitch_rad)};
 }
-static SceneEditorMeshSurfacePoint3 primitive_local(SceneEditorMeshSurfacePoint3 p,const RuntimeSceneBridgePrimitiveSeed* seed) {
-    p.x-=seed->origin_x;p.y-=seed->origin_y;p.z-=seed->origin_z;
-    return (SceneEditorMeshSurfacePoint3){
-        0.5+(p.x*seed->axis_u_x+p.y*seed->axis_u_y+p.z*seed->axis_u_z)/fmax(fabs(seed->width),0.1),
-        0.5+(p.x*seed->axis_v_x+p.y*seed->axis_v_y+p.z*seed->axis_v_z)/fmax(fabs(seed->height),0.1),
-        0.5+(p.x*seed->normal_x+p.y*seed->normal_y+p.z*seed->normal_z)/fmax(fabs(seed->depth),0.1)};
-}
 static SceneEditorMeshSurfacePoint3 mesh_local(CoreObjectVec3 p,const CoreMeshAssetRuntimeContract* c) {
     return (SceneEditorMeshSurfacePoint3){
         (p.x-c->local_bounds.min.x)/fmax(c->local_bounds.max.x-c->local_bounds.min.x,1e-9),
@@ -341,10 +338,12 @@ static void scene_editor_primitive_surface_rasterize_triangle(
     normal = scene_editor_mesh_surface_normal(wa, wb, wc);
     double ua=0,va=0,ub=0,vb=0,uc=0,vc=0;
     SceneEditorMeshPreviewShadeNormal view=material_view(projector);
-    if(material) {
-        SceneEditorMeshSurfacePoint3 la=primitive_local(wa,primitive),lb=primitive_local(wb,primitive),lc=primitive_local(wc,primitive);
-        SceneEditorMeshPreviewShadeNormal face=scene_editor_mesh_surface_normal(la,lb,lc);
-        material_uv(la,face,&ua,&va);material_uv(lb,face,&ub,&vb);material_uv(lc,face,&uc,&vc);
+    if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL) {
+        int face=0;
+        RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wa.x,wa.y,wa.z),vec3(normal.x,normal.y,normal.z),&face,&ua,&va);
+        RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wb.x,wb.y,wb.z),vec3(normal.x,normal.y,normal.z),&face,&ub,&vb);
+        RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wc.x,wc.y,wc.z),vec3(normal.x,normal.y,normal.z),&face,&uc,&vc);
+        material=SceneEditorViewportMaterialPrepareFace(scene_object_index,face);
     }
     for (int y = min_y; y <= max_y; ++y) {
         for (int x = min_x; x <= max_x; ++x) {
@@ -387,7 +386,7 @@ static void scene_editor_primitive_surface_rasterize(
                                                    &triangle_count)) {
         return;
     }
-    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorViewportMaterialPrepare(primitive->scene_object_index) : NULL;
+    const SceneEditorViewportMaterial* material=NULL;
     for (size_t i = 0u; i < triangle_count; ++i) {
         scene_editor_primitive_surface_rasterize_triangle(projector,
                                                           &triangles[i],

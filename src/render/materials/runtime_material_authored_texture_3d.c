@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+static unsigned long long authored_texture_revision;
+unsigned long long RuntimeMaterialAuthoredTextureRevision(void) {return authored_texture_revision;}
 void runtime_material_authored_texture_copy_text(char* dst,
                                                  size_t dst_size,
                                                  const char* src) {
@@ -87,6 +89,7 @@ void runtime_material_authored_texture_face_reset(RuntimeMaterialAuthoredTexture
 void runtime_material_authored_texture_binding_reset(RuntimeMaterialAuthoredTextureBinding* binding) {
     int i = 0;
     if (!binding) return;
+    ++authored_texture_revision;
     for (i = 0; i < RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_FACES; ++i) {
         runtime_material_authored_texture_face_reset(&binding->baseFaces[i]);
         runtime_material_authored_texture_face_reset(&binding->overlayFaces[i]);

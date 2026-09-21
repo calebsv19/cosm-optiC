@@ -12,6 +12,7 @@
 #include "procedural/procedural_surface_material_runtime_adapter.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
+#include "render/runtime_surface_mapping.h"
 #include "render/runtime_water_material_3d.h"
 
 static bool runtime_material_payload_3d_valid_scene_object_index(int scene_object_index) {
@@ -320,6 +321,12 @@ static void runtime_material_payload_3d_apply_texture(
                                                    payload->bsdf.specWeight,
                                                    payload->bsdf.diffuseWeight,
                                                    payload->transparency);
+    if (RuntimeSurfaceMappingActive(hit->sceneObjectIndex)) {
+        if (RuntimeSurfaceMappingEvaluate(object, hit, &base_eval, &surface_eval))
+            runtime_material_payload_3d_apply_surface_eval(payload, &surface_eval);
+        else payload->valid = false;
+        return;
+    }
     if (runtime_material_payload_3d_resolve_object_texture_uv(hit, &object_u, &object_v) &&
         SceneEditorMaterialStackGetEffectiveObjectStack(object, hit->sceneObjectIndex, &stack) &&
         RuntimeMaterialTextureStackEvaluatePlacedUV(&stack,
@@ -646,7 +653,7 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     payload.hairOptics = RuntimeHairOptics3D_Normalize(&payload.hairOptics);
 
     *out_payload = payload;
-    return true;
+    return payload.valid;
 }
 
 bool RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(int scene_object_index,

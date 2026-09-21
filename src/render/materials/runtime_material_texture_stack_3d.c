@@ -301,12 +301,12 @@ static RuntimeMaterialTextureStackBaseSample runtime_material_texture_stack_samp
 static RuntimeMaterialTextureStackBaseSample runtime_material_texture_stack_sample_brick(
     RuntimeMaterialTextureStackUV uv,
     const RuntimeMaterialTexture3DParams* params,
-    int seed) {
+    int seed, bool cells) {
     RuntimeMaterialTextureStackBaseSample sample;
     double grain = params ? params->grain : 0.5;
     double color_depth = params ? params->colorDepth : 0.5;
-    double tiles_u = runtime_material_texture_stack_lerp(3.0, 8.0, grain);
-    double tiles_v = tiles_u * 0.48;
+    double tiles_u = cells ? 1.0 : runtime_material_texture_stack_lerp(3.0, 8.0, grain);
+    double tiles_v = cells ? 1.0 : tiles_u * 0.48;
     double row_value = floor(uv.v * tiles_v);
     int row = (int)row_value;
     double cell_u = (uv.u * tiles_u) + ((row & 1) ? 0.5 : 0.0);
@@ -428,7 +428,7 @@ static bool runtime_material_texture_stack_sample_base_layer(
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD) {
         *out_sample = runtime_material_texture_stack_sample_wood(uv, &params, seed);
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK) {
-        *out_sample = runtime_material_texture_stack_sample_brick(uv, &params, seed);
+        *out_sample = runtime_material_texture_stack_sample_brick(uv, &params, seed, false);
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_CONCRETE) {
         *out_sample = runtime_material_texture_stack_sample_concrete(uv, &params, seed);
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_STONE) {
@@ -762,6 +762,42 @@ static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
     runtime_material_surface_eval_refresh(&eval);
     *out_eval = eval;
     return eval.active;
+}
+
+/* Versioned cell-domain adapter. Legacy placement and kernels above are unchanged.
+ * Layer offsets are cell units, rotation is about the cell origin; no fract of
+ * the whole coordinate. Stable uint32 identity never includes array position. */
+bool RuntimeMaterialTextureStackEvaluateBrickCells(const RuntimeMaterialTextureStack* stack,
+    double u, double v, uint32_t seed, const RuntimeMaterialSurfaceEval* base,
+    RuntimeMaterialSurfaceEval* out) {
+    if (!stack || !base || !out || !isfinite(u) || !isfinite(v)) return false;
+    RuntimeMaterialTextureStack normalized=RuntimeMaterialTextureStackNormalize(*stack);
+    RuntimeMaterialSurfaceEval eval=*base;
+    for (int i=0;i<normalized.layerCount;++i) {
+        const RuntimeMaterialTextureLayer* layer=&normalized.layers[i];
+        if (layer->kind!=RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK &&
+            layer->kind!=RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_SOLID) return false;
+        if (!layer->enabled) continue;
+        uint32_t key=seed ^ (uint32_t)layer->params.seed;
+        for (const unsigned char* c=(const unsigned char*)layer->layerId;*c;++c)
+            key=(key ^ *c)*UINT32_C(16777619);
+        const double c=cos(layer->placement.rotation),s=sin(layer->placement.rotation);
+        RuntimeMaterialTextureStackUV uv={0};
+        uv.u=(u*c-v*s)*layer->placement.scale+layer->placement.offsetU;
+        uv.v=(u*s+v*c)*layer->placement.scale+layer->placement.offsetV;
+        if (!isfinite(uv.u) || !isfinite(uv.v) || fabs(uv.u)>1e6 || fabs(uv.v)>1e6) return false;
+        double amount=runtime_material_texture_stack_clamp01(layer->opacity*layer->placement.strength);
+        if (layer->kind==RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK) {
+            RuntimeMaterialTextureStackBaseSample sample=runtime_material_texture_stack_sample_brick(
+                uv,&layer->params,(int)(key & UINT32_C(0x00ffffff)),true);
+            runtime_material_surface_eval_apply_base_sample(&eval,&sample,amount,i);
+        }
+        runtime_material_surface_eval_apply_layer_influences(&eval,layer,amount);
+    }
+    if (eval.transparency>base->transparency) eval.transparency=base->transparency;
+    runtime_material_surface_eval_refresh(&eval);
+    *out=eval;
+    return true;
 }
 
 bool RuntimeMaterialTextureStackEvaluatePlacedUV(

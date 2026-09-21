@@ -1,4 +1,21 @@
 #include "core_authored_texture.h"
+#include "core_authored_surface_mapping.h"
+#include <math.h>
+#include <assert.h>
+
+static void test_surface_mapping(void) {
+    CoreAuthoredSurfaceMapping m={0};
+    m.version=1; m.space=CORE_AUTHORED_SURFACE_OBJECT_REST;
+    m.axis_u[0]=1; m.axis_v[1]=1; m.tile_m[0]=0.5; m.tile_m[1]=0.25;
+    assert(core_authored_surface_mapping_validate(&m));
+    m.space=CORE_AUTHORED_SURFACE_WORLD; m.seed=UINT32_MAX;
+    assert(core_authored_surface_mapping_validate(&m));
+    m.tile_m[0]=0; assert(!core_authored_surface_mapping_validate(&m)); m.tile_m[0]=0.5;
+    m.axis_v[0]=1; assert(!core_authored_surface_mapping_validate(&m)); m.axis_v[0]=0;
+    m.rotation_rad=NAN; assert(!core_authored_surface_mapping_validate(&m)); m.rotation_rad=0;
+    m.version=2; assert(!core_authored_surface_mapping_validate(&m));
+    assert(!core_authored_surface_mapping_validate(NULL));
+}
 
 #include <assert.h>
 #include <string.h>
@@ -439,5 +456,6 @@ int main(void) {
         prism_adjacent_roles));
 
     test_indexed_palette_and_atlas_contracts();
+    test_surface_mapping();
     return 0;
 }

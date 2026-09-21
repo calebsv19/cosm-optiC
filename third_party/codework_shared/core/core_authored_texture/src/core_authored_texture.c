@@ -1,6 +1,25 @@
 #include "core_authored_texture.h"
+#include "core_authored_surface_mapping.h"
+#include <math.h>
 
 #include <string.h>
+
+bool core_authored_surface_mapping_validate(const CoreAuthoredSurfaceMapping* m) {
+    double uu=0.0, vv=0.0, uv=0.0;
+    if (!m || m->version != CORE_AUTHORED_SURFACE_MAPPING_VERSION ||
+        (m->space != CORE_AUTHORED_SURFACE_OBJECT_REST &&
+         m->space != CORE_AUTHORED_SURFACE_WORLD) || !isfinite(m->rotation_rad)) return false;
+    for (int i=0;i<3;++i) {
+        if (!isfinite(m->origin_m[i]) || !isfinite(m->axis_u[i]) || !isfinite(m->axis_v[i])) return false;
+        uu+=m->axis_u[i]*m->axis_u[i]; vv+=m->axis_v[i]*m->axis_v[i];
+        uv+=m->axis_u[i]*m->axis_v[i];
+    }
+    if (fabs(uu-1.0)>1e-9 || fabs(vv-1.0)>1e-9 || fabs(uv)>1e-9) return false;
+    for (int i=0;i<2;++i)
+        if (!isfinite(m->tile_m[i]) || m->tile_m[i]<=1e-9 ||
+            !isfinite(m->offset_m[i]) || !isfinite(m->pivot_m[i])) return false;
+    return true;
+}
 
 static bool core_authored_texture_text_equals(const char* a, const char* b) {
     return a && b && strcmp(a, b) == 0;

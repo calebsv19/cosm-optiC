@@ -57,6 +57,7 @@ typedef struct RuntimeMaterialAuthoredTextureFaceMetadata {
 } RuntimeMaterialAuthoredTextureFaceMetadata;
 
 void RuntimeMaterialAuthoredTextureResetAll(void);
+unsigned long long RuntimeMaterialAuthoredTextureRevision(void);
 bool RuntimeMaterialAuthoredTextureClearBindingForObject(int scene_object_index);
 
 bool RuntimeMaterialAuthoredTextureBindManifestForObject(int scene_object_index,

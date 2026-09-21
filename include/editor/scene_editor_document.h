@@ -37,6 +37,10 @@ bool SceneEditorDocumentSetMaterialIdForSceneIndex(int scene_object_index,
                                                    int material_id,
                                                    char* diagnostics,
                                                    size_t diagnostics_size);
+/* Complete versioned mapping JSON, or NULL to return to explicit legacy meaning.
+ * The retained command validates before applying and keeps source/unknown fields. */
+bool SceneEditorDocumentSetSurfaceMappingForSceneIndex(int scene_object_index,
+    const char* mapping_json, char* diagnostics, size_t diagnostics_size);
 bool SceneEditorDocumentDuplicateForSceneIndex(int scene_object_index,
                                                int* out_new_scene_object_index,
                                                char* diagnostics,

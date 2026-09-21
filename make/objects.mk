@@ -144,6 +144,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d_json.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_surface_mapping.o \
+	$(BUILD_DIR)/render/materials/runtime_surface_material_primitive.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_surface_eval_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \
@@ -559,6 +561,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d_json.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_3d.o \
+	$(BUILD_DIR)/render/materials/runtime_surface_mapping.o \
+	$(BUILD_DIR)/render/materials/runtime_surface_material_primitive.o \
 	$(BUILD_DIR)/render/materials/runtime_material_payload_surface_eval_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_water_material_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_principled_bsdf_3d.o \

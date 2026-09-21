@@ -41,6 +41,7 @@ typedef struct SceneEditorMaterialFacePlacement {
     RuntimeMaterialTexture3DParams params;
 } SceneEditorMaterialFacePlacement;
 
+unsigned long long SceneEditorMaterialFacePlacementRevision(void);
 void SceneEditorMaterialFacePlacementResetAll(void);
 void SceneEditorMaterialFacePlacementResetObject(int scene_object_index);
 bool SceneEditorMaterialFacePlacementResetFace(int scene_object_index, int face_group_index);

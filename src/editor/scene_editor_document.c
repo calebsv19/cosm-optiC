@@ -19,6 +19,7 @@
 #include "import/runtime_scene_motion_bridge.h"
 
 #define SCENE_EDITOR_DOCUMENT_HISTORY_LIMIT 32
+bool SceneEditorDocumentCloneMappedMaterial(json_object* root,json_object* source,const char* new_id);
 
 typedef struct SceneEditorDocumentState {
     json_object* root;
@@ -535,6 +536,24 @@ bool SceneEditorDocumentSetMaterialIdForSceneIndex(int scene_object_index,
     return document_finish_command(diagnostics, diagnostics_size);
 }
 
+bool SceneEditorDocumentSetSurfaceMappingForSceneIndex(int index,const char* mapping_json,
+    char* diagnostic,size_t size) {
+    if(!SceneEditorDocumentObjectEditable(index,diagnostic,size)) return false;
+    json_object* object=document_object_for_scene_index(index,diagnostic,size);
+    json_object* mapping=mapping_json?json_tokener_parse(mapping_json):NULL;
+    if(!object || (mapping_json && (!mapping || !json_object_is_type(mapping,json_type_object)))) {
+        if(mapping) json_object_put(mapping);
+        document_diag(diagnostic,size,"invalid surface mapping JSON");return false;
+    }
+    if(!document_begin_command(diagnostic,size)) {if(mapping) json_object_put(mapping);return false;}
+    json_object* extensions=document_get_or_add_object(object,"extensions");
+    json_object* ray=document_get_or_add_object(extensions,"ray_tracing");
+    if(!ray) {if(mapping) json_object_put(mapping);document_rollback_command();return false;}
+    if(mapping) json_object_object_add(ray,"surface_mapping",mapping);
+    else json_object_object_del(ray,"surface_mapping");
+    return document_finish_command(diagnostic,size);
+}
+
 static bool document_make_unique_id(json_object* objects,
                                     const char* source_id,
                                     char* out_id,
@@ -580,6 +599,10 @@ bool SceneEditorDocumentDuplicateForSceneIndex(int scene_object_index,
     json_object_object_add(duplicate, "object_id", json_object_new_string(unique_id));
     json_object_object_add(duplicate, "display_name", json_object_new_string(unique_id));
     json_object_array_add(objects, duplicate);
+    if(!SceneEditorDocumentCloneMappedMaterial(s_document.root,source,unique_id)) {
+        document_rollback_command();
+        document_diag(diagnostics,diagnostics_size,"failed to duplicate mapped material source");return false;
+    }
     if (!document_finish_command(diagnostics, diagnostics_size)) return false;
     if (out_new_scene_object_index) *out_new_scene_object_index = sceneSettings.objectCount - 1;
     return true;

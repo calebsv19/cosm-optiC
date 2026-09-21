@@ -18,6 +18,7 @@
 #include "material/material_manager.h"
 #include "render/runtime_native_3d_prepare_cache.h"
 #include "render/runtime_material_authored_texture_3d.h"
+#include "render/runtime_surface_mapping.h"
 #include "scene/object_manager.h"
 
 #include <json-c/json.h>
@@ -885,6 +886,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     g_last_3d_scaffold.valid = true;
     g_last_3d_digest.valid = true;
     g_last_3d_primitive_seeds.valid = true;
+    RuntimeSurfaceMappingLoadScene(root, world_scale);
     animSettings.runtimeScenePath[0] = '\0';
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.useFluidScene = false;

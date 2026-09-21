@@ -15,7 +15,7 @@ all: $(LIB)
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-$(LIB_OBJ): src/core_authored_texture.c | $(OBJ_DIR)
+$(LIB_OBJ): src/core_authored_texture.c include/core_authored_texture.h include/core_authored_surface_mapping.h | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 
 $(LIB): $(LIB_OBJ)
