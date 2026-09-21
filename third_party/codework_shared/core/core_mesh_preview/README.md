@@ -105,3 +105,7 @@ Shared runtime mesh-preview contract for viewport-safe mesh visualization.
   solver/collision truth kept out of this core module.
 - Private execution plan:
   `docs/private_program_docs/shared/active/2026-06-14_core_mesh_preview_upgrade_plan.md`
+
+## 0.6.0 — explicit surface attributes
+
+Attribute-bearing runtime documents use an exact source-triangle LOD that copies UV-set identity and surface corners and sets attribute_protected. Requested triangle budgets are advisory for these documents; no seam-destroying clustering is performed. Geometry-only documents retain existing simplification. Consumers must rebuild against the appended C structs.

@@ -116,12 +116,16 @@ void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* ass
         core_mesh_preview_lod_mesh_init(&g_mesh_preview_store.lods[i]);
         g_mesh_preview_store.interactive_valid[i] = SceneEditorMeshPreviewBuildLod(
             &assets->assets[i].document,
-            SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
+            assets->assets[i].procedural_solid_material_runtime_program.valid ? assets->assets[i].document.triangle_count : SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
             &g_mesh_preview_store.interactive_lods[i]);
         g_mesh_preview_store.valid[i] = SceneEditorMeshPreviewBuildLod(
             &assets->assets[i].document,
-            SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
+            assets->assets[i].procedural_solid_material_runtime_program.valid ? assets->assets[i].document.triangle_count : SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
             &g_mesh_preview_store.lods[i]);
+        if(assets->assets[i].procedural_solid_material_runtime_program.valid) {
+            g_mesh_preview_store.lods[i].attribute_protected=true;
+            g_mesh_preview_store.interactive_lods[i].attribute_protected=true;
+        }
         if (g_mesh_preview_store.valid[i]) {
             (void)scene_editor_mesh_preview_store_build_vertex_normals(
                 i, &assets->assets[i].document, &g_mesh_preview_store.lods[i], false);

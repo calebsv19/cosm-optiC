@@ -1,5 +1,6 @@
 #pragma once
 #include <json-c/json.h>
+#include "core_mesh_preview.h"
 #include "core_authored_surface_mapping.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
@@ -32,3 +33,8 @@ bool RuntimeSurfaceMappingEvaluateReferencedStack(const HitInfo3D* hit,const cha
 bool RuntimeSurfaceMaterialCompileSource(json_object* source,RuntimeMaterialTextureStack* out);
 
 bool RuntimeSurfaceMappingPreviewSupported(int index);
+
+bool RuntimeSurfaceMappingNeedsMeshAttributes(int index);
+bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
+    const double barycentric[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh* lod,
+    RuntimeMaterialSurfaceEval* out);

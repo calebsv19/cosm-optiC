@@ -6,6 +6,7 @@ Editor UI closeout and the next material lane (September 20, 2026):
 - [Editor workspace behavior](editor_workspace.md)
 - [Measured viewport/render material parity gaps](material_viewport_parity.md)
 - [Cohesive surface material mapping plan](surface_material_mapping_plan.md)
+- [M4 explicit UV assets and tangent transport](surface_material_m4_contract.md)
 - [M3 retained surface documents and face regions](surface_material_m3_contract.md)
 
 Public identity:

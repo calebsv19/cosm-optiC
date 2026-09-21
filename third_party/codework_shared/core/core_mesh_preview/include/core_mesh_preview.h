@@ -60,6 +60,11 @@ typedef struct CoreMeshPreviewLodMesh {
     size_t source_vertex_count;
     size_t source_triangle_count;
     int cluster_resolution;
+    /* Exact attribute-preserving fallback; budget is advisory in this case. */
+    bool attribute_protected;
+    char uv_set_id[64];
+    size_t surface_corner_count;
+    CoreMeshAssetSurfaceCorner *surface_corners;
 } CoreMeshPreviewLodMesh;
 
 typedef struct CoreMeshPreviewRuntimePayload {

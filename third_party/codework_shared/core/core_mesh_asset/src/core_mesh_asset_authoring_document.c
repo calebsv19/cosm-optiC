@@ -465,6 +465,7 @@ static cJSON *core_mesh_asset_doc_imported_mesh_source_to_json(
     cJSON_AddBoolToObject(obj, "weld_vertices", source->weld_vertices);
     cJSON_AddNumberToObject(obj, "weld_tolerance", source->weld_tolerance);
     cJSON_AddBoolToObject(obj, "preserve_source_normals", source->preserve_source_normals);
+    if(source->source_format==CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_OBJ) cJSON_AddStringToObject(obj,"uv_set_id",source->uv_set_id);
     cJSON_AddStringToObject(obj,
                            "normal_mode",
                            core_mesh_asset_imported_normal_mode_name(source->normal_mode));
@@ -565,6 +566,12 @@ static CoreResult core_mesh_asset_doc_imported_mesh_source_from_json(
     out_source->weld_vertices = cJSON_IsTrue(weld_vertices);
     out_source->weld_tolerance = weld_tolerance->valuedouble;
     out_source->preserve_source_normals = cJSON_IsTrue(preserve_source_normals);
+    const cJSON *uv_set=cJSON_GetObjectItemCaseSensitive(node,"uv_set_id");
+    if(uv_set) {
+        if(!cJSON_IsString(uv_set)) return core_mesh_asset_doc_invalid_arg("invalid uv_set_id");
+        r=core_mesh_asset_doc_copy_text(out_source->uv_set_id,sizeof(out_source->uv_set_id),uv_set->valuestring);
+        if(r.code!=CORE_OK) return r;
+    }
     if (normal_mode || crease_angle_degrees) {
         if (!cJSON_IsString(normal_mode) || !normal_mode->valuestring ||
             !cJSON_IsNumber(crease_angle_degrees)) {

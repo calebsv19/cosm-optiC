@@ -17,9 +17,9 @@
 #include <unistd.h>
 #include <time.h>
 
-#define RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_SCHEMA_VERSION 1u
+#define RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_SCHEMA_VERSION 2u
 #define RUNTIME_MESH_BLAS_CACHE_3D_BLAS_BUILDER_VERSION 1u
-#define RUNTIME_MESH_BLAS_CACHE_3D_TRIANGLE_LAYOUT_VERSION 2u
+#define RUNTIME_MESH_BLAS_CACHE_3D_TRIANGLE_LAYOUT_VERSION 3u
 #define RUNTIME_MESH_BLAS_CACHE_3D_BVH_LAYOUT_VERSION 1u
 #define RUNTIME_MESH_BLAS_CACHE_3D_BVH_BUILDER_POLICY_VERSION 1u
 #define RUNTIME_MESH_BLAS_CACHE_3D_ACCEL_POLICY_STATIC_TLAS_BLAS 1u
@@ -418,6 +418,12 @@ static bool runtime_mesh_blas_cache_3d_build_local_mesh(
                                       document->vertices[src->c].normal.y,
                                       document->vertices[src->c].normal.z);
             dst->hasVertexNormals = true;
+        }
+        if(document->surface_corners && document->surface_corner_count==document->triangle_count*3) {
+            dst->hasSurfaceUV=true;memcpy(dst->uvSetId,document->uv_set_id,sizeof(dst->uvSetId));
+            memcpy(dst->surfaceCorners,document->surface_corners+i*3,sizeof(dst->surfaceCorners));
+            Vec3 n[3];for(int k=0;k<3;++k) n[k]=vec3(dst->surfaceCorners[k].normal.x,dst->surfaceCorners[k].normal.y,dst->surfaceCorners[k].normal.z);
+            dst->hasVertexNormals=true;dst->vertexNormal0=n[0];dst->vertexNormal1=n[1];dst->vertexNormal2=n[2];
         }
         dst->twoSided = false;
         if (asset->procedural_surface_valid &&

@@ -41,7 +41,8 @@ typedef enum CoreMeshAssetSourceMode {
 
 typedef enum CoreMeshAssetImportedMeshSourceFormat {
     CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_UNKNOWN = 0,
-    CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL = 1
+    CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL = 1,
+    CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_OBJ = 2
 } CoreMeshAssetImportedMeshSourceFormat;
 
 typedef enum CoreMeshAssetRuntimeNormalProvenance {
@@ -110,6 +111,17 @@ typedef struct CoreMeshAssetSurfaceGroup {
     size_t triangle_count;
 } CoreMeshAssetSurfaceGroup;
 
+/* Triangle-major corners (3*t + corner), independent of welded position indices.
+ * One named UV set; dimensionless, unwrapped coordinates. Invalid tangent frames
+ * explicitly represent degenerate UVs. B = handedness * cross(N, T). */
+typedef struct CoreMeshAssetSurfaceCorner {
+    double uv[2];
+    CoreObjectVec3 normal;
+    CoreObjectVec3 tangent;
+    double handedness;
+    bool tangent_valid;
+} CoreMeshAssetSurfaceCorner;
+
 typedef struct CoreMeshAssetRuntimeDocument {
     CoreMeshAssetRuntimeContract contract;
     size_t vertex_count;
@@ -120,7 +132,15 @@ typedef struct CoreMeshAssetRuntimeDocument {
     CoreMeshAssetRuntimeTriangle *triangles;
     size_t surface_group_count;
     CoreMeshAssetSurfaceGroup *surface_groups;
+    char uv_set_id[64];
+    size_t surface_corner_count;
+    CoreMeshAssetSurfaceCorner *surface_corners;
 } CoreMeshAssetRuntimeDocument;
+
+CoreResult core_mesh_asset_surface_allocate(CoreMeshAssetRuntimeDocument *document,
+                                            const char *uv_set_id);
+CoreResult core_mesh_asset_surface_generate_tangents(CoreMeshAssetRuntimeDocument *document);
+CoreResult core_mesh_asset_surface_validate(const CoreMeshAssetRuntimeDocument *document);
 
 typedef struct CoreMeshAssetPlanePrimitiveSeed {
     double width;
@@ -155,6 +175,7 @@ typedef struct CoreMeshAssetImportedMeshSource {
     double source_to_asset_scale;
     char orientation_policy[64];
     char default_surface_group_id[64];
+    char uv_set_id[64];
     bool weld_vertices;
     double weld_tolerance;
     bool preserve_source_normals;

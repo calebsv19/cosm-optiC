@@ -837,6 +837,38 @@ static bool ray_tracing_runtime_mesh_assets_load_scene_file_with_options(
             ray_tracing_runtime_mesh_asset_set_free(out_set);
             return false;
         }
+        {
+            /* Validate every declared UV chart, including named graph mappings. */
+            json_object *ext=NULL,*ray=NULL,*map=NULL,*authoring=NULL,*rows=NULL,*maps=NULL;
+            json_object_object_get_ex(object,"extensions",&ext);
+            if(ext) json_object_object_get_ex(ext,"ray_tracing",&ray);
+            if(ray) json_object_object_get_ex(ray,"surface_mapping",&map);
+            ext=ray=NULL;
+            json_object_object_get_ex(root,"extensions",&ext);
+            if(ext) json_object_object_get_ex(ext,"ray_tracing",&ray);
+            if(ray) json_object_object_get_ex(ray,"authoring",&authoring);
+            if(authoring) json_object_object_get_ex(authoring,"object_materials",&rows);
+            for(size_t row=0;json_object_is_type(rows,json_type_array) && row<json_object_array_length(rows);++row) {
+                json_object *r=json_object_array_get_idx(rows,row),*id=NULL,*binding=NULL;
+                json_object_object_get_ex(r,"object_id",&id);
+                if(!json_object_is_type(id,json_type_string) || strcmp(json_object_get_string(id),object_id)) continue;
+                json_object_object_get_ex(r,"surface_material_binding",&binding);
+                if(binding) json_object_object_get_ex(binding,"mappings",&maps);
+            }
+            size_t named=json_object_is_type(maps,json_type_array)?json_object_array_length(maps):0;
+            for(size_t chart=0;chart<=named;++chart) {
+                json_object *m=map,*method=NULL,*set=NULL;
+                if(chart) {m=NULL;json_object_object_get_ex(json_object_array_get_idx(maps,chart-1),"definition",&m);}
+                if(m) json_object_object_get_ex(m,"method",&method);
+                if(!json_object_is_type(method,json_type_string) || strcmp(json_object_get_string(method),"authored_uv")) continue;
+                json_object_object_get_ex(m,"uv_set_id",&set);
+                const CoreMeshAssetRuntimeDocument *mesh=asset_skipped?NULL:&out_set->assets[asset_index].document;
+                if(!mesh || !mesh->surface_corner_count || !json_object_is_type(set,json_type_string) || strcmp(mesh->uv_set_id,json_object_get_string(set))) {
+                    runtime_mesh_asset_diag(out_diagnostics,out_diagnostics_size,"authored UV set is missing, mismatched or unavailable");
+                    json_object_put(root);ray_tracing_runtime_mesh_asset_set_free(out_set);return false;
+                }
+            }
+        }
         if (!asset_skipped &&
             !runtime_mesh_asset_append_instance(out_set,
                                                 object_id,

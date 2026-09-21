@@ -6,6 +6,12 @@
 
 bool core_authored_surface_mapping_validate(const CoreAuthoredSurfaceMapping* m) {
     double uu=0.0, vv=0.0, uv=0.0;
+    if(m && m->version==3) {
+        if(!m->uv_set_id[0] || !memchr(m->uv_set_id,0,sizeof(m->uv_set_id)) || !isfinite(m->rotation_rad)) return false;
+        for(int i=0;i<2;++i) if(!isfinite(m->uv_scale[i]) || fabs(m->uv_scale[i])<1e-12 ||
+           !isfinite(m->uv_offset[i])) return false;
+        return true;
+    }
     if (!m || (m->version != 1 && m->version != 2) ||
         (m->space != CORE_AUTHORED_SURFACE_OBJECT_REST &&
          m->space != CORE_AUTHORED_SURFACE_WORLD) || !isfinite(m->rotation_rad)) return false;
@@ -35,7 +41,7 @@ bool core_authored_surface_coordinates(const CoreAuthoredSurfaceMapping* m,
                                       const double point[3],CoreAuthoredSurfaceCoordinates* out) {
     if (!out) return false;
     memset(out,0,sizeof(*out));
-    if (!point || !core_authored_surface_mapping_validate(m)) return false;
+    if (!point || !core_authored_surface_mapping_validate(m) || m->version==3) return false;
     double u=0,v=0,d[3];
     for(int i=0;i<3;++i) {
         if(!isfinite(point[i])) return false;
@@ -687,4 +693,16 @@ const CoreAuthoredTextureAtlasCell* core_authored_texture_atlas_cell_find(
         }
     }
     return NULL;
+}
+
+
+bool core_authored_surface_uv_coordinates(const CoreAuthoredSurfaceMapping* m,
+    const char* id,const double uv[2],CoreAuthoredSurfaceCoordinates* out) {
+    if(!out) return false;memset(out,0,sizeof(*out));
+    if(!m || m->version!=3 || !core_authored_surface_mapping_validate(m) || !id || strcmp(id,m->uv_set_id) ||
+       !uv || !isfinite(uv[0]) || !isfinite(uv[1])) return false;
+    double u=uv[0]*m->uv_scale[0],v=uv[1]*m->uv_scale[1],c=cos(m->rotation_rad),s=sin(m->rotation_rad);
+    out->uv_tiles[0]=u*c-v*s+m->uv_offset[0];out->uv_tiles[1]=u*s+v*c+m->uv_offset[1];
+    out->valid=isfinite(out->uv_tiles[0]) && isfinite(out->uv_tiles[1]);
+    out->has_authored_uv=out->valid;out->source_weight=1;return out->valid;
 }

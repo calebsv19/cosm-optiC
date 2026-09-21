@@ -196,6 +196,8 @@ const char *core_mesh_asset_imported_mesh_source_format_name(
     switch (format) {
         case CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL:
             return "stl";
+        case CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_OBJ:
+            return "obj";
         case CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_UNKNOWN:
         default:
             return "unknown";
@@ -214,6 +216,9 @@ CoreResult core_mesh_asset_imported_mesh_source_format_parse(
     if (core_mesh_asset_text_equals(text, "stl")) {
         *out_format = CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL;
         return core_result_ok();
+    }
+    if (core_mesh_asset_text_equals(text, "obj")) {
+        *out_format=CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_OBJ;return core_result_ok();
     }
     {
         CoreResult r = { CORE_ERR_NOT_FOUND, "unknown imported mesh source format" };
@@ -305,6 +310,7 @@ void core_mesh_asset_imported_mesh_source_init(CoreMeshAssetImportedMeshSource *
     source->weld_vertices = true;
     source->weld_tolerance = 0.000001;
     source->preserve_source_normals = false;
+    memcpy(source->uv_set_id,"uv0",4);
     source->normal_mode = CORE_MESH_ASSET_IMPORTED_NORMAL_MODE_NONE;
     source->crease_angle_degrees = 180.0;
 }
@@ -317,7 +323,8 @@ CoreResult core_mesh_asset_imported_mesh_source_validate(
     if (source->import_id[0] == '\0') {
         return core_mesh_asset_invalid_arg("import_id is required");
     }
-    if (source->source_format != CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL) {
+    if (source->source_format != CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL &&
+        source->source_format != CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_OBJ) {
         return core_mesh_asset_invalid_arg("known imported mesh source_format is required");
     }
     if (source->source_uri[0] == '\0') {

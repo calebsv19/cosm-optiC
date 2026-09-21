@@ -13,7 +13,7 @@ static const uint32_t kRuntimeMeshAssetPackLegacyVersion = 1u;
 static const uint32_t kRuntimeMeshAssetPackLegacyCacheVersion = 2u;
 static const uint32_t kRuntimeMeshAssetPackVersion = 3u;
 static const uint32_t kRuntimeMeshAssetPackCacheVersion = 4u;
-static const uint32_t kRuntimeMeshAssetPackCacheSchemaVersion = 2u;
+static const uint32_t kRuntimeMeshAssetPackCacheSchemaVersion = 3u;
 static const uint32_t kRuntimeMeshAssetPackEndianMarker = 0x01020304u;
 static const uint64_t kRuntimeMeshAssetPackFnvOffset = 1469598103934665603ull;
 static const uint64_t kRuntimeMeshAssetPackFnvPrime = 1099511628211ull;
@@ -168,6 +168,7 @@ static bool runtime_mesh_asset_pack_write_document_file(
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack input missing");
         return false;
     }
+    if(document->surface_corner_count) format_version=source_key?6u:5u;
     if (!core_is_little_endian()) {
         runtime_mesh_asset_pack_diag(out_diagnostics,
                                      out_diagnostics_size,
@@ -354,6 +355,17 @@ static bool runtime_mesh_asset_pack_write_document_file(
         }
     }
 
+    if(document->surface_corner_count) {
+        bool ok=runtime_mesh_asset_pack_write_string64(f,document->uv_set_id);
+        for(size_t i=0;ok && i<document->surface_corner_count;++i) {
+            const CoreMeshAssetSurfaceCorner *c=&document->surface_corners[i];
+            ok=runtime_mesh_asset_pack_write_double(f,c->uv[0]) && runtime_mesh_asset_pack_write_double(f,c->uv[1]) &&
+               runtime_mesh_asset_pack_write_vec3(f,c->normal) && runtime_mesh_asset_pack_write_vec3(f,c->tangent) &&
+               runtime_mesh_asset_pack_write_double(f,c->handedness) && runtime_mesh_asset_pack_write_u32(f,c->tangent_valid?1:0);
+        }
+        if(!ok) {fclose(f);if(atomic_write) unlink(write_path);runtime_mesh_asset_pack_diag(out_diagnostics,out_diagnostics_size,"surface attributes write failed");return false;}
+    }
+
     if (fclose(f) != 0) {
         if (atomic_write) unlink(write_path);
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack close failed");
@@ -431,17 +443,17 @@ static bool runtime_mesh_asset_pack_read_document_file(
         (version != kRuntimeMeshAssetPackLegacyVersion &&
          version != kRuntimeMeshAssetPackLegacyCacheVersion &&
          version != kRuntimeMeshAssetPackVersion &&
-         version != kRuntimeMeshAssetPackCacheVersion) ||
+         version != kRuntimeMeshAssetPackCacheVersion && version != 5u && version != 6u) ||
         endian_marker != kRuntimeMeshAssetPackEndianMarker ||
         (require_cache_key && version != kRuntimeMeshAssetPackLegacyCacheVersion &&
-         version != kRuntimeMeshAssetPackCacheVersion)) {
+         version != kRuntimeMeshAssetPackCacheVersion && version != 6u)) {
         fclose(f);
         runtime_mesh_asset_pack_diag(out_diagnostics, out_diagnostics_size, "mesh asset pack header invalid");
         return false;
     }
     memset(&actual_source_key, 0, sizeof(actual_source_key));
     if (version == kRuntimeMeshAssetPackLegacyCacheVersion ||
-        version == kRuntimeMeshAssetPackCacheVersion) {
+        version == kRuntimeMeshAssetPackCacheVersion || version == 6u) {
         if (!runtime_mesh_asset_pack_read_u32(f, &actual_source_key.core_mesh_asset_schema_version) ||
             !runtime_mesh_asset_pack_read_u32(f, &actual_source_key.ray_tracing_cache_schema_version) ||
             !runtime_mesh_asset_pack_read_u32(f, &actual_source_key.pointer_size_bytes) ||
@@ -466,8 +478,7 @@ static bool runtime_mesh_asset_pack_read_document_file(
         return false;
     }
     if (!runtime_mesh_asset_pack_read_u32(f, &vertex_count) ||
-        ((version == kRuntimeMeshAssetPackVersion ||
-          version == kRuntimeMeshAssetPackCacheVersion) &&
+        ((version >= 3u) &&
          (!runtime_mesh_asset_pack_read_u32(f, &normal_count) ||
           !runtime_mesh_asset_pack_read_u32(f, &normal_provenance))) ||
         !runtime_mesh_asset_pack_read_u32(f, &triangle_count) ||
@@ -571,6 +582,22 @@ static bool runtime_mesh_asset_pack_read_document_file(
                  sizeof(document.triangles[i].surface_group_id),
                  "%s",
                  document.surface_groups[group_index].group_id);
+    }
+
+    if(version>=5u) {
+        char id[64];
+        result=(CoreResult){CORE_ERR_INVALID_ARG,"invalid packed surface attributes"};
+        if(!runtime_mesh_asset_pack_read_exact(f,id,sizeof(id)) || !memchr(id,0,sizeof(id))) goto fail;
+        result=core_mesh_asset_surface_allocate(&document,id);if(result.code!=CORE_OK) goto fail;
+        result=(CoreResult){CORE_ERR_INVALID_ARG,"truncated or malformed packed surface attributes"};
+        for(size_t i=0;i<document.surface_corner_count;++i) {
+            CoreMeshAssetSurfaceCorner *c=&document.surface_corners[i];uint32_t valid;
+            if(!runtime_mesh_asset_pack_read_double(f,&c->uv[0]) || !runtime_mesh_asset_pack_read_double(f,&c->uv[1]) ||
+               !runtime_mesh_asset_pack_read_vec3(f,&c->normal) || !runtime_mesh_asset_pack_read_vec3(f,&c->tangent) ||
+               !runtime_mesh_asset_pack_read_double(f,&c->handedness) || !runtime_mesh_asset_pack_read_u32(f,&valid) || valid>1) goto fail;
+            c->tangent_valid=valid!=0;
+        }
+        if(fgetc(f)!=EOF || ferror(f)) goto fail;
     }
 
     if (fclose(f) != 0) {

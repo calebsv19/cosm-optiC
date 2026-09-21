@@ -30,6 +30,22 @@ static void test_surface_mapping(void) {
     assert(q.singular && q.source_weight==0);
     m.reference_radius_m=0;assert(!core_authored_surface_coordinates(&m,pole,&q));assert(!q.valid);
     m.reference_radius_m=1;m.pole_radius_m=2;assert(!core_authored_surface_mapping_validate(&m));
+    m=(CoreAuthoredSurfaceMapping){0};m.version=3;
+    /* UV identity is explicit; coordinates need an authored stream. */
+    m.uv_set_id[0]='u';m.uv_scale[0]=2;m.uv_scale[1]=-3;
+    m.uv_offset[0]=.25;m.uv_offset[1]=.5;
+    double uv[]={.2,.4};
+    assert(core_authored_surface_mapping_validate(&m));
+    assert(core_authored_surface_uv_coordinates(&m,"u",uv,&q));
+    assert(q.has_authored_uv && q.valid && fabs(q.uv_tiles[0]-.65)<1e-12 && fabs(q.uv_tiles[1]+.7)<1e-12);
+    assert(!core_authored_surface_uv_coordinates(&m,"wrong",uv,&q) && !q.valid);
+    assert(!core_authored_surface_coordinates(&m,pole,&q));
+    m.rotation_rad=1.5707963267948966;
+    assert(core_authored_surface_uv_coordinates(&m,"u",uv,&q));
+    assert(fabs(q.uv_tiles[0]-1.45)<1e-12 && fabs(q.uv_tiles[1]-.9)<1e-12);
+    uv[0]=NAN;assert(!core_authored_surface_uv_coordinates(&m,"u",uv,&q));
+    m.uv_scale[0]=0;assert(!core_authored_surface_mapping_validate(&m));
+
 }
 
 #include <assert.h>

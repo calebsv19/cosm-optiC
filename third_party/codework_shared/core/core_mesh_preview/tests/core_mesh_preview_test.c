@@ -137,6 +137,27 @@ static int test_coherent_lod_mesh(void) {
         }
     }
     core_mesh_preview_lod_mesh_free(&lod);
+    if(!failed) {
+        failed |= expect_ok(core_mesh_asset_surface_allocate(&grid,"seam_uv"),"allocate LOD UVs");
+        for(size_t t=0;!failed && t<grid.triangle_count;++t) {
+            grid.surface_corners[3*t].uv[0]=(double)t;
+            grid.surface_corners[3*t+1].uv[0]=(double)t+(t%2?-1:1);
+            grid.surface_corners[3*t+2].uv[0]=(double)t;
+            grid.surface_corners[3*t+2].uv[1]=1;
+        }
+        if(!failed) failed |= expect_ok(core_mesh_asset_surface_generate_tangents(&grid),"generate LOD tangents");
+        if(!failed) failed |= expect_ok(core_mesh_preview_build_lod_mesh(&grid,180u,&lod),"protect UV LOD");
+        if(!failed && (!lod.attribute_protected || lod.triangle_count!=grid.triangle_count ||
+            lod.cluster_resolution!=0 || strcmp(lod.uv_set_id,"seam_uv") || lod.surface_corner_count!=grid.surface_corner_count ||
+            memcmp(lod.surface_corners,grid.surface_corners,grid.surface_corner_count*sizeof(*grid.surface_corners)))) {
+            fprintf(stderr,"attribute LOD did not preserve source corners and identity\n");failed=1;
+        }
+        if(!failed) {
+            grid.surface_corners[0].uv[0]=99;
+            if(lod.surface_corners[0].uv[0]==99) {fprintf(stderr,"attribute LOD aliases source storage\n");failed=1;}
+        }
+        core_mesh_preview_lod_mesh_free(&lod);
+    }
     core_mesh_asset_runtime_document_free(&grid);
 
     failed |= make_tetra(&tetra);

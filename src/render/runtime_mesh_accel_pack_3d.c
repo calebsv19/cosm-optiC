@@ -10,7 +10,7 @@
 static const unsigned char kRuntimeMeshAccelPack3DMagic[8] = {
     'R', 'T', 'M', 'B', 'V', 'H', '3', '\0'
 };
-static const uint32_t kRuntimeMeshAccelPack3DVersion = 1u;
+static const uint32_t kRuntimeMeshAccelPack3DVersion = 2u;
 static const uint32_t kRuntimeMeshAccelPack3DEndianMarker = 0x01020304u;
 static const uint64_t kRuntimeMeshAccelPack3DFnvOffset = 1469598103934665603ull;
 static const uint64_t kRuntimeMeshAccelPack3DFnvPrime = 1099511628211ull;
@@ -168,6 +168,37 @@ static bool runtime_mesh_accel_pack_3d_key_matches(
            actual->source_triangle_count == expected->source_triangle_count;
 }
 
+static bool accel_surface_write(FILE *f,const RuntimeTriangle3D *triangle) {
+    if(!runtime_mesh_accel_pack_3d_write_u32(f,triangle->hasSurfaceUV?1:0)) return false;
+    if(!triangle->hasSurfaceUV) return true;
+    if(!runtime_mesh_accel_pack_3d_write_exact(f,triangle->uvSetId,64)) return false;
+    for(int k=0;k<3;++k) {
+        const CoreMeshAssetSurfaceCorner *c=&triangle->surfaceCorners[k];
+        const double values[]={c->uv[0],c->uv[1],c->normal.x,c->normal.y,c->normal.z,c->tangent.x,c->tangent.y,c->tangent.z,c->handedness};
+        for(int v=0;v<9;++v) if(!runtime_mesh_accel_pack_3d_write_double(f,values[v])) return false;
+        if(!runtime_mesh_accel_pack_3d_write_u32(f,c->tangent_valid?1:0)) return false;
+    }
+    return true;
+}
+static bool accel_surface_read(FILE *f,RuntimeTriangle3D *triangle) {
+    uint32_t active;if(!runtime_mesh_accel_pack_3d_read_u32(f,&active) || active>1) return false;
+    if(!active) return true;
+    if(!runtime_mesh_accel_pack_3d_read_exact(f,triangle->uvSetId,64)) return false;
+    Vec3 normals[3];
+    for(int k=0;k<3;++k) {
+        CoreMeshAssetSurfaceCorner *c=&triangle->surfaceCorners[k];uint32_t valid;
+        double *values[]={&c->uv[0],&c->uv[1],&c->normal.x,&c->normal.y,&c->normal.z,&c->tangent.x,&c->tangent.y,&c->tangent.z,&c->handedness};
+        for(int v=0;v<9;++v) if(!runtime_mesh_accel_pack_3d_read_double(f,values[v])) return false;
+        if(!runtime_mesh_accel_pack_3d_read_u32(f,&valid) || valid>1) return false;
+        c->tangent_valid=valid!=0;normals[k]=vec3(c->normal.x,c->normal.y,c->normal.z);
+    }
+    CoreMeshAssetRuntimeDocument check={0};check.triangle_count=1;check.surface_corner_count=3;
+    check.surface_corners=triangle->surfaceCorners;memcpy(check.uv_set_id,triangle->uvSetId,64);
+    if(core_mesh_asset_surface_validate(&check).code!=CORE_OK) return false;
+    triangle->hasSurfaceUV=triangle->hasVertexNormals=true;
+    triangle->vertexNormal0=normals[0];triangle->vertexNormal1=normals[1];triangle->vertexNormal2=normals[2];return true;
+}
+
 static bool runtime_mesh_accel_pack_3d_write_triangle(FILE* file,
                                                       const RuntimeTriangle3D* triangle) {
     uint32_t two_sided = triangle && triangle->twoSided ? 1u : 0u;
@@ -179,7 +210,7 @@ static bool runtime_mesh_accel_pack_3d_write_triangle(FILE* file,
            runtime_mesh_accel_pack_3d_write_u32(file, two_sided) &&
            runtime_mesh_accel_pack_3d_write_exact(file,
                                                   &triangle->localTriangleIndex,
-                                                  sizeof(triangle->localTriangleIndex));
+                                                  sizeof(triangle->localTriangleIndex)) && accel_surface_write(file,triangle);
 }
 
 static bool runtime_mesh_accel_pack_3d_read_triangle(FILE* file,
@@ -203,6 +234,7 @@ static bool runtime_mesh_accel_pack_3d_read_triangle(FILE* file,
         triangle->localTriangleIndex >= source_triangle_count) {
         return false;
     }
+    if(!accel_surface_read(file,triangle)) return false;
     triangle->twoSided = two_sided != 0u;
     triangle->primitiveIndex = -1;
     triangle->sceneObjectIndex = -1;

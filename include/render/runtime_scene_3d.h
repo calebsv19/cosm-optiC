@@ -2,6 +2,7 @@
 #define RENDER_RUNTIME_SCENE_3D_H
 
 #include <stdbool.h>
+#include "core_mesh_asset.h"
 
 #include "config/config_manager.h"
 #include "math/vec3.h"
@@ -93,6 +94,9 @@ typedef struct {
     Vec3 vertexNormal1;
     Vec3 vertexNormal2;
     bool twoSided;
+    bool hasSurfaceUV;
+    char uvSetId[64];
+    CoreMeshAssetSurfaceCorner surfaceCorners[3];
     bool hasObjectTextureCoords;
     Vec3 objectTexture0;
     Vec3 objectTexture1;

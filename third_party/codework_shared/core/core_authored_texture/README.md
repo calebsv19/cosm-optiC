@@ -75,3 +75,7 @@ Shared authored-texture manifest contract semantics for cross-app texture export
   - source slot RGBA identities must be unique and palettes must provide exactly one entry per slot;
   - atlas cells use unsigned pixel rectangles, one fixed logical cell size, unique IDs, non-overlapping in-bounds rectangles, and explicit index-atlas or palette-baked output kinds;
   - file parsing, image loading, palette baking, rendering, and app-specific tile meaning remain host-owned.
+
+## 0.5.0 — explicit surface attributes
+
+Add authored-UV mapping version 3 and pure core_authored_surface_uv_coordinates evaluation with explicit UV-set matching, dimensionless scale/offset and rotation. Position-only evaluation rejects this mapping. Existing planar and axial behavior is retained. Tangent response, filtering and color-space policy remain consumer work.

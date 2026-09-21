@@ -412,9 +412,10 @@ static void scene_editor_mesh_surface_rasterize(
     const SDL_Color base = scene_editor_mesh_surface_base_color(
         mode,
         instance->scene_object_index);
+    bool direct_mapping=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && RuntimeSurfaceMappingNeedsMeshAttributes(instance->scene_object_index) && RuntimeSurfaceMappingPreviewSupported(instance->scene_object_index);
     bool unsupported_mapping=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && RuntimeSurfaceMappingActive(instance->scene_object_index) && !RuntimeSurfaceMappingPreviewSupported(instance->scene_object_index);
     const SceneEditorSurfaceMappingCache* mapped=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorSurfaceMappingCachePrepare(instance->scene_object_index) : NULL;
-    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !mapped && !unsupported_mapping ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
+    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !mapped && !unsupported_mapping && !direct_mapping ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
     SceneEditorMeshPreviewShadeNormal view=material_view(projector);
     for (size_t triangle = 0u; triangle < lod->triangle_count; ++triangle) {
         const uint32_t ia = lod->indices[triangle * 3u + 0u];
@@ -479,6 +480,11 @@ static void scene_editor_mesh_surface_rasterize(
                 normal_c = scene_editor_mesh_surface_world_normal(local_normal, instance);
             }
         }
+        if(lod->surface_corners) {
+            normal_a=scene_editor_mesh_surface_world_normal(lod->surface_corners[triangle*3].normal,instance);
+            normal_b=scene_editor_mesh_surface_world_normal(lod->surface_corners[triangle*3+1].normal,instance);
+            normal_c=scene_editor_mesh_surface_world_normal(lod->surface_corners[triangle*3+2].normal,instance);
+        }
         double ua=0,va=0,ub=0,vb=0,uc=0,vc=0;
         if(material) {
             SceneEditorMeshSurfacePoint3 la=mesh_local(lod->vertices[ia],contract),lb=mesh_local(lod->vertices[ib],contract),lc=mesh_local(lod->vertices[ic],contract);
@@ -501,6 +507,21 @@ static void scene_editor_mesh_surface_rasterize(
                     w0*normal_a.y+w1*normal_b.y+w2*normal_c.y,w0*normal_a.z+w1*normal_b.z+w2*normal_c.z};
                 color=material ? SceneEditorViewportMaterialShade(material,shading_normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
                                : SceneEditorMeshPreviewShadeColor(base,shading_normal);
+                if(direct_mapping) {
+                    /* Coverage admits a small edge tolerance. Material queries stay
+                     * on the triangle so prepared geometry fields remain valid. */
+                    double weights[3]={fmax(0,w0),fmax(0,w1),fmax(0,w2)};
+                    double total=weights[0]+weights[1]+weights[2];
+                    for(int k=0;k<3;++k) weights[k]/=total;
+                    double u=weights[0],v=weights[1],w=weights[2];
+                    Vec3 world=vec3(u*wa.x+v*wb.x+w*wc.x,u*wa.y+v*wb.y+w*wc.y,u*wa.z+v*wb.z+w*wc.z);
+                    shading_normal=(SceneEditorMeshPreviewShadeNormal){u*normal_a.x+v*normal_b.x+w*normal_c.x,
+                        u*normal_a.y+v*normal_b.y+w*normal_c.y,u*normal_a.z+v*normal_b.z+w*normal_c.z};
+                    RuntimeMaterialSurfaceEval eval;
+                    color=RuntimeSurfaceMaterialSampleMesh(instance->scene_object_index,instance->asset_index,triangle,weights,world,
+                        vec3(shading_normal.x,shading_normal.y,shading_normal.z),lod,&eval) ?
+                        SceneEditorViewportMaterialShadeSample(&eval,sceneSettings.sceneObjects[instance->scene_object_index].emissiveStrength,shading_normal,view):(SDL_Color){255,0,255,255};
+                }
                 if(unsupported_mapping) color=((x/12+y/12)%2)?(SDL_Color){92,70,92,255}:(SDL_Color){142,115,142,255};
                 if(mapped) {
                     Vec3 world=vec3(w0*wa.x+w1*wb.x+w2*wc.x,w0*wa.y+w1*wb.y+w2*wc.y,w0*wa.z+w1*wb.z+w2*wc.z);

@@ -45,6 +45,10 @@ typedef struct {
     double baryU;
     double baryV;
     double baryW;
+    bool hasSurfaceUV, hasSurfaceTangent;
+    char uvSetId[64];
+    double surfaceUV[2], surfaceHandedness;
+    Vec3 surfaceTangent;
     bool hasObjectTextureCoord;
     Vec3 objectTextureCoord;
     bool hasProceduralSurfaceMaterial;

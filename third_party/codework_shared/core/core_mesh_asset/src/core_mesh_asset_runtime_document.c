@@ -4,6 +4,8 @@
 
 #include <math.h>
 #include <stdint.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -102,6 +104,8 @@ static bool runtime_doc_write_vec3(FILE *f, CoreObjectVec3 v) {
     return fprintf(f, "{\"x\":%.17g,\"y\":%.17g,\"z\":%.17g}", v.x, v.y, v.z) >= 0;
 }
 
+#include "core_mesh_asset_surface.inc"
+
 static CoreResult runtime_doc_save_file_streaming(const CoreMeshAssetRuntimeDocument *document,
                                                   const char *path) {
     char *temp_path = NULL;
@@ -186,7 +190,7 @@ static CoreResult runtime_doc_save_file_streaming(const CoreMeshAssetRuntimeDocu
              runtime_doc_write_json_string(f, triangle->surface_group_id) &&
              fprintf(f, "}%s\n", (i + 1u < document->triangle_count) ? "," : "") >= 0;
     }
-    ok = ok && fprintf(f, "\t]},\n\t\"surface_groups\":[\n") >= 0;
+    ok = ok && fprintf(f, "\t]") >= 0 && surface_write(f,document) && fprintf(f, "},\n\t\"surface_groups\":[\n") >= 0;
     for (i = 0u; ok && i < document->surface_group_count; ++i) {
         const CoreMeshAssetSurfaceGroup *group = &document->surface_groups[i];
         ok = fprintf(f, "\t\t{\"group_id\":") >= 0 &&
@@ -348,6 +352,8 @@ void core_mesh_asset_runtime_document_free(CoreMeshAssetRuntimeDocument *documen
     core_free(document->vertices);
     core_free(document->triangles);
     core_free(document->surface_groups);
+    core_free(document->surface_corners);
+    document->surface_corners=NULL;document->surface_corner_count=0;document->uv_set_id[0]=0;
     document->vertices = NULL;
     document->triangles = NULL;
     document->surface_groups = NULL;
@@ -428,6 +434,8 @@ CoreResult core_mesh_asset_runtime_document_set_surface_group_count(
     }
     if (surface_group_count == 0u) {
         core_free(document->surface_groups);
+    core_free(document->surface_corners);
+    document->surface_corners=NULL;document->surface_corner_count=0;document->uv_set_id[0]=0;
         document->surface_groups = NULL;
         document->surface_group_count = 0u;
         return core_result_ok();
@@ -441,6 +449,8 @@ CoreResult core_mesh_asset_runtime_document_set_surface_group_count(
     }
     memset(buffer, 0, surface_group_count * sizeof(CoreMeshAssetSurfaceGroup));
     core_free(document->surface_groups);
+    core_free(document->surface_corners);
+    document->surface_corners=NULL;document->surface_corner_count=0;document->uv_set_id[0]=0;
     document->surface_groups = (CoreMeshAssetSurfaceGroup *)buffer;
     document->surface_group_count = surface_group_count;
     return core_result_ok();
@@ -521,7 +531,7 @@ CoreResult core_mesh_asset_runtime_document_validate(
             return runtime_doc_invalid_arg("runtime mesh triangle surface group is unresolved");
         }
     }
-    return core_result_ok();
+    return core_mesh_asset_surface_validate(document);
 }
 
 CoreResult core_mesh_asset_runtime_document_load_file(const char *path,
@@ -762,7 +772,9 @@ CoreResult core_mesh_asset_runtime_document_load_file(const char *path,
         return runtime_doc_invalid_arg("surface group count mismatch");
     }
 
+    r = surface_read(mesh,&document);
     cJSON_Delete(root);
+    if(r.code != CORE_OK) {core_mesh_asset_runtime_document_free(&document);return r;}
     r = core_mesh_asset_runtime_document_validate(&document);
     if (r.code != CORE_OK) {
         core_mesh_asset_runtime_document_free(&document);

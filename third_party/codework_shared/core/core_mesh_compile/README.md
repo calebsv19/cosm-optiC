@@ -125,3 +125,7 @@ normal islands. Point-only contacts and coincident duplicate/opposed faces stay
 separate, eliminating first-face cancellation fallback. Flat output is unchanged.
 Triangle indices are committed only after generated normals validate. This does
 not repair geometry or certify arbitrary non-manifold meshes.
+
+## 0.8.0 — explicit surface attributes
+
+Add bounded triangle OBJ import with separate position/UV/normal indices, negative indices, explicit UV-set identity and per-corner tangent generation. v/vt and v/vt/vn triangles are supported. Polygons, missing UVs, nonfinite values and unsupported directives fail; callers triangulate first. OBJ material libraries are not imported. Existing STL and pending 0.7.1 normal-generation behavior is preserved.

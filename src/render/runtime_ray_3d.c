@@ -403,6 +403,23 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     hit.baryU = bary_u;
     hit.baryV = bary_v;
     hit.baryW = bary_w;
+    if(triangle->hasSurfaceUV) {
+        hit.hasSurfaceUV=true;memcpy(hit.uvSetId,triangle->uvSetId,sizeof(hit.uvSetId));
+        const double w[3]={bary_u,bary_v,bary_w};Vec3 tangent=vec3(0,0,0),normal=vec3(0,0,0);double sign=0;
+        bool valid=true;
+        for(int k=0;k<3;++k) {
+            const CoreMeshAssetSurfaceCorner *c=&triangle->surfaceCorners[k];
+            hit.surfaceUV[0]+=w[k]*c->uv[0];hit.surfaceUV[1]+=w[k]*c->uv[1];
+            tangent=vec3_add(tangent,vec3_scale(vec3(c->tangent.x,c->tangent.y,c->tangent.z),w[k]));
+            normal=vec3_add(normal,vec3_scale(vec3(c->normal.x,c->normal.y,c->normal.z),w[k]));
+            sign+=w[k]*c->handedness;valid=valid && c->tangent_valid;
+        }
+        tangent=vec3_sub(tangent,vec3_scale(hit.shadingNormal,vec3_dot(tangent,hit.shadingNormal)));
+        if(valid && vec3_length(tangent)>1e-12 && fabs(sign)>.99) {
+            hit.hasSurfaceTangent=true;hit.surfaceTangent=vec3_normalize(tangent);
+            hit.surfaceHandedness=(sign<0?-1:1)*(vec3_dot(normal,hit.shadingNormal)<0?-1:1);
+        }
+    }
     if (triangle->hasObjectTextureCoords) {
         hit.hasObjectTextureCoord = true;
         hit.objectTextureCoord =

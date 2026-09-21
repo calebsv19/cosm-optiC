@@ -107,3 +107,7 @@ Shared reusable 3D mesh-asset contract semantics for the physics trio object-aut
   array parsing to linear cJSON traversal so larger mesh payloads do not pay
   linked-list indexed-access costs.
 - v0.3.0 adds runtime-document payload validation and file loading, with tests covering the RayTracing MRT0 low/medium/high sphere fixtures.
+
+## 0.7.0 — explicit surface attributes
+
+Optional triangle-major per-corner UV coordinates, named UV-set identity, normalized corner normals and tangent/handedness validity. Runtime JSON preserves the version-1 surface_attributes stream; absent attributes retain legacy behavior. Tangents are derivative-based and orthogonalized per corner; degenerate UVs preserve coordinates and explicitly invalidate the tangent frame. One UV set per document; this is not MikkTSpace or an unwrap tool.

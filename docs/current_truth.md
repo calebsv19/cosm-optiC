@@ -1,5 +1,21 @@
 # optiC Current Truth
 
+## September 21 surface-material M4 source checkpoint
+
+The isolated surface-material lane completes M0–M4. Explicit named per-corner UVs
+and tangent frames now survive triangle OBJ compilation, runtime/packed storage,
+asset/acceleration caches, transformed ray hits and material preview. UV assets
+and supported mapped geometry-field programs use exact source-triangle LOD to
+preserve attributes in both preview modes. This supersedes the M3 mapped
+solid-graph preview restriction below. See the [M4 contract](surface_material_m4_contract.md)
+for schema, import limits, editing, tests and the full-detail cost tradeoff.
+
+M5 filtering, color spaces, basis-correct normal/bump and measured performance are
+next. Main Edit adoption, installed builds and publication remain separate.
+VERSION 0.16.0 and WORKER_VERSION 0.7.1 are unchanged; shared source dependencies
+advance to mesh asset 0.7.0, mesh compile 0.8.0, mesh preview 0.6.0 and authored
+texture 0.5.0. Earlier dated sections describe their checkpoint state.
+
 ## September 21 surface-material M3 source checkpoint
 
 The isolated surface-material lane now completes M0–M3: common planar/axial

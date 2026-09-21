@@ -8,19 +8,20 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
 
 ## Surface material mapping follow-up — September 21, 2026
 
-The isolated surface-material lane completes M0–M3. The
-[M3 document/region contract](surface_material_m3_contract.md) records retained
-source editing, face overrides, persistence and capability limits. The original
-[parity diagnostic](material_viewport_parity.md) remains the historical failure
-baseline; current mapped acceptance and unchanged legacy behavior have separate
-proof. Main Edit adoption is a distinct integration step.
+The isolated surface-material lane completes M0–M4. The
+[M4 explicit UV contract](surface_material_m4_contract.md) records per-corner UVs,
+named sets, tangent frames, import/storage/cache transport and protected exact LOD.
+Mapped geometry-field preview now evaluates the same compiled program as ray hits.
+The original [parity diagnostic](material_viewport_parity.md) remains historical;
+current mapped acceptance and unchanged legacy behavior have separate proof.
+Main Edit adoption is a distinct integration step.
 
-M4 is next: per-corner UVs/UV-set identity and tangents across import, compilation,
-pack storage, preview and LOD. M5 follows with footprint filtering, color spaces,
-normal/bump fidelity and measured orbit cost. M6 broadens typed graph editing,
-3D/triplanar sources and producer tools. Solid-graph preview attribute preservation
-must be explicit in M4; M3 reports that preview as unavailable. Preview-window
-redesign and release/version work remain separate.
+M5 is next: footprint-aware filtering, declared color spaces, basis-correct
+normal/bump and directional response, distant/grazing stability and measured
+orbit/render cost. M4 exact LOD preserves correctness but does not qualify
+large-mesh interaction performance. Attribute-aware reduction is a future
+optimization. M6 broadens typed graph editing, 3D/triplanar sources and producer
+tools. Preview-window redesign and release/version work remain separate.
 
 ## Near-Term Intent
 

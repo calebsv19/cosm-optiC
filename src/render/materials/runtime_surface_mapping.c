@@ -1,5 +1,6 @@
 #include "render/runtime_surface_mapping.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_mesh_asset_loader.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "render/runtime_material_graph_3d.h"
@@ -60,6 +61,17 @@ static bool vector(json_object* o,const char* key,double* out,int count) {
 }
 static bool parse(json_object* o,CoreAuthoredSurfaceMapping* m) {
     json_object* seed=field(o,"seed"); memset(m,0,sizeof(*m));
+    if(token(o,"method","authored_uv")) {
+        const char *id=json_object_get_string(field(o,"uv_set_id"));
+        m->version=3;
+        if(!token(o,"required_capability","optic.authored_uv_v1") || !token(o,"source_domain","brick_cells_v1") ||
+           !json_object_is_type(field(o,"version"),json_type_int) || json_object_get_int(field(o,"version"))!=3 ||
+           !json_object_is_type(field(o,"uv_set_id"),json_type_string) || !id || !id[0] || strlen(id)>=sizeof(m->uv_set_id) || !json_object_is_type(seed,json_type_int) ||
+           json_object_get_int64(seed)<0 || json_object_get_uint64(seed)>UINT32_MAX) return false;
+        snprintf(m->uv_set_id,sizeof(m->uv_set_id),"%s",id);m->seed=(uint32_t)json_object_get_uint64(seed);
+        return vector(o,"uv_scale",m->uv_scale,2) && vector(o,"uv_offset",m->uv_offset,2) &&
+            number(field(o,"rotation_rad"),&m->rotation_rad) && core_authored_surface_mapping_validate(m);
+    }
     bool axial=token(o,"method","axial_height");
     int version=axial?2:1;
     if(!token(o,"required_capability",axial?"optic.axial_surface_v2":"optic.planar_surface_v1") ||
@@ -326,7 +338,7 @@ static bool regions_supported(json_object* row,json_object* object,const CoreAut
     for(size_t i=0;maps && i<json_object_array_length(maps);++i) {
         json_object* entry=json_object_array_get_idx(maps,i),*id=field(entry,"id");CoreAuthoredSurfaceMapping parsed;
         if(!json_object_is_type(id,json_type_string) || !json_object_get_string(id)[0] || strlen(json_object_get_string(id))>=64 ||
-           !parse(field(entry,"definition"),&parsed)) return false;
+           !parse(field(entry,"definition"),&parsed) || (parsed.version==3 && !token(object,"object_type","mesh_asset_instance"))) return false;
         for(size_t j=0;j<i;++j) if(token(json_object_array_get_idx(maps,j),"id",json_object_get_string(id))) return false;
         if(field(entry,"path") || field(entry,"sha256")) {
             const char* path=json_object_get_string(field(entry,"path"));
@@ -359,7 +371,7 @@ static bool regions_supported(json_object* row,json_object* object,const CoreAut
             if(region_map) return false;
             region_map=resolve_mapping(binding,field(region,"mapping_ref"));if(!region_map) return false;
         }
-        if(region_map && !parse(region_map,&effective)) return false;
+        if(region_map && (!parse(region_map,&effective) || effective.version==3)) return false;
         if(field(region,"source") && !source_supported(field(region,"source"),effective.version==2)) return false;
         if(!layer_maps(field(region,"source")?field(region,"source"):row,binding,false,NULL)) return false;
         /* An inherited source must also fit an overridden projection. */
@@ -430,13 +442,13 @@ bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_
         json_object* object=json_object_array_get_idx(objects,i); json_object* m=NULL;
         json_object* ray=field(field(object,"extensions"),"ray_tracing");
         if(!ray || !json_object_object_get_ex(ray,"surface_mapping",&m)) continue;
-        CoreAuthoredSurfaceMapping parsed; double dims[3]={0};
+        CoreAuthoredSurfaceMapping parsed={0}; double dims[3]={0};
         bool mesh=token(object,"object_type","mesh_asset_instance");
         bool geometry=mesh || ((token(object,"object_type","plane_primitive") || token(object,"object_type","rect_prism_primitive")) && dimensions(object,dims) && frame_supported(object));
         bool valid=geometry &&
             field(object,"object_id") && json_object_is_type(field(object,"object_id"),json_type_string) &&
             strlen(json_object_get_string(field(object,"object_id")))>0 && strlen(json_object_get_string(field(object,"object_id")))<64 &&
-            parse(m,&parsed) && (!mesh || parsed.version==2) &&
+            parse(m,&parsed) && (mesh?(parsed.version==2 || parsed.version==3):parsed.version!=3) &&
             layers_supported(root,json_object_get_string(field(object,"object_id")),token(m,"method","axial_height")) &&
             regions_supported(material_row(root,json_object_get_string(field(object,"object_id"))),object,&parsed);
         const char* object_id=json_object_get_string(field(object,"object_id"));
@@ -457,8 +469,8 @@ bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_
         if(scale && !json_object_is_type(scale,json_type_object)) valid=false;
         for(int a=0;a<3;++a) {
             double value=1; char key[2]={"xyz"[a],0};
-            if(field(scale,key) && (!number(field(scale,key),&value) || value<=0)) valid=false;
-            if(mesh && (!isfinite(value*world_scale) || value*world_scale<1e-9)) valid=false;
+            if(field(scale,key) && (!number(field(scale,key),&value) || (parsed.version==3?fabs(value)<1e-9:value<=0))) valid=false;
+            if(mesh && (!isfinite(value*world_scale) || fabs(value*world_scale)<1e-9)) valid=false;
             double size=dims[a]*value*world_scale;
             if(!mesh && (a<2 || token(object,"object_type","rect_prism_primitive")) &&
                (!isfinite(size) || size<0.1)) valid=false;
@@ -516,6 +528,10 @@ unsigned long long RuntimeSurfaceMappingRevision(void) {return revision;}
 static bool coordinates_for(const HitInfo3D* hit,const CoreAuthoredSurfaceMapping* m,CoreAuthoredSurfaceCoordinates* out) {
     if(out) memset(out,0,sizeof(*out));
     if(!hit || !out || !RuntimeSurfaceMappingActive(hit->sceneObjectIndex)) return false;
+    if(m->version==3) {
+        bool ok=hit->hasSurfaceUV && core_authored_surface_uv_coordinates(m,hit->uvSetId,hit->surfaceUV,out);
+        if(ok) out->has_tangent=hit->hasSurfaceTangent;return ok;
+    }
     const Binding* b=&bindings[hit->sceneObjectIndex];
     const RuntimeSceneBridgePrimitiveSeed* p=&b->primitive;
     double point[3]={hit->position.x/b->world_scale,hit->position.y/b->world_scale,hit->position.z/b->world_scale};
@@ -635,5 +651,41 @@ bool RuntimeSurfaceMappingEvaluateReferencedStack(const HitInfo3D* hit,const cha
 }
 
 bool RuntimeSurfaceMappingPreviewSupported(int index) {
-    return RuntimeSurfaceMappingActive(index) && !bindings[index].asset_graph;
+    if(!RuntimeSurfaceMappingActive(index)) return false;
+    if(!bindings[index].asset_graph) return true;
+    const RayTracingRuntimeMeshAssetSet *assets=ray_tracing_runtime_mesh_assets_last();
+    for(int i=0;assets && i<assets->instance_count;++i) if(assets->instances[i].scene_object_index==index) {
+        int a=assets->instances[i].asset_index;
+        return a>=0 && a<assets->asset_count && assets->assets[a].procedural_solid_material_runtime_program.valid &&
+            assets->assets[a].procedural_solid_material_runtime_program.graph.surface_mapping_ref[0];
+    }
+    return false;
+}
+
+bool RuntimeSurfaceMappingNeedsMeshAttributes(int index) {
+    return RuntimeSurfaceMappingActive(index) && (bindings[index].asset_graph || bindings[index].map.version==3);
+}
+bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
+    const double weights[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh* lod,
+    RuntimeMaterialSurfaceEval* out) {
+    if(!RuntimeSurfaceMappingActive(index) || !weights || !lod || triangle>=lod->triangle_count || !out) return false;
+    HitInfo3D hit;HitInfo3D_Reset(&hit);hit.sceneObjectIndex=index;hit.localTriangleIndex=(int)triangle;
+    hit.triangleIndex=(int)triangle;hit.position=world;hit.normal=hit.geometricNormal=hit.shadingNormal=normal;
+    hit.baryU=weights[0];hit.baryV=weights[1];hit.baryW=weights[2];
+    if(lod->surface_corners && lod->surface_corner_count==lod->triangle_count*3) {
+        hit.hasSurfaceUV=true;memcpy(hit.uvSetId,lod->uv_set_id,sizeof(hit.uvSetId));
+        for(int k=0;k<3;++k) for(int a=0;a<2;++a) hit.surfaceUV[a]+=weights[k]*lod->surface_corners[triangle*3+k].uv[a];
+    }
+    const RayTracingRuntimeMeshAssetSet *assets=ray_tracing_runtime_mesh_assets_last();
+    if(bindings[index].asset_graph) {
+        if(!assets || asset_index<0 || asset_index>=assets->asset_count || !lod->attribute_protected) return false;
+        const ProceduralSolidMaterialRuntimeProgramV1 *program=&assets->assets[asset_index].procedural_solid_material_runtime_program;
+        if(!program->valid || !program->graph.surface_mapping_ref[0]) return false;
+        hit.hasRegionAuthoredMaterial=true;hit.proceduralSolidMaterialRuntimeProgram=program;
+    }
+    RuntimeMaterialPayload3D payload;
+    if(!RuntimeMaterialPayload3D_ResolveFromHit(&hit,&payload)) return false;
+    *out=RuntimeMaterialSurfaceEvalMakeBase(payload.baseColorR,payload.baseColorG,payload.baseColorB,
+        payload.bsdf.roughness,payload.bsdf.reflectivity,payload.bsdf.specWeight,payload.bsdf.diffuseWeight,payload.transparency);
+    out->active=true;return true;
 }

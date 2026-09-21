@@ -105,7 +105,7 @@ static void runtime_mesh_asset_pack_source_key(const char* resolved_path,
     out_key->source_size_bytes = (int64_t)file_size;
     out_key->source_checksum = (uint64_t)checksum;
     out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
-    out_key->ray_tracing_cache_schema_version = 2u;
+    out_key->ray_tracing_cache_schema_version = 3u;
     out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
 }
 
@@ -160,6 +160,10 @@ static bool runtime_mesh_asset_document_copy(const CoreMeshAssetRuntimeDocument*
         memcpy(dst->surface_groups,
                src->surface_groups,
                sizeof(*src->surface_groups) * src->surface_group_count);
+    }
+    if(src->surface_corner_count) {
+        result=core_mesh_asset_surface_allocate(dst,src->uv_set_id);if(result.code!=CORE_OK) goto fail;
+        memcpy(dst->surface_corners,src->surface_corners,src->surface_corner_count*sizeof(*src->surface_corners));
     }
     return true;
 

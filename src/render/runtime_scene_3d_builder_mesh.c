@@ -360,6 +360,22 @@ bool runtime_scene_3d_builder_append_mesh_asset_set_at_t(
                     vec3_length(appended->vertexNormal1) > 1e-9 &&
                     vec3_length(appended->vertexNormal2) > 1e-9;
             }
+            if(document->surface_corner_count==document->triangle_count*3 && document->surface_corners) {
+                RuntimeTriangle3D *dst=&scene->triangleMesh.triangles[scene->triangleMesh.triangleCount-1];
+                dst->hasSurfaceUV=true;memcpy(dst->uvSetId,document->uv_set_id,sizeof(dst->uvSetId));
+                Vec3 normals[3];
+                for(int k=0;k<3;++k) {
+                    CoreMeshAssetSurfaceCorner c=document->surface_corners[j*3+k];
+                    CoreMeshAssetRuntimeVertex v={0};v.normal=c.normal;
+                    Vec3 n=runtime_scene_3d_builder_transform_mesh_normal(&v,instance);
+                    Vec3 t=runtime_scene_3d_builder_rotate_instance(vec3(c.tangent.x*instance->scale_x,c.tangent.y*instance->scale_y,c.tangent.z*instance->scale_z),instance);
+                    t=vec3_normalize(vec3_sub(t,vec3_scale(n,vec3_dot(n,t))));
+                    c.normal=(CoreObjectVec3){n.x,n.y,n.z};c.tangent=(CoreObjectVec3){t.x,t.y,t.z};
+                    if(instance->scale_x*instance->scale_y*instance->scale_z<0) c.handedness=-c.handedness;
+                    dst->surfaceCorners[k]=c;normals[k]=n;
+                }
+                dst->hasVertexNormals=true;dst->vertexNormal0=normals[0];dst->vertexNormal1=normals[1];dst->vertexNormal2=normals[2];
+            }
             if (asset->procedural_surface_valid &&
                 asset->procedural_material.valid &&
                 asset->procedural_material.vertex_count ==

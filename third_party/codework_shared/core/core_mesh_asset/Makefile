@@ -39,7 +39,7 @@ $(OBJ_DIR)/core_mesh_asset.o: src/core_mesh_asset.c | $(OBJ_DIR)
 $(OBJ_DIR)/core_mesh_asset_authoring_document.o: src/core_mesh_asset_authoring_document.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 
-$(OBJ_DIR)/core_mesh_asset_runtime_document.o: src/core_mesh_asset_runtime_document.c | $(OBJ_DIR)
+$(OBJ_DIR)/core_mesh_asset_runtime_document.o: src/core_mesh_asset_runtime_document.c src/core_mesh_asset_surface.inc include/core_mesh_asset.h | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(INC) -c $< -o $@
 
 $(TEST_CJSON_OBJ): $(CJSON_SRC) | $(OBJ_DIR)
@@ -51,8 +51,12 @@ $(LIB): $(LIB_OBJ)
 $(TEST_BIN): tests/core_mesh_asset_test.c $(LIB) $(TEST_CJSON_OBJ) $(CORE_BASE_DIR)/build/libcore_base.a $(CORE_IO_DIR)/build/libcore_io.a $(CORE_OBJECT_DIR)/build/libcore_object.a $(CORE_UNITS_DIR)/build/libcore_units.a | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(INC) $< $(LIB) $(TEST_CJSON_OBJ) $(CORE_OBJECT_DIR)/build/libcore_object.a $(CORE_UNITS_DIR)/build/libcore_units.a $(CORE_IO_DIR)/build/libcore_io.a $(CORE_BASE_DIR)/build/libcore_base.a -lm -o $@
 
-test: $(TEST_BIN)
+$(OBJ_DIR)/core_mesh_surface_test: tests/core_mesh_surface_test.c $(LIB) $(TEST_CJSON_OBJ) $(CORE_BASE_DIR)/build/libcore_base.a $(CORE_IO_DIR)/build/libcore_io.a $(CORE_OBJECT_DIR)/build/libcore_object.a $(CORE_UNITS_DIR)/build/libcore_units.a | $(OBJ_DIR)
+	$(CC) $(CFLAGS) $(INC) $< $(LIB) $(TEST_CJSON_OBJ) $(CORE_OBJECT_DIR)/build/libcore_object.a $(CORE_UNITS_DIR)/build/libcore_units.a $(CORE_IO_DIR)/build/libcore_io.a $(CORE_BASE_DIR)/build/libcore_base.a -lm -o $@
+
+test: $(TEST_BIN) $(OBJ_DIR)/core_mesh_surface_test
 	./$(TEST_BIN)
+	./$(OBJ_DIR)/core_mesh_surface_test
 
 clean:
 	rm -rf $(OBJ_DIR)

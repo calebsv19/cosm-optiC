@@ -24,6 +24,10 @@ static json_object* current(int index) {
     char json[8192];if(!SceneEditorDocumentGetSurfaceMappingJSON(index,json,sizeof(json))) return NULL;
     return json_tokener_parse(json);
 }
+static const char* field_key(json_object* m,int i) {
+    if(json_object_get_int(get(m,"version"))==3 && i<4) return i<2?"uv_scale":"uv_offset";
+    return keys[i];
+}
 static void cancel(void) {edit=-1;SDL_StopTextInput();}
 static void button(SDL_Renderer* r,SDL_Rect rect,const char* text,bool active) {
     SDL_SetRenderDrawColor(r,active?66:38,active?76:42,active?85:46,255);SDL_RenderFillRect(r,&rect);
@@ -56,6 +60,21 @@ int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int in
     expand=(SDL_Rect){b.x,y,b.w,25};button(r,expand,opened?"Surface mapping  -":"Surface mapping  +",opened);y+=29;
     if(!opened || index<0) return y;
     json_object* m=current(index);int version=m?json_object_get_int(get(m,"version")):0;
+    if(version==3) {
+        char text[150];snprintf(text,sizeof(text),"Authored UV set: %s",json_object_get_string(get(m,"uv_set_id")));
+        SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},text,(SDL_Color){185,200,210,255});y+=26;
+        SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},"LOD: source detail preserves UV seams",(SDL_Color){185,200,210,255});y+=26;
+        const int indices[]={0,1,2,3,7,11};const char* uv_labels[]={"U scale","V scale","U offset","V offset","Rotation rad","Seed"};
+        for(int k=0;k<6;++k) {
+            int i=indices[k];json_object *v=get(m,field_key(m,i));if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
+            fields[i]=(SDL_Rect){b.x+(k%2)*(b.w/2),y,b.w/2-3,24};
+            if(edit==i) snprintf(text,sizeof(text),"%s: %s",uv_labels[k],draft);
+            else snprintf(text,sizeof(text),"%s: %.7g",uv_labels[k],json_object_get_double(v));
+            button(r,fields[i],text,edit==i);if(k%2) y+=27;
+        }
+        if(status[0]) {SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},status,(SDL_Color){225,195,150,255});y+=27;}
+        json_object_put(m);return y;
+    }
     for(int i=0;i<3;++i) {methods[i]=(SDL_Rect){b.x+i*b.w/3,y,b.w/3-3,25};button(r,methods[i],(const char*[]){"Legacy","Planar","Axial brick"}[i],version==i);}y+=29;
     if(m) {
         const char* sp=json_object_get_string(get(m,"space"));
@@ -67,7 +86,7 @@ int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int in
         int column=0;
         for(int i=0;i<FIELDS;++i) {
             if((version==1 && (i==4 || i==5 || i==6 || i>=12)) || (version==2 && i==7)) continue;
-            fields[i]=(SDL_Rect){b.x+column*(b.w/2),y,b.w/2-3,24};json_object* v=get(m,keys[i]);if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
+            fields[i]=(SDL_Rect){b.x+column*(b.w/2),y,b.w/2-3,24};json_object* v=get(m,field_key(m,i));if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
             if(edit==i) snprintf(text,sizeof(text),"%s: %s",labels[i],draft);
             else snprintf(text,sizeof(text),"%s: %.7g",labels[i],json_object_get_double(v));
             button(r,fields[i],text,edit==i);column=1-column;if(column==0) y+=27;
@@ -102,8 +121,8 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
                 if(!enabled || RayTracingDeepRenderDesktopHost_HasActiveWork()) {cancel();return true;}
                 json_object* m=current(index);if(!m) {cancel();return true;}
                 json_object* v=edit==11?json_object_new_int64((int64_t)value):json_object_new_double(value);
-                if(components[edit]>=0) json_object_array_put_idx(get(m,keys[edit]),components[edit],v);
-                else json_object_object_add(m,keys[edit],v);
+                if(components[edit]>=0) json_object_array_put_idx(get(m,field_key(m,edit)),components[edit],v);
+                else json_object_object_add(m,field_key(m,edit),v);
                 apply(m,index);cancel();return true;
             }
         }
@@ -137,7 +156,7 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
     }
     for(int i=0;i<FIELDS;++i) if(inside(fields[i],x,y)) {
         json_object* m=current(index);if(!m) return true;
-        json_object* v=get(m,keys[i]);if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
+        json_object* v=get(m,field_key(m,i));if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
         snprintf(draft,sizeof(draft),"%.12g",json_object_get_double(v));json_object_put(m);
         edit=i;edit_revision=SceneEditorDocumentRevision();SDL_StartTextInput();return true;
     }

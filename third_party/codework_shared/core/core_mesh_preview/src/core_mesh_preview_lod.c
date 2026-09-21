@@ -36,6 +36,7 @@ void core_mesh_preview_lod_mesh_free(CoreMeshPreviewLodMesh *mesh) {
     if (!mesh) return;
     free(mesh->vertices);
     free(mesh->indices);
+    free(mesh->surface_corners);
     core_mesh_preview_lod_mesh_init(mesh);
 }
 
@@ -65,6 +66,13 @@ static CoreResult lod_copy_runtime_mesh(const CoreMeshAssetRuntimeDocument *docu
         out_mesh->indices[i * 3u + 0u] = (uint32_t)triangle->a;
         out_mesh->indices[i * 3u + 1u] = (uint32_t)triangle->b;
         out_mesh->indices[i * 3u + 2u] = (uint32_t)triangle->c;
+    }
+    if(document->surface_corner_count) {
+        out_mesh->surface_corners=malloc(document->surface_corner_count*sizeof(*out_mesh->surface_corners));
+        if(!out_mesh->surface_corners) {core_mesh_preview_lod_mesh_free(out_mesh);return lod_nomem("surface preview allocation failed");}
+        memcpy(out_mesh->surface_corners,document->surface_corners,document->surface_corner_count*sizeof(*out_mesh->surface_corners));
+        memcpy(out_mesh->uv_set_id,document->uv_set_id,sizeof(out_mesh->uv_set_id));
+        out_mesh->surface_corner_count=document->surface_corner_count;out_mesh->attribute_protected=true;
     }
     out_mesh->vertex_count = document->vertex_count;
     out_mesh->triangle_count = document->triangle_count;
@@ -272,7 +280,7 @@ CoreResult core_mesh_preview_build_lod_mesh(const CoreMeshAssetRuntimeDocument *
         document->vertex_count > UINT32_MAX) {
         return lod_invalid("runtime mesh cannot produce an indexed preview LOD");
     }
-    if (document->triangle_count <= target_triangles) {
+    if (document->surface_corner_count || document->triangle_count <= target_triangles) {
         return lod_copy_runtime_mesh(document, out_mesh);
     }
 

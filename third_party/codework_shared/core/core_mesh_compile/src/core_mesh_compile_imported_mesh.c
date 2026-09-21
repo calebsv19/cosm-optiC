@@ -769,6 +769,8 @@ static void imported_mesh_compute_bounds(const CoreObjectVec3 *vertices,
     }
 }
 
+#include "core_mesh_compile_obj.inc"
+
 CoreResult core_mesh_compile_imported_mesh_to_runtime_document_with_progress(
     const CoreMeshAssetAuthoringDocument *document,
     const char *source_root,
@@ -777,6 +779,7 @@ CoreResult core_mesh_compile_imported_mesh_to_runtime_document_with_progress(
     CoreMeshCompileProgressCallback progress_callback,
     void *progress_user_data) {
     CoreMeshCompileAuthoringContract compile_contract;
+    CoreMeshAssetSurfaceCorner *parsed_corners=NULL;
     char source_path[512];
     CoreObjectVec3 *parsed_vertices = NULL;
     CoreMeshCompileParsedTriangle *parsed_triangles = NULL;
@@ -805,8 +808,8 @@ CoreResult core_mesh_compile_imported_mesh_to_runtime_document_with_progress(
         return r;
     }
     if (document->imported_mesh_source.source_format !=
-        CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL) {
-        return imported_mesh_invalid_arg("only STL imported mesh compile is supported");
+        CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_STL && document->imported_mesh_source.source_format != CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_OBJ) {
+        return imported_mesh_invalid_arg("unsupported imported mesh format");
     }
     r = imported_mesh_source_path(&document->imported_mesh_source,
                                   source_root,
@@ -815,6 +818,9 @@ CoreResult core_mesh_compile_imported_mesh_to_runtime_document_with_progress(
     if (r.code != CORE_OK) {
         return r;
     }
+    if(document->imported_mesh_source.source_format==CORE_MESH_ASSET_IMPORTED_MESH_SOURCE_FORMAT_OBJ) {
+        r=imported_mesh_parse_obj(source_path,&document->imported_mesh_source,&parsed_vertices,&parsed_vertex_count,&parsed_triangles,&parsed_triangle_count,&parsed_corners);
+    } else
     r = imported_mesh_parse_stl(source_path,
                                 &document->imported_mesh_source,
                                 progress_callback,
@@ -891,11 +897,18 @@ CoreResult core_mesh_compile_imported_mesh_to_runtime_document_with_progress(
         document->imported_mesh_source.crease_angle_degrees);
     if (r.code != CORE_OK) goto fail;
 
+    if(parsed_corners) {
+        r=core_mesh_asset_surface_allocate(out_document,document->imported_mesh_source.uv_set_id);
+        if(r.code!=CORE_OK) goto fail;
+        memcpy(out_document->surface_corners,parsed_corners,parsed_triangle_count*3*sizeof(*parsed_corners));
+        r=core_mesh_asset_surface_generate_tangents(out_document);if(r.code!=CORE_OK) goto fail;
+    }
     r = core_mesh_asset_runtime_document_validate(out_document);
     if (r.code != CORE_OK) goto fail;
 
     core_free(parsed_vertices);
     core_free(parsed_triangles);
+    core_free(parsed_corners);
     imported_mesh_emit_progress(progress_callback,
                                 progress_user_data,
                                 CORE_MESH_COMPILE_PROGRESS_STAGE_COMPLETE,
@@ -907,6 +920,7 @@ CoreResult core_mesh_compile_imported_mesh_to_runtime_document_with_progress(
 fail:
     core_free(parsed_vertices);
     core_free(parsed_triangles);
+    core_free(parsed_corners);
     core_mesh_asset_runtime_document_free(out_document);
     return r;
 }

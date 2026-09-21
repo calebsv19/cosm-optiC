@@ -125,7 +125,7 @@ and prisms. M2 axial mesh sources keep their object mapping; arbitrary mesh regi
 painting and per-layer mesh projection overrides are not implemented. Existing
 solid-graph geometry-field selection remains in its own compiler.
 
-Solid-graph mapping integration is renderer-only: the current simplified mesh
+At the M3 checkpoint, solid-graph mapping integration was renderer-only: the current simplified mesh
 preview lacks its geometry-field attributes. Such a binding explicitly displays
 **preview unavailable** and a placeholder. It cannot masquerade as a flat material
 preview. Mapped solid textures support brick/solid sources with stable material
@@ -133,7 +133,9 @@ IDs shorter than 32 bytes and no microdetail normal perturbation; unsupported
 mapped evaluation fails rather than falling back to triangle coordinates. The
 runtime probe covers a compiled constant-weight graph across distinct triangles,
 not all geometry-field graphs. Full preview attribute retention belongs to M4,
-and basis-correct normal/bump response belongs to M5.
+and basis-correct normal/bump response belongs to M5. The subsequent
+[M4 checkpoint](surface_material_m4_contract.md) preserves source triangle identity
+and enables preview for these supported mapped geometry-field programs.
 
 Authored image integration uses primitive face manifests; it does not add imported
 mesh UVs, texture color-space declarations or footprint filtering. Surface-authoring

@@ -7,6 +7,7 @@
  * v1 is planar; v2 is axial height. No implicit UV/geometry inference. */
 #define CORE_AUTHORED_SURFACE_MAPPING_VERSION 1u
 #define CORE_AUTHORED_SURFACE_AXIAL_VERSION 2u
+#define CORE_AUTHORED_SURFACE_UV_VERSION 3u
 typedef enum CoreAuthoredSurfaceSpace {
     CORE_AUTHORED_SURFACE_OBJECT_REST = 1,
     CORE_AUTHORED_SURFACE_WORLD = 2
@@ -20,6 +21,8 @@ typedef struct CoreAuthoredSurfaceMapping {
     /* v2 axial_height: axis_u is seam reference, axis_v is height direction.
      * Integer circumference repeats; explicit fade-to-base near the axis. */
     double reference_radius_m, seam_rad, pole_radius_m;
+    char uv_set_id[64];
+    double uv_scale[2], uv_offset[2]; /* v3 dimensionless UV transform */
     double height_range_m[2]; /* viewport acceleration window, not a clamp */
 } CoreAuthoredSurfaceMapping;
 typedef struct CoreAuthoredSurfaceCoordinates {
@@ -39,4 +42,6 @@ bool core_authored_surface_mapping_validate(const CoreAuthoredSurfaceMapping* ma
 bool core_authored_surface_coordinates(const CoreAuthoredSurfaceMapping* mapping,
                                       const double point_m[3],
                                       CoreAuthoredSurfaceCoordinates* out);
+bool core_authored_surface_uv_coordinates(const CoreAuthoredSurfaceMapping* mapping,
+    const char* uv_set_id, const double uv[2], CoreAuthoredSurfaceCoordinates* out);
 #endif
