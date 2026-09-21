@@ -11,6 +11,37 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Explicit surface attributes cannot use the size-limited bounds-only preview
+ * loader: dropping their mesh also drops the declared chart. */
+static bool runtime_scene_bridge_requires_full_surface_meshes(const char *text) {
+    json_object *root=json_tokener_parse(text),*objects=NULL,*ext=NULL,*ray=NULL,*authoring=NULL,*rows=NULL;
+    bool required=false;
+    if(!root)return false;
+    json_object_object_get_ex(root,"objects",&objects);
+    for(size_t i=0;json_object_is_type(objects,json_type_array)&&i<json_object_array_length(objects);++i){
+        json_object *o=json_object_array_get_idx(objects,i),*map=NULL,*sampling=NULL,*method=NULL;
+        ext=ray=NULL;json_object_object_get_ex(o,"extensions",&ext);
+        if(ext)json_object_object_get_ex(ext,"ray_tracing",&ray);
+        if(ray){json_object_object_get_ex(ray,"surface_mapping",&map);json_object_object_get_ex(ray,"surface_sampling",&sampling);}
+        if(map)json_object_object_get_ex(map,"method",&method);
+        required|=sampling!=NULL||(json_object_is_type(method,json_type_string)&&!strcmp(json_object_get_string(method),"authored_uv"));
+    }
+    ext=ray=NULL;json_object_object_get_ex(root,"extensions",&ext);
+    if(ext)json_object_object_get_ex(ext,"ray_tracing",&ray);
+    if(ray)json_object_object_get_ex(ray,"authoring",&authoring);
+    if(authoring)json_object_object_get_ex(authoring,"object_materials",&rows);
+    for(size_t i=0;json_object_is_type(rows,json_type_array)&&i<json_object_array_length(rows);++i){
+        json_object *binding=NULL,*maps=NULL;json_object_object_get_ex(json_object_array_get_idx(rows,i),"surface_material_binding",&binding);
+        if(binding)json_object_object_get_ex(binding,"mappings",&maps);
+        for(size_t j=0;json_object_is_type(maps,json_type_array)&&j<json_object_array_length(maps);++j){
+            json_object *definition=NULL,*method=NULL;json_object_object_get_ex(json_object_array_get_idx(maps,j),"definition",&definition);
+            if(definition)json_object_object_get_ex(definition,"method",&method);
+            required|=json_object_is_type(method,json_type_string)&&!strcmp(json_object_get_string(method),"authored_uv");
+        }
+    }
+    json_object_put(root);return required;
+}
+
 #define RUNTIME_SCENE_BRIDGE_EDITOR_MESH_PREVIEW_MAX_ASSET_BYTES (1024u * 1024u)
 
 bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
@@ -156,7 +187,7 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
         return false;
     }
 
-    if (load_mesh_assets) {
+    if (load_mesh_assets || runtime_scene_bridge_requires_full_surface_meshes(json_text)) {
         if (!ray_tracing_runtime_mesh_assets_load_scene_file(
                 runtime_scene_path_copy,
                 mesh_assets,

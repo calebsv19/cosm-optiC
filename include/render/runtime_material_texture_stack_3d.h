@@ -78,6 +78,8 @@ typedef struct {
     double textureU;
     double textureV;
     double layerMasks[RUNTIME_MATERIAL_TEXTURE_STACK_MAX_LAYERS];
+    bool linearColor,worldNormalActive;
+    double worldNormal[3];
     bool microdetailNormalActive;
     double microdetailHeight;
     double microdetailSlopeU;

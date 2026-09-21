@@ -3,6 +3,32 @@
 #include <math.h>
 #include <assert.h>
 
+#include "core_authored_surface_sampling.h"
+static void test_surface_sampling(void) {
+    CoreAuthoredSurfacePyramid p={0};float checker[64];
+    for(int y=0;y<8;++y)for(int x=0;x<8;++x)checker[y*8+x]=(float)((x+y)%2);
+    assert(core_authored_surface_pyramid_build(&p,8,8,1,checker));
+    double uv[2]={.0625,.0625},zero[2]={0,0},dx[2]={.5,0},dy[2]={0,.01},v[8],lod;
+    assert(core_authored_surface_pyramid_sample(&p,uv,zero,zero,v,&lod)&&v[0]==0&&lod==0);
+    for(int i=0;i<100;++i){uv[0]=i*.0123-1;assert(core_authored_surface_pyramid_sample(&p,uv,dx,dy,v,&lod));assert(fabs(v[0]-.5)<1e-12 && lod==2);}
+    uv[0]=NAN;assert(!core_authored_surface_pyramid_sample(&p,uv,dx,dy,v,NULL));
+    assert(!core_authored_surface_pyramid_build(&p,7,8,1,checker));assert(p.width==8);
+    checker[0]=INFINITY;assert(!core_authored_surface_pyramid_build(&p,8,8,1,checker));
+    core_authored_surface_pyramid_free(&p);float strip[1024];for(int i=0;i<1024;++i)strip[i]=(float)(i%2);
+    assert(core_authored_surface_pyramid_build(&p,1024,1,1,strip)&&p.levels==11);
+    uv[0]=.31;dx[0]=1;assert(core_authored_surface_pyramid_sample(&p,uv,dx,dy,v,&lod)&&v[0]==.5&&lod==10);
+    core_authored_surface_pyramid_free(&p);
+    assert(fabs(core_authored_surface_srgb_to_linear(128./255)-.21586050011389926)<1e-12);
+    assert(fabs(core_authored_surface_srgb_to_linear(.04045)-.0031308049535603713)<1e-14);
+    double n[]={0,0,1},t[]={2,0,3},sample[]={.6,.3,.7416198487095663},out[3];
+    assert(core_authored_surface_normal(n,t,1,sample,out));assert(fabs(out[0]-.6)<1e-12&&fabs(out[1]-.3)<1e-12);
+    assert(core_authored_surface_normal(n,t,-1,sample,out));assert(fabs(out[0]-.6)<1e-12&&fabs(out[1]+.3)<1e-12);
+    double du[]={2,0,0},dv[]={1,3,0},gradient[]={.4,.5};
+    assert(core_authored_surface_bump(n,du,dv,gradient,out));double length=sqrt(1+.04+.01);
+    assert(fabs(out[0]+.2/length)<1e-12&&fabs(out[1]+.1/length)<1e-12&&fabs(out[2]-1/length)<1e-12);
+    assert(!core_authored_surface_bump(n,du,du,gradient,out));assert(!core_authored_surface_normal(n,n,1,sample,out));
+}
+
 static void test_surface_mapping(void) {
     CoreAuthoredSurfaceMapping m={0};
     m.version=1; m.space=CORE_AUTHORED_SURFACE_OBJECT_REST;
@@ -488,5 +514,6 @@ int main(void) {
 
     test_indexed_palette_and_atlas_contracts();
     test_surface_mapping();
+    test_surface_sampling();
     return 0;
 }

@@ -3,6 +3,7 @@
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "render/runtime_surface_mapping.h"
+#include "render/runtime_surface_sampling.h"
 #include "app/ray_tracing_deep_render_desktop_host.h"
 #include <json-c/json.h>
 #include <math.h>
@@ -60,6 +61,9 @@ int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int in
     expand=(SDL_Rect){b.x,y,b.w,25};button(r,expand,opened?"Surface mapping  -":"Surface mapping  +",opened);y+=29;
     if(!opened || index<0) return y;
     json_object* m=current(index);int version=m?json_object_get_int(get(m,"version")):0;
+    if(RuntimeSurfaceSamplingActive(index)){
+        SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},"Sampling: filtered / linear color",(SDL_Color){185,200,210,255});y+=26;
+    }
     if(version==3) {
         char text[150];snprintf(text,sizeof(text),"Authored UV set: %s",json_object_get_string(get(m,"uv_set_id")));
         SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},text,(SDL_Color){185,200,210,255});y+=26;

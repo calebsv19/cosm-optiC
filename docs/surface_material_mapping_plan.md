@@ -1,9 +1,10 @@
 # Cohesive surface material mapping
 
-Status: M0–M4 implemented in the isolated surface-material lane. See the
+Status: M0–M5 implemented in the isolated surface-material lane. See the
 [M1 contract](surface_material_m1_contract.md), [M2 checkpoint](surface_material_m2_contract.md)
 [M3 document/region contract](surface_material_m3_contract.md) and
-[M4 explicit UV contract](surface_material_m4_contract.md).
+[M4 explicit UV contract](surface_material_m4_contract.md) and
+[M5 sampling/response contract](surface_material_m5_contract.md).
 Main Edit adoption and package publication remain separate. The broader roadmap
 below includes work beyond this checkpoint.
 

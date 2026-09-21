@@ -1,6 +1,8 @@
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_surface_mapping_cache.h"
 #include "render/runtime_surface_mapping.h"
+#include "render/runtime_surface_sampling.h"
+#include "render/runtime_material_payload_3d.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "editor/scene_editor_material_face_placement.h"
 #include "editor/scene_editor_viewport_material.h"
@@ -339,13 +341,17 @@ static void scene_editor_primitive_surface_rasterize_triangle(
     normal = scene_editor_mesh_surface_normal(wa, wb, wc);
     double ua=0,va=0,ub=0,vb=0,uc=0,vc=0;
     SceneEditorMeshPreviewShadeNormal view=material_view(projector);
-    if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL) {
+    if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !RuntimeSurfaceSamplingActive(scene_object_index)) {
         int face=0;
         RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wa.x,wa.y,wa.z),vec3(normal.x,normal.y,normal.z),&face,&ua,&va);
         RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wb.x,wb.y,wb.z),vec3(normal.x,normal.y,normal.z),&face,&ub,&vb);
         RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wc.x,wc.y,wc.z),vec3(normal.x,normal.y,normal.z),&face,&uc,&vc);
         material=SceneEditorViewportMaterialPrepareFace(scene_object_index,face);
     }
+    double wx[3]={(c.y-b.y)/area,(a.y-c.y)/area,(b.y-a.y)/area};
+    double wy[3]={(b.x-c.x)/area,(c.x-a.x)/area,(a.x-b.x)/area};
+    Vec3 dpdx=vec3(wx[0]*wa.x+wx[1]*wb.x+wx[2]*wc.x,wx[0]*wa.y+wx[1]*wb.y+wx[2]*wc.y,wx[0]*wa.z+wx[1]*wb.z+wx[2]*wc.z);
+    Vec3 dpdy=vec3(wy[0]*wa.x+wy[1]*wb.x+wy[2]*wc.x,wy[0]*wa.y+wy[1]*wb.y+wy[2]*wc.y,wy[0]*wa.z+wy[1]*wb.z+wy[2]*wc.z);
     for (int y = min_y; y <= max_y; ++y) {
         for (int x = min_x; x <= max_x; ++x) {
             const double px = (double)x + 0.5;
@@ -361,6 +367,18 @@ static void scene_editor_primitive_surface_rasterize_triangle(
             if (!SceneEditorMeshPreviewDepthWins(depth, g_surface.depth[pixel])) continue;
             color = material ? SceneEditorViewportMaterialShade(material,normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
                              : SceneEditorMeshPreviewShadeColor(base, normal);
+            if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && RuntimeSurfaceSamplingActive(scene_object_index)) {
+                HitInfo3D hit;HitInfo3D_Reset(&hit);hit.sceneObjectIndex=scene_object_index;
+                hit.position=vec3(w0*wa.x+w1*wb.x+w2*wc.x,w0*wa.y+w1*wb.y+w2*wc.y,w0*wa.z+w1*wb.z+w2*wc.z);
+                hit.normal=hit.shadingNormal=hit.geometricNormal=vec3(normal.x,normal.y,normal.z);
+                hit.hasPixelFootprint=true;hit.pixelDpDx=dpdx;hit.pixelDpDy=dpdy;
+                RuntimeMaterialPayload3D p;
+                if(RuntimeMaterialPayload3D_ResolveFromHit(&hit,&p)){
+                    RuntimeMaterialSurfaceEval e=RuntimeMaterialSurfaceEvalMakeBase(p.baseColorR,p.baseColorG,p.baseColorB,p.bsdf.roughness,p.bsdf.reflectivity,p.bsdf.specWeight,p.bsdf.diffuseWeight,p.transparency);
+                    e.linearColor=true;e.worldNormalActive=p.hasMicrodetailNormal;e.worldNormal[0]=p.microdetailShadingNormal.x;e.worldNormal[1]=p.microdetailShadingNormal.y;e.worldNormal[2]=p.microdetailShadingNormal.z;
+                    color=SceneEditorViewportMaterialShadeSample(&e,sceneSettings.sceneObjects[scene_object_index].emissiveStrength,normal,view);
+                }else color=(SDL_Color){255,0,255,255};
+            }
             g_surface.depth[pixel] = depth;
             g_surface.owner[pixel] = scene_object_index;
             g_surface.rgba[pixel * 4u + 0u] = color.r;
@@ -491,7 +509,11 @@ static void scene_editor_mesh_surface_rasterize(
             SceneEditorMeshPreviewShadeNormal face=scene_editor_mesh_surface_normal(la,lb,lc);
             material_uv(la,face,&ua,&va);material_uv(lb,face,&ub,&vb);material_uv(lc,face,&uc,&vc);
         }
-        for (int y = min_y; y <= max_y; ++y) {
+        double wx[3]={(c.y-b.y)/area,(a.y-c.y)/area,(b.y-a.y)/area};
+    double wy[3]={(b.x-c.x)/area,(c.x-a.x)/area,(a.x-b.x)/area};
+    Vec3 dpdx=vec3(wx[0]*wa.x+wx[1]*wb.x+wx[2]*wc.x,wx[0]*wa.y+wx[1]*wb.y+wx[2]*wc.y,wx[0]*wa.z+wx[1]*wb.z+wx[2]*wc.z);
+    Vec3 dpdy=vec3(wy[0]*wa.x+wy[1]*wb.x+wy[2]*wc.x,wy[0]*wa.y+wy[1]*wb.y+wy[2]*wc.y,wy[0]*wa.z+wy[1]*wb.z+wy[2]*wc.z);
+    for (int y = min_y; y <= max_y; ++y) {
             for (int x = min_x; x <= max_x; ++x) {
                 const double px = (double)x + 0.5;
                 const double py = (double)y + 0.5;
@@ -518,8 +540,8 @@ static void scene_editor_mesh_surface_rasterize(
                     shading_normal=(SceneEditorMeshPreviewShadeNormal){u*normal_a.x+v*normal_b.x+w*normal_c.x,
                         u*normal_a.y+v*normal_b.y+w*normal_c.y,u*normal_a.z+v*normal_b.z+w*normal_c.z};
                     RuntimeMaterialSurfaceEval eval;
-                    color=RuntimeSurfaceMaterialSampleMesh(instance->scene_object_index,instance->asset_index,triangle,weights,world,
-                        vec3(shading_normal.x,shading_normal.y,shading_normal.z),lod,&eval) ?
+                    color=RuntimeSurfaceMaterialSampleMeshFootprint(instance->scene_object_index,instance->asset_index,triangle,weights,world,
+                        vec3(shading_normal.x,shading_normal.y,shading_normal.z),lod,&dpdx,&dpdy,&eval) ?
                         SceneEditorViewportMaterialShadeSample(&eval,sceneSettings.sceneObjects[instance->scene_object_index].emissiveStrength,shading_normal,view):(SDL_Color){255,0,255,255};
                 }
                 if(unsupported_mapping) color=((x/12+y/12)%2)?(SDL_Color){92,70,92,255}:(SDL_Color){142,115,142,255};

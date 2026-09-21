@@ -1,5 +1,33 @@
 # optiC Current Truth
 
+## September 21 surface-material M5 source checkpoint
+
+The isolated lane completes M0–M5. Explicit `optic.surface_sampling_v1` materials
+share prepared mip filtering, declared linear/sRGB/data encodings, RMS roughness,
+chart-aligned normal maps and meter-scaled height response between viewport and
+ray shading. Primary rays and viewport pixels supply footprints. Required UV
+meshes now use the full editor loader, fixing the large-asset preview skip.
+See the [M5 contract](surface_material_m5_contract.md) for the exact capability,
+resource limits, failure policies and tests.
+
+Eleven UV/material cases, three planar/curved cases, 12 negative preflights,
+shared sanitizer tests, M0–M4 regressions and eight frozen legacy fixtures pass.
+Material-value parity is within 2.3e-16 in the UV fixtures. Full-quality Material
+orbit measures 38–58 ms for the small UV cases, 102 ms for the 8,192-triangle
+exact-LOD mesh, and 91–193 ms for the plane/sphere/cylinder fixtures on the tested
+Apple Silicon host. Sampling state does not rebuild during orbit. These are
+bounded fixture measurements, not a general real-time guarantee.
+
+This first capability supports one object chart with a brick/solid stack and
+optional pinned image channels. Broader M3 graph/region/manifest combinations
+remain on their existing paths. Grazing footprints use conservative isotropic
+mips; secondary offset rays currently use chart averages. General anisotropic
+BRDFs, secondary differential transport and attribute-aware mesh reduction remain
+follow-up work. M6 is next for typed graph/source/producer tools. Main Edit
+adoption, installed builds and publication remain separate. Application 0.16.0
+and worker 0.7.1 are unchanged; authored texture shared source advances to 0.6.0.
+Earlier dated sections describe their historical checkpoint state.
+
 ## September 21 surface-material M4 source checkpoint
 
 The isolated surface-material lane completes M0–M4. Explicit named per-corner UVs

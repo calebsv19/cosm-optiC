@@ -1,3 +1,4 @@
+#include "render/runtime_surface_sampling.h"
 #include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_disney_v2_transport_internal_3d.h"
 
@@ -187,6 +188,8 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
 
         payload_resolved = RuntimeMaterialPayload3D_ResolveFromHit(&current_hit, &payload) &&
                            payload.valid;
+        if(payload_resolved && RuntimeSurfaceSamplingActive(current_hit.sceneObjectIndex))
+            (void)RuntimeMaterialPayload3D_ApplyShadingNormal(&payload,&current_hit);
         principled = payload_resolved ? RuntimePrincipledBSDF3D_FromMaterialPayload(&payload)
                                       : RuntimePrincipledBSDF3D_Default();
         if (RuntimeDisneyV2_3D_ShouldEvaluateEmissiveAreaLightSample(scene,

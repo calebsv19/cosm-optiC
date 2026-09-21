@@ -8,6 +8,7 @@
 #include "app/ray_tracing_sha256.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "config/config_manager.h"
+#include "render/runtime_surface_sampling.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -38,6 +39,8 @@ typedef struct Binding {
 } Binding;
 static Binding bindings[MAX_OBJECTS];
 static unsigned long long revision;
+static bool sampling_validate_scene(json_object*,char*,size_t);
+static bool sampling_prepare_scene(json_object*);
 
 static json_object* field(json_object* o,const char* key) {
     json_object* v=NULL; if(o) json_object_object_get_ex(o,key,&v); return v;
@@ -480,9 +483,9 @@ bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_
             return false;
         }
     }
-    return true;
+    return sampling_validate_scene(root,diagnostic,size);
 }
-void RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
+bool RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
     memset(bindings,0,sizeof(bindings)); ++revision;
     RuntimeSceneBridge3DPrimitiveSeedState seeds={0};
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
@@ -522,6 +525,7 @@ void RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
             prepare_regions(b,material_row(root,p->object_id));
         }
     }
+    return sampling_prepare_scene(root);
 }
 bool RuntimeSurfaceMappingActive(int i) { return animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE && i>=0 && i<MAX_OBJECTS && bindings[i].active; }
 unsigned long long RuntimeSurfaceMappingRevision(void) {return revision;}
@@ -663,18 +667,31 @@ bool RuntimeSurfaceMappingPreviewSupported(int index) {
 }
 
 bool RuntimeSurfaceMappingNeedsMeshAttributes(int index) {
-    return RuntimeSurfaceMappingActive(index) && (bindings[index].asset_graph || bindings[index].map.version==3);
+    return RuntimeSurfaceMappingActive(index) && (bindings[index].asset_graph || bindings[index].map.version==3 || RuntimeSurfaceSamplingActive(index));
 }
-bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
+bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t triangle,
     const double weights[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh* lod,
-    RuntimeMaterialSurfaceEval* out) {
+    const Vec3 *dpdx,const Vec3 *dpdy,RuntimeMaterialSurfaceEval* out) {
     if(!RuntimeSurfaceMappingActive(index) || !weights || !lod || triangle>=lod->triangle_count || !out) return false;
     HitInfo3D hit;HitInfo3D_Reset(&hit);hit.sceneObjectIndex=index;hit.localTriangleIndex=(int)triangle;
     hit.triangleIndex=(int)triangle;hit.position=world;hit.normal=hit.geometricNormal=hit.shadingNormal=normal;
     hit.baryU=weights[0];hit.baryV=weights[1];hit.baryW=weights[2];
+    if(dpdx&&dpdy){hit.hasPixelFootprint=true;hit.pixelDpDx=*dpdx;hit.pixelDpDy=*dpdy;}
+
     if(lod->surface_corners && lod->surface_corner_count==lod->triangle_count*3) {
         hit.hasSurfaceUV=true;memcpy(hit.uvSetId,lod->uv_set_id,sizeof(hit.uvSetId));
         for(int k=0;k<3;++k) for(int a=0;a<2;++a) hit.surfaceUV[a]+=weights[k]*lod->surface_corners[triangle*3+k].uv[a];
+        const CoreMeshAssetSurfaceCorner *c=lod->surface_corners+triangle*3;
+        double u1=c[1].uv[0]-c[0].uv[0],v1=c[1].uv[1]-c[0].uv[1],u2=c[2].uv[0]-c[0].uv[0],v2=c[2].uv[1]-c[0].uv[1],det=u1*v2-u2*v1;
+        if(c[0].tangent_valid&&c[1].tangent_valid&&c[2].tangent_valid&&fabs(det)>1e-30){
+            CoreObjectVec3 a=lod->vertices[lod->indices[triangle*3]],b=lod->vertices[lod->indices[triangle*3+1]],d=lod->vertices[lod->indices[triangle*3+2]];
+            Vec3 local[2]={vec3(b.x-a.x,b.y-a.y,b.z-a.z),vec3(d.x-a.x,d.y-a.y,d.z-a.z)},edge[2];
+            for(int k=0;k<2;++k){double v[]={local[k].x,local[k].y,local[k].z};edge[k]=vec3(0,0,0);
+                for(int axis=0;axis<3;++axis)edge[k]=vec3_add(edge[k],vec3_scale(vec3(bindings[index].basis[axis][0],bindings[index].basis[axis][1],bindings[index].basis[axis][2]),v[axis]*bindings[index].scale[axis]*bindings[index].world_scale));}
+            hit.surfaceDpDu=vec3_scale(vec3_sub(vec3_scale(edge[0],v2),vec3_scale(edge[1],v1)),1/det);
+            hit.surfaceDpDv=vec3_scale(vec3_sub(vec3_scale(edge[1],u1),vec3_scale(edge[0],u2)),1/det);hit.hasSurfaceDifferentials=true;
+        }
+
     }
     const RayTracingRuntimeMeshAssetSet *assets=ray_tracing_runtime_mesh_assets_last();
     if(bindings[index].asset_graph) {
@@ -687,5 +704,14 @@ bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
     if(!RuntimeMaterialPayload3D_ResolveFromHit(&hit,&payload)) return false;
     *out=RuntimeMaterialSurfaceEvalMakeBase(payload.baseColorR,payload.baseColorG,payload.baseColorB,
         payload.bsdf.roughness,payload.bsdf.reflectivity,payload.bsdf.specWeight,payload.bsdf.diffuseWeight,payload.transparency);
-    out->active=true;return true;
+    out->active=true;
+    out->linearColor=RuntimeSurfaceSamplingActive(index);
+    if(payload.hasMicrodetailNormal){out->worldNormalActive=true;out->worldNormal[0]=payload.microdetailShadingNormal.x;out->worldNormal[1]=payload.microdetailShadingNormal.y;out->worldNormal[2]=payload.microdetailShadingNormal.z;}
+    return true;
 }
+
+bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
+    const double weights[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh *lod,RuntimeMaterialSurfaceEval *out) {
+    return RuntimeSurfaceMaterialSampleMeshFootprint(index,asset_index,triangle,weights,world,normal,lod,NULL,NULL,out);
+}
+#include "runtime_surface_sampling.inc"

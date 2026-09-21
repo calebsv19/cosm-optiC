@@ -56,6 +56,10 @@ typedef struct RuntimeMaterialAuthoredTextureFaceMetadata {
         channelRefs[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MAX_CHANNEL_REFS];
 } RuntimeMaterialAuthoredTextureFaceMetadata;
 
+/* Raw encoded/data bytes: no implicit gamma transform. Host declares encoding. */
+bool RuntimeMaterialAuthoredTextureReadPNGData(const char* path,unsigned maximum_dimension,
+    unsigned char** rgba,int* width,int* height);
+
 bool RuntimeMaterialAuthoredTextureGetMappingReference(int index,char* out,size_t size);
 void RuntimeMaterialAuthoredTextureResetAll(void);
 unsigned long long RuntimeMaterialAuthoredTextureRevision(void);

@@ -529,7 +529,7 @@ static bool runtime_material_authored_texture_parse_face_metadata(
     return true;
 }
 
-static bool runtime_material_authored_texture_read_png_rgba(const char* path,
+bool RuntimeMaterialAuthoredTextureReadPNGData(const char* path, unsigned maximum_dimension,
                                                             unsigned char** out_rgba,
                                                             int* out_width,
                                                             int* out_height) {
@@ -590,7 +590,7 @@ static bool runtime_material_authored_texture_read_png_rgba(const char* path,
         png_set_gray_to_rgb(png_ptr);
     }
     png_read_update_info(png_ptr, info_ptr);
-    if (width == 0u || height == 0u || width > 8192u || height > 8192u) {
+    if (width == 0u || height == 0u || width > maximum_dimension || height > maximum_dimension) {
         goto cleanup;
     }
     rgba = (unsigned char*)malloc((size_t)width * (size_t)height * 4u);
@@ -674,7 +674,7 @@ static bool runtime_material_authored_texture_load_face_array(RuntimeMaterialAut
                                                                         file_name,
                                                                         png_path,
                                                                         sizeof(png_path)) ||
-            !runtime_material_authored_texture_read_png_rgba(png_path, &rgba, &width, &height)) {
+            !RuntimeMaterialAuthoredTextureReadPNGData(png_path,8192u, &rgba, &width, &height)) {
             goto fail;
         }
         face = &faces[face_group_index];

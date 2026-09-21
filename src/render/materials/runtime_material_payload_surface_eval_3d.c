@@ -97,6 +97,10 @@ bool RuntimeMaterialPayload3D_ApplyShadingNormal(
         !(vec3_length(payload->microdetailShadingNormal) > 1e-9)) {
         return false;
     }
+    if(!io_hit->hasUnperturbedShadingNormal){
+        io_hit->unperturbedShadingNormal=io_hit->shadingNormal;
+        io_hit->hasUnperturbedShadingNormal=true;
+    }
     io_hit->shadingNormal = payload->microdetailShadingNormal;
     io_hit->normal = payload->microdetailShadingNormal;
     return true;

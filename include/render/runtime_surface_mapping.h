@@ -8,7 +8,7 @@
 
 /* Prepared per-object binding. Missing binding is the unchanged legacy path. */
 bool RuntimeSurfaceMappingValidateScene(json_object* root, char* diagnostic, size_t size);
-void RuntimeSurfaceMappingLoadScene(json_object* root, double world_scale);
+bool RuntimeSurfaceMappingLoadScene(json_object* root, double world_scale);
 bool RuntimeSurfaceMappingActive(int object_index);
 unsigned long long RuntimeSurfaceMappingRevision(void);
 bool RuntimeSurfaceMappingCoordinates(const HitInfo3D* hit, CoreAuthoredSurfaceCoordinates* out);
@@ -38,3 +38,7 @@ bool RuntimeSurfaceMappingNeedsMeshAttributes(int index);
 bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
     const double barycentric[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh* lod,
     RuntimeMaterialSurfaceEval* out);
+
+bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t triangle,
+    const double barycentric[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh *lod,
+    const Vec3 *dpdx,const Vec3 *dpdy,RuntimeMaterialSurfaceEval *out);

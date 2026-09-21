@@ -1,5 +1,17 @@
 # core_authored_texture
 
+## 0.6.0 prepared surface sampling
+
+`core_authored_surface_sampling.h` adds JSON/IO-free, immutable float mip
+pyramids for power-of-two linear/data images (1..1024 per axis, 1..8 channels),
+repeat addressing, bilinear/trilinear filtering with a conservative major-axis
+footprint, sRGB decoding, handed tangent-normal conversion and meter-scaled bump
+response. Zero-initialize pyramids before first build; free them explicitly.
+Failed builds retain the old pyramid. Hosts own encoding/channel policy, image
+IO, budgets, derivatives, resource lifetime and scene application. Workers may
+read prepared pyramids concurrently; rebuilding/freeing requires host exclusion.
+Earlier version sections below describe their historical scope.
+
 ## 0.4.0 additive axial coordinate contract
 
 Adds v2 axial height mapping with stored seam/reference radius, integer repeat
@@ -34,14 +46,14 @@ Shared authored-texture manifest contract semantics for cross-app texture export
 - No PNG/image IO
 - No editor/runtime UI behavior
 - No scene-envelope ownership (`core_scene` still owns scene/object semantics)
-- No scene writeback helpers or runtime material sampling behavior
+- No scene writeback helpers or app-specific runtime material behavior
 
 ## Status
-- Current module (`v0.4.0`) with the existing semantic manifest/net APIs plus generic exact-index palette, atlas-cell validation and the planar/axial surface mapping contracts.
+- Current module (`v0.6.0`) with semantic manifest/net APIs, exact-index palette/atlas validation, planar/axial/authored-UV mapping, and prepared sampling/response helpers.
 - Bridge-first adoption is now live in:
   - `drawing_program` authored-texture export
   - `ray_tracing` authored-texture loader validation
-- Current shared ownership is intentionally limited to manifest meaning and validation:
+- Manifest ownership includes:
   - schema/version vocabulary
   - binding/output/primitive vocabulary
   - face-role semantics

@@ -13,6 +13,7 @@
 #include "render/runtime_material_authored_texture_3d.h"
 #include "render/runtime_material_texture_stack_3d.h"
 #include "render/runtime_surface_mapping.h"
+#include "render/runtime_surface_sampling.h"
 #include "render/runtime_water_material_3d.h"
 
 static bool runtime_material_payload_3d_valid_scene_object_index(int scene_object_index) {
@@ -337,6 +338,7 @@ static void runtime_material_payload_3d_apply_texture(
                                                    payload->bsdf.specWeight,
                                                    payload->bsdf.diffuseWeight,
                                                    payload->transparency);
+    if (RuntimeSurfaceSamplingActive(hit->sceneObjectIndex)) return;
     if (RuntimeSurfaceMappingActive(hit->sceneObjectIndex)) {
         if (RuntimeSurfaceMappingEvaluate(object, hit, &base_eval, &surface_eval))
             runtime_material_payload_3d_apply_surface_eval(payload, &surface_eval);
@@ -553,6 +555,9 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
         return false;
     }
 
+    if(hit && RuntimeSurfaceSamplingActive(scene_object_index) && !hit->hasRegionMaterial &&
+       !hit->hasRegionAuthoredMaterial && !hit->hasProceduralSurfaceMaterial)
+        return RuntimeSurfaceSamplingResolve(hit,out_payload);
     object_copy = sceneSettings.sceneObjects[scene_object_index];
     if (hit && hit->hasRegionMaterial) {
         runtime_material_payload_3d_apply_region_preset(
@@ -668,6 +673,7 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
         object_copy.hairCuticleTiltDegrees;
     payload.hairOptics = RuntimeHairOptics3D_Normalize(&payload.hairOptics);
 
+    if(hit && !RuntimeSurfaceSamplingApply(hit,&payload))payload.valid=false;
     *out_payload = payload;
     return payload.valid;
 }

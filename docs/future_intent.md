@@ -8,7 +8,7 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
 
 ## Surface material mapping follow-up — September 21, 2026
 
-The isolated surface-material lane completes M0–M4. The
+The isolated surface-material lane completes M0–M5. The
 [M4 explicit UV contract](surface_material_m4_contract.md) records per-corner UVs,
 named sets, tangent frames, import/storage/cache transport and protected exact LOD.
 Mapped geometry-field preview now evaluates the same compiled program as ray hits.
@@ -16,12 +16,15 @@ The original [parity diagnostic](material_viewport_parity.md) remains historical
 current mapped acceptance and unchanged legacy behavior have separate proof.
 Main Edit adoption is a distinct integration step.
 
-M5 is next: footprint-aware filtering, declared color spaces, basis-correct
-normal/bump and directional response, distant/grazing stability and measured
-orbit/render cost. M4 exact LOD preserves correctness but does not qualify
-large-mesh interaction performance. Attribute-aware reduction is a future
-optimization. M6 broadens typed graph editing, 3D/triplanar sources and producer
-tools. Preview-window redesign and release/version work remain separate.
+M5 adds explicitly declared filtering, color/data encoding and tangent/height
+response; see the [M5 sampling contract](surface_material_m5_contract.md) for
+measured cost and scope. M6 is next: typed graph editing, additional 3D/triplanar
+sources, producer/unwrap tools and precise capability reporting. Broader
+sampling of graph/region/manifest bindings, transported secondary differentials,
+measured anisotropic response and attribute-aware LOD remain explicit extensions.
+The full-detail M5 fixture measures 102 ms per full-quality Material orbit frame
+at 8,192 triangles; larger scenes and faster interaction need separate proof.
+Preview-window redesign and release/version work remain separate.
 
 ## Near-Term Intent
 

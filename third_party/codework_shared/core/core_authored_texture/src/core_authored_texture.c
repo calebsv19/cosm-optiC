@@ -706,3 +706,5 @@ bool core_authored_surface_uv_coordinates(const CoreAuthoredSurfaceMapping* m,
     out->valid=isfinite(out->uv_tiles[0]) && isfinite(out->uv_tiles[1]);
     out->has_authored_uv=out->valid;out->source_weight=1;return out->valid;
 }
+
+#include "core_authored_surface_sampling.inc"

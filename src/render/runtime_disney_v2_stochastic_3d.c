@@ -1,3 +1,4 @@
+#include "render/runtime_surface_sampling.h"
 #include "render/runtime_specular_bsdf_3d.h"
 #include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_disney_v2_internal_3d.h"
@@ -537,6 +538,10 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
             RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo, &secondary_payload) &&
             secondary_payload.valid;
         if (secondary_payload_resolved) {
+            if(RuntimeSurfaceSamplingActive(trace.geometryHitInfo.sceneObjectIndex)){
+                (void)RuntimeMaterialPayload3D_ApplyShadingNormal(&secondary_payload,&trace.geometryHitInfo);
+                io_result->pathState.hitInfo=trace.geometryHitInfo;
+            }
             secondary_principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&secondary_payload);
             runtime_disney_v2_3d_secondary_response(&secondary_principled,
                                                     &secondary_response_r,

@@ -20,6 +20,8 @@
 typedef struct {
     Vec3 origin;
     Vec3 direction;
+    bool hasDifferentials, footprintUnbounded;
+    Vec3 directionDx, directionDy; /* adjacent primary pixel directions */
 } Ray3D;
 
 typedef struct {
@@ -29,6 +31,8 @@ typedef struct {
     Vec3 normal;
     Vec3 geometricNormal;
     Vec3 shadingNormal;
+    bool hasUnperturbedShadingNormal;
+    Vec3 unperturbedShadingNormal;
     int triangleIndex;
     int localTriangleIndex;
     int primitiveIndex;
@@ -49,6 +53,8 @@ typedef struct {
     char uvSetId[64];
     double surfaceUV[2], surfaceHandedness;
     Vec3 surfaceTangent;
+    bool hasSurfaceDifferentials, hasPixelFootprint, footprintUnbounded;
+    Vec3 surfaceDpDu, surfaceDpDv, pixelDpDx, pixelDpDy;
     bool hasObjectTextureCoord;
     Vec3 objectTextureCoord;
     bool hasProceduralSurfaceMaterial;

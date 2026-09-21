@@ -213,6 +213,9 @@ Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
                               Vec3 direction,
                               FISICS_DIM(length) FISICS_UNIT(meter) double epsilon) {
     Ray3D ray = RuntimeRay3D_Make(origin, direction);
+    /* Secondary rays lack transported differentials: use the conservative
+     * chart average for explicitly filtered materials, never point sample. */
+    ray.footprintUnbounded = true;
     Vec3 offset_normal = vec3_normalize(normal);
     double side = 1.0;
     FISICS_DIM(length) FISICS_UNIT(meter) double minimum_epsilon =
@@ -405,6 +408,16 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     hit.baryW = bary_w;
     if(triangle->hasSurfaceUV) {
         hit.hasSurfaceUV=true;memcpy(hit.uvSetId,triangle->uvSetId,sizeof(hit.uvSetId));
+        const CoreMeshAssetSurfaceCorner *corners=triangle->surfaceCorners;
+        double du1=corners[1].uv[0]-corners[0].uv[0],dv1=corners[1].uv[1]-corners[0].uv[1];
+        double du2=corners[2].uv[0]-corners[0].uv[0],dv2=corners[2].uv[1]-corners[0].uv[1],det=du1*dv2-du2*dv1;
+        if(corners[0].tangent_valid && corners[1].tangent_valid && corners[2].tangent_valid && fabs(det)>1e-30) {
+            Vec3 e1=vec3_sub(triangle->p1,triangle->p0),e2=vec3_sub(triangle->p2,triangle->p0);
+            hit.surfaceDpDu=vec3_scale(vec3_sub(vec3_scale(e1,dv2),vec3_scale(e2,dv1)),1/det);
+            hit.surfaceDpDv=vec3_scale(vec3_sub(vec3_scale(e2,du1),vec3_scale(e1,du2)),1/det);
+            hit.hasSurfaceDifferentials=true;
+        }
+
         const double w[3]={bary_u,bary_v,bary_w};Vec3 tangent=vec3(0,0,0),normal=vec3(0,0,0);double sign=0;
         bool valid=true;
         for(int k=0;k<3;++k) {
@@ -877,23 +890,37 @@ bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* contex
     stats = &context->routeStats;
     runtime_ray_3d_counter_increment(&stats->traceCalls);
 
+    bool found=false;
     if (active_route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS_PARITY) {
-        return runtime_ray_3d_trace_scene_first_hit_parity(context,
+        found=runtime_ray_3d_trace_scene_first_hit_parity(context,
                                                            scene,
                                                            ray,
                                                            t_min,
                                                            t_max,
                                                            out_hit);
-    }
-    if (active_route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
-        return runtime_ray_3d_trace_scene_first_hit_tlas_blas(context,
+    } else if (active_route == RUNTIME_RAY_3D_TRACE_ROUTE_TLAS_BLAS) {
+        found=runtime_ray_3d_trace_scene_first_hit_tlas_blas(context,
                                                               scene,
                                                               ray,
                                                               t_min,
                                                               t_max,
                                                               out_hit);
+    } else {
+        runtime_ray_3d_counter_increment(&stats->flattenedTraceCalls);
+        found=runtime_ray_3d_trace_scene_first_hit_flattened(scene,ray,t_min,t_max,out_hit);
     }
-
-    runtime_ray_3d_counter_increment(&stats->flattenedTraceCalls);
-    return runtime_ray_3d_trace_scene_first_hit_flattened(scene, ray, t_min, t_max, out_hit);
+    if(found) out_hit->footprintUnbounded=ray->footprintUnbounded;
+    if(found && ray->hasDifferentials) {
+        out_hit->footprintUnbounded=true;
+        Vec3 normal=out_hit->geometricNormal;
+        double plane=vec3_dot(vec3_sub(out_hit->position,ray->origin),normal);
+        double dx=vec3_dot(ray->directionDx,normal),dy=vec3_dot(ray->directionDy,normal);
+        if(fabs(dx)>1e-12 && fabs(dy)>1e-12 && plane/dx>0 && plane/dy>0) {
+            out_hit->pixelDpDx=vec3_sub(vec3_add(ray->origin,vec3_scale(ray->directionDx,plane/dx)),out_hit->position);
+            out_hit->pixelDpDy=vec3_sub(vec3_add(ray->origin,vec3_scale(ray->directionDy,plane/dy)),out_hit->position);
+            out_hit->hasPixelFootprint=true;
+            out_hit->footprintUnbounded=false;
+        }
+    }
+    return found;
 }

@@ -886,7 +886,10 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     g_last_3d_scaffold.valid = true;
     g_last_3d_digest.valid = true;
     g_last_3d_primitive_seeds.valid = true;
-    RuntimeSurfaceMappingLoadScene(root, world_scale);
+    if(!RuntimeSurfaceMappingLoadScene(root,world_scale)) {
+        runtime_scene_bridge_preflight_diag(out_summary,"surface sampling preparation failed");
+        json_object_put(root);return false;
+    }
     animSettings.runtimeScenePath[0] = '\0';
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.useFluidScene = false;
