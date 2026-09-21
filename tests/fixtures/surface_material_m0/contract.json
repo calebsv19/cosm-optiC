@@ -1,0 +1,39 @@
+{
+  "schema": "optic_surface_mapping_m0_fixture_contract",
+  "version": 1,
+  "status": "proposed_oracle_not_runtime_mapping_support",
+  "frame": "right_handed_z_up_meters",
+  "seed": 1729,
+  "grid": {"columns": 8, "rows": 4, "cell_pixels": 64, "origin": "bottom_left", "labels": "column_row"},
+  "plane": {"width_m": 4, "height_m": 2, "subdivision": [8, 4], "tile_m": [0.5, 0.5], "origin_m": [-2, -1, 0]},
+  "curved": {"radius_m": 1, "height_m": 2, "low": [8, 4], "high": [32, 16], "horizontal_repeats": 8, "course_height_m": 0.25, "v_origin_m": -1, "axis": [0, 0, 1], "seam_direction": [1, 0, 0], "pole_policy": "flag_singular_use_u_zero", "cylinder_caps": "separate_planar_regions"},
+  "tolerances": {
+    "same_surface_position_m": 1e-9,
+    "same_surface_coordinates_tiles": 1e-9,
+    "uncached_material_channel_abs": 1e-6,
+    "analytic_sample_coordinates_tiles": 1e-9,
+    "mesh_vertex_radius_m": 1e-8,
+    "sphere_centroid_radial_deficit_low_m": 0.14,
+    "sphere_centroid_radial_deficit_high_m": 0.009,
+    "cylinder_side_centroid_radial_deficit_low_m": 0.068,
+    "cylinder_side_centroid_radial_deficit_high_m": 0.0043,
+    "whole_image_low_high_equality": false,
+    "cache_image_tolerance": "measure_and_freeze_before_M1_acceptance"
+  },
+  "plane_samples": [
+    {"point_m": [-1.75, -0.75, 0], "uv_tiles": [0.5, 0.5], "label": "0_0"},
+    {"point_m": [0.25, 0.25, 0], "uv_tiles": [4.5, 2.5], "label": "4_2"},
+    {"point_m": [1.75, 0.75, 0], "uv_tiles": [7.5, 3.5], "label": "7_3"},
+    {"point_m": [2.25, 0.25, 0], "uv_tiles": [8.5, 2.5], "label": "outside_geometry_addressing_probe"}
+  ],
+  "analytic_samples": [
+    {"point_m": [1, 0, 0], "uv_tiles": [0, 4], "status": "seam"},
+    {"point_m": [0, 1, 0], "uv_tiles": [2, 4], "status": "regular"},
+    {"point_m": [-1, 0, 0], "uv_tiles": [4, 4], "status": "regular"},
+    {"point_m": [0, -1, 0], "uv_tiles": [6, 4], "status": "regular"},
+    {"point_m": [0, 0, 1], "uv_tiles": [0, 8], "status": "pole_singular"},
+    {"point_m": [0, 0, -1], "uv_tiles": [0, 0], "status": "pole_singular"}
+  ],
+  "future_negative_cases": ["zero_axis", "zero_radius", "singular_transform", "unknown_required_method", "stale_region_digest", "overlapping_region_assignments"],
+  "future_invariance_cases": ["triangle_reorder", "object_reorder", "camera_orbit", "workspace_switch", "duplicate_copies_seed", "save_fresh_reopen", "undo_redo", "mirrored_transform", "nonuniform_scale", "object_motion_object_space", "object_motion_world_space"]
+}
