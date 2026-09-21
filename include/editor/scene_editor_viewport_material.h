@@ -13,3 +13,6 @@ SDL_Color SceneEditorViewportMaterialShade(const SceneEditorViewportMaterial* ma
     double u, double v);
 void SceneEditorViewportMaterialReset(void);
 unsigned long long SceneEditorViewportMaterialBuildCount(void);
+
+SDL_Color SceneEditorViewportMaterialShadeSample(const RuntimeMaterialSurfaceEval* eval,double emission,
+    SceneEditorMeshPreviewShadeNormal normal,SceneEditorMeshPreviewShadeNormal view);

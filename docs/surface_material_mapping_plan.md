@@ -1,7 +1,9 @@
 # Cohesive surface material mapping — next lane
 
-Status: planned, following the September 20 UI closeout. No version change or
-mapping implementation is included in that closeout.
+Status: M0–M2 implemented in the isolated surface-material lane. See the
+[M1 contract](surface_material_m1_contract.md) and [M2 checkpoint](surface_material_m2_contract.md).
+Main Edit adoption and package publication remain separate. The broader roadmap
+below includes work beyond this checkpoint.
 
 ## User outcome
 

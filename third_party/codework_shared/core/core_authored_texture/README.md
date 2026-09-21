@@ -1,5 +1,13 @@
 # core_authored_texture
 
+## 0.4.0 additive axial coordinate contract
+
+Adds v2 axial height mapping with stored seam/reference radius, integer repeat
+count and effective width, explicit smooth fade to base near the axis, and a
+pure point-to-coordinate evaluator. The v1 planar contract remains supported.
+Hosts still own geometry conversion, source addressing, filtering and UI.
+
+
 ## 0.3.0 additive surface mapping contract
 
 `core_authored_surface_mapping.h` adds JSON-free planar mapping vocabulary and
@@ -29,7 +37,7 @@ Shared authored-texture manifest contract semantics for cross-app texture export
 - No scene writeback helpers or runtime material sampling behavior
 
 ## Status
-- Current module (`v0.3.0`) with the existing semantic manifest/net APIs plus generic exact-index palette, atlas-cell validation and the planar surface mapping contract.
+- Current module (`v0.4.0`) with the existing semantic manifest/net APIs plus generic exact-index palette, atlas-cell validation and the planar/axial surface mapping contracts.
 - Bridge-first adoption is now live in:
   - `drawing_program` authored-texture export
   - `ray_tracing` authored-texture loader validation

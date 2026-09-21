@@ -83,6 +83,11 @@ SDL_Color SceneEditorViewportMaterialShade(const SceneEditorViewportMaterial* ma
     if(!material) return SceneEditorMeshPreviewShadeColor((SDL_Color){160,160,160,255},n);
     RuntimeMaterialSurfaceEval eval;
     if(!SceneEditorViewportMaterialSample(material,u,v,&eval)) return (SDL_Color){255,0,255,255};
+    return SceneEditorViewportMaterialShadeSample(&eval,material->emission,n,view);
+}
+SDL_Color SceneEditorViewportMaterialShadeSample(const RuntimeMaterialSurfaceEval* e,double emission,
+    SceneEditorMeshPreviewShadeNormal n,SceneEditorMeshPreviewShadeNormal view) {
+    RuntimeMaterialSurfaceEval eval=*e;
     Sample s={eval.colorR,eval.colorG,eval.colorB,eval.roughness,eval.reflectivity,eval.specWeight,eval.diffuseWeight,eval.transparency};
     n=normalized(n);double nv=dot(n,view);if(nv<0) {n.x=-n.x;n.y=-n.y;n.z=-n.z;nv=-nv;}
     SceneEditorMeshPreviewShadeNormal light={-0.365148, -0.182574, 0.912871};
@@ -101,7 +106,7 @@ SDL_Color SceneEditorViewportMaterialShade(const SceneEditorViewportMaterial* ma
     double diffuse=(0.18+0.82*nl)*clamp01(s.diffuse)*(1-reflection);
     double rgb[3]={s.r,s.g,s.b};Uint8 output[3];
     for(int i=0;i<3;++i) {
-        double value=rgb[i]*diffuse+env*f*(0.4+0.6*rgb[i])+spec+rgb[i]*material->emission;
+        double value=rgb[i]*diffuse+env*f*(0.4+0.6*rgb[i])+spec+rgb[i]*emission;
         output[i]=(Uint8)lround(255*clamp01(value));
     }
     return (SDL_Color){output[0],output[1],output[2],255};

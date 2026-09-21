@@ -85,4 +85,7 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
                                                 char* diagnostics,
                                                 size_t diagnostics_size);
 
+
+bool SceneEditorDocumentGetSurfaceMappingJSON(int index,char* out,size_t size);
+
 #endif

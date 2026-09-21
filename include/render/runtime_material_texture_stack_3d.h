@@ -174,4 +174,8 @@ bool RuntimeMaterialTextureStackEvaluateOverlayPlacedUV(
     const RuntimeMaterialSurfaceEval* base_eval,
     RuntimeMaterialSurfaceEval* out_eval);
 
+
+bool RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(const RuntimeMaterialTextureStack* stack,
+    double u,double v,uint32_t seed,int period,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out);
+
 #endif

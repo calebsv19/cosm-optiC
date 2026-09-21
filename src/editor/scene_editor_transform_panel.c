@@ -1,4 +1,5 @@
 #include "editor/scene_editor_rename.h"
+#include "editor/scene_editor_surface_mapping_panel.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_transform_feedback.h"
@@ -443,6 +444,9 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     y += field_h + gap;
     }
 
+    if(has_transform) y=SceneEditorSurfaceMappingPanelRender(renderer,bounds,y,selected,editable);
+    else SceneEditorSurfaceMappingPanelReset();
+
     if (has_transform) {
         int material_id=sceneSettings.sceneObjects[selected].material_id;
         static const char* names[]={"Default","Mirror","Rough metal","Glossy","Emissive","Transparent"};
@@ -545,6 +549,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
 }
 
 void SceneEditorTransformPanelReleaseFocusForEvent(const SDL_Event* event) {
+    SceneEditorSurfaceMappingPanelRelease(event);
     if (!event || (s_edit_field < 0 && !s_edit_name)) return;
     if (event->type == SDL_WINDOWEVENT &&
         event->window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
@@ -567,6 +572,7 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
     char diagnostics[256] = {0};
     int selected = ObjectEditorGetSelectedObjectIndex();
     if (!event || !SceneEditorDocumentIsOpen() || !s_controls_active) return false;
+    if(SceneEditorSurfaceMappingPanelEvent(event,selected)) return true;
     if ((s_edit_field>=0 || s_edit_name) && event->type==SDL_KEYDOWN &&
         (event->key.keysym.mod&(KMOD_CTRL|KMOD_GUI))!=0) {
         if (event->key.keysym.sym==SDLK_c) {
@@ -827,10 +833,12 @@ bool SceneEditorTransformPanelPoll(void) {
 }
 
 bool SceneEditorTransformPanelInteractionActive(void) {
+    if(SceneEditorSurfaceMappingPanelActive()) return true;
     return s_edit_field >= 0 || s_edit_name || s_picker.active || s_job_pid > 0;
 }
 
 void SceneEditorTransformPanelReset(void) {
+    SceneEditorSurfaceMappingPanelReset();
     panel_cancel_edit();
     if (s_picker_initialized && s_picker.active) {
         RayTracing_FolderPicker_Cancel(&s_picker);

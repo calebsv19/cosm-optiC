@@ -15,6 +15,21 @@ static void test_surface_mapping(void) {
     m.rotation_rad=NAN; assert(!core_authored_surface_mapping_validate(&m)); m.rotation_rad=0;
     m.version=2; assert(!core_authored_surface_mapping_validate(&m));
     assert(!core_authored_surface_mapping_validate(NULL));
+    m.axis_v[1]=0;m.axis_v[2]=1;m.reference_radius_m=1;m.pole_radius_m=.1;
+    m.height_range_m[0]=-1;m.height_range_m[1]=1;
+    assert(core_authored_surface_mapping_validate(&m));
+    CoreAuthoredSurfaceCoordinates q;
+    for(int j=0;j<50;++j) {
+        double angle=(j+.31)*6.283185307179586/50;
+        double point[]={cos(angle),sin(angle),.3};
+        assert(core_authored_surface_coordinates(&m,point,&q));
+        assert(q.repeats_u==13 && fabs(q.uv_tiles[0]-angle/6.283185307179586*13)<1e-10);
+        assert(fabs(q.uv_tiles[1]-1.2)<1e-12 && q.source_weight==1 && !q.singular);
+    }
+    double pole[]={0,0,1};assert(core_authored_surface_coordinates(&m,pole,&q));
+    assert(q.singular && q.source_weight==0);
+    m.reference_radius_m=0;assert(!core_authored_surface_coordinates(&m,pole,&q));assert(!q.valid);
+    m.reference_radius_m=1;m.pole_radius_m=2;assert(!core_authored_surface_mapping_validate(&m));
 }
 
 #include <assert.h>

@@ -1,4 +1,5 @@
 #include "editor/scene_editor_material_stack.h"
+#include "editor/scene_editor_surface_mapping_cache.h"
 #include "render/runtime_surface_mapping.h"
 #include "render/runtime_material_authored_texture_3d.h"
 #include "editor/scene_editor_material_face_placement.h"
@@ -411,7 +412,8 @@ static void scene_editor_mesh_surface_rasterize(
     const SDL_Color base = scene_editor_mesh_surface_base_color(
         mode,
         instance->scene_object_index);
-    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
+    const SceneEditorSurfaceMappingCache* mapped=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorSurfaceMappingCachePrepare(instance->scene_object_index) : NULL;
+    const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !mapped ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
     SceneEditorMeshPreviewShadeNormal view=material_view(projector);
     for (size_t triangle = 0u; triangle < lod->triangle_count; ++triangle) {
         const uint32_t ia = lod->indices[triangle * 3u + 0u];
@@ -498,6 +500,20 @@ static void scene_editor_mesh_surface_rasterize(
                     w0*normal_a.y+w1*normal_b.y+w2*normal_c.y,w0*normal_a.z+w1*normal_b.z+w2*normal_c.z};
                 color=material ? SceneEditorViewportMaterialShade(material,shading_normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
                                : SceneEditorMeshPreviewShadeColor(base,shading_normal);
+                if(mapped) {
+                    Vec3 world=vec3(w0*wa.x+w1*wb.x+w2*wc.x,w0*wa.y+w1*wb.y+w2*wc.y,w0*wa.z+w1*wb.z+w2*wc.z);
+                    CoreObjectVec3 la=lod->vertices[ia],lb=lod->vertices[ib],lc=lod->vertices[ic];
+                    Vec3 rest=vec3(w0*la.x+w1*lb.x+w2*lc.x,w0*la.y+w1*lb.y+w2*lc.y,w0*la.z+w1*lb.z+w2*lc.z);
+                    double dx0=(c.y-b.y)/area,dx1=(a.y-c.y)/area,dx2=-dx0-dx1;
+                    double dy0=-(c.x-b.x)/area,dy1=-(a.x-c.x)/area,dy2=-dy0-dy1;
+                    Vec3 wx=vec3_add(world,vec3(dx0*wa.x+dx1*wb.x+dx2*wc.x,dx0*wa.y+dx1*wb.y+dx2*wc.y,dx0*wa.z+dx1*wb.z+dx2*wc.z));
+                    Vec3 wy=vec3_add(world,vec3(dy0*wa.x+dy1*wb.x+dy2*wc.x,dy0*wa.y+dy1*wb.y+dy2*wc.y,dy0*wa.z+dy1*wb.z+dy2*wc.z));
+                    Vec3 rx=vec3_add(rest,vec3(dx0*la.x+dx1*lb.x+dx2*lc.x,dx0*la.y+dx1*lb.y+dx2*lc.y,dx0*la.z+dx1*lb.z+dx2*lc.z));
+                    Vec3 ry=vec3_add(rest,vec3(dy0*la.x+dy1*lb.x+dy2*lc.x,dy0*la.y+dy1*lb.y+dy2*lc.y,dy0*la.z+dy1*lb.z+dy2*lc.z));
+                    RuntimeMaterialSurfaceEval e;
+                    color=SceneEditorSurfaceMappingCacheSample(mapped,world,rest,wx,rx,wy,ry,&e) ?
+                        SceneEditorViewportMaterialShadeSample(&e,sceneSettings.sceneObjects[instance->scene_object_index].emissiveStrength,shading_normal,view) : (SDL_Color){255,0,255,255};
+                }
                 g_surface.depth[pixel] = depth;
                 g_surface.owner[pixel] = instance->scene_object_index;
                 g_surface.rgba[pixel * 4u + 0u] = color.r;

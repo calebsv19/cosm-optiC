@@ -1,5 +1,8 @@
 # Surface material M1: common planar sampling
 
+This records the M1 checkpoint. [M2](surface_material_m2_contract.md) adds explicit
+axial mesh mapping and retained inspector controls without replacing v1 behavior.
+
 M1 implements a versioned planar mapping binding and a common primitive material
 query. It stops before M2 axial mapping and new inspector controls. See
 [surface_material_m0_contract.md](surface_material_m0_contract.md) for the frozen

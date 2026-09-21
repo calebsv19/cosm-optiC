@@ -22,7 +22,7 @@ $(LIB): $(LIB_OBJ)
 	ar rcs $@ $^
 
 $(TEST_BIN): tests/core_authored_texture_test.c $(LIB) | $(OBJ_DIR)
-	$(CC) $(CFLAGS) $(INC) $< $(LIB) -o $@
+	$(CC) $(CFLAGS) $(INC) $< $(LIB) -lm -o $@
 
 test: $(TEST_BIN)
 	./$(TEST_BIN)

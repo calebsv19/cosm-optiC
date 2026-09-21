@@ -301,7 +301,7 @@ static RuntimeMaterialTextureStackBaseSample runtime_material_texture_stack_samp
 static RuntimeMaterialTextureStackBaseSample runtime_material_texture_stack_sample_brick(
     RuntimeMaterialTextureStackUV uv,
     const RuntimeMaterialTexture3DParams* params,
-    int seed, bool cells) {
+    int seed, bool cells, int period) {
     RuntimeMaterialTextureStackBaseSample sample;
     double grain = params ? params->grain : 0.5;
     double color_depth = params ? params->colorDepth : 0.5;
@@ -318,8 +318,14 @@ static RuntimeMaterialTextureStackBaseSample runtime_material_texture_stack_samp
     double mortar = 0.045;
     double edge_u = local_u < 0.5 ? local_u : 1.0 - local_u;
     double edge_v = local_v < 0.5 ? local_v : 1.0 - local_v;
+    if(period>0) ix=((ix%period)+period)%period;
     double brick_jitter = runtime_material_texture_stack_hash(ix, iy, seed + 211);
     double grit = runtime_material_texture_stack_fbm(cell_u * 3.0, cell_v * 3.0, seed + 223);
+    if(period>0) {
+        double x=cell_u-floor(cell_u/period)*period,t=x/period;
+        grit=runtime_material_texture_stack_fbm(x*3,cell_v*3,seed+223)*(1-t)+
+             runtime_material_texture_stack_fbm((x-period)*3,cell_v*3,seed+223)*t;
+    }
     double tone = runtime_material_texture_stack_clamp01((brick_jitter * 0.35) + (grit * 0.65));
     double depth = runtime_material_texture_stack_lerp(0.55, 1.0, color_depth);
     runtime_material_texture_stack_base_sample_init(&sample);
@@ -428,7 +434,7 @@ static bool runtime_material_texture_stack_sample_base_layer(
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD) {
         *out_sample = runtime_material_texture_stack_sample_wood(uv, &params, seed);
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK) {
-        *out_sample = runtime_material_texture_stack_sample_brick(uv, &params, seed, false);
+        *out_sample = runtime_material_texture_stack_sample_brick(uv, &params, seed, false,0);
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_CONCRETE) {
         *out_sample = runtime_material_texture_stack_sample_concrete(uv, &params, seed);
     } else if (layer->kind == RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_STONE) {
@@ -767,8 +773,8 @@ static bool runtime_material_texture_stack_evaluate_placed_uv_internal(
 /* Versioned cell-domain adapter. Legacy placement and kernels above are unchanged.
  * Layer offsets are cell units, rotation is about the cell origin; no fract of
  * the whole coordinate. Stable uint32 identity never includes array position. */
-bool RuntimeMaterialTextureStackEvaluateBrickCells(const RuntimeMaterialTextureStack* stack,
-    double u, double v, uint32_t seed, const RuntimeMaterialSurfaceEval* base,
+bool RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(const RuntimeMaterialTextureStack* stack,
+    double u, double v, uint32_t seed, int period, const RuntimeMaterialSurfaceEval* base,
     RuntimeMaterialSurfaceEval* out) {
     if (!stack || !base || !out || !isfinite(u) || !isfinite(v)) return false;
     RuntimeMaterialTextureStack normalized=RuntimeMaterialTextureStackNormalize(*stack);
@@ -789,7 +795,7 @@ bool RuntimeMaterialTextureStackEvaluateBrickCells(const RuntimeMaterialTextureS
         double amount=runtime_material_texture_stack_clamp01(layer->opacity*layer->placement.strength);
         if (layer->kind==RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_BRICK) {
             RuntimeMaterialTextureStackBaseSample sample=runtime_material_texture_stack_sample_brick(
-                uv,&layer->params,(int)(key & UINT32_C(0x00ffffff)),true);
+                uv,&layer->params,(int)(key & UINT32_C(0x00ffffff)),true,period);
             runtime_material_surface_eval_apply_base_sample(&eval,&sample,amount,i);
         }
         runtime_material_surface_eval_apply_layer_influences(&eval,layer,amount);
@@ -798,6 +804,11 @@ bool RuntimeMaterialTextureStackEvaluateBrickCells(const RuntimeMaterialTextureS
     runtime_material_surface_eval_refresh(&eval);
     *out=eval;
     return true;
+}
+
+bool RuntimeMaterialTextureStackEvaluateBrickCells(const RuntimeMaterialTextureStack* stack,
+    double u,double v,uint32_t seed,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out) {
+    return RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(stack,u,v,seed,0,base,out);
 }
 
 bool RuntimeMaterialTextureStackEvaluatePlacedUV(

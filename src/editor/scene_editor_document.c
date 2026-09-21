@@ -19,6 +19,7 @@
 #include "import/runtime_scene_motion_bridge.h"
 
 #define SCENE_EDITOR_DOCUMENT_HISTORY_LIMIT 32
+bool SceneEditorDocumentEnsureMappingSource(json_object* root,json_object* object,int index);
 bool SceneEditorDocumentCloneMappedMaterial(json_object* root,json_object* source,const char* new_id);
 
 typedef struct SceneEditorDocumentState {
@@ -536,6 +537,16 @@ bool SceneEditorDocumentSetMaterialIdForSceneIndex(int scene_object_index,
     return document_finish_command(diagnostics, diagnostics_size);
 }
 
+bool SceneEditorDocumentGetSurfaceMappingJSON(int index,char* out,size_t size) {
+    json_object* object=document_object_for_scene_index(index,NULL,0);
+    json_object *ext=NULL,*ray=NULL,*mapping=NULL;
+    if(!out || !size || !object || !json_object_object_get_ex(object,"extensions",&ext) ||
+       !json_object_object_get_ex(ext,"ray_tracing",&ray) || !json_object_object_get_ex(ray,"surface_mapping",&mapping)) return false;
+    const char* json=json_object_to_json_string_ext(mapping,JSON_C_TO_STRING_PLAIN);
+    if(strlen(json)>=size) return false;
+    snprintf(out,size,"%s",json);return true;
+}
+
 bool SceneEditorDocumentSetSurfaceMappingForSceneIndex(int index,const char* mapping_json,
     char* diagnostic,size_t size) {
     if(!SceneEditorDocumentObjectEditable(index,diagnostic,size)) return false;
@@ -549,6 +560,9 @@ bool SceneEditorDocumentSetSurfaceMappingForSceneIndex(int index,const char* map
     json_object* extensions=document_get_or_add_object(object,"extensions");
     json_object* ray=document_get_or_add_object(extensions,"ray_tracing");
     if(!ray) {if(mapping) json_object_put(mapping);document_rollback_command();return false;}
+    if(mapping && !SceneEditorDocumentEnsureMappingSource(s_document.root,object,index)) {
+        json_object_put(mapping);document_rollback_command();document_diag(diagnostic,size,"Mapping requires an explicit brick/solid source");return false;
+    }
     if(mapping) json_object_object_add(ray,"surface_mapping",mapping);
     else json_object_object_del(ray,"surface_mapping");
     return document_finish_command(diagnostic,size);

@@ -21,3 +21,7 @@ bool RuntimeSurfaceMaterialPrimitiveIsland(int object_index, Vec3 position,
     Vec3 outward_normal, int* face, double* u, double* v);
 bool RuntimeSurfaceMaterialPrimitiveIslandForSeed(const RuntimeSceneBridgePrimitiveSeed* seed,
     Vec3 position, Vec3 outward_normal, int* face, double* u, double* v);
+
+bool RuntimeSurfaceMappingDefinition(int index,CoreAuthoredSurfaceMapping* out);
+bool RuntimeSurfaceMappingEvaluateTiles(int index,double u,double v,const RuntimeMaterialSurfaceEval* base,RuntimeMaterialSurfaceEval* out);
+void RuntimeSurfaceMappingBlendPole(const RuntimeMaterialSurfaceEval* base,double weight,RuntimeMaterialSurfaceEval* out);

@@ -393,6 +393,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 
 #include "scene_editor_material_parity_probe.h"
 #include "scene_editor_surface_mapping_m1.h"
+#include "scene_editor_surface_mapping_m2.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -414,6 +415,13 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && !strcmp(argv[3],"--mapping-panel")) {
+        surface_mapping_panel_probe(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--mapping-m2") || !strcmp(argv[3],"--mapping-m2-reopen"))) {
+        surface_mapping_m2_probe(&editor,!strcmp(argv[3],"--mapping-m2-reopen"));
+        DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if(argc==4 && (!strcmp(argv[3],"--mapping-m1") || !strcmp(argv[3],"--mapping-m1-reopen"))) {
         surface_mapping_m1_probe(&editor,!strcmp(argv[3],"--mapping-m1-reopen"));
         DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
