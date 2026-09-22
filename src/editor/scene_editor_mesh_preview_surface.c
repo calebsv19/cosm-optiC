@@ -1,3 +1,4 @@
+#include "render/runtime_surface_graph.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_surface_mapping_cache.h"
 #include "render/runtime_surface_mapping.h"
@@ -341,7 +342,7 @@ static void scene_editor_primitive_surface_rasterize_triangle(
     normal = scene_editor_mesh_surface_normal(wa, wb, wc);
     double ua=0,va=0,ub=0,vb=0,uc=0,vc=0;
     SceneEditorMeshPreviewShadeNormal view=material_view(projector);
-    if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !RuntimeSurfaceSamplingActive(scene_object_index)) {
+    if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !(RuntimeSurfaceSamplingActive(scene_object_index) || RuntimeSurfaceGraphActive(scene_object_index))) {
         int face=0;
         RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wa.x,wa.y,wa.z),vec3(normal.x,normal.y,normal.z),&face,&ua,&va);
         RuntimeSurfaceMaterialPrimitiveIslandForSeed(primitive,vec3(wb.x,wb.y,wb.z),vec3(normal.x,normal.y,normal.z),&face,&ub,&vb);
@@ -367,7 +368,7 @@ static void scene_editor_primitive_surface_rasterize_triangle(
             if (!SceneEditorMeshPreviewDepthWins(depth, g_surface.depth[pixel])) continue;
             color = material ? SceneEditorViewportMaterialShade(material,normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
                              : SceneEditorMeshPreviewShadeColor(base, normal);
-            if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && RuntimeSurfaceSamplingActive(scene_object_index)) {
+            if(mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && (RuntimeSurfaceSamplingActive(scene_object_index) || RuntimeSurfaceGraphActive(scene_object_index))) {
                 HitInfo3D hit;HitInfo3D_Reset(&hit);hit.sceneObjectIndex=scene_object_index;
                 hit.position=vec3(w0*wa.x+w1*wb.x+w2*wc.x,w0*wa.y+w1*wb.y+w2*wc.y,w0*wa.z+w1*wb.z+w2*wc.z);
                 hit.normal=hit.shadingNormal=hit.geometricNormal=vec3(normal.x,normal.y,normal.z);

@@ -1,3 +1,4 @@
+#include "render/runtime_surface_graph.h"
 #include "editor/scene_editor_surface_material_panel.h"
 #include "render/runtime_surface_mapping.h"
 #include "editor/material_editor_internal.h"
@@ -41,7 +42,8 @@ static double material_editor_slider_value_from_x(const SDL_Rect* track, int mx)
 
 void HandleMaterialEditorEvents(SDL_Event* event) {
     if (!event) return;
-    if(RuntimeSurfaceMappingActive(MaterialEditorResolveFocusedObjectIndex())) {
+    if (RuntimeSurfaceMappingActive(MaterialEditorResolveFocusedObjectIndex()) ||
+        RuntimeSurfaceGraphActive(MaterialEditorResolveFocusedObjectIndex())) {
         SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex());return;
     }
     if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {

@@ -887,7 +887,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     g_last_3d_digest.valid = true;
     g_last_3d_primitive_seeds.valid = true;
     if(!RuntimeSurfaceMappingLoadScene(root,world_scale)) {
-        runtime_scene_bridge_preflight_diag(out_summary,"surface sampling preparation failed");
+        runtime_scene_bridge_preflight_diag(out_summary,"surface material preparation failed");
         json_object_put(root);return false;
     }
     animSettings.runtimeScenePath[0] = '\0';
@@ -961,11 +961,14 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
            json_object_object_get_ex(runtime_root,"objects",&objects)) {
             for(size_t i=0;i<json_object_array_length(objects);++i) {
                 json_object *o=json_object_array_get_idx(objects,i),*id=NULL,*e=NULL,*r=NULL,*m=NULL;
-                if(!json_object_object_get_ex(o,"object_id",&id) || !json_object_object_get_ex(o,"extensions",&e) ||
-                   !json_object_object_get_ex(e,"ray_tracing",&r) || !json_object_object_get_ex(r,"surface_mapping",&m)) continue;
+                if(!json_object_object_get_ex(o,"object_id",&id)) continue;
+                if(json_object_object_get_ex(o,"extensions",&e) && json_object_object_get_ex(e,"ray_tracing",&r))
+                    json_object_object_get_ex(r,"surface_mapping",&m);
                 for(size_t j=0;j<json_object_array_length(rows);++j) {
                     json_object *row=json_object_array_get_idx(rows,j),*rid=NULL;
                     if(!json_object_object_get_ex(row,"object_id",&rid) || strcmp(json_object_get_string(id),json_object_get_string(rid))) continue;
+                    json_object *graph=NULL;json_object_object_get_ex(row,"surface_graph",&graph);
+                    if(!m && !graph) continue;
                     bool replaced=false;
                     for(size_t k=0;k<json_object_array_length(orows);++k) {
                         json_object *candidate=json_object_array_get_idx(orows,k),*cid=NULL;

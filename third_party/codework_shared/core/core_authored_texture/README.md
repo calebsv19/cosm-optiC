@@ -91,3 +91,14 @@ Shared authored-texture manifest contract semantics for cross-app texture export
 ## 0.5.0 — explicit surface attributes
 
 Add authored-UV mapping version 3 and pure core_authored_surface_uv_coordinates evaluation with explicit UV-set matching, dimensionless scale/offset and rotation. Position-only evaluation rejects this mapping. Existing planar and axial behavior is retained. Tangent response, filtering and color-space policy remain consumer work.
+
+## 0.7.0 — typed procedural surface graphs
+
+Additive JSON/IO-free bounded DAG validation and immutable evaluation in
+`core_authored_surface_graph.h`. Scalar, linear color, meter-space coordinates,
+seeded value noise, independently filtered triplanar checker, multiply and mix
+nodes produce base color and optional roughness. Preparation rejects cycles,
+type mismatches, invalid parameters and references. Noise fades to its statistical
+mean as footprints grow; checker uses separable box integration per projection.
+This does not promise exact noise integration or coherent triplanar brick.
+Hosts own JSON, geometry transforms, source combinations, UI and lifetime.

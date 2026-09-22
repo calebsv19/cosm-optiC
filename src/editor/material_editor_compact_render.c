@@ -1,3 +1,4 @@
+#include "render/runtime_surface_graph.h"
 #include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_surfaces.h"
 #include "render/runtime_surface_mapping.h"
@@ -633,7 +634,7 @@ int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
         MaterialEditorCompactLayoutBuild(shell_bounds, MaterialEditorIdentityPopoverOpen());
     if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return bottom_y;
 
-    if(RuntimeSurfaceMappingActive(focused_index)) {
+    if (RuntimeSurfaceMappingActive(focused_index) || RuntimeSurfaceGraphActive(focused_index)) {
         return SceneEditorSurfaceMaterialPanelRender(renderer,
             (SDL_Rect){content_bounds.x,top_y,content_bounds.w,bottom_y-top_y},focused_index);
     }

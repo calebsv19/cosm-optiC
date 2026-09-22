@@ -1,3 +1,4 @@
+#include "render/runtime_surface_graph.h"
 #include "render/runtime_material_payload_3d.h"
 
 #include <math.h>
@@ -558,6 +559,7 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     if(hit && RuntimeSurfaceSamplingActive(scene_object_index) && !hit->hasRegionMaterial &&
        !hit->hasRegionAuthoredMaterial && !hit->hasProceduralSurfaceMaterial)
         return RuntimeSurfaceSamplingResolve(hit,out_payload);
+    if(hit && RuntimeSurfaceGraphActive(scene_object_index)) return RuntimeSurfaceGraphResolve(hit,out_payload);
     object_copy = sceneSettings.sceneObjects[scene_object_index];
     if (hit && hit->hasRegionMaterial) {
         runtime_material_payload_3d_apply_region_preset(

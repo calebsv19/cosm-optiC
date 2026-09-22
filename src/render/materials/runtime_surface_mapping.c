@@ -9,6 +9,7 @@
 #include "render/runtime_material_authored_texture_3d.h"
 #include "config/config_manager.h"
 #include "render/runtime_surface_sampling.h"
+#include "render/runtime_surface_graph.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,13 +42,15 @@ static Binding bindings[MAX_OBJECTS];
 static unsigned long long revision;
 static bool sampling_validate_scene(json_object*,char*,size_t);
 static bool sampling_prepare_scene(json_object*);
+static bool graph_validate_scene(json_object*,char*,size_t);
+static bool graph_prepare_scene(json_object*,double);
 
 static json_object* field(json_object* o,const char* key) {
     json_object* v=NULL; if(o) json_object_object_get_ex(o,key,&v); return v;
 }
 static bool token(json_object* o,const char* k,const char* value) {
     json_object* v=field(o,k);
-    return v && json_object_is_type(v,json_type_string) && !strcmp(json_object_get_string(v),value);
+    return value && v && json_object_is_type(v,json_type_string) && !strcmp(json_object_get_string(v),value);
 }
 static json_object* mapping(json_object* object) {
     return field(field(field(object,"extensions"),"ray_tracing"),"surface_mapping");
@@ -483,7 +486,7 @@ bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_
             return false;
         }
     }
-    return sampling_validate_scene(root,diagnostic,size);
+    return sampling_validate_scene(root,diagnostic,size) && graph_validate_scene(root,diagnostic,size);
 }
 bool RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
     memset(bindings,0,sizeof(bindings)); ++revision;
@@ -525,7 +528,7 @@ bool RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
             prepare_regions(b,material_row(root,p->object_id));
         }
     }
-    return sampling_prepare_scene(root);
+    return sampling_prepare_scene(root) && graph_prepare_scene(root,world_scale);
 }
 bool RuntimeSurfaceMappingActive(int i) { return animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE && i>=0 && i<MAX_OBJECTS && bindings[i].active; }
 unsigned long long RuntimeSurfaceMappingRevision(void) {return revision;}
@@ -655,6 +658,7 @@ bool RuntimeSurfaceMappingEvaluateReferencedStack(const HitInfo3D* hit,const cha
 }
 
 bool RuntimeSurfaceMappingPreviewSupported(int index) {
+    if(RuntimeSurfaceGraphActive(index)) return true;
     if(!RuntimeSurfaceMappingActive(index)) return false;
     if(!bindings[index].asset_graph) return true;
     const RayTracingRuntimeMeshAssetSet *assets=ray_tracing_runtime_mesh_assets_last();
@@ -667,12 +671,13 @@ bool RuntimeSurfaceMappingPreviewSupported(int index) {
 }
 
 bool RuntimeSurfaceMappingNeedsMeshAttributes(int index) {
+    if(RuntimeSurfaceGraphActive(index)) return true;
     return RuntimeSurfaceMappingActive(index) && (bindings[index].asset_graph || bindings[index].map.version==3 || RuntimeSurfaceSamplingActive(index));
 }
 bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t triangle,
     const double weights[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh* lod,
     const Vec3 *dpdx,const Vec3 *dpdy,RuntimeMaterialSurfaceEval* out) {
-    if(!RuntimeSurfaceMappingActive(index) || !weights || !lod || triangle>=lod->triangle_count || !out) return false;
+    if((!RuntimeSurfaceMappingActive(index) && !RuntimeSurfaceGraphActive(index)) || !weights || !lod || triangle>=lod->triangle_count || !out) return false;
     HitInfo3D hit;HitInfo3D_Reset(&hit);hit.sceneObjectIndex=index;hit.localTriangleIndex=(int)triangle;
     hit.triangleIndex=(int)triangle;hit.position=world;hit.normal=hit.geometricNormal=hit.shadingNormal=normal;
     hit.baryU=weights[0];hit.baryV=weights[1];hit.baryW=weights[2];
@@ -705,7 +710,7 @@ bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t 
     *out=RuntimeMaterialSurfaceEvalMakeBase(payload.baseColorR,payload.baseColorG,payload.baseColorB,
         payload.bsdf.roughness,payload.bsdf.reflectivity,payload.bsdf.specWeight,payload.bsdf.diffuseWeight,payload.transparency);
     out->active=true;
-    out->linearColor=RuntimeSurfaceSamplingActive(index);
+    out->linearColor=RuntimeSurfaceSamplingActive(index) || RuntimeSurfaceGraphActive(index);
     if(payload.hasMicrodetailNormal){out->worldNormalActive=true;out->worldNormal[0]=payload.microdetailShadingNormal.x;out->worldNormal[1]=payload.microdetailShadingNormal.y;out->worldNormal[2]=payload.microdetailShadingNormal.z;}
     return true;
 }
@@ -715,3 +720,5 @@ bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
     return RuntimeSurfaceMaterialSampleMeshFootprint(index,asset_index,triangle,weights,world,normal,lod,NULL,NULL,out);
 }
 #include "runtime_surface_sampling.inc"
+
+#include "runtime_surface_graph.inc"

@@ -1,3 +1,4 @@
+#include "render/runtime_surface_graph.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_document.h"
 
@@ -588,6 +589,17 @@ bool SceneEditorDocumentGetSurfaceMaterialJSON(int index,char* out,size_t size) 
     const char* text=json_object_to_json_string_ext(row,JSON_C_TO_STRING_PLAIN);
     if(strlen(text)>=size) return false;
     snprintf(out,size,"%s",text);return true;
+}
+bool SceneEditorDocumentSetSurfaceGraph(int index,const char *text,unsigned long long revision,char *diagnostic,size_t size) {
+    if(revision!=s_document.revision || !SceneEditorDocumentObjectEditable(index,diagnostic,size)) {
+        document_diag(diagnostic,size,"stale or locked graph edit");return false;
+    }
+    json_object *row=document_material_row(index),*graph=text?json_tokener_parse(text):NULL;
+    CoreSurfaceGraph compiled;
+    if(!row || !RuntimeSurfaceGraphParse(graph,&compiled,diagnostic,size)) {if(graph)json_object_put(graph);return false;}
+    if(!document_begin_command(diagnostic,size)){json_object_put(graph);return false;}
+    json_object_object_add(row,"surface_graph",graph);
+    return document_finish_command(diagnostic,size);
 }
 bool SceneEditorDocumentSetSurfaceBinding(int index,const char* binding_json,unsigned long long revision,char* diagnostic,size_t size) {
     if(revision!=s_document.revision || !SceneEditorDocumentObjectEditable(index,diagnostic,size)) {

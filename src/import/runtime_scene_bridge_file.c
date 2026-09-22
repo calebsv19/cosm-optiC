@@ -31,6 +31,7 @@ static bool runtime_scene_bridge_requires_full_surface_meshes(const char *text) 
     if(ray)json_object_object_get_ex(ray,"authoring",&authoring);
     if(authoring)json_object_object_get_ex(authoring,"object_materials",&rows);
     for(size_t i=0;json_object_is_type(rows,json_type_array)&&i<json_object_array_length(rows);++i){
+        json_object *graph=NULL;json_object_object_get_ex(json_object_array_get_idx(rows,i),"surface_graph",&graph);required|=graph!=NULL;
         json_object *binding=NULL,*maps=NULL;json_object_object_get_ex(json_object_array_get_idx(rows,i),"surface_material_binding",&binding);
         if(binding)json_object_object_get_ex(binding,"mappings",&maps);
         for(size_t j=0;json_object_is_type(maps,json_type_array)&&j<json_object_array_length(maps);++j){

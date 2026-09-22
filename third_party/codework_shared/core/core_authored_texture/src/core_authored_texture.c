@@ -708,3 +708,5 @@ bool core_authored_surface_uv_coordinates(const CoreAuthoredSurfaceMapping* m,
 }
 
 #include "core_authored_surface_sampling.inc"
+
+#include "core_authored_surface_graph.inc"

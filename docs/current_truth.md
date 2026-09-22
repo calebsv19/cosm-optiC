@@ -1,5 +1,29 @@
 # optiC Current Truth
 
+## September 21 surface-material M6 source checkpoint
+
+The isolated lane completes the bounded M0–M6 implementation. M6 adds typed
+procedural graphs, object-rest/world 3D noise and independently filtered triplanar
+checker sources, retained inspector parameter/connection commands, deterministic
+planar/box UV tools, and agent/Sculpts producer adoption. Executable capability
+reporting and preflight reject unsupported combinations. See the
+[M6 contract](surface_material_m6_contract.md) for node types, filtering policy,
+source compatibility, producer commands and validation.
+
+Four native rest/world cases retain source/provenance through real inspector
+edits, undo/redo, duplication, save and fresh-process reopen. Forty-eight samples
+per case match ray/preview color within 2.1e-14; flattened/TLAS renders match.
+Shared unit/sanitizer checks, 13 negative preflights, generated-UV compilation and
+deterministic Sculpts-to-optiC rendering pass. This is source/test evidence;
+hands-on and installed-build acceptance remain separate.
+
+The new shared API is core_authored_texture 0.7.0. App 0.16.0 and worker 0.7.1
+are unchanged. M6 graphs are exclusive procedural sources, not a universal
+shader language or an extension of M5's image-sampling combinations. Broader
+image/graph/region composition, general unwrap/atlas tools, transported secondary
+differentials and faster attributed preview remain follow-up work. Main Edit
+integration is the next adoption gate. Earlier sections are historical.
+
 ## September 21 surface-material M5 source checkpoint
 
 The isolated lane completes M0–M5. Explicit `optic.surface_sampling_v1` materials

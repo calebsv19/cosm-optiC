@@ -213,3 +213,9 @@ use `ray_tracing` where repo/runtime identifiers need to stay exact.
 ## Private Planning Docs
 - Private scaffold plans and internal execution docs are in the workspace private docs bucket:
   - `../../docs/private_program_docs/ray_tracing/`
+
+## Typed surface capability discovery
+
+See [M6 graph and producer tools](surface_material_m6_contract.md). The headless
+renderer exposes `--surface-capabilities` and `--validate-surface-graph <file>`;
+normal scene preflight additionally checks graph/source/geometry combinations.

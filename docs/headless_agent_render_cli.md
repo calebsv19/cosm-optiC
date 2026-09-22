@@ -1332,3 +1332,9 @@ For project-owned STL intake, per-instance shading, safe rebuilds and relocation
 proof, use [Managed mesh assets](managed_mesh_assets.md). Keep the complete
 project for source rebuildability; a runtime-only render export is a different
 guarantee. Existing loose scenes keep their current behavior.
+
+## Typed surface capability discovery
+
+See [M6 graph and producer tools](surface_material_m6_contract.md). The headless
+renderer exposes `--surface-capabilities` and `--validate-surface-graph <file>`;
+normal scene preflight additionally checks graph/source/geometry combinations.

@@ -1,3 +1,4 @@
+#include "render/runtime_surface_graph.h"
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -1059,6 +1060,17 @@ static int run_render(const RayTracingAgentRenderRequest *request,
 }
 
 int main(int argc, char **argv) {
+    if(argc==2 && !strcmp(argv[1],"--surface-capabilities")) {puts(RuntimeSurfaceGraphCapabilities());return 0;}
+    if(argc==3 && !strcmp(argv[1],"--validate-surface-graph")) {
+        FILE *file=fopen(argv[2],"rb");if(!file)return 2;
+        if(fseek(file,0,SEEK_END)){fclose(file);return 2;}long length=ftell(file);rewind(file);
+        if(length<1 || length>1048576){fclose(file);return 2;}
+        char *text=calloc((size_t)length+1,1);if(!text){fclose(file);return 2;}
+        bool read_ok=fread(text,1,(size_t)length,file)==(size_t)length;fclose(file);
+        json_object *graph=read_ok?json_tokener_parse(text):NULL;free(text);
+        CoreSurfaceGraph program;char diagnostic[256];bool ok=RuntimeSurfaceGraphParse(graph,&program,diagnostic,sizeof(diagnostic));
+        if(graph)json_object_put(graph);puts(diagnostic);return ok?0:2;
+    }
     const char *request_path = NULL;
     const char *summary_override = NULL;
     const char *job_id = NULL;

@@ -1,3 +1,4 @@
+#include "render/runtime_surface_graph.h"
 #include "render/runtime_surface_mapping.h"
 #include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_document.h"
@@ -46,10 +47,12 @@ static json_object* active_layer(json_object* source) {
     if(!n) return NULL;layer_index%=n;
     json_object* layer=json_object_array_get_idx(list,layer_index);return graph?get(layer,"layer"):layer;
 }
+#include "scene_editor_surface_graph_panel.inc"
 int SceneEditorSurfaceMaterialPanelRender(SDL_Renderer* r,SDL_Rect b,int index) {
-    if(selected!=index) {cancel();selected=index;scope=layer_index=0;status[0]=0;}
+    if(selected!=index) {cancel();selected=index;scope=layer_index=graph_node_index=0;status[0]=0;}
     memset(fields,0,sizeof(fields));scope_rect=layer_rect=enable_rect=reset_rect=(SDL_Rect){0};
     json_object* row=current(index);if(!row) return b.y;
+    if(RuntimeSurfaceGraphActive(index)){int end=graph_panel_render(r,b,index,row);json_object_put(row);return end;}
     int y=b.y;json_object* binding=get(row,"surface_material_binding");
     if(!binding) {
         enable_rect=(SDL_Rect){b.x,y,b.w,27};draw(r,enable_rect,"Enable retained source editing",false);
@@ -87,6 +90,7 @@ int SceneEditorSurfaceMaterialPanelRender(SDL_Renderer* r,SDL_Rect b,int index) 
     json_object_put(row);return y;
 }
 static bool apply_value(int index,double value) {
+    if(RuntimeSurfaceGraphActive(index))return graph_panel_apply(index,value);
     if(scope==0) return SceneEditorDocumentSetSurfaceLayerValue(index,layer_id,groups[editing],keys[editing],value,revision,status,sizeof(status));
     json_object* row=current(index);if(!row) return false;
     json_object* binding=get(row,"surface_material_binding"),*reg=region(binding);
@@ -129,7 +133,8 @@ bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* e,int index) {
     }
     if(e->type!=SDL_MOUSEBUTTONDOWN || e->button.button!=SDL_BUTTON_LEFT) return false;
     int x=e->button.x,y=e->button.y;
-    if(inside(scope_rect,x,y)) {
+    if(RuntimeSurfaceGraphActive(index) && !RayTracingDeepRenderDesktopHost_HasActiveWork() && graph_panel_click(index,x,y))return true;
+    if(!RuntimeSurfaceGraphActive(index) && inside(scope_rect,x,y)) {
         SceneEditorDocumentObjectInfo info;int count=1;
         if(SceneEditorDocumentObjectAt(0,&info)) {
             for(int i=0;i<SceneEditorDocumentObjectCount();++i) if(SceneEditorDocumentObjectAt(i,&info) && info.runtime_index==index) {
@@ -138,7 +143,7 @@ bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* e,int index) {
         }
         scope=(scope+1)%count;layer_index=0;cancel();return true;
     }
-    if(inside(layer_rect,x,y)) {++layer_index;cancel();return true;}
+    if(inside(layer_rect,x,y)) {++layer_index;++graph_node_index;cancel();return true;}
     if(RayTracingDeepRenderDesktopHost_HasActiveWork()) return false;
     if(inside(enable_rect,x,y)) {
         SceneEditorDocumentSetSurfaceBinding(index,"{\"version\":1,\"required_capability\":\"optic.surface_material_v3\"}",SceneEditorDocumentRevision(),status,sizeof(status));return true;
@@ -159,6 +164,8 @@ bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* e,int index) {
 bool SceneEditorSurfaceMaterialPanelActive(void) {return editing>=0;}
 bool SceneEditorSurfaceMaterialPanelControl(const char* name,SDL_Rect* out) {
     if(!name || !out) return false;
+    if(RuntimeSurfaceGraphActive(selected) && !strncmp(name,"parameter",9) && name[9]>='0' && name[9]<='5' && !name[10]){*out=fields[name[9]-'0'];return out->w>0;}
+    if(RuntimeSurfaceGraphActive(selected) && !strncmp(name,"input",5) && name[5]>='0' && name[5]<='2' && !name[6]){*out=graph_edges[name[5]-'0'];return out->w>0;}
     if(!strcmp(name,"scope")) *out=scope_rect;
     else if(!strcmp(name,"layer")) *out=layer_rect;
     else if(!strcmp(name,"enable")) *out=enable_rect;

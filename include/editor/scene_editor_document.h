@@ -95,4 +95,8 @@ bool SceneEditorDocumentSetSurfaceLayerValue(int index,const char* layer_id,
     const char* group,const char* property,double value,unsigned long long revision,
     char* diagnostic,size_t size);
 
+/* Typed graph replacement is one validated, revision-guarded undo command. */
+bool SceneEditorDocumentSetSurfaceGraph(int index, const char *graph_json,
+    unsigned long long revision, char *diagnostic, size_t size);
+
 #endif
