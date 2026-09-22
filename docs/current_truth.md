@@ -11,7 +11,9 @@ mode survives edits. Constrained panes scroll and hidden controls are inert.
 See the [T1 contract](surface_material_t1_contract.md) for exact scope, native
 acceptance and supported geometry/resource boundaries. T2 resource ownership,
 file assignment/relinking and preparation efficiency are next; mixed composition
-remains T3. These are source changes, not a packaged release or hands-on acceptance.
+remains T3. The isolated source checkpoint is `d7f948e`; Main Edit adoption remains pending
+explicit authorization. These are source changes, not a packaged release or
+hands-on acceptance.
 
 ## September 21 T0 hardening checkpoint
 

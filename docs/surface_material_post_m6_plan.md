@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0 complete, including verified Main Edit source adoption. T1 authoring complete in source; verification is recorded in its contract. T2–T5 remain planned.
+Status: T0 complete, including verified Main Edit source adoption. T1 authoring complete in isolated source; Main Edit adoption awaits explicit authorization. Verification is recorded in its contract. T2–T5 remain planned.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution

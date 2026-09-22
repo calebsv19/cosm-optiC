@@ -1,5 +1,9 @@
 # T1 material inspector and retained authoring
 
+Source checkpoint: `d7f948e`. Implementation and isolated native verification are
+complete. Main Edit adoption is pending explicit operator authorization; its
+current source remains at the T0 checkpoint.
+
 T1 adds a common material inspector and completes editing of the existing bounded
 procedural graph. It reuses the M6 graph compiler and T0 document transactions;
 there is no new graph schema or shared evaluator version.
@@ -107,3 +111,9 @@ preview-shading checks pass. Full workspace acceptance also passes, including
 legacy source subtabs, preset assignment and popup dismissal without click-through. The four M6 source/space cases retain ray/preview
 agreement within 2.1e-14 and identical flattened/TLAS render hashes. These are
 compatibility checks; T1 makes no rendering-performance improvement claim.
+
+T0 fault-injected generation, undo/restore and save-publication recovery also pass
+on the T1 source. Local verification artifacts are under
+`build/surface_material_t1/`, including `acceptance-closeout/acceptance.json`,
+`workspace-verified/acceptance.json`, `lifecycle-closeout/acceptance.json`, and the
+M1–M6/legacy logs. Installed builds and package publication are separate.
