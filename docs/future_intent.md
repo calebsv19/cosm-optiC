@@ -15,7 +15,8 @@ T1 common authoring and complete editing of existing graph capabilities are now
 implemented; see the [T1 contract](surface_material_t1_contract.md). T2 resource
 workflows and preparation are implemented; see the [T2 contract](surface_material_t2_contract.md).
 T3 image/procedural composition is next, followed by rendering quality/performance.
-T1/T2 source adoption in Main Edit remains pending explicit authorization.
+T0–T2 are adopted in Main Edit through `3819af1` with fresh native authoring,
+resource/candidate, recovery and editor/headless checks.
 
 
 The adopted surface-material source completes the bounded M0–M6 implementation. The

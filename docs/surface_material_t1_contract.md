@@ -1,8 +1,9 @@
 # T1 material inspector and retained authoring
 
-Source checkpoint: `d7f948e`. Implementation and isolated native verification are
-complete. Main Edit adoption is pending explicit operator authorization; its
-current source remains at the T0 checkpoint.
+Source checkpoint: `d7f948e`. Main Edit adopted T1 and T2 through `3819af1`
+on September 22, 2026, with a clean fast-forward and fresh native authoring,
+reopen, resource and recovery checks. Implementation and source adoption are
+complete; installed-release and human acceptance remain separate.
 
 T1 adds a common material inspector and completes editing of the existing bounded
 procedural graph. It reuses the M6 graph compiler and T0 document transactions;

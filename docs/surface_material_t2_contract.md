@@ -1,8 +1,8 @@
 # T2 resource workflow and preparation
 
-T2 is implemented in isolated source. Main Edit adoption remains pending explicit
-operator authorization. This is local source/native proof, not an installed or
-published release. App 0.16.0, worker 0.7.1 and shared authored texture 0.7.1 remain
+Main Edit adopted T1 and T2 at source checkpoint `3819af1` on September 22,
+2026, by an explicitly authorized clean fast-forward. Fresh adoption checks pass.
+This is source/native proof, not an installed or published release. App 0.16.0, worker 0.7.1 and shared authored texture 0.7.1 remain
 unchanged. T3 composition is next.
 
 ## Resource ownership
@@ -131,3 +131,23 @@ recorded eviction. Warm loads, transform edits and viewport frames decode/build
 zero new resources. These are local fixture timings, not a general performance
 promise. Native OS chooser completion and human hands-on acceptance remain
 unverified; native commands, panel interactions and guarded adoption are tested.
+
+## Main Edit adoption verification
+
+Fresh evidence is under `build/surface_material_t2_adoption/` in Main Edit.
+`adoption.json` binds all five passing check groups to source `3819af1`:
+
+- Application, native test host, headless renderer and mesh compiler rebuilt.
+- Editor foundation, managed mesh, pane-host, preview shading, headless preflight
+  and image export passed.
+- `t1/acceptance.json`: full authoring, all seven node kinds, constrained panes,
+  undo/redo, source identity and fresh-process reopen.
+- `tools/acceptance.json`: nine pure tests plus real UV compilation/preview and
+  portable primitive/UV bundle validation and relocated rendering.
+- `t2/acceptance.json`: image cards, repair, relative reopen, 100-object shared
+  preparation, budget recovery and reviewed candidate adoption/Undo/Redo.
+- `t0/acceptance.json`: generation, restore, history and save-publication failure
+  recovery; archived input fixtures remain unchanged.
+
+The working tree remained clean after these checks. T0–T2 source adoption is
+complete; T3 composition is the next implementation milestone.

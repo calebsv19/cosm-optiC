@@ -8,8 +8,10 @@ generated-UV candidates with undoable adoption. A 100-object fixture shares one
 image decode and one program bake; warm loads, transforms and preview frames
 produce no new decodes. See the [T2 contract](surface_material_t2_contract.md) for
 budgets, measured timings, portability scope and native evidence. T3 composition
-is next. T1/T2 Main Edit adoption remains pending explicit authorization; installed
-release and human hands-on acceptance are separate.
+is next. Main Edit adopted T1/T2 through `3819af1` by clean fast-forward and
+passes fresh authoring, resources, portable candidate, recovery and editor/headless
+checks under `build/surface_material_t2_adoption/`. T0–T2 source adoption is
+complete; installed release and human hands-on acceptance are separate.
 
 ## September 22 T1 material authoring
 
@@ -21,8 +23,8 @@ retain rejected values; source and mapping reset independently; Material preview
 mode survives edits. Constrained panes scroll and hidden controls are inert.
 See the [T1 contract](surface_material_t1_contract.md) for exact scope, native
 acceptance and supported geometry/resource boundaries. T2 now adds resource ownership,
-file assignment/relinking and preparation efficiency; mixed composition remains T3. The isolated source checkpoint is `d7f948e`; Main Edit adoption remains pending
-explicit authorization. These are source changes, not a packaged release or
+file assignment/relinking and preparation efficiency; mixed composition remains T3. The original source checkpoint is `d7f948e`;
+Main Edit adoption and fresh verification are complete through `3819af1`. These are source changes, not a packaged release or
 hands-on acceptance.
 
 ## September 21 T0 hardening checkpoint
