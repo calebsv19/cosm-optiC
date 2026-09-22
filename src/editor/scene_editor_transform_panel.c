@@ -865,3 +865,15 @@ void SceneEditorTransformPanelReset(void) {
     s_import_open=s_surface_open=s_material_open=false;
     s_import_scale=1.0;
 }
+
+bool SceneEditorTransformPanelMaterialControl(const char* name,SDL_Rect* out) {
+    if(!name || !out)return false;
+    if(!strcmp(name,"material"))*out=s_material_expand;
+    else if(!strcmp(name,"edit"))*out=s_material_edit;
+    else if(!strncmp(name,"preset:",7)) {
+        char* end=NULL;long index=strtol(name+7,&end,10);
+        if(end==name+7 || *end || index<0 || index>=MAX_MATERIALS)return false;
+        *out=s_material_choices[index];
+    } else return false;
+    return out->w>0 && out->h>0;
+}

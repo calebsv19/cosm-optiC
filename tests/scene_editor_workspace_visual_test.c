@@ -152,32 +152,42 @@ static void verify_rename(SceneEditor* editor) {
     SceneEditorSessionRuntimeRender(editor);
 }
 
+#include "editor/scene_editor_surface_material_panel.h"
 static void verify_material_inspector(SceneEditor* editor) {
     unsigned long long revision=SceneEditorDocumentRevision();
     int selected=ObjectEditorGetSelectedObjectIndex();
     SceneEditorPaneLayout layout; assert(SceneEditorGetPaneLayout(&layout));
-    assert(s_recipe_action_rects[0].x>=layout.right_content_rect.x);
-    const MaterialEditorSubPane sections[]={MATERIAL_EDITOR_SUBPANE_RESPONSE,MATERIAL_EDITOR_SUBPANE_TEXTURES,
-        MATERIAL_EDITOR_SUBPANE_STACK,MATERIAL_EDITOR_SUBPANE_FACE,MATERIAL_EDITOR_SUBPANE_GRAPH,MATERIAL_EDITOR_SUBPANE_PROOF};
-    for(int i=0;i<6;++i) {
-        /* Close the previous section so every navigation header remains reachable. */
-        if(s_material_editor_section_open) click(editor,s_material_editor_compact_layout_rects.tab_rects[MaterialEditorGetActiveSubPane()]);
-        assert(!s_material_editor_section_open);
-        click(editor,s_material_editor_compact_layout_rects.tab_rects[sections[i]]);
-        assert(s_material_editor_section_open && MaterialEditorGetActiveSubPane()==sections[i]);
+    SDL_Rect control;
+    const char* sections[]={"Appearance","Sources","Coordinates","Preview"};
+    for(int i=0;i<4;++i) {
+        char name[80];snprintf(name,sizeof(name),"section:%s",sections[i]);
+        assert(SceneEditorSurfaceMaterialPanelControl(name,&control));
+        assert(control.x>=layout.right_content_rect.x && control.w>0 && control.h>0);
+        click(editor,control);assert(SceneEditorSurfaceMaterialSection()==i);
         assert(ObjectEditorGetSelectedObjectIndex()==selected);
         assert(SceneEditorDocumentRevision()==revision);
-        char name[80];snprintf(name,sizeof(name),"material_inspector_section_%d.ppm",i);capture(editor,name);
+        snprintf(name,sizeof(name),"material_inspector_section_%d.ppm",i);capture(editor,name);
     }
-    click(editor,s_material_editor_compact_layout_rects.tab_rects[MaterialEditorGetActiveSubPane()]);
-    click(editor,s_material_editor_compact_layout_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_RESPONSE]);
+    /* Legacy Pattern/Layers/Graph controls remain available inside common Sources. */
+    assert(SceneEditorSurfaceMaterialPanelControl("section:Sources",&control));click(editor,control);
+    const MaterialEditorSubPane legacy_sources[]={MATERIAL_EDITOR_SUBPANE_TEXTURES,
+        MATERIAL_EDITOR_SUBPANE_STACK,MATERIAL_EDITOR_SUBPANE_GRAPH};
+    for(int i=0;i<3;++i) {
+        control=s_material_editor_compact_layout_rects.tab_rects[legacy_sources[i]];
+        assert(control.w>0 && control.h>0);click(editor,control);
+        assert(MaterialEditorGetActiveSubPane()==legacy_sources[i]);
+        assert(SceneEditorSurfaceMaterialSection()==1 && SceneEditorDocumentRevision()==revision);
+        if(i<2) {char name[80];snprintf(name,sizeof(name),"material_inspector_section_%d.ppm",i+4);capture(editor,name);}
+    }
+    assert(SceneEditorSurfaceMaterialPanelControl("section:Appearance",&control));click(editor,control);
+    assert(s_recipe_action_rects[0].w>0 && s_recipe_action_rects[0].x>=layout.right_content_rect.x);
     click(editor,s_recipe_action_rects[0]);
     assert(MaterialEditorGetRecipeMenuAxis()==MATERIAL_EDITOR_RECIPE_AXIS_FAMILY);
     capture(editor,"material_inspector_preset_menu.ppm");
     /* Dismissing the popup must not click the property beneath it. */
-    click(editor,s_material_editor_compact_layout_rects.tab_rects[MATERIAL_EDITOR_SUBPANE_RESPONSE]);
+    assert(SceneEditorSurfaceMaterialPanelControl("section:Sources",&control));click(editor,control);
     assert(MaterialEditorGetRecipeMenuAxis()==MATERIAL_EDITOR_RECIPE_AXIS_NONE);
-    assert(s_material_editor_section_open);
+    assert(SceneEditorSurfaceMaterialSection()==0);
     click(editor,s_recipe_action_rects[0]);
     key(editor,SDLK_ESCAPE);
     assert(MaterialEditorGetRecipeMenuAxis()==MATERIAL_EDITOR_RECIPE_AXIS_NONE);
@@ -399,6 +409,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_surface_mapping_m5.h"
 #include "scene_editor_surface_graph_m6.h"
 #include "scene_editor_surface_lifecycle_t0.h"
+#include "scene_editor_material_authoring_t1.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -428,6 +439,9 @@ int main(int argc, char** argv) {
     }
     if(argc==4 && !strcmp(argv[3],"--sampling-ray-motion-m5")) {
         surface_sampling_ray_motion_m5_probe();DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--material-authoring-t1") || !strcmp(argv[3],"--material-authoring-t1-reopen"))) {
+        surface_material_authoring_t1_probe(&editor,!strcmp(argv[3],"--material-authoring-t1-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }
     if(argc==4 && !strcmp(argv[3],"--surface-lifecycle-t0")) {
         surface_lifecycle_t0_probe(argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
@@ -607,17 +621,20 @@ int main(int argc, char** argv) {
     assert(SceneEditorToolStateGetActive()==SCENE_EDITOR_TOOL_SELECT && editor.running);
     assert(SceneEditorMeshPreviewStoreHasSceneObject(selected));
     int material_before=sceneSettings.sceneObjects[selected].material_id;
-    SDL_Rect material_field={before.right_content_rect.x+25,before.right_content_rect.y+48+23+5*29+66+8,1,1};
+    SDL_Rect material_field;
+    assert(SceneEditorTransformPanelMaterialControl("material",&material_field));
     click(&editor,material_field);
     capture(&editor,"workspace_inspector_materials.ppm");
     /* Mirror is the second preset; assignment stays in the selected-object inspector. */
-    click(&editor,(SDL_Rect){material_field.x,material_field.y+2*29,1,1});
+    assert(SceneEditorTransformPanelMaterialControl("preset:1",&material_field));
+    click(&editor,material_field);
     assert(sceneSettings.sceneObjects[selected].material_id==1);
     if (material_before!=1) assert(SceneEditorTransformPanelHistory(false));
     assert(sceneSettings.sceneObjects[selected].material_id==material_before);
     SceneEditorSessionRuntimeRender(&editor);
     SceneEditorDigestOverlayNavState before_material=*SceneEditorGetViewportNavState();
-    click(&editor,(SDL_Rect){material_field.x,material_field.y+29,1,1});
+    assert(SceneEditorTransformPanelMaterialControl("edit",&material_field));
+    click(&editor,material_field);
     assert(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_MATERIALS);
     assert(ObjectEditorGetSelectedObjectIndex()==selected);
     assert(MaterialEditorGetViewMode()==MATERIAL_EDITOR_VIEW_SCENE_PLACEMENT);

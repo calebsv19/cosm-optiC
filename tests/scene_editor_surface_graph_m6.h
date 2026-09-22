@@ -191,6 +191,9 @@ static void surface_graph_m6_probe(SceneEditor *editor) {
     SceneEditorSessionRuntimeRender(editor);
     assert(SceneEditorSurfaceMaterialPanelControl("input0", &control));
     click(editor, control);
+    SceneEditorSessionRuntimeRender(editor);
+    assert(SceneEditorSurfaceMaterialPanelControl("candidate:light", &control));
+    click(editor, control);
     assert(SceneEditorDocumentGetSurfaceMaterialJSON(0, after, sizeof(after)));
     assert(strcmp(original, after));
     assert(SceneEditorDocumentUndo(diagnostic, sizeof(diagnostic)));

@@ -1,5 +1,18 @@
 # optiC Current Truth
 
+## September 22 T1 material authoring
+
+T1 adds the common Assignment header and stable inspector sections, transactional
+New/Assign/Duplicate/Replace, all seven existing graph node kinds, named connections
+and output wiring. It preserves source/provenance through undo and save/reopen,
+including historical source-ID collision protection after reopening. Numeric drafts
+retain rejected values; source and mapping reset independently; Material preview
+mode survives edits. Constrained panes scroll and hidden controls are inert.
+See the [T1 contract](surface_material_t1_contract.md) for exact scope, native
+acceptance and supported geometry/resource boundaries. T2 resource ownership,
+file assignment/relinking and preparation efficiency are next; mixed composition
+remains T3. These are source changes, not a packaged release or hands-on acceptance.
+
 ## September 21 T0 hardening checkpoint
 
 T0 corrects shared noise lattice wrapping, stages all material tables before
@@ -9,7 +22,7 @@ object/node/property and stable reason; incompatible graph mapping controls are
 gated. See the [T0 contract](surface_material_t0_contract.md) for compatibility,
 failure policy and independent/native verification. Shared authored texture is
 0.7.1. Main Edit adopted the hardened history by clean fast-forward and passes
-fresh retained M3–M6 workflows and T0 recovery checks. T1 is next; T2–T5 remain planned,
+fresh retained M3–M6 workflows and T0 recovery checks. T1 follows this checkpoint; T2–T5 remain planned,
 and hands-on acceptance remains separate from scripted native proof.
 
 ## September 21 post-M6 independent audit (historical findings)

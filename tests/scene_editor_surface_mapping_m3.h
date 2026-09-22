@@ -2,6 +2,41 @@
 #include "procedural/procedural_solid_material_runtime_program.h"
 #include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_material_graph.h"
+#include "editor/scene_editor_surface_mapping_panel.h"
+
+/* Mapping text must retain focus through the Material workspace's input router. */
+static void m3_material_coordinate_input(SceneEditor* editor) {
+    SDL_Rect control;char before[8192],after[8192],diagnostic[512];
+    assert(SceneEditorDocumentGetSurfaceMappingJSON(0,before,sizeof(before)));
+    assert(SceneEditorSurfaceMaterialPanelControl("section:Coordinates",&control));click(editor,control);
+    SceneEditorSessionRuntimeRender(editor);
+    if(!SceneEditorSurfaceMappingPanelControl("tile_width",&control)) {
+        assert(SceneEditorSurfaceMappingPanelControl("expand",&control));click(editor,control);
+        SceneEditorSessionRuntimeRender(editor);
+    }
+    assert(SceneEditorSurfaceMappingPanelControl("tile_width",&control));click(editor,control);
+    assert(SceneEditorSurfaceMappingPanelActive() && SceneEditorSurfaceMaterialPanelActive());
+    unsigned long long revision=SceneEditorDocumentRevision();
+    SDL_Event text={0};text.type=SDL_TEXTINPUT;snprintf(text.text.text,sizeof(text.text.text),"-1");
+    SceneEditorSessionRuntimeHandleEvent(editor,&text);key(editor,SDLK_RETURN);
+    assert(SceneEditorSurfaceMappingPanelActive());assert(SceneEditorDocumentRevision()==revision);
+    assert(SceneEditorDocumentGetSurfaceMappingJSON(0,after,sizeof(after)));assert(!strcmp(before,after));
+    SDL_Event select_all={0};select_all.type=SDL_KEYDOWN;select_all.key.keysym.sym=SDLK_a;select_all.key.keysym.mod=KMOD_CTRL;
+    SceneEditorSessionRuntimeHandleEvent(editor,&select_all);
+    snprintf(text.text.text,sizeof(text.text.text),"0.731");SceneEditorSessionRuntimeHandleEvent(editor,&text);key(editor,SDLK_RETURN);
+    assert(!SceneEditorSurfaceMappingPanelActive());assert(SceneEditorDocumentRevision()>revision);
+    assert(SceneEditorDocumentGetSurfaceMappingJSON(0,after,sizeof(after)));
+    json_object* map=json_tokener_parse(after),*tile=NULL;assert(json_object_object_get_ex(map,"tile_m",&tile));
+    assert(fabs(json_object_get_double(json_object_array_get_idx(tile,0))-.731)<1e-12);json_object_put(map);
+    assert(SceneEditorDocumentUndo(diagnostic,sizeof(diagnostic)));
+    SceneEditorSessionRuntimeRender(editor);assert(SceneEditorSurfaceMappingPanelControl("tile_width",&control));click(editor,control);
+    snprintf(text.text.text,sizeof(text.text.text),"0.999");SceneEditorSessionRuntimeHandleEvent(editor,&text);key(editor,SDLK_ESCAPE);
+    assert(!SceneEditorSurfaceMappingPanelActive());
+    assert(SceneEditorDocumentGetSurfaceMappingJSON(0,after,sizeof(after)));assert(!strcmp(before,after));
+    SceneEditorSessionRuntimeRender(editor);assert(SceneEditorSurfaceMappingPanelControl("tile_width",&control));click(editor,control);
+    assert(SceneEditorSurfaceMaterialPanelControl("section:Sources",&control));click(editor,control);
+    assert(!SceneEditorSurfaceMappingPanelActive());SceneEditorSessionRuntimeRender(editor);
+}
 
 static json_object* m3_member(json_object* o,const char* key) {
     json_object* v=NULL;assert(o && json_object_object_get_ex(o,key,&v));return v;
@@ -78,6 +113,7 @@ static void surface_mapping_m3_probe(SceneEditor* editor,bool reopen) {
     ObjectEditorSetSelectedObjectIndex(0);
     SceneEditorWorkspaceProfileSelect(editor,SCENE_WORKSPACE_MATERIALS);
     SceneEditorSessionRuntimeRender(editor);
+    m3_material_coordinate_input(editor);
     SDL_Rect control;assert(SceneEditorSurfaceMaterialPanelControl("opacity",&control));
     click(editor,control);assert(SceneEditorSurfaceMaterialPanelActive());
     SDL_Event input={0};input.type=SDL_TEXTINPUT;snprintf(input.text.text,sizeof(input.text.text),"0.43");

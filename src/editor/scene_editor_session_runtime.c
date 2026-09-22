@@ -38,12 +38,16 @@ static void scene_editor_session_runtime_update_dirty_objects(void) {
 }
 
 static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
+    /* A hidden or collapsed inspector must never retain last frame hit targets. */
+    SceneEditorSurfaceMaterialPanelInvalidateControls();
     static unsigned long long preview_revision;
     unsigned long long revision=SceneEditorDocumentRevision();
     if (SceneEditorDocumentIsOpen() && revision!=preview_revision) {
         /* Document commands rebuild runtime instances. Publish their new meshes
            to the editor as well, including import, transform, Undo and Redo. */
+        SceneEditorMeshDisplayMode retained_mode = SceneEditorMeshPreviewModeGet();
         SceneEditorMeshPreviewRenderReset(editor->renderer);
+        SceneEditorMeshPreviewModeSet(retained_mode);
         SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
         preview_revision=revision;
     }
@@ -64,7 +68,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (!editor || !event) {
         return;
     }
-    if(SceneEditorSurfaceMaterialPanelActive() &&
+    if(editor->currentMode==EDITOR_MODE_MATERIAL && SceneEditorSurfaceMaterialPanelActive() &&
        SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex())) return;
     if (SceneEditorRenameActive() && SceneEditorRenameHandleEvent(event)) return;
     if (editor->currentMode==EDITOR_MODE_MATERIAL && MaterialEditorHandlePopupEvent(event)) return;
@@ -101,6 +105,8 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (SceneEditorTransformPanelInteractionActive()) {
         return;
     }
+    if (editor->currentMode==EDITOR_MODE_MATERIAL && event->type==SDL_MOUSEWHEEL &&
+        SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex())) return;
     if (SceneEditorSidebarHandleEvent(event)) return;
     {
         SceneEditorPaneLayout layout;

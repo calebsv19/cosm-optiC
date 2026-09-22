@@ -18,5 +18,7 @@ void SceneEditorTransformPanelReleaseFocusForEvent(const SDL_Event* event);
 bool SceneEditorTransformPanelInteractionActive(void);
 bool SceneEditorTransformPanelPoll(void);
 void SceneEditorTransformPanelReset(void);
+/* Read currently rendered material hit targets for native interaction clients. */
+bool SceneEditorTransformPanelMaterialControl(const char* name,SDL_Rect* out);
 
 #endif

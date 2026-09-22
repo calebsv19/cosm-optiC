@@ -1,6 +1,7 @@
 #include "render/runtime_surface_graph.h"
 #include "render/runtime_surface_mapping.h"
 #include "editor/scene_editor_surface_material_panel.h"
+#include "editor/scene_editor_surface_mapping_panel.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_typography.h"
 #include "app/ray_tracing_deep_render_desktop_host.h"
@@ -18,11 +19,17 @@ static const char* labels[]={"Opacity","Roughness","Layer U","Layer V","Strength
 static SDL_Rect scope_rect,layer_rect,enable_rect,reset_rect,fields[6];
 static int selected=-1,scope=0,layer_index=0,editing=-1;
 static unsigned long long revision;
+static double field_values[6];
+static bool draft_selected;
 static char draft[64],status[256],layer_id[32];
 static json_object* get(json_object* o,const char* k) {json_object* v=NULL;if(o) json_object_object_get_ex(o,k,&v);return v;}
 static json_object* clone(json_object* o) {return o?json_tokener_parse(json_object_to_json_string(o)):NULL;}
 static json_object* current(int index) {
-    char text[65536];return SceneEditorDocumentGetSurfaceMaterialJSON(index,text,sizeof(text))?json_tokener_parse(text):NULL;
+    size_t size=SceneEditorDocumentSurfaceMaterialJSONSize(index);
+    if(!size)return NULL;
+    char *text=malloc(size);if(!text)return NULL;
+    json_object *row=SceneEditorDocumentGetSurfaceMaterialJSON(index,text,size)?json_tokener_parse(text):NULL;
+    free(text);return row;
 }
 static bool inside(SDL_Rect r,int x,int y) {return r.w>0 && x>=r.x && x<r.x+r.w && y>=r.y && y<r.y+r.h;}
 static void cancel(void) {editing=-1;SDL_StopTextInput();}
@@ -47,11 +54,41 @@ static json_object* active_layer(json_object* source) {
     if(!n) return NULL;layer_index%=n;
     json_object* layer=json_object_array_get_idx(list,layer_index);return graph?get(layer,"layer"):layer;
 }
+static void graph_panel_reset(void);
+static bool graph_panel_select_coordinates(int index);
+#include "scene_editor_material_assignment.inc"
 #include "scene_editor_surface_graph_panel.inc"
+void SceneEditorSurfaceMaterialPanelInvalidateControls(void) {
+    assignment_invalidate();
+    memset(fields,0,sizeof(fields));scope_rect=layer_rect=enable_rect=reset_rect=(SDL_Rect){0};
+    graph_panel_invalidate();SceneEditorSurfaceMappingPanelInvalidateControls();
+}
 int SceneEditorSurfaceMaterialPanelRender(SDL_Renderer* r,SDL_Rect b,int index) {
-    if(selected!=index) {cancel();selected=index;scope=layer_index=graph_node_index=0;status[0]=0;}
+    if(selected!=index) {cancel();graph_panel_reset();selected=index;scope=layer_index=graph_node_index=0;}
     memset(fields,0,sizeof(fields));scope_rect=layer_rect=enable_rect=reset_rect=(SDL_Rect){0};
     json_object* row=current(index);if(!row) return b.y;
+    int section=SceneEditorSurfaceMaterialSection();
+    if(section==0 || section==3) {
+        int y=b.y;char line[160];json_object* graph=get(row,"surface_graph");
+        const char* color=json_object_get_string(get(get(graph,"outputs"),"base_color"));
+        const char* rough=json_object_get_string(get(get(graph,"outputs"),"roughness"));
+        const char* lines[4]={section==0?"Appearance":"Preview and validation",
+            graph?"Linear procedural source":"Retained mapped source",
+            "Edit source values in Sources", "Coordinates are edited independently"};
+        for(int i=0;i<4 && y+24<=b.y+b.h;++i){SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},lines[i],(SDL_Color){193,207,217,255});y+=27;}
+        if(graph && y+54<=b.y+b.h){snprintf(line,sizeof(line),"Base color: %s",color?color:"none");draw(r,(SDL_Rect){b.x,y,b.w,24},line,false);y+=27;
+            snprintf(line,sizeof(line),"Roughness: %s",rough?rough:"material default");draw(r,(SDL_Rect){b.x,y,b.w,24},line,false);y+=27;}
+        if(section==3 && status[0] && y<b.y+b.h)
+            y+=SceneEditorLabelWrapped(r,(SDL_Rect){b.x,y,b.w,b.y+b.h-y},status,(SDL_Color){230,190,145,255});
+        json_object_put(row);return y;
+    }
+    if(section==2 && !RuntimeSurfaceGraphActive(index)) {
+        json_object_put(row);return SceneEditorSurfaceMappingPanelRender(r,b,b.y,index,true);
+    }
+    if(section==2 && RuntimeSurfaceGraphActive(index) && !graph_panel_select_coordinates(index)) {
+        SceneEditorLabelLeft(r,(SDL_Rect){b.x,b.y,b.w,24},"This graph has no coordinate source.",(SDL_Color){193,207,217,255});
+        json_object_put(row);return b.y+27;
+    }
     if(RuntimeSurfaceGraphActive(index)){int end=graph_panel_render(r,b,index,row);json_object_put(row);return end;}
     int y=b.y;json_object* binding=get(row,"surface_material_binding");
     if(!binding) {
@@ -80,6 +117,7 @@ int SceneEditorSurfaceMaterialPanelRender(SDL_Renderer* r,SDL_Rect b,int index) 
             const double values[]={actual->opacity,actual->roughnessInfluence,actual->placement.offsetU,actual->placement.offsetV,actual->placement.strength,actual->params.grain};
             value=values[i];
         }
+        field_values[i]=value;
         fields[i]=(SDL_Rect){b.x+(i%2)*(b.w/2),y,b.w/2-3,25};
         if(editing==i) snprintf(text,sizeof(text),"%s: %s",labels[i],draft);
         else snprintf(text,sizeof(text),"%s: %.6g",labels[i],value);
@@ -112,21 +150,28 @@ static bool apply_value(int index,double value) {
 }
 bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* e,int index) {
     if(!e) return false;
+    SceneEditorSurfaceMappingPanelRelease(e);
+    if(SceneEditorSurfaceMaterialHeaderEvent(e,index)) return true;
+    if(assignment_mode)return true;
+    if(SceneEditorSurfaceMaterialSection()==2 && !RuntimeSurfaceGraphActive(index))
+        return SceneEditorSurfaceMappingPanelEvent(e,index);
+    if(SceneEditorSurfaceMaterialSection()!=1 && SceneEditorSurfaceMaterialSection()!=2)return false;
+    if(RuntimeSurfaceGraphActive(index) && graph_panel_event(e,index)) return true;
     if(index!=selected) {cancel();return false;}
     if(editing>=0 && ((e->type==SDL_WINDOWEVENT && e->window.event==SDL_WINDOWEVENT_FOCUS_LOST) ||
        (e->type==SDL_MOUSEBUTTONDOWN && !inside(fields[editing],e->button.x,e->button.y)))) cancel();
     if(editing>=0) {
         if(revision!=SceneEditorDocumentRevision()) {cancel();return true;}
-        if(e->type==SDL_TEXTINPUT) {if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
+        if(e->type==SDL_TEXTINPUT) {if(draft_selected){draft[0]=0;draft_selected=false;}if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
         if(e->type==SDL_KEYDOWN) {
             if(e->key.keysym.sym==SDLK_ESCAPE) {cancel();return true;}
-            if(e->key.keysym.sym==SDLK_a && (e->key.keysym.mod&(KMOD_GUI|KMOD_CTRL))) {draft[0]=0;return true;}
-            if(e->key.keysym.sym==SDLK_BACKSPACE) {size_t n=strlen(draft);if(n) draft[n-1]=0;return true;}
+            if(e->key.keysym.sym==SDLK_a && (e->key.keysym.mod&(KMOD_GUI|KMOD_CTRL))) {draft_selected=true;return true;}
+            if(e->key.keysym.sym==SDLK_BACKSPACE) {if(draft_selected){draft[0]=0;draft_selected=false;}else{size_t n=strlen(draft);if(n) draft[n-1]=0;}return true;}
             if(e->key.keysym.sym==SDLK_RETURN) {
                 char* end;double value=strtod(draft,&end);
                 if(end==draft || *end || !isfinite(value)) {snprintf(status,sizeof(status),"Enter a finite numeric value");return true;}
                 if(RayTracingDeepRenderDesktopHost_HasActiveWork()) {cancel();return true;}
-                if(apply_value(index,value)) snprintf(status,sizeof(status),"Source updated; Undo available");cancel();return true;
+                if(apply_value(index,value)) {snprintf(status,sizeof(status),"Source updated; Undo available");cancel();}return true;
             }
             return true;
         }
@@ -157,13 +202,17 @@ bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* e,int index) {
         SceneEditorDocumentSetSurfaceBinding(index,json_object_to_json_string(binding),SceneEditorDocumentRevision(),status,sizeof(status));json_object_put(row);return true;
     }
     for(int i=0;i<6;++i) if(inside(fields[i],x,y)) {
-        editing=i;revision=SceneEditorDocumentRevision();draft[0]=0;SDL_StartTextInput();return true;
+        editing=i;revision=SceneEditorDocumentRevision();snprintf(draft,sizeof(draft),"%.9g",field_values[i]);draft_selected=true;SDL_StartTextInput();return true;
     }
     return false;
 }
-bool SceneEditorSurfaceMaterialPanelActive(void) {return editing>=0;}
+bool SceneEditorSurfaceMaterialPanelActive(void) {return editing>=0 || assignment_mode!=0 || graph_panel_active() ||
+    (SceneEditorSurfaceMaterialSection()==2 && SceneEditorSurfaceMappingPanelActive());}
 bool SceneEditorSurfaceMaterialPanelControl(const char* name,SDL_Rect* out) {
     if(!name || !out) return false;
+    if(assignment_control(name,out))return true;
+    if(SceneEditorSurfaceMaterialHeaderModal() || (SceneEditorSurfaceMaterialSection()!=1 && SceneEditorSurfaceMaterialSection()!=2))return false;
+    if(RuntimeSurfaceGraphActive(selected) && graph_panel_control(name,out))return true;
     if(RuntimeSurfaceGraphActive(selected) && !strncmp(name,"parameter",9) && name[9]>='0' && name[9]<='5' && !name[10]){*out=fields[name[9]-'0'];return out->w>0;}
     if(RuntimeSurfaceGraphActive(selected) && !strncmp(name,"input",5) && name[5]>='0' && name[5]<='2' && !name[6]){*out=graph_edges[name[5]-'0'];return out->w>0;}
     if(!strcmp(name,"scope")) *out=scope_rect;

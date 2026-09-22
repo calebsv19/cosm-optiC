@@ -5,3 +5,11 @@ int SceneEditorSurfaceMaterialPanelRender(SDL_Renderer* renderer,SDL_Rect bounds
 bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* event,int index);
 bool SceneEditorSurfaceMaterialPanelActive(void);
 bool SceneEditorSurfaceMaterialPanelControl(const char* name,SDL_Rect* out);
+
+/* Shared assignment/section shell for every material family. */
+int SceneEditorSurfaceMaterialHeaderRender(SDL_Renderer* renderer, SDL_Rect bounds, int index);
+bool SceneEditorSurfaceMaterialHeaderEvent(const SDL_Event* event, int index);
+bool SceneEditorSurfaceMaterialHeaderModal(void);
+int SceneEditorSurfaceMaterialSection(void); /* Appearance, Sources, Coordinates, Preview */
+
+void SceneEditorSurfaceMaterialPanelInvalidateControls(void);

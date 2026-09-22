@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0 complete, including verified Main Edit source adoption. T1 is next; T2–T5 remain planned.
+Status: T0 complete, including verified Main Edit source adoption. T1 authoring complete in source; verification is recorded in its contract. T2–T5 remain planned.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -141,11 +141,12 @@ retained workflows pass; final lifecycle and M3/M4 checks include the save corre
 Independent shared noise references, 29 diagnostic cases, injected generation and
 save failures, and all eight unchanged legacy render hashes pass. Shared authored
 texture minimum is 0.7.1. Installed builds and user hands-on acceptance remain
-separate. **T1 is the next implementation slice.**
+separate. **T1 follows this hardening checkpoint.**
 
 ### T1 — Complete authoring of existing capabilities
 
-Depends on T0's diagnostics/capability gates. Findings U1/U2/U5–U9.
+**Complete in source.** Depends on T0's diagnostics/capability gates. Findings U1/U2/U5–U9.
+See the [T1 contract](surface_material_t1_contract.md) for implementation and verification.
 
 - T1.1 Keep one assignment header and stable inspector sections across material families.
 - T1.2 Add transactional New/Assign/Duplicate/Replace source commands. No manual JSON
@@ -155,7 +156,8 @@ Depends on T0's diagnostics/capability gates. Findings U1/U2/U5–U9.
 - T1.4 Normalize value editing, independent source/mapping resets, explicit preview
   state and usable short/narrow-panel behavior.
 
-**Exit:** a blank scene reaches a valid noise/triplanar material entirely through UI;
+**Exit:** a scene with geometry and no authored material source reaches a valid
+noise/triplanar material entirely through UI;
 creation/replacement/connection edits each have predictable undo semantics; canceled
 or rejected edits preserve source/draft; save/reopen preserves IDs and provenance;
 normal-size and constrained-layout native captures are reviewed.

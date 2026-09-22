@@ -8,3 +8,5 @@ void SceneEditorSurfaceMappingPanelReset(void);
 bool SceneEditorSurfaceMappingPanelActive(void);
 /* Stable control identities for automation/native acceptance. */
 bool SceneEditorSurfaceMappingPanelControl(const char* name,SDL_Rect* out);
+
+void SceneEditorSurfaceMappingPanelInvalidateControls(void);

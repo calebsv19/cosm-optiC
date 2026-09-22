@@ -224,8 +224,12 @@ normal scene preflight additionally checks graph/source/geometry combinations.
 
 See the [audit-backed next-step plan](surface_material_post_m6_plan.md) and its
 three independent source audits for the correctness, authoring, preparation and
-composition roadmap. T0 is implemented and adopted in Main Edit source; T1–T5
+composition roadmap. T0 is adopted in Main Edit source and T1 authoring is implemented; T2–T5
 remain planned. Source adoption is separate from installed product releases.
 
 T0 hardens noise periodicity, material generation recovery, graph diagnostics and
 control availability. See [T0 correctness and recovery](surface_material_t0_contract.md).
+
+T1 delivers the common inspector, assignment commands and complete editing of the
+existing graph. See [T1 material authoring](surface_material_t1_contract.md) for
+workflow, preservation rules, constrained layout and native verification.

@@ -611,12 +611,18 @@ static json_object* document_material_row(int index) {
     json_object* object=document_object_for_scene_index(index,NULL,0);
     const char* id=json_object_get_string(document_member(object,"object_id"));
     json_object* rows=document_member(document_member(document_member(document_member(s_document.root,"extensions"),"ray_tracing"),"authoring"),"object_materials");
-    for(size_t i=0;id && rows && i<json_object_array_length(rows);++i) {
+    for(size_t i=0;id && json_object_is_type(rows,json_type_array) && i<json_object_array_length(rows);++i) {
         json_object* row=json_object_array_get_idx(rows,i);
         const char* other=json_object_get_string(document_member(row,"object_id"));
         if(other && !strcmp(id,other)) return row;
     }
     return NULL;
+}
+size_t SceneEditorDocumentSurfaceMaterialJSONSize(int index) {
+    json_object* row=document_material_row(index);
+    if(!row) return 0;
+    const char* text=json_object_to_json_string_ext(row,JSON_C_TO_STRING_PLAIN);
+    return text ? strlen(text)+1 : 0;
 }
 bool SceneEditorDocumentGetSurfaceMaterialJSON(int index,char* out,size_t size) {
     json_object* row=document_material_row(index);
@@ -700,6 +706,8 @@ bool SceneEditorDocumentSetSurfaceLayerValue(int index,const char* layer_id,
     json_object_object_add(target,property,!strcmp(property,"seed")?json_object_new_int64((int64_t)value):json_object_new_double(value));
     return document_finish_command(diagnostic,size);
 }
+
+#include "scene_editor_document_material_authoring.inc"
 
 static bool document_make_unique_id(json_object* objects,
                                     const char* source_id,

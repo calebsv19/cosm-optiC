@@ -10,12 +10,16 @@ static void m2_control(SceneEditor* editor,const char* name) {
     assert(SceneEditorSurfaceMappingPanelControl(name,&rect));
     assert(rect.y+rect.h<=800);click(editor,rect);
 }
-static void m2_edit(SceneEditor* editor,const char* name,const char* value) {
+static void m2_edit_attempt(SceneEditor* editor,const char* name,const char* value,bool accepted) {
     m2_control(editor,name);assert(SceneEditorSurfaceMappingPanelActive());
     SDL_Event e={0};e.type=SDL_KEYDOWN;e.key.keysym.sym=SDLK_a;e.key.keysym.mod=KMOD_GUI;
     SceneEditorSessionRuntimeHandleEvent(editor,&e);
     e=(SDL_Event){0};e.type=SDL_TEXTINPUT;snprintf(e.text.text,sizeof(e.text.text),"%s",value);SceneEditorSessionRuntimeHandleEvent(editor,&e);
-    key(editor,SDLK_RETURN);assert(!SceneEditorSurfaceMappingPanelActive());
+    key(editor,SDLK_RETURN);assert(SceneEditorSurfaceMappingPanelActive()==!accepted);
+    if(!accepted){key(editor,SDLK_ESCAPE);assert(!SceneEditorSurfaceMappingPanelActive());}
+}
+static void m2_edit(SceneEditor* editor,const char* name,const char* value) {
+    m2_edit_attempt(editor,name,value,true);
 }
 static void surface_mapping_m2_probe(SceneEditor* editor,bool reopen) {
     CoreAuthoredSurfaceMapping m;assert(RuntimeSurfaceMappingDefinition(0,&m) && m.version==2);
@@ -78,7 +82,7 @@ static void surface_mapping_m2_probe(SceneEditor* editor,bool reopen) {
     assert(!MaterialEditorApplyLayerKindToFocused(RUNTIME_MATERIAL_TEXTURE_LAYER_KIND_WOOD));
     m2_control(editor,"expand");m2_edit(editor,"tile_width","0.4");
     assert(RuntimeSurfaceMappingDefinition(0,&m) && fabs(m.tile_m[0]-.4)<1e-12);
-    unsigned long long revision=SceneEditorDocumentRevision();m2_edit(editor,"radius","0");assert(SceneEditorDocumentRevision()==revision);
+    unsigned long long revision=SceneEditorDocumentRevision();m2_edit_attempt(editor,"radius","0",false);assert(SceneEditorDocumentRevision()==revision);
     m2_edit(editor,"seam","0.23");m2_edit(editor,"offset_v","0.13");
     assert(SceneEditorDocumentUndo(diagnostic,sizeof(diagnostic)));assert(SceneEditorDocumentRedo(diagnostic,sizeof(diagnostic)));
     m2_control(editor,"axis");m2_control(editor,"axis");m2_control(editor,"axis");

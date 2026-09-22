@@ -1,5 +1,6 @@
 #include "render/runtime_surface_graph.h"
 #include "editor/scene_editor_surface_material_panel.h"
+#include "editor/scene_editor_surface_mapping_panel.h"
 #include "editor/scene_editor_surfaces.h"
 #include "render/runtime_surface_mapping.h"
 #include "editor/material_editor_internal.h"
@@ -524,256 +525,61 @@ static int material_editor_draw_graph_readback(SDL_Renderer* renderer,
     return cursor_y;
 }
 
-static void material_editor_draw_identity_popover(SDL_Renderer* renderer,
-                                                  const SceneObject* obj,
-                                                  int focused_index,
-                                                  int selected_faces,
-                                                  int focused_faces,
-                                                  const char* edit_text,
-                                                  RayTracingThemePalette palette) {
-    MaterialEditorMaterialReadback material = {0};
-    MaterialEditorRecipeReadback recipe = {0};
-    char line[160];
-    SDL_Rect pop = s_material_editor_compact_layout_rects.identity_popover;
-    int y = pop.y + 8;
-    if (!s_material_editor_compact_layout_rects.identity_popover_visible ||
-        pop.w <= 0 ||
-        pop.h <= 0) {
-        return;
-    }
-    material_editor_draw_panel_frame(renderer, pop, palette);
-    if (!obj) {
-        RenderLabelTextWrappedLeft(renderer,
-                                   (SDL_Rect){pop.x + 8, y, pop.w - 16, pop.h - 16},
-                                   "No focused material object.",
-                                   palette.text_muted);
-        return;
-    }
-    if (MaterialEditorBuildRecipeReadback(&recipe)) {
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){pop.x + 8, y, pop.w - 16, 16},
-                            recipe.header_label,
-                            palette.text_primary);
-        y += 18;
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){pop.x + 8, y, pop.w - 16, 16},
-                            recipe.detail_label,
-                            palette.text_muted);
-        y += 18;
-    } else {
-        snprintf(line, sizeof(line), "Object #%d  material id %d", focused_index, obj->material_id);
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){pop.x + 8, y, pop.w - 16, 16},
-                            line,
-                            palette.text_primary);
-        y += 18;
-    }
-    if (MaterialEditorBuildMaterialReadback(&material)) {
-        snprintf(line,
-                 sizeof(line),
-                 "%s | %s",
-                 material.preset_label,
-                 material.state_label);
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){pop.x + 8, y, pop.w - 16, 16},
-                            line,
-                            palette.text_muted);
-        y += 18;
-    }
-    snprintf(line,
-             sizeof(line),
-             "Faces %d/%d selected | %s",
-             selected_faces,
-             focused_faces,
-             edit_text);
-    RenderLabelTextLeft(renderer,
-                        (SDL_Rect){pop.x + 8, y, pop.w - 16, 16},
-                        line,
-                        palette.text_muted);
-    y += 18;
-    if (material.source_label[0] && y + 16 <= pop.y + pop.h - 8) {
-        snprintf(line,
-                 sizeof(line),
-                 "Source %s | %s",
-                 material.source_label,
-                 material.save_request_label);
-        RenderLabelTextLeft(renderer,
-                            (SDL_Rect){pop.x + 8, y, pop.w - 16, 16},
-                            line,
-                            palette.text_muted);
-        y += 18;
-    }
-    if (y + 18 <= pop.y + pop.h - 8) {
-        RenderLabelTextWrappedLeft(renderer,
-                                   (SDL_Rect){pop.x + 8, y, pop.w - 16, pop.h - (y - pop.y) - 8},
-                                   "Recipe choices seed editable stack, response, texture, face, and graph panes.",
-                                   palette.text_muted);
-    }
-}
-
 int MaterialEditorRenderCompactPaneControls(SDL_Renderer* renderer,
                                             SDL_Rect content_bounds,
-                                            int top_y,
-                                            int bottom_y) {
+                                            int top_y, int bottom_y) {
     SceneObject* obj = material_editor_focused_object();
     RayTracingThemePalette palette = material_editor_palette();
-    SDL_Rect shell_bounds = {content_bounds.x,
-                             top_y,
-                             content_bounds.w,
-                             bottom_y - top_y};
-    SDL_Rect pane_bounds;
-    int cursor_y = 0;
-    int pane_bottom = 0;
-    int focused_index = MaterialEditorResolveFocusedObjectIndex();
-    int selected_faces = MaterialEditorSelectedFaceGroupCount();
-    int focused_faces = MaterialEditorFocusedFaceGroupCount();
-    char edit_text[48];
-
+    int index = MaterialEditorResolveFocusedObjectIndex();
+    SDL_Rect shell = {content_bounds.x,top_y,content_bounds.w,bottom_y-top_y};
     material_editor_reset_compact_control_rects();
-    s_material_editor_compact_layout_rects =
-        MaterialEditorCompactLayoutBuild(shell_bounds, MaterialEditorIdentityPopoverOpen());
-    if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return bottom_y;
-
-    if (RuntimeSurfaceMappingActive(focused_index) || RuntimeSurfaceGraphActive(focused_index)) {
-        return SceneEditorSurfaceMaterialPanelRender(renderer,
-            (SDL_Rect){content_bounds.x,top_y,content_bounds.w,bottom_y-top_y},focused_index);
-    }
-    if (obj && s_material_editor_active_face_group_index >= 0) {
-        RuntimeMaterialTextureLayer active_layer = {0};
-        bool has_override = false;
-        if (SceneEditorMaterialStackHasObjectStack(focused_index) &&
-            material_editor_get_active_layer(obj, NULL, &active_layer, NULL)) {
-            has_override = SceneEditorMaterialFacePlacementHasOverrideForLayer(
-                focused_index,
-                s_material_editor_active_face_group_index,
-                active_layer.layerId);
-        } else {
-            has_override =
-                SceneEditorMaterialFacePlacementHasOverride(focused_index,
-                                                            s_material_editor_active_face_group_index);
-        }
-        snprintf(edit_text,
-                 sizeof(edit_text),
-                 "Face #%d %s",
-                 s_material_editor_active_face_group_index,
-                 has_override ? "override" : "default");
-    } else {
-        snprintf(edit_text, sizeof(edit_text), "Object defaults");
-    }
-
-    int row_h = animation_config_scale_text_point_size(&animSettings,30,30);
-    s_material_editor_compact_layout_rects.identity_header.h = row_h*3;
-    s_material_editor_compact_layout_rects.content.y = shell_bounds.y + row_h*3 + 8;
-    s_material_editor_compact_layout_rects.content.h = bottom_y - s_material_editor_compact_layout_rects.content.y;
+    SceneEditorSurfaceMaterialPanelInvalidateControls();
+    s_material_editor_compact_layout_rects = MaterialEditorCompactLayoutBuild(shell,false);
     memset(s_material_editor_compact_layout_rects.tab_rects,0,sizeof(s_material_editor_compact_layout_rects.tab_rects));
-    material_editor_draw_shell(renderer, obj, focused_index, palette);
-    pane_bounds = s_material_editor_compact_layout_rects.content;
-    cursor_y = pane_bounds.y;
-    pane_bottom = pane_bounds.y + pane_bounds.h;
-
-    if (!obj) {
-        RenderLabelTextWrappedLeft(renderer,
-                                   pane_bounds,
-                                   "No object selected. Click an object in the viewport.",
-                                   palette.text_muted);
-        material_editor_draw_identity_popover(renderer,
-                                              obj,
-                                              focused_index,
-                                              selected_faces,
-                                              focused_faces,
-                                              edit_text,
-                                              palette);
-        material_editor_draw_recipe_menu(renderer, palette);
-        return cursor_y+60;
-    }
-
-    const MaterialEditorSubPane order[] = {MATERIAL_EDITOR_SUBPANE_RESPONSE,
-        MATERIAL_EDITOR_SUBPANE_TEXTURES, MATERIAL_EDITOR_SUBPANE_STACK,
-        MATERIAL_EDITOR_SUBPANE_FACE, MATERIAL_EDITOR_SUBPANE_GRAPH, MATERIAL_EDITOR_SUBPANE_PROOF};
-    const int disclosure_h=animation_config_scale_text_point_size(&animSettings,24,24);
-    for (int section=0; section<MATERIAL_EDITOR_SUBPANE_COUNT; ++section) {
-        MaterialEditorSubPane pane=order[section];
-        bool opened=s_material_editor_section_open && MaterialEditorGetActiveSubPane()==pane;
-        SDL_Rect header={pane_bounds.x,cursor_y,pane_bounds.w,disclosure_h};
-        s_material_editor_compact_layout_rects.tab_rects[pane]=header;
-        SceneEditorSurfaceFill(renderer,header,palette.button_fill);
-        SDL_SetRenderDrawColor(renderer,palette.panel_border.r,palette.panel_border.g,palette.panel_border.b,255);
-        SDL_RenderDrawLine(renderer,header.x,header.y,header.x+header.w,header.y);
-        SDL_Color label_color=opened ? palette.text_primary : palette.text_muted;
-        SDL_SetRenderDrawColor(renderer,label_color.r,label_color.g,label_color.b,255);
-        int cx=header.x+10,cy=header.y+header.h/2;
-        SDL_Point chevron[3];
-        if(opened) {
-            chevron[0]=(SDL_Point){cx-3,cy-2};chevron[1]=(SDL_Point){cx,cy+1};chevron[2]=(SDL_Point){cx+3,cy-2};
-        } else {
-            chevron[0]=(SDL_Point){cx-2,cy-3};chevron[1]=(SDL_Point){cx+1,cy};chevron[2]=(SDL_Point){cx-2,cy+3};
+    if(!renderer || shell.w<=0 || shell.h<=0)return bottom_y;
+    int y=SceneEditorSurfaceMaterialHeaderRender(renderer,shell,index);
+    if(SceneEditorSurfaceMaterialHeaderModal() || !obj)return y;
+    SDL_Rect body={shell.x,y,shell.w,bottom_y-y};
+    if(body.h<=0)return y;
+    if(RuntimeSurfaceMappingActive(index) || RuntimeSurfaceGraphActive(index))
+        return SceneEditorSurfaceMaterialPanelRender(renderer,body,index);
+    int section=SceneEditorSurfaceMaterialSection();
+    if(section==0) {
+        int row_h=animation_config_scale_text_point_size(&animSettings,30,30);
+        s_material_editor_compact_layout_rects.identity_header=(SDL_Rect){body.x,y,body.w,row_h*3};
+        material_editor_draw_shell(renderer,obj,index,palette);y+=row_h*3+6;
+        y=MaterialEditorDrawCompactResponsePane(renderer,body,y,bottom_y,obj,palette);
+        material_editor_draw_recipe_menu(renderer,palette);
+    } else if(section==1) {
+        const MaterialEditorSubPane panes[]={MATERIAL_EDITOR_SUBPANE_TEXTURES,MATERIAL_EDITOR_SUBPANE_STACK,MATERIAL_EDITOR_SUBPANE_GRAPH};
+        const char* labels[]={"Pattern","Layers","Legacy graph"};
+        MaterialEditorSubPane pane=MaterialEditorGetActiveSubPane();
+        if(pane!=panes[0] && pane!=panes[1] && pane!=panes[2])pane=panes[1];
+        for(int i=0;i<3;++i) {
+            SDL_Rect tab={body.x+i*body.w/3,y,body.w/3-3,26};
+            s_material_editor_compact_layout_rects.tab_rects[panes[i]]=tab;
+            MaterialEditorDrawButton(renderer,tab,labels[i],pane==panes[i],palette);
         }
-        SDL_RenderDrawLine(renderer,chevron[0].x,chevron[0].y,chevron[1].x,chevron[1].y);
-        SDL_RenderDrawLine(renderer,chevron[1].x,chevron[1].y,chevron[2].x,chevron[2].y);
-        MaterialEditorTextLeft(renderer,(SDL_Rect){header.x+22,header.y,header.w-30,header.h},
-            MaterialEditorSubPaneLabel(pane),label_color);
-        cursor_y += disclosure_h;
-        if(!opened) continue;
-        cursor_y+=8;
-        pane_bounds.x+=8; pane_bounds.w-=16;
-    if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_STACK) {
-        cursor_y = MaterialEditorDrawLayerList(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
-        if (material_editor_use_object_layer_controls(obj)) {
-            cursor_y =
-                MaterialEditorDrawLayerKindButtons(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
-        }
-        cursor_y = MaterialEditorDrawLayerComposition(renderer,pane_bounds,cursor_y,pane_bottom,palette);
-    } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_RESPONSE) {
-        cursor_y = MaterialEditorDrawCompactResponsePane(renderer,
-                                                         pane_bounds,
-                                                         cursor_y,
-                                                         pane_bottom,
-                                                         obj,
-                                                         palette);
-    } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_TEXTURES) {
-        cursor_y = MaterialEditorAuthoredTextureBindingRenderPaneControls(renderer,
-                                                                          pane_bounds,
-                                                                          cursor_y,
-                                                                          pane_bottom,
-                                                                          focused_index,
-                                                                          palette);
-        cursor_y =
-            material_editor_draw_texture_kind_buttons(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
-        cursor_y =
-            material_editor_draw_placement_controls(renderer, pane_bounds, cursor_y, pane_bottom, obj, palette);
-        cursor_y = MaterialEditorDrawPatternParameters(renderer,pane_bounds,cursor_y,pane_bottom,obj,palette);
-    } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_FACE) {
-        cursor_y = material_editor_draw_face_controls(renderer,
-                                                      pane_bounds,
-                                                      cursor_y,
-                                                      pane_bottom,
-                                                      obj,
-                                                      focused_index,
-                                                      selected_faces,
-                                                      palette);
-    } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_GRAPH) {
-        cursor_y = material_editor_draw_graph_readback(renderer,
-                                                       pane_bounds,
-                                                       cursor_y,
-                                                       pane_bottom,
-                                                       palette);
-    } else if (MaterialEditorGetActiveSubPane() == MATERIAL_EDITOR_SUBPANE_PROOF) {
-        cursor_y=MaterialEditorDrawLayerDiagnostics(renderer,pane_bounds,cursor_y,pane_bottom,palette);
-        cursor_y=material_editor_draw_texture_channel_readback(renderer,pane_bounds,cursor_y,pane_bottom,focused_index,palette);
-        cursor_y = material_editor_draw_proof_controls(renderer, pane_bounds, cursor_y, pane_bottom, palette);
+        y+=30;
+        if(pane==MATERIAL_EDITOR_SUBPANE_STACK) {
+            y=MaterialEditorDrawLayerList(renderer,body,y,bottom_y,obj,palette);
+            if(material_editor_use_object_layer_controls(obj))
+                y=MaterialEditorDrawLayerKindButtons(renderer,body,y,bottom_y,obj,palette);
+            y=MaterialEditorDrawLayerComposition(renderer,body,y,bottom_y,palette);
+        } else if(pane==MATERIAL_EDITOR_SUBPANE_TEXTURES) {
+            y=MaterialEditorAuthoredTextureBindingRenderPaneControls(renderer,body,y,bottom_y,index,palette);
+            y=material_editor_draw_texture_kind_buttons(renderer,body,y,bottom_y,obj,palette);
+            y=material_editor_draw_placement_controls(renderer,body,y,bottom_y,obj,palette);
+            y=MaterialEditorDrawPatternParameters(renderer,body,y,bottom_y,obj,palette);
+        } else y=material_editor_draw_graph_readback(renderer,body,y,bottom_y,palette);
+    } else if(section==2) {
+        y=SceneEditorSurfaceMappingPanelRender(renderer,body,y,index,true);
+        y=material_editor_draw_face_controls(renderer,body,y,bottom_y,obj,index,
+            MaterialEditorSelectedFaceGroupCount(),palette);
+    } else {
+        y=MaterialEditorDrawLayerDiagnostics(renderer,body,y,bottom_y,palette);
+        y=material_editor_draw_texture_channel_readback(renderer,body,y,bottom_y,index,palette);
+        y=material_editor_draw_proof_controls(renderer,body,y,bottom_y,palette);
     }
-
-        pane_bounds.x-=8; pane_bounds.w+=16;
-        cursor_y+=8;
-    }
-    (void)cursor_y;
-    material_editor_draw_identity_popover(renderer,
-                                          obj,
-                                          focused_index,
-                                          selected_faces,
-                                          focused_faces,
-                                          edit_text,
-                                          palette);
-    material_editor_draw_recipe_menu(renderer, palette);
-    return cursor_y;
+    return y;
 }

@@ -88,6 +88,8 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
 
 bool SceneEditorDocumentGetSurfaceMappingJSON(int index,char* out,size_t size);
 bool SceneEditorDocumentGetSurfaceMaterialJSON(int index,char* out,size_t size);
+/* Serialized retained material bytes including NUL; zero when no row is available. */
+size_t SceneEditorDocumentSurfaceMaterialJSONSize(int index);
 bool SceneEditorDocumentSetSurfaceBinding(int index,const char* binding_json,unsigned long long revision,char* diagnostic,size_t size);
 /* M3 source edits address stable layer IDs in retained graphs/stacks. A stale
  * revision or unsupported property is rejected before any mutation. */
@@ -99,6 +101,30 @@ bool SceneEditorDocumentSetSurfaceLayerValue(int index,const char* layer_id,
 bool SceneEditorDocumentSetSurfaceGraph(int index, const char *graph_json,
     unsigned long long revision, char *diagnostic, size_t size);
 
+
+/* T1 retained material commands. New refuses an existing explicit source; Replace
+ * archives prior declarations. Assignment/duplication own a fresh source identity.
+ * All operations validate one whole document command with revision and lock guards. */
+bool SceneEditorDocumentMaterialPreset(int index, const char* preset, bool replace,
+    unsigned long long revision, char* diagnostic, size_t size);
+bool SceneEditorDocumentMaterialAssign(int index, int source_index,
+    unsigned long long revision, char* diagnostic, size_t size);
+bool SceneEditorDocumentMaterialDuplicate(int index,
+    unsigned long long revision, char* diagnostic, size_t size);
+bool SceneEditorDocumentMaterialResetSource(int index,
+    unsigned long long revision, char* diagnostic, size_t size);
+bool SceneEditorDocumentMaterialResetMapping(int index,
+    unsigned long long revision, char* diagnostic, size_t size);
+bool SceneEditorDocumentSurfaceGraphAddNode(int index, const char* node_json,
+    unsigned long long revision, char* diagnostic, size_t size);
+bool SceneEditorDocumentSurfaceGraphDeleteNode(int index, const char* node_id,
+    unsigned long long revision, char* diagnostic, size_t size);
+/* Named ports: coordinates; a/b; a/b/factor. Optional roughness output may be NULL. */
+bool SceneEditorDocumentSurfaceGraphConnect(int index, const char* node_id,
+    const char* port, const char* source_node_id, unsigned long long revision,
+    char* diagnostic, size_t size);
+bool SceneEditorDocumentSurfaceGraphSetOutput(int index, const char* output,
+    const char* source_node_id, unsigned long long revision, char* diagnostic, size_t size);
 
 /* One-shot deterministic lifecycle faults, disabled during normal operation. */
 typedef enum SceneEditorDocumentFailure {

@@ -18,8 +18,10 @@ static const char* labels[]={"Width m","Height m","Offset U m","Offset V m","Rad
 static const int components[]={0,1,0,1,-1,-1,-1,-1,0,1,2,-1,0,1};
 #define FIELDS 14
 static SDL_Rect expand,methods[3],space,axis,fields[FIELDS];
-static bool opened,enabled;static int selected=-1,edit=-1;static unsigned long long edit_revision;
+static bool opened,enabled,draft_selected;static int selected=-1,edit=-1;static unsigned long long edit_revision;
 static char draft[80],status[256];
+static SDL_Rect mapping_viewport;
+static int mapping_scroll,mapping_scroll_max;
 static bool inside(SDL_Rect r,int x,int y) {return r.w>0 && x>=r.x && y>=r.y && x<r.x+r.w && y<r.y+r.h;}
 static json_object* get(json_object* o,const char* key) {json_object* v=NULL;if(o) json_object_object_get_ex(o,key,&v);return v;}
 static json_object* current(int index) {
@@ -30,7 +32,7 @@ static const char* field_key(json_object* m,int i) {
     if(json_object_get_int(get(m,"version"))==3 && i<4) return i<2?"uv_scale":"uv_offset";
     return keys[i];
 }
-static void cancel(void) {edit=-1;SDL_StopTextInput();}
+static void cancel(void) {edit=-1;draft_selected=false;SDL_StopTextInput();}
 static void button(SDL_Renderer* r,SDL_Rect rect,const char* text,bool active) {
     SDL_SetRenderDrawColor(r,active?66:38,active?76:42,active?85:46,255);SDL_RenderFillRect(r,&rect);
     SceneEditorLabelLeft(r,(SDL_Rect){rect.x+5,rect.y,rect.w-10,rect.h},text,(SDL_Color){220,223,226,255});
@@ -56,7 +58,7 @@ static json_object* defaults(bool axial) {
     }
     return m;
 }
-int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int index,bool editable) {
+static int mapping_panel_render_content(SDL_Renderer* r,SDL_Rect b,int y,int index,bool editable) {
     if(index!=selected) {cancel();selected=index;status[0]=0;}
     enabled=editable;memset(methods,0,sizeof(methods));memset(fields,0,sizeof(fields));space=axis=(SDL_Rect){0};
     expand=(SDL_Rect){b.x,y,b.w,25};button(r,expand,opened?"Surface mapping  -":"Surface mapping  +",opened);y+=29;
@@ -120,8 +122,36 @@ int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int in
     if(status[0]) {SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},status,(SDL_Color){225,195,150,255});y+=27;}
     return y;
 }
+static void mapping_bound_control(SDL_Rect* rect,SDL_Rect bounds) {
+    if(rect->x<bounds.x || rect->y<bounds.y || rect->x+rect->w>bounds.x+bounds.w || rect->y+rect->h>bounds.y+bounds.h)*rect=(SDL_Rect){0};
+}
+int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int index,bool editable) {
+    if(index!=selected)mapping_scroll=mapping_scroll_max=0;
+    SceneEditorSurfaceMappingPanelInvalidateControls();
+    mapping_viewport=(SDL_Rect){b.x,y,b.w,b.y+b.h-y};
+    if(mapping_viewport.w<=0 || mapping_viewport.h<=0)return y;
+    bool clipped=SDL_RenderIsClipEnabled(r);SDL_Rect old_clip,clip=mapping_viewport;
+    SDL_RenderGetClipRect(r,&old_clip);
+    if(clipped)SDL_IntersectRect(&mapping_viewport,&old_clip,&clip);
+    SDL_RenderSetClipRect(r,&clip);
+    int end=mapping_panel_render_content(r,b,y-mapping_scroll,index,editable);
+    SDL_RenderSetClipRect(r,clipped?&old_clip:NULL);
+    mapping_scroll_max=end+mapping_scroll-y-mapping_viewport.h;
+    if(mapping_scroll_max<0)mapping_scroll_max=0;
+    if(mapping_scroll>mapping_scroll_max)mapping_scroll=mapping_scroll_max;
+    mapping_bound_control(&expand,clip);mapping_bound_control(&space,clip);mapping_bound_control(&axis,clip);
+    for(int i=0;i<3;++i)mapping_bound_control(&methods[i],clip);
+    for(int i=0;i<FIELDS;++i)mapping_bound_control(&fields[i],clip);
+    return y+((end+mapping_scroll-y)<mapping_viewport.h ? end+mapping_scroll-y:mapping_viewport.h);
+}
 bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
     if(!e || index!=selected) return false;
+    if(e->type==SDL_MOUSEWHEEL) {
+        int x,y;SDL_GetMouseState(&x,&y);if(!inside(mapping_viewport,x,y))return false;
+        cancel();mapping_scroll-=e->wheel.y*27;
+        if(mapping_scroll<0)mapping_scroll=0;if(mapping_scroll>mapping_scroll_max)mapping_scroll=mapping_scroll_max;
+        return true;
+    }
     /* Recheck the active source even before the next layout clears old hit targets. */
     if(RuntimeSurfaceGraphActive(index)) {
         cancel();
@@ -131,11 +161,11 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
     }
     if(edit>=0) {
         if(SceneEditorDocumentRevision()!=edit_revision) {cancel();return false;}
-        if(e->type==SDL_TEXTINPUT) {if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
+        if(e->type==SDL_TEXTINPUT) {if(draft_selected){draft[0]=0;draft_selected=false;}if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
         if(e->type==SDL_KEYDOWN) {
             if(e->key.keysym.sym==SDLK_ESCAPE) {cancel();return true;}
-            if(e->key.keysym.sym==SDLK_BACKSPACE) {size_t n=strlen(draft);if(n) draft[n-1]=0;return true;}
-            if(e->key.keysym.sym==SDLK_a && (e->key.keysym.mod & (KMOD_CTRL|KMOD_GUI))) {draft[0]=0;return true;}
+            if(e->key.keysym.sym==SDLK_BACKSPACE) {if(draft_selected){draft[0]=0;draft_selected=false;}else{size_t n=strlen(draft);if(n) draft[n-1]=0;}return true;}
+            if(e->key.keysym.sym==SDLK_a && (e->key.keysym.mod & (KMOD_CTRL|KMOD_GUI))) {draft_selected=true;return true;}
             if(e->key.keysym.sym==SDLK_RETURN) {
                 char* end;double value=strtod(draft,&end);
                 if(end==draft || *end || !isfinite(value) || (edit==11 && (value<0 || value>UINT32_MAX || floor(value)!=value))) {snprintf(status,sizeof(status),"Enter a valid finite value");return true;}
@@ -144,7 +174,7 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
                 json_object* v=edit==11?json_object_new_int64((int64_t)value):json_object_new_double(value);
                 if(components[edit]>=0) json_object_array_put_idx(get(m,field_key(m,edit)),components[edit],v);
                 else json_object_object_add(m,field_key(m,edit),v);
-                apply(m,index);cancel();return true;
+                if(apply(m,index))cancel();return true;
             }
         }
     }
@@ -179,7 +209,7 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
         json_object* m=current(index);if(!m) return true;
         json_object* v=get(m,field_key(m,i));if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
         snprintf(draft,sizeof(draft),"%.12g",json_object_get_double(v));json_object_put(m);
-        edit=i;edit_revision=SceneEditorDocumentRevision();SDL_StartTextInput();return true;
+        edit=i;draft_selected=true;edit_revision=SceneEditorDocumentRevision();SDL_StartTextInput();return true;
     }
     return false;
 }
@@ -188,7 +218,7 @@ void SceneEditorSurfaceMappingPanelRelease(const SDL_Event* e) {
     if((e->type==SDL_WINDOWEVENT && e->window.event==SDL_WINDOWEVENT_FOCUS_LOST) ||
        (e->type==SDL_MOUSEBUTTONDOWN && !inside(fields[edit],e->button.x,e->button.y))) cancel();
 }
-void SceneEditorSurfaceMappingPanelReset(void) {cancel();opened=false;selected=-1;enabled=false;expand=(SDL_Rect){0};}
+void SceneEditorSurfaceMappingPanelReset(void) {cancel();opened=false;selected=-1;enabled=false;expand=(SDL_Rect){0};mapping_scroll=mapping_scroll_max=0;mapping_viewport=(SDL_Rect){0};}
 bool SceneEditorSurfaceMappingPanelActive(void) {return edit>=0;}
 bool SceneEditorSurfaceMappingPanelControl(const char* name,SDL_Rect* out) {
     if(!name || !out) return false;
@@ -200,4 +230,9 @@ bool SceneEditorSurfaceMappingPanelControl(const char* name,SDL_Rect* out) {
     else if(!strcmp(name,"axis")) *out=axis;
     else {for(int i=0;i<FIELDS;++i) if(!strcmp(name,names[i])) {*out=fields[i];return out->w>0;}return false;}
     return out->w>0;
+}
+
+void SceneEditorSurfaceMappingPanelInvalidateControls(void) {
+    memset(methods,0,sizeof(methods));memset(fields,0,sizeof(fields));
+    expand=space=axis=mapping_viewport=(SDL_Rect){0};
 }

@@ -11,9 +11,10 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
 The [independent post-M6 audit and plan](surface_material_post_m6_plan.md) now
 controls the next-step order. T0 correctness, failure handling and Main Edit source
 adoption are complete; see the [T0 contract](surface_material_t0_contract.md).
-Next is T1 common authoring and complete editing of existing graph capabilities,
-then T2 resource workflows/preparation and T3 composition. The broader authoring,
-resource and performance findings remain planned work.
+T1 common authoring and complete editing of existing graph capabilities are now
+implemented; see the [T1 contract](surface_material_t1_contract.md). Next is T2
+resource workflows/preparation, then T3 composition. Broader image-resource and
+performance findings remain planned work.
 
 
 The adopted surface-material source completes the bounded M0–M6 implementation. The
