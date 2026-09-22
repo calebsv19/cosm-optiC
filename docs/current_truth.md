@@ -2,19 +2,22 @@
 
 ## September 22 T4 secondary detail and measured preview costs
 
-T4 source work is complete in the isolated material lane. Bounded ideal reflection
-and refraction retain adjacent ray origins/directions; four subfootprint samples
+T4 source work is complete and adopted in Main Edit at `51cfb1f`. Bounded ideal
+reflection and refraction retain adjacent ray origins/directions; four subfootprint samples
 preserve secondary detail within frozen linear error/contrast/motion budgets.
 Unknown normal derivatives and rough/stochastic events stay conservative. Exact
 preview preparation and reuse reduce measured raster/shading medians by 24–65%
 across five supported fixtures, with unchanged frame hashes and all p95/memory
-gates met. The existing mesh-instance limit is 64; 100 is explicitly unsupported.
+gates met in the isolated source run. Fresh adoption repeats pass image/timing
+checks but exceed the 1M-triangle peak-RSS gate; that memory check remains open.
+The existing mesh-instance limit is 64; 100 is explicitly unsupported.
 
 See the [T4 contract](surface_material_t4_contract.md) for fixture hardware, image
 and performance receipts, actual headless transport/parity checks and fresh
 T0–T3 regressions. One preexisting legacy nested-transmission unit assertion still
-fails and is disclosed there. Main Edit remains at T3 pending T4 adoption; this
-source checkpoint is not an installed-package or hands-on acceptance claim.
+fails and is disclosed there. Fresh Main Edit adoption receipts are under
+`build/surface_material_t4_adoption/`.
+This source checkpoint is not an installed-package or hands-on acceptance claim.
 
 ## September 22 T3 composition adopted
 
@@ -26,7 +29,8 @@ for boundaries and fresh Main Edit evidence. Canonical and vendored shared core
 are 0.8.0. Implementation is `fab3972`; `808b2b6` corrects the variance reference
 check for a one-code-value float32/double quantization difference. T0–T3 source
 adoption is complete. T4 secondary texture detail and measured preview costs are
-next. Installed release and human hands-on acceptance remain separate.
+now also adopted; see the current entry above. Installed release and human
+hands-on acceptance remain separate.
 
 ## September 22 T2 resources and preparation
 

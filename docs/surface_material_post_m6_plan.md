@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0–T3 complete and adopted in Main Edit through `808b2b6`; canonical shared authored texture is 0.8.0. Fresh adoption checks are recorded in the [T3 contract](surface_material_t3_contract.md). T4 is source-complete in the isolated lane; Main Edit adoption is next. T5 remains deferred. See the [T4 contract](surface_material_t4_contract.md).
+Status: T0–T4 implemented and adopted in Main Edit through `51cfb1f`; canonical shared authored texture is 0.8.0. Fresh adoption checks are recorded in the [T3 contract](surface_material_t3_contract.md). T4 source adoption is complete; fresh verification leaves the 1M-triangle memory gate open, as recorded in its contract. T5 remains deferred. See the [T4 contract](surface_material_t4_contract.md).
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -244,18 +244,18 @@ cannot trade away source semantics or independent correctness gates.
    measured dominant preview cost; preserve UV charts, tangent handedness, source
    semantics and declared image-error limits through any sharing or reduction.
 
-These steps are now implemented in the isolated T4 lane. The [T4 contract](surface_material_t4_contract.md)
+These steps are implemented and adopted in Main Edit. The [T4 contract](surface_material_t4_contract.md)
 records frozen and passing image/performance gates, exact pixel preservation,
 production transport/parity and retained T0–T3 checks. The instance stress cell is
 64 because the importer explicitly rejects the originally proposed 100. There is
-no whole-app frame-rate claim. Main Edit adoption remains pending.
+no whole-app frame-rate claim. Main Edit adopted source commit `51cfb1f`.
 
 ### T5 — Broader artist tools
 
 Schedule after the workflows above are usable: general seam/atlas unwrap, richer
 procedural families, optional spatial node canvas, multiple UV sets/UDIM and more
 advanced directional response. Each requires its own source/runtime/UI capability
-and acceptance slice. These are deferred opportunities, not required to call T0–T3
+and acceptance slice. These are deferred opportunities, not required to call T0–T4
 complete and not newly claimed M6 capabilities.
 
 ## Ownership and reuse decisions
@@ -288,12 +288,40 @@ lands as its own bounded change with fault-injection proof. UI and wider composi
 start against those verified contracts. A later instruction to start a named slice
 authorizes implementation; this audit's planning status is not a perpetual approval gate.
 
-## Current handoff after T4 source completion
+## Current handoff after T4 adoption
 
-T0–T3 remain adopted in Main Edit. T4 is implemented and verified in the isolated
-material lane; adopt it and run fresh Main Edit checks next. T4 needs no canonical
-shared-module synchronization or version change. Its defined image/performance
-gates pass; the contract separately discloses one preexisting legacy emission-unit
-assertion and the diagnostic-ledger counting limitation. Installed-package and
-operator acceptance remain separate. T5 is deferred until its next bounded artist
-workflow is selected; the optional features above are not one automatic expansion.
+Main Edit adopted T4 source commit `51cfb1f` by clean fast-forward from `0a4c361`.
+T4 needs no canonical shared-module synchronization or version change. The
+[T4 contract](surface_material_t4_contract.md) records fresh adoption checks.
+Installed-package and operator acceptance remain separate.
+
+Before broader artist tools, prioritize these bounded investigations:
+
+1. Close the fresh adoption memory gate at one million triangles. Peak RSS was
+   5.036% and 11.218% above the frozen baseline in two runs, exceeding the 5%
+   allowance. Preserve failed receipts and distinguish allocator/driver variation
+   from retained application memory before claiming acceptance.
+2. Resolve the preexisting nested-transmission receiver-radiance unit assertion.
+   Establish the intended physical/fixture behavior before changing either the
+   renderer or its expectation; do not merely lower the threshold.
+3. Give the trace-cost diagnostic ledger safe parallel counter ownership and
+   deterministic reduction. Current strict accounting proof uses one worker;
+   a complete rendered image does not prove exact parallel diagnostic counts.
+
+T5 is worthwhile as a selected artist workflow, not one combined expansion.
+For imported meshes needing controlled texture placement, seam selection and
+reviewed atlas unwrap are a useful first candidate. Scope that slice around
+preview, explicit adoption, per-corner UV/tangent preservation, undo and reopen.
+If actual authoring instead needs more source variety, choose one procedural
+family first. A spatial canvas is optional until graph navigation warrants it;
+multiple UV sets/UDIM and advanced directional response each need separate
+source, runtime and UI acceptance. None is implicitly started by adoption.
+
+Retain these explicit limits rather than treating them as unfinished T4:
+rough/stochastic/diffuse and varying-normal secondary events remain conservative;
+the local tangent-plane footprint does not reconstruct silhouettes or visibility;
+64 imported mesh instances are supported; development-build preview timings do
+not establish whole-app interactive frame rate. Extend a limit only against a
+concrete scene and frozen quality/performance criteria. Hands-on material workflow
+acceptance and a separately authorized installed-build/release refresh remain
+product-delivery steps.

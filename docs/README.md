@@ -224,8 +224,9 @@ normal scene preflight additionally checks graph/source/geometry combinations.
 
 See the [audit-backed next-step plan](surface_material_post_m6_plan.md) and its
 three independent source audits for the correctness, authoring, preparation and
-composition roadmap. T0–T3 are adopted and freshly verified in Main Edit through
-`808b2b6`; canonical shared authored texture is 0.8.0. T4/T5 remain planned. Source adoption is separate from installed product releases.
+composition roadmap. T0–T4 are adopted in Main Edit through `51cfb1f`; canonical
+shared authored texture is 0.8.0. T5 remains deferred to a selected artist workflow.
+Source adoption is separate from installed product releases.
 
 T0 hardens noise periodicity, material generation recovery, graph diagnostics and
 control availability. See [T0 correctness and recovery](surface_material_t0_contract.md).
@@ -240,3 +241,7 @@ UV candidate adoption. See [T2 resource workflow](surface_material_t2_contract.m
 T3 combines image and procedural sources with explicit roughness and primitive
 region outputs. See [T3 composition](surface_material_t3_contract.md) for the
 opt-in schema, editor workflow, response policy and adoption status.
+
+T4 preserves bounded ideal secondary texture detail and reduces measured preview
+costs. See [T4 quality, performance and adoption](surface_material_t4_contract.md)
+for frozen budgets, fresh checks and remaining conservative boundaries.

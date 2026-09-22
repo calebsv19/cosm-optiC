@@ -1,6 +1,6 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-08-23
+Last updated: 2026-09-22
 
 ## Direction
 
@@ -17,7 +17,10 @@ workflows and preparation are implemented; see the [T2 contract](surface_materia
 T3 image/procedural composition and canonical shared/Main Edit adoption are
 complete through `808b2b6`; its [contract](surface_material_t3_contract.md) records
 fresh verification. T4 secondary texture quality and measured preview performance
-is the next implementation slice.
+are implemented and adopted at `51cfb1f`; see the [T4 contract](surface_material_t4_contract.md).
+The next bounded cleanup is the unresolved 1M-triangle adoption memory gate,
+then the legacy nested-transmission assertion and parallel diagnostic accounting. T5 remains a separately selected artist workflow, with
+seam/atlas unwrap a candidate for imported-mesh texture placement.
 T0–T2 are adopted in Main Edit through `3819af1` with fresh native authoring,
 resource/candidate, recovery and editor/headless checks.
 
@@ -36,10 +39,12 @@ measured cost and scope. The [M6 contract](surface_material_m6_contract.md) adds
 typed graph editing, 3D/triplanar sources, bounded producer/unwrap tools and
 executable capability reporting. T0 hardening and source integration are complete;
 user hands-on acceptance remains separate from scripted native proof. Broader
-sampling of graph/region/manifest bindings, transported secondary differentials,
-measured anisotropic response and attribute-aware LOD remain explicit extensions.
-The full-detail M5 fixture measures 102 ms per full-quality Material orbit frame
-at 8,192 triangles; larger scenes and faster interaction need separate proof.
+sampling of graph/region/manifest bindings, rough/stochastic or varying-normal
+secondary footprints, measured anisotropic response and attribute-aware LOD remain
+explicit extensions. T4 now transports bounded ideal secondary differentials.
+The historical full-detail M5 fixture measured 102 ms at 8,192 triangles. T4
+records a separate fixed-resolution matrix through one million triangles and
+64 instances; those timings are not interchangeable or whole-app FPS claims.
 Preview-window redesign and release/version work remain separate.
 
 ## Near-Term Intent

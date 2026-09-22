@@ -1,8 +1,9 @@
 # T4 secondary detail and preview cost
 
-Status: T4 source implementation and its defined gates are complete in the
-isolated material lane, based on T3 closeout `0a4c361`. Main Edit adoption remains
-separate. The measurement gates below were fixed before renderer optimization.
+Status: T4 source implementation `51cfb1f` is adopted in Main Edit by clean
+fast-forward from T3 closeout `0a4c361`. The measurement gates below were fixed
+before renderer optimization. Fresh adoption evidence is recorded below; its 1M-triangle memory gate remains
+open. Source adoption does not imply every fresh check passed.
 
 ## Order and ownership
 
@@ -209,8 +210,8 @@ The complete emission group is therefore **not green**. See
 This is a separate preexisting receiver-radiance follow-up, not a waived T4 gate.
 
 T4 changes no shared module/version, authored source format, app/worker version,
-release package or installed build. Next: adopt this source checkpoint into Main
-Edit and repeat its adoption checks. T5 remains a separate prioritization of
+release package or installed build. Main Edit source adoption and fresh checks
+are recorded below. T5 remains a separate prioritization of
 unwrap/atlas tools, procedural families, node canvas, multiple UV sets/UDIM and
 advanced directional response; none is implicitly started by this closeout.
 
@@ -220,3 +221,54 @@ the reviewed build passes all comparison gates with 26.5% lower raster/shading
 median and identical frame hashes (`performance-reviewed-8k/baseline.json`).
 The combined local closeout is `build/surface_material_t4/closeout.json`; failed
 fixture attempts remain retained alongside final receipts.
+
+
+## Main Edit adoption — September 22, 2026
+
+Both source checkouts were clean before Main Edit fast-forwarded from `0a4c361`
+to `51cfb1f`. Fresh development application, native fixture host, unit runner,
+mesh compiler and headless renderer builds pass. Source adoption changes no
+shared module, package, installed application or release metadata.
+
+Fresh receipts under `build/surface_material_t4_adoption/` record:
+
+- `secondary/acceptance.json`: all 12 linear image cases, analytic transport and
+  active-resource eligibility gates pass.
+- `integrator/acceptance.json`: all eight production renders pass with identical
+  flattened/TLAS image pairs and exact single-worker transport accounting.
+- `results.json`: T3 composition and authoring, T1 authoring, T2 resources and T0
+  recovery pass, as do geometry, lighting/material and topology unit groups.
+- `runtime_emission_transparency.log`: the same one preexisting nested-layer
+  radiance assertion still fails. This is not a full-unit-suite green claim.
+
+The immediate cleanup priority is the million-triangle adoption memory gate,
+followed by that radiance assertion against its intended transport behavior and
+reliable parallel diagnostic accounting.
+T5 is useful only as a bounded artist workflow selected from the
+[post-M6 plan](surface_material_post_m6_plan.md#current-handoff-after-t4-adoption).
+General unwrap, more procedural families, a canvas, UDIM and directional response
+are separate choices; adoption does not implicitly implement them.
+
+
+### Fresh memory gate remains open
+
+`performance/baseline.json` passes exact frame/source identity and every timing
+budget across all five cases. Raster/shading medians improve by 24.9–67.7% against
+the frozen pre-T4 baseline. Four cases also pass memory; the million-triangle
+case records peak-RSS ratio **1.050362**, exceeding the fixed **1.05** gate.
+`performance-1m-repeat/baseline.json` repeats that case unchanged and records
+ratio **1.112183**, with image and timing gates still passing. Both failures are
+retained; no threshold or expected output was relaxed. Earlier isolated passing
+measurements remain historical evidence and do not override these fresh failures.
+
+Main Edit source adoption is done. Fresh acceptance is incomplete specifically
+on this memory gate, in addition to the separately disclosed preexisting unit
+failure. Do not label the whole adoption suite green or infer a memory saving.
+
+A fresh control (`performance-1m-control/baseline.json`) uses the exact saved
+pre-T4 binary, hash-verified against the original baseline. Its peak RSS is
+3,307,749,376 bytes versus 3,583,180,800 and 3,794,075,648 bytes for the two adopted
+runs (ratios 1.08327 and 1.14703). This does not establish the allocation cause,
+but it does not explain away the observed increase as only a stale baseline.
+The next investigation should separate geometry/document-reapply retention from
+native allocator/driver costs, retaining the same geometry and frame checks.
