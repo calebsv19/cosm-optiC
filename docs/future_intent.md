@@ -18,8 +18,9 @@ T3 image/procedural composition and canonical shared/Main Edit adoption are
 complete through `808b2b6`; its [contract](surface_material_t3_contract.md) records
 fresh verification. T4 secondary texture quality and measured preview performance
 are implemented and adopted at `51cfb1f`; see the [T4 contract](surface_material_t4_contract.md).
-The next bounded cleanup is the unresolved 1M-triangle adoption memory gate,
-then the legacy nested-transmission assertion and parallel diagnostic accounting. T5 remains a separately selected artist workflow, with
+Cleanup `1f49771` addresses the 1M-triangle memory gate, nested-transmission
+oracle and parallel diagnostic accounting. T5 is explicitly paused; the contract
+records separate preexisting adaptive-scatter test failures. T5 remains a separately selected artist workflow, with
 seam/atlas unwrap a candidate for imported-mesh texture placement.
 T0–T2 are adopted in Main Edit through `3819af1` with fresh native authoring,
 resource/candidate, recovery and editor/headless checks.

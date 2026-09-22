@@ -1,23 +1,21 @@
 # optiC Current Truth
 
-## September 22 T4 secondary detail and measured preview costs
+## September 22 T4 adopted and cleanup implemented
 
-T4 source work is complete and adopted in Main Edit at `51cfb1f`. Bounded ideal
-reflection and refraction retain adjacent ray origins/directions; four subfootprint samples
-preserve secondary detail within frozen linear error/contrast/motion budgets.
-Unknown normal derivatives and rough/stochastic events stay conservative. Exact
-preview preparation and reuse reduce measured raster/shading medians by 24–65%
-across five supported fixtures, with unchanged frame hashes and all p95/memory
-gates met in the isolated source run. Fresh adoption repeats pass image/timing
-checks but exceed the 1M-triangle peak-RSS gate; that memory check remains open.
-The existing mesh-instance limit is 64; 100 is explicitly unsupported.
+Main Edit adopted T4 `51cfb1f` and cleanup `1f49771`. Bounded ideal reflection and
+refraction retain texture footprints; measured preview optimization preserves
+exact pixels and geometry. Cleanup shares protected geometry between preview
+qualities, repairs the nested-transmission test oracle, and synchronizes parallel
+diagnostic records. The original five-case performance matrix passes after the
+memory fix; the fresh Main Edit 1M repeat also passes (RSS +2.09%, allowance +5%).
+The full emission unit group and focused parallel ledger checks pass.
 
-See the [T4 contract](surface_material_t4_contract.md) for fixture hardware, image
-and performance receipts, actual headless transport/parity checks and fresh
-T0–T3 regressions. One preexisting legacy nested-transmission unit assertion still
-fails and is disclosed there. Fresh Main Edit adoption receipts are under
-`build/surface_material_t4_adoption/`.
-This source checkpoint is not an installed-package or hands-on acceptance claim.
+See the [T4 contract](surface_material_t4_contract.md#t4-cleanup-and-stop-before-t5)
+for evidence, adoption verification and historical failures. A separate broad
+adaptive-scatter suite has 14 failures reproduced by the unchanged control build;
+this is not a full-unit-suite green claim. T5 is paused. The 64-instance limit,
+conservative unsupported secondary footprints, installed-build refresh and
+hands-on acceptance remain separate.
 
 ## September 22 T3 composition adopted
 

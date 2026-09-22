@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0–T4 implemented and adopted in Main Edit through `51cfb1f`; canonical shared authored texture is 0.8.0. Fresh adoption checks are recorded in the [T3 contract](surface_material_t3_contract.md). T4 source adoption is complete; fresh verification leaves the 1M-triangle memory gate open, as recorded in its contract. T5 remains deferred. See the [T4 contract](surface_material_t4_contract.md).
+Status: T0–T4 adopted in Main Edit, with cleanup source `1f49771`. Canonical shared authored texture remains 0.8.0. See the [T4 contract](surface_material_t4_contract.md) for fresh checks and retained boundaries. T5 is explicitly paused.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -290,23 +290,16 @@ authorizes implementation; this audit's planning status is not a perpetual appro
 
 ## Current handoff after T4 adoption
 
-Main Edit adopted T4 source commit `51cfb1f` by clean fast-forward from `0a4c361`.
-T4 needs no canonical shared-module synchronization or version change. The
-[T4 contract](surface_material_t4_contract.md) records fresh adoption checks.
-Installed-package and operator acceptance remain separate.
+Main Edit adopted T4 and cleanup source `1f49771`. The requested cleanup is
+implemented: protected geometry has one preview owner, the nested-transmission
+oracle isolates attenuated emitter contribution, and parallel diagnostic records
+are synchronized. The [T4 contract](surface_material_t4_contract.md#t4-cleanup-and-stop-before-t5)
+records checks, original failures and adoption evidence. No shared synchronization
+or version change is required. T5 is paused at the user's explicit boundary.
 
-Before broader artist tools, prioritize these bounded investigations:
-
-1. Close the fresh adoption memory gate at one million triangles. Peak RSS was
-   5.036% and 11.218% above the frozen baseline in two runs, exceeding the 5%
-   allowance. Preserve failed receipts and distinguish allocator/driver variation
-   from retained application memory before claiming acceptance.
-2. Resolve the preexisting nested-transmission receiver-radiance unit assertion.
-   Establish the intended physical/fixture behavior before changing either the
-   renderer or its expectation; do not merely lower the threshold.
-3. Give the trace-cost diagnostic ledger safe parallel counter ownership and
-   deterministic reduction. Current strict accounting proof uses one worker;
-   a complete rendered image does not prove exact parallel diagnostic counts.
+A separate broad adaptive-scatter suite still has 14 assertions reproduced by
+the unchanged Main Edit control. Record that follow-up independently of material
+T4 acceptance; do not silently expand into a new adaptive-rendering workstream.
 
 T5 is worthwhile as a selected artist workflow, not one combined expansion.
 For imported meshes needing controlled texture placement, seam selection and

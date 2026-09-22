@@ -225,7 +225,8 @@ normal scene preflight additionally checks graph/source/geometry combinations.
 See the [audit-backed next-step plan](surface_material_post_m6_plan.md) and its
 three independent source audits for the correctness, authoring, preparation and
 composition roadmap. T0–T4 are adopted in Main Edit through `51cfb1f`; canonical
-shared authored texture is 0.8.0. T5 remains deferred to a selected artist workflow.
+shared authored texture is 0.8.0. Cleanup `1f49771` addresses memory and diagnostic
+acceptance; T5 is explicitly paused.
 Source adoption is separate from installed product releases.
 
 T0 hardens noise periodicity, material generation recovery, graph diagnostics and

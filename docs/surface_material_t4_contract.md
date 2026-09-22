@@ -2,8 +2,8 @@
 
 Status: T4 source implementation `51cfb1f` is adopted in Main Edit by clean
 fast-forward from T3 closeout `0a4c361`. The measurement gates below were fixed
-before renderer optimization. Fresh adoption evidence is recorded below; its 1M-triangle memory gate remains
-open. Source adoption does not imply every fresh check passed.
+before renderer optimization. The initial adoption findings and subsequent cleanup are recorded below.
+Cleanup source `1f49771` closes the three requested implementation/test gaps.
 
 ## Order and ownership
 
@@ -225,6 +225,9 @@ fixture attempts remain retained alongside final receipts.
 
 ## Main Edit adoption — September 22, 2026
 
+This section records the original adoption before cleanup; the cleanup section
+below supersedes its open memory, emission-oracle and diagnostic-counter status.
+
 Both source checkouts were clean before Main Edit fast-forwarded from `0a4c361`
 to `51cfb1f`. Fresh development application, native fixture host, unit runner,
 mesh compiler and headless renderer builds pass. Source adoption changes no
@@ -250,7 +253,7 @@ General unwrap, more procedural families, a canvas, UDIM and directional respons
 are separate choices; adoption does not implicitly implement them.
 
 
-### Fresh memory gate remains open
+### Initial adoption memory failure (historical)
 
 `performance/baseline.json` passes exact frame/source identity and every timing
 budget across all five cases. Raster/shading medians improve by 24.9–67.7% against
@@ -272,3 +275,88 @@ runs (ratios 1.08327 and 1.14703). This does not establish the allocation cause,
 but it does not explain away the observed increase as only a stale baseline.
 The next investigation should separate geometry/document-reapply retention from
 native allocator/driver costs, retaining the same geometry and frame checks.
+
+
+## T4 cleanup and stop before T5
+
+Cleanup source `1f49771` addresses the three named follow-ups without adding T5
+features or changing a shared module, source format, version or installed build.
+
+### Exact preview ownership and memory
+
+The first adoption peak RSS was already reached before the timed loops and did
+not rise during orbit, cache-hit or edit phases. Inspection found that protected
+per-corner attributes forced both full and interactive preview LODs to retain
+exact geometry, yet the app allocated two complete meshes and normal arrays.
+The preview store now owns one protected full mesh. Interactive lookup borrows
+that same mesh and its normals through the existing fallback; reset frees one
+owner. The recovered-asset path uses the same rule. Unprotected reduced LODs keep
+their existing independent storage. No shared LOD algorithm or limit changed.
+
+The unchanged five-case, 20-sample matrix passes every image, geometry, timing
+and memory gate in `build/surface_material_t4_cleanup/performance/baseline.json`.
+Peak-RSS ratios to the frozen pre-T4 baseline are 1.0161, 1.0001, 0.9306, 0.9822
+and 0.9908 for 8K, 100K, 1M, 10-instance and 64-instance cases respectively.
+Dominant raster/shading medians improve 22.4–67.6%. A fixture assertion verifies
+both qualities use the same protected mesh; all original frame hashes remain
+unchanged. Historical failed runs above remain retained.
+
+### Nested transmission oracle
+
+The original tinted fixture transmits direct radiance 0.028853993 with the rear
+emitter enabled and 0.008290302 with it disabled. Thus the emitter is reached;
+the old `> 0.05` absolute-brightness assertion conflated transmission reachability
+with attenuation through two tinted layers. No renderer behavior or brightness
+threshold was weakened to force a pass. The replacement isolates the positive
+emitter contribution, verifies half-emission linearity in scalar and all RGB
+channels to 1e-8, and compares diffuse bounce depth 1 with 4. The complete
+emission/transparency unit group now passes.
+
+### Parallel diagnostic ownership
+
+Existing app-level pthread synchronization protects complete ledger records,
+configuration/reset and snapshots. Internal compound records share one lock;
+disabled rendering takes only an atomic enabled-flag read. No allocations or
+new scheduling system are added. This preserves cross-counter snapshot
+invariants, min/max values and floating aggregates. Reset remains an explicit
+between-job collection boundary. Integer totals are exact after workers join;
+floating sums retain normal order-dependent rounding rather than a bitwise
+reproducibility guarantee.
+
+An eight-thread regression records 160,000 rays while taking 1,000 snapshots,
+checks compound-counter consistency and exact final counts, then tests disabled
+recording and reset. The focused `runtime_render_trace_cost_ledger` group also
+runs the existing attribution tests. Eight production render pairs configured for one and four workers have identical BMP hashes and integer transport counts; floating
+aggregates agree within relative 1e-10. Each image accounts for 19,200 primary
+rays. See `build/surface_material_t4_cleanup/parallel-comparison.json`.
+
+### Regression scope and remaining boundaries
+
+Fresh secondary quality, T2 resource/UV workflows, T3 authoring and T0 recovery
+pass. Geometry, lighting/material, topology, emission and focused ledger units
+pass. Preview units exposed another preexisting 52 MiB stack-local asset set;
+moving only that test scratch to the heap makes the complete preview group pass.
+
+The broader adaptive-scatter/preview suite still has 14 failures. The unchanged
+Main Edit control binary produces the identical failure list. They are separate
+from the three requested cleanup items and remain recorded in
+`ledger-unit.log` and `ledger-broad-control.log`; no full-unit-suite green claim
+is made. T5 is explicitly paused. Rough/stochastic/varying-normal footprints,
+silhouette reconstruction, the 64-instance limit, hands-on acceptance and release
+refresh retain their previously documented boundaries.
+
+
+### Fresh Main Edit cleanup adoption
+
+Main Edit fast-forwarded cleanly to `1f49771`. Fresh development application,
+fixture host, unit runner and headless builds pass. The emission, focused ledger
+and repaired preview unit groups pass, as do the eight production renders
+configured for four workers. The final 20-sample 1M-triangle repeat passes every
+unchanged gate: peak-RSS ratio **1.020911**, raster/shading median reduction
+**31.4%**, identical frame/source geometry and passing p95 timing limits.
+This repeat and the earlier five-case run bound the observed behavior; allocator
+variation remains visible, so no universal memory-reduction claim is made.
+
+Main Edit receipts are in `build/surface_material_t4_cleanup_adoption/`, including
+`results.json`, `performance-1m/baseline.json` and the combined `closeout.json`.
+The three requested cleanup items are closed. No T5 implementation was started.
