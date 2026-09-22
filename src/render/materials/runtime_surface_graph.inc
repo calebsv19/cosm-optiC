@@ -1,4 +1,5 @@
-/* Host boundary: retained JSON -> validated shared program -> immutable per-object frame. */
+/* Host boundary: retained JSON -> validated shared program -> immutable
+ * per-object frame. */
 #include "render/runtime_surface_graph.h"
 typedef struct {
     bool active;
@@ -11,12 +12,16 @@ static SurfaceGraph surface_graphs[MAX_OBJECTS];
 static const char *sg_kinds[] = {"scalar",   "color", "coordinate", "noise3d", "triplanar_checker",
                                  "multiply", "mix"};
 const char *RuntimeSurfaceGraphCapabilities(void) {
-    return "{\"version\":1,\"capability\":\"optic.surface_graph_v1\",\"max_nodes\":32,"
-           "\"nodes\":[\"scalar\",\"color\",\"coordinate\",\"noise3d\",\"triplanar_checker\","
+    return "{\"version\":1,\"capability\":\"optic.surface_graph_v1\",\"max_"
+           "nodes\":32,"
+           "\"nodes\":[\"scalar\",\"color\",\"coordinate\",\"noise3d\","
+           "\"triplanar_checker\","
            "\"multiply\",\"mix\"],"
-           "\"spaces\":[\"object_rest\",\"world\"],\"outputs\":[\"base_color\",\"roughness\"],"
+           "\"spaces\":[\"object_rest\",\"world\"],\"outputs\":[\"base_color\","
+           "\"roughness\"],"
            "\"color_space\":\"linear\",\"combinations\":\"exclusive_source\","
-           "\"filter\":\"box_checker_noise_fade\",\"secondary_footprint\":\"source_mean\"}";
+           "\"filter\":\"box_checker_noise_fade\",\"secondary_footprint\":"
+           "\"source_mean\"}";
 }
 static int graph_reference(json_object *nodes, json_object *reference) {
     if (!json_object_is_type(reference, json_type_string))
@@ -26,87 +31,241 @@ static int graph_reference(json_object *nodes, json_object *reference) {
             return (int)i;
     return -1;
 }
-bool RuntimeSurfaceGraphParse(json_object *source, CoreSurfaceGraph *out, char *diagnostic,
-                              size_t size) {
+/* Diagnostics stay host-owned: the shared compiler has no JSON or retained IDs.
+ */
+static bool graph_has_field(json_object *object, const char *key) {
+    json_object *value = NULL;
+    return json_object_object_get_ex(object, key, &value);
+}
+static bool graph_error(RuntimeSurfaceGraphDiagnostic *d, const char *node, const char *property,
+                        const char *code, const char *message) {
+    if (d) {
+        snprintf(d->node_id, sizeof(d->node_id), "%s", node ? node : "");
+        snprintf(d->property, sizeof(d->property), "%s", property ? property : "");
+        snprintf(d->code, sizeof(d->code), "%s", code);
+        snprintf(d->message, sizeof(d->message), "%s", message);
+    }
+    return false;
+}
+static void graph_format_error(const RuntimeSurfaceGraphDiagnostic *d, char *text, size_t size) {
+    if (!text || !size)
+        return;
+    if (!d->code[0]) {
+        text[0] = 0;
+        return;
+    }
+    snprintf(text, size, "surface_graph: code=%s object=%s node=%s property=%s: %s", d->code,
+             d->object_id[0] ? d->object_id : "-", d->node_id[0] ? d->node_id : "-", d->property,
+             d->message);
+}
+static const char *graph_node_id(json_object *nodes, int index) {
+    json_object *id = field(json_object_array_get_idx(nodes, (size_t)index), "id");
+    return json_object_is_type(id, json_type_string) ? json_object_get_string(id) : NULL;
+}
+static int graph_node_type(CoreSurfaceGraphKind kind) {
+    return kind == CORE_SG_COORDINATE ? 2 : (kind == CORE_SG_COLOR || kind == CORE_SG_MIX ? 1 : 0);
+}
+static int graph_node_arity(CoreSurfaceGraphKind kind) {
+    return kind == CORE_SG_MIX ? 3
+           : kind == CORE_SG_MULTIPLY
+               ? 2
+               : (kind == CORE_SG_NOISE3D || kind == CORE_SG_TRIPLANAR ? 1 : 0);
+}
+/* Identify the retained edge closing a cycle. Shared prepare still owns
+ * executable order. */
+static bool graph_check_cycle(const CoreSurfaceGraph *g, json_object *nodes, int index,
+                              unsigned char *state, RuntimeSurfaceGraphDiagnostic *d) {
+    if (state[index] == 2)
+        return true;
+    state[index] = 1;
+    for (int port = 0; port < graph_node_arity(g->nodes[index].kind); ++port) {
+        int target = g->nodes[index].inputs[port];
+        char property[32];
+        snprintf(property, sizeof(property), "inputs[%d]", port);
+        if (state[target] == 1)
+            return graph_error(d, graph_node_id(nodes, index), property, "cycle",
+                               "Connect this input to a node that does not depend on this node.");
+        if (!graph_check_cycle(g, nodes, target, state, d))
+            return false;
+    }
+    state[index] = 2;
+    return true;
+}
+bool RuntimeSurfaceGraphParseDetailed(json_object *source, const char *object_id,
+                                      CoreSurfaceGraph *out,
+                                      RuntimeSurfaceGraphDiagnostic *diagnostic) {
+    RuntimeSurfaceGraphDiagnostic local = {0};
+    RuntimeSurfaceGraphDiagnostic *d = diagnostic ? diagnostic : &local;
+    memset(d, 0, sizeof(*d));
+    snprintf(d->object_id, sizeof(d->object_id), "%s", object_id ? object_id : "");
+    if (out)
+        memset(out, 0, sizeof(*out));
     CoreSurfaceGraph g = {0};
     g.roughness_output = -1;
+    if (!json_object_is_type(source, json_type_object))
+        return graph_error(d, NULL, "surface_graph", "invalid_type", "Provide a graph object.");
+    if (!token(source, "required_capability", "optic.surface_graph_v1"))
+        return graph_error(d, NULL, "required_capability", "unsupported_capability",
+                           "Use optic.surface_graph_v1 with this renderer.");
+    if (!json_object_is_type(field(source, "version"), json_type_int) ||
+        json_object_get_int(field(source, "version")) != 1)
+        return graph_error(d, NULL, "version", "unsupported_version",
+                           "Use integer graph version 1.");
+    if (!token(source, "color_space", "linear"))
+        return graph_error(d, NULL, "color_space", "unsupported_encoding",
+                           "Declare linear graph colors.");
+    if (graph_has_field(source, "required_features"))
+        return graph_error(d, NULL, "required_features", "unsupported_feature",
+                           "This renderer cannot execute additional required graph features.");
     json_object *nodes = field(source, "nodes"), *outputs = field(source, "outputs");
-    bool ok = token(source, "required_capability", "optic.surface_graph_v1") &&
-              json_object_is_type(field(source, "version"), json_type_int) &&
-              json_object_get_int(field(source, "version")) == 1 &&
-              token(source, "color_space", "linear") &&
-              json_object_is_type(nodes, json_type_array) &&
-              json_object_is_type(outputs, json_type_object) && !field(source, "required_features");
-    if (ok)
-        g.count = json_object_array_length(nodes);
-    ok = ok && g.count > 0 && g.count <= CORE_SURFACE_GRAPH_MAX_NODES;
-    for (size_t i = 0; ok && i < g.count; ++i) {
+    if (!json_object_is_type(nodes, json_type_array))
+        return graph_error(d, NULL, "nodes", "invalid_type", "Provide an array of graph nodes.");
+    g.count = json_object_array_length(nodes);
+    if (!g.count || g.count > CORE_SURFACE_GRAPH_MAX_NODES)
+        return graph_error(d, NULL, "nodes", "node_limit", "Provide between 1 and 32 nodes.");
+    if (!json_object_is_type(outputs, json_type_object))
+        return graph_error(d, NULL, "outputs", "invalid_type", "Provide named graph outputs.");
+    for (size_t i = 0; i < g.count; ++i) {
         json_object *node = json_object_array_get_idx(nodes, i), *id = field(node, "id"),
                     *inputs = field(node, "inputs");
+        const char *name = graph_node_id(nodes, (int)i);
+        char property[48];
+        snprintf(property, sizeof(property), "nodes[%zu].id", i);
+        if (!json_object_is_type(id, json_type_string) || !name[0] || strlen(name) >= 64)
+            return graph_error(d, NULL, property, "invalid_node_id",
+                               "Use a unique node ID of 1 to 63 bytes.");
+        for (size_t j = 0; j < i; ++j)
+            if (token(json_object_array_get_idx(nodes, j), "id", name))
+                return graph_error(d, name, "id", "duplicate_node_id",
+                                   "Give this node a unique ID and update its references.");
         CoreSurfaceGraphNode *n = &g.nodes[i];
         n->kind = (CoreSurfaceGraphKind)-1;
-        ok = json_object_is_type(id, json_type_string) && strlen(json_object_get_string(id)) > 0 &&
-             strlen(json_object_get_string(id)) < 64;
-        for (size_t j = 0; j < i; ++j)
-            if (token(json_object_array_get_idx(nodes, j), "id", json_object_get_string(id)))
-                ok = false;
         for (int k = 0; k < 7; ++k)
             if (token(node, "kind", sg_kinds[k]))
                 n->kind = (CoreSurfaceGraphKind)k;
-        int arity = n->kind == CORE_SG_MIX ? 3
-                    : n->kind == CORE_SG_MULTIPLY
-                        ? 2
-                        : (n->kind == CORE_SG_NOISE3D || n->kind == CORE_SG_TRIPLANAR ? 1 : 0);
-        if (arity)
-            ok = ok && json_object_is_type(inputs, json_type_array) &&
-                 json_object_array_length(inputs) == (size_t)arity;
-        else if (inputs)
-            ok = ok && json_object_is_type(inputs, json_type_array) &&
-                 json_object_array_length(inputs) == 0;
-        for (int a = 0; ok && a < arity; ++a)
-            n->inputs[a] = graph_reference(nodes, json_object_array_get_idx(inputs, a));
-        if (n->kind == CORE_SG_SCALAR)
-            ok = ok && number(field(node, "value"), &n->value[0]);
-        if (n->kind == CORE_SG_COLOR)
-            ok = ok && vector(node, "value", n->value, 3);
+        if ((int)n->kind < 0)
+            return graph_error(d, name, "kind", "unsupported_node",
+                               "Choose a node kind listed by --surface-capabilities.");
+        if (graph_has_field(node, "required_features"))
+            return graph_error(d, name, "required_features", "unsupported_feature",
+                               "This renderer cannot execute additional required node features.");
+        int arity = graph_node_arity(n->kind);
+        if ((arity || inputs) && (!json_object_is_type(inputs, json_type_array) ||
+                                  json_object_array_length(inputs) != (size_t)arity))
+            return graph_error(d, name, "inputs", "input_count",
+                               "Provide the declared number of ordered inputs for this node kind.");
+        for (int port = 0; port < arity; ++port) {
+            n->inputs[port] =
+                graph_reference(nodes, json_object_array_get_idx(inputs, (size_t)port));
+            if (n->inputs[port] < 0) {
+                snprintf(property, sizeof(property), "inputs[%d]", port);
+                return graph_error(d, name, property, "missing_reference",
+                                   "Connect this input to an existing node ID.");
+            }
+        }
+        if (n->kind == CORE_SG_SCALAR || n->kind == CORE_SG_COLOR) {
+            if ((n->kind == CORE_SG_SCALAR && !number(field(node, "value"), &n->value[0])) ||
+                (n->kind == CORE_SG_COLOR && !vector(node, "value", n->value, 3)))
+                return graph_error(d, name, "value", "invalid_type",
+                                   "Provide finite scalar or three-component color values.");
+            for (int component = 0; component < (n->kind == CORE_SG_COLOR ? 3 : 1); ++component)
+                if (n->value[component] < 0 || n->value[component] > 1) {
+                    snprintf(property, sizeof(property), "value[%d]", component);
+                    return graph_error(d, name, n->kind == CORE_SG_SCALAR ? "value" : property,
+                                       "parameter_range", "Use a value between 0 and 1.");
+                }
+        }
         if (n->kind == CORE_SG_COORDINATE) {
-            ok = ok && (token(node, "space", "object_rest") || token(node, "space", "world")) &&
-                 number(field(node, "scale_m"), &n->scale_m) && vector(node, "offset", n->value, 3);
+            if (!token(node, "space", "object_rest") && !token(node, "space", "world"))
+                return graph_error(d, name, "space", "unsupported_space",
+                                   "Choose object_rest or world coordinates.");
             n->world_space = token(node, "space", "world");
+            if (!number(field(node, "scale_m"), &n->scale_m) || n->scale_m < 1e-6 ||
+                n->scale_m > 1e6)
+                return graph_error(d, name, "scale_m", "parameter_range",
+                                   "Use a finite scale from 1e-6 to 1e6 meters.");
+            if (!vector(node, "offset", n->value, 3))
+                return graph_error(d, name, "offset", "invalid_type",
+                                   "Provide three finite dimensionless offsets.");
+            for (int component = 0; component < 3; ++component)
+                if (fabs(n->value[component]) > 1e6) {
+                    snprintf(property, sizeof(property), "offset[%d]", component);
+                    return graph_error(d, name, property, "parameter_range",
+                                       "Use an offset between -1e6 and 1e6.");
+                }
         }
         if (n->kind == CORE_SG_NOISE3D) {
             double seed = 0;
-            ok = ok && number(field(node, "seed"), &seed) && seed >= 0 && seed <= 4294967295.0 &&
-                 floor(seed) == seed;
-            if (ok)
-                n->seed = (uint32_t)seed;
+            if (!number(field(node, "seed"), &seed) || seed < 0 || seed > 4294967295.0 ||
+                floor(seed) != seed)
+                return graph_error(d, name, "seed", "parameter_range",
+                                   "Use an integer seed from 0 to 4294967295.");
+            n->seed = (uint32_t)seed;
         }
-        if (n->kind == CORE_SG_TRIPLANAR)
-            ok = ok && number(field(node, "sharpness"), &n->sharpness);
-        if (field(node, "required_features"))
-            ok = false;
+        if (n->kind == CORE_SG_TRIPLANAR && (!number(field(node, "sharpness"), &n->sharpness) ||
+                                             n->sharpness < 1 || n->sharpness > 16))
+            return graph_error(d, name, "sharpness", "parameter_range",
+                               "Use finite projection sharpness from 1 to 16.");
     }
-    if (ok) {
-        g.color_output = graph_reference(nodes, field(outputs, "base_color"));
-        if (field(outputs, "roughness")) {
-            g.roughness_output = graph_reference(nodes, field(outputs, "roughness"));
-            if (g.roughness_output < 0)
-                ok = false;
-        }
-        json_object_object_foreach(outputs, key, value) {
-            (void)value;
-            if (strcmp(key, "base_color") && strcmp(key, "roughness"))
-                ok = false;
+    /* Check input types after all declared node kinds are known. */
+    for (size_t i = 0; i < g.count; ++i) {
+        const CoreSurfaceGraphNode *n = &g.nodes[i];
+        for (int port = 0; port < graph_node_arity(n->kind); ++port) {
+            int expected = n->kind == CORE_SG_MIX        ? (port < 2 ? 1 : 0)
+                           : n->kind == CORE_SG_MULTIPLY ? 0
+                                                         : 2;
+            if (graph_node_type(g.nodes[n->inputs[port]].kind) != expected) {
+                char property[32];
+                snprintf(property, sizeof(property), "inputs[%d]", port);
+                return graph_error(d, graph_node_id(nodes, (int)i), property, "input_type",
+                                   expected == 0   ? "Connect a scalar-output node."
+                                   : expected == 1 ? "Connect a color-output node."
+                                                   : "Connect a coordinate-output node.");
+            }
         }
     }
-    if (ok)
-        ok = core_surface_graph_prepare(&g, diagnostic, size);
-    if (!ok && diagnostic && size)
-        snprintf(
-            diagnostic, size,
-            "surface_graph: invalid or unsupported capability, node, edge, parameter or output");
+    g.color_output = graph_reference(nodes, field(outputs, "base_color"));
+    if (g.color_output < 0)
+        return graph_error(d, NULL, "outputs.base_color", "missing_reference",
+                           "Reference an existing color-output node.");
+    if (graph_node_type(g.nodes[g.color_output].kind) != 1)
+        return graph_error(d, graph_node_id(nodes, g.color_output), "outputs.base_color",
+                           "output_type", "Reference a color-output node.");
+    if (field(outputs, "roughness")) {
+        g.roughness_output = graph_reference(nodes, field(outputs, "roughness"));
+        if (g.roughness_output < 0)
+            return graph_error(d, NULL, "outputs.roughness", "missing_reference",
+                               "Reference an existing scalar-output node.");
+        if (graph_node_type(g.nodes[g.roughness_output].kind) != 0)
+            return graph_error(d, graph_node_id(nodes, g.roughness_output), "outputs.roughness",
+                               "output_type", "Reference a scalar-output node.");
+    }
+    json_object_object_foreach(outputs, key, value) {
+        (void)value;
+        if (strcmp(key, "base_color") && strcmp(key, "roughness")) {
+            char property[96];
+            snprintf(property, sizeof(property), "outputs.%s", key);
+            return graph_error(d, NULL, property, "unsupported_output",
+                               "This renderer supports base_color and roughness outputs.");
+        }
+    }
+    unsigned char state[CORE_SURFACE_GRAPH_MAX_NODES] = {0};
+    for (size_t i = 0; i < g.count; ++i)
+        if (!graph_check_cycle(&g, nodes, (int)i, state, d))
+            return false;
+    char shared_diagnostic[160] = {0};
+    if (!core_surface_graph_prepare(&g, shared_diagnostic, sizeof(shared_diagnostic)))
+        return graph_error(d, NULL, "surface_graph", "compiler_rejected", shared_diagnostic);
     if (out)
         *out = g;
+    memset(d, 0, sizeof(*d));
+    return true;
+}
+bool RuntimeSurfaceGraphParse(json_object *source, CoreSurfaceGraph *out, char *diagnostic,
+                              size_t size) {
+    RuntimeSurfaceGraphDiagnostic detail;
+    bool ok = RuntimeSurfaceGraphParseDetailed(source, NULL, out, &detail);
+    graph_format_error(&detail, diagnostic, size);
     return ok;
 }
 static bool graph_validate_scene(json_object *root, char *diagnostic, size_t size) {
@@ -118,64 +277,117 @@ static bool graph_validate_scene(json_object *root, char *diagnostic, size_t siz
         json_object *row = json_object_array_get_idx(rows, i), *source = NULL;
         if (!json_object_object_get_ex(row, "surface_graph", &source))
             continue;
+        RuntimeSurfaceGraphDiagnostic d = {0};
         CoreSurfaceGraph g;
-        bool ok = RuntimeSurfaceGraphParse(source, &g, diagnostic, size);
+        json_object *identity = field(row, "object_id");
+        const char *id = json_object_is_type(identity, json_type_string)
+                             ? json_object_get_string(identity)
+                             : NULL;
+        snprintf(d.object_id, sizeof(d.object_id), "%s", id ? id : "");
+        if (!id || !id[0]) {
+            graph_error(&d, NULL, "object_id", "invalid_object_id",
+                        "Name the scene object receiving this graph.");
+            goto failed;
+        }
+        if (!RuntimeSurfaceGraphParseDetailed(source, id, &g, &d))
+            goto failed;
+        /* Successful graph parsing clears diagnostics; restore the enclosing
+         * identity. */
+        snprintf(d.object_id, sizeof(d.object_id), "%s", id);
         int matches = 0, row_matches = 0;
-        const char *id = json_object_get_string(field(row, "object_id"));
-        for (size_t j = 0; id && j < json_object_array_length(rows); ++j)
+        json_object *object = NULL;
+        for (size_t j = 0; j < json_object_array_length(rows); ++j)
             if (token(json_object_array_get_idx(rows, j), "object_id", id))
                 ++row_matches;
-        for (size_t j = 0; id && json_object_is_type(objects, json_type_array) &&
-                           j < json_object_array_length(objects);
+        for (size_t j = 0;
+             json_object_is_type(objects, json_type_array) && j < json_object_array_length(objects);
              ++j) {
-            json_object *o = json_object_array_get_idx(objects, j);
-            if (!token(o, "object_id", id))
-                continue;
-            ++matches;
-            ok = ok && (token(o, "object_type", "mesh_asset_instance") ||
-                        token(o, "object_type", "plane_primitive") ||
-                        token(o, "object_type", "rect_prism_primitive"));
-            double dims[3];
-            if (!token(o, "object_type", "mesh_asset_instance"))
-                ok = ok && dimensions(o, dims) && frame_supported(o);
-            json_object *ray = field(field(o, "extensions"), "ray_tracing");
-            ok = ok && !field(ray, "surface_mapping") && !field(ray, "surface_sampling") &&
-                 !field(o, "procedural_solid_material_ref");
-            json_object *t = field(o, "transform");
-            for (int a = 0; a < 3; ++a) {
-                char key[] = {"xyz"[a], 0};
-                double s = 1, p = 0, r = 0;
-                if (field(field(t, "scale"), key))
-                    ok = ok && number(field(field(t, "scale"), key), &s) && fabs(s) >= 1e-6 &&
-                         fabs(s) <= 1e6;
-                if (field(field(t, "position"), key))
-                    ok = ok && number(field(field(t, "position"), key), &p) && fabs(p) <= 1e9;
-                if (field(field(t, "rotation"), key))
-                    ok = ok && number(field(field(t, "rotation"), key), &r) && fabs(r) <= 1e6;
+            json_object *candidate = json_object_array_get_idx(objects, j);
+            if (token(candidate, "object_id", id)) {
+                object = candidate;
+                ++matches;
             }
-            if (field(t, "pivot_policy") && !token(t, "pivot_policy", "authored_origin"))
-                ok = false;
+        }
+        if (matches != 1 || row_matches != 1) {
+            graph_error(&d, NULL, "object_id",
+                        matches == 0 ? "missing_object" : "duplicate_object_id",
+                        "Provide exactly one matching scene object and one material row.");
+            goto failed;
+        }
+        if (!token(object, "object_type", "mesh_asset_instance") &&
+            !token(object, "object_type", "plane_primitive") &&
+            !token(object, "object_type", "rect_prism_primitive")) {
+            graph_error(&d, NULL, "object_type", "unsupported_geometry",
+                        "Use a mesh instance, plane or rectangular prism.");
+            goto failed;
+        }
+        double dims[3];
+        if (!token(object, "object_type", "mesh_asset_instance") &&
+            (!dimensions(object, dims) || !frame_supported(object))) {
+            graph_error(&d, NULL, "primitive", "unsupported_frame",
+                        "Use valid primitive dimensions and an orthonormal frame.");
+            goto failed;
+        }
+        json_object *ray = field(field(object, "extensions"), "ray_tracing");
+        const char *object_conflicts[] = {"surface_mapping", "surface_sampling",
+                                          "procedural_solid_material_ref"};
+        for (size_t c = 0; c < sizeof(object_conflicts) / sizeof(*object_conflicts); ++c)
+            if (field(c == 2 ? object : ray, object_conflicts[c])) {
+                graph_error(&d, NULL, object_conflicts[c], "mixed_source",
+                            "Keep one supported material source; replace this "
+                            "conflicting declaration explicitly.");
+                goto failed;
+            }
+        json_object *transform = field(object, "transform");
+        const char *components[] = {"scale", "position", "rotation"};
+        for (int c = 0; c < 3; ++c)
+            for (int axis = 0; axis < 3; ++axis) {
+                char key[] = {"xyz"[axis], 0};
+                json_object *value = field(field(transform, components[c]), key);
+                double number_value = 0;
+                if (value &&
+                    (!number(value, &number_value) || fabs(number_value) > (c == 1 ? 1e9 : 1e6) ||
+                     (c == 0 && fabs(number_value) < 1e-6))) {
+                    char property[64];
+                    snprintf(property, sizeof(property), "transform.%s.%s", components[c], key);
+                    graph_error(&d, NULL, property, "transform_range",
+                                "Use a finite supported transform; scale magnitudes must "
+                                "be 1e-6 to 1e6.");
+                    goto failed;
+                }
+            }
+        if (field(transform, "pivot_policy") &&
+            !token(transform, "pivot_policy", "authored_origin")) {
+            graph_error(&d, NULL, "transform.pivot_policy", "unsupported_pivot",
+                        "Use authored_origin for graph coordinates.");
+            goto failed;
         }
         const char *conflicts[] = {"material_graph",           "materialGraph",
                                    "material_texture_stack",   "materialTextureStack",
                                    "surface_material_binding", "authored_texture",
                                    "procedural_texture",       "texture_id"};
         for (size_t c = 0; c < sizeof(conflicts) / sizeof(*conflicts); ++c)
-            if (field(row, conflicts[c]))
-                ok = false;
+            if (field(row, conflicts[c])) {
+                graph_error(&d, NULL, conflicts[c], "mixed_source",
+                            "Keep one supported material source; replace this "
+                            "conflicting declaration explicitly.");
+                goto failed;
+            }
         double scale = 0;
-        ok = ok && number(field(root, "world_scale"), &scale) && scale >= 1e-6 && scale <= 1e6;
-        if (!ok || matches != 1 || row_matches != 1) {
-            snprintf(
-                diagnostic, size,
-                "surface_graph: unsupported geometry, transform, mixed source, identity or graph");
-            return false;
+        if (!number(field(root, "world_scale"), &scale) || scale < 1e-6 || scale > 1e6) {
+            graph_error(&d, NULL, "world_scale", "parameter_range",
+                        "Use a finite world scale from 1e-6 to 1e6.");
+            goto failed;
         }
+        continue;
+    failed:
+        graph_format_error(&d, diagnostic, size);
+        return false;
     }
     return true;
 }
-static bool graph_prepare_scene(json_object *root, double world_scale) {
-    memset(surface_graphs, 0, sizeof(surface_graphs));
+static bool graph_prepare_scene(json_object *root, double world_scale, SurfaceGraph *surface_graphs) {
+    memset(surface_graphs, 0, sizeof(*surface_graphs) * MAX_OBJECTS);
     RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
     json_object *objects = field(root, "objects");
@@ -242,7 +454,7 @@ static bool graph_prepare_scene(json_object *root, double world_scale) {
     }
     return true;
 failed:
-    memset(surface_graphs, 0, sizeof(surface_graphs));
+    memset(surface_graphs, 0, sizeof(*surface_graphs) * MAX_OBJECTS);
     return false;
 }
 bool RuntimeSurfaceGraphActive(int index) {

@@ -1,4 +1,5 @@
 #include "editor/scene_editor_surface_material_panel.h"
+#include "editor/scene_editor_surface_mapping_panel.h"
 #include "render/runtime_surface_graph.h"
 /* Cross-adapter, retained document and actual typed-control acceptance. */
 static void surface_graph_m6_probe(SceneEditor *editor) {
@@ -37,6 +38,8 @@ static void surface_graph_m6_probe(SceneEditor *editor) {
                     &h.pixelDpDy, &preview));
                 error = fmax(error, fabs(preview.colorR - payload.baseColorR));
                 error = fmax(error, fabs(preview.colorG - payload.baseColorG));
+                error = fmax(error, fabs(preview.colorB - payload.baseColorB));
+                error = fmax(error, fabs(preview.roughness - payload.bsdf.roughness));
                 assert(preview.linearColor);
             }
             /* Independent inverse-frame position from the compiled asset's source vertices. */
@@ -66,6 +69,8 @@ static void surface_graph_m6_probe(SceneEditor *editor) {
                     CoreSurfaceGraphResult expected;
                     assert(core_surface_graph_evaluate(&program, &query, &expected));
                     assert(fabs(point_payload.baseColorR - expected.color[0]) < 1e-8);
+                    assert(fabs(point_payload.baseColorG - expected.color[1]) < 1e-8);
+                    assert(fabs(point_payload.baseColorB - expected.color[2]) < 1e-8);
                 }
             }
             assert(fabs(payload.bsdf.roughness - .65) < 1e-10);
@@ -75,6 +80,75 @@ static void surface_graph_m6_probe(SceneEditor *editor) {
             ++count;
         }
     assert(count > 0 && error < 1e-8);
+    /* Graph sources never expose competing mapping declarations, including stale events. */
+    SceneEditorSurfaceMappingPanelReset();
+    SDL_Rect mapping_bounds = {20, 20, 500, 300}, mapping_control;
+    SceneEditorSurfaceMappingPanelRender(editor->renderer, mapping_bounds, 20, 0, true);
+    assert(SceneEditorSurfaceMappingPanelControl("expand", &mapping_control));
+    SDL_Event mapping_event = {0};
+    mapping_event.type = SDL_MOUSEBUTTONDOWN;
+    mapping_event.button.button = SDL_BUTTON_LEFT;
+    mapping_event.button.x = mapping_control.x + 2;
+    mapping_event.button.y = mapping_control.y + 2;
+    assert(SceneEditorSurfaceMappingPanelEvent(&mapping_event, 0));
+    SceneEditorSurfaceMappingPanelRender(editor->renderer, mapping_bounds, 20, 0, true);
+    const char *mapping_controls[] = {"legacy", "planar", "axial", "space", "axis",
+                                      "tile_width", "offset_u", "seed"};
+    unsigned long long mapping_revision = SceneEditorDocumentRevision();
+    for(size_t i = 0; i < sizeof(mapping_controls) / sizeof(mapping_controls[0]); ++i)
+        assert(!SceneEditorSurfaceMappingPanelControl(mapping_controls[i], &mapping_control));
+    mapping_event.button.y = 80;
+    assert(!SceneEditorSurfaceMappingPanelEvent(&mapping_event, 0));
+    assert(!SceneEditorSurfaceMappingPanelActive());
+    assert(SceneEditorDocumentRevision() == mapping_revision);
+    SceneEditorSurfaceMappingPanelReset();
+    /* Exercise nonconstant blue and roughness without changing the persisted fixture. */
+    json_object *outputs = NULL, *light_value = NULL;
+    assert(json_object_object_get_ex(graph, "outputs", &outputs));
+    assert(json_object_object_get_ex(json_object_array_get_idx(nodes, 3), "value", &light_value));
+    json_object_object_add(outputs, "roughness", json_object_new_string("pattern"));
+    json_object_array_put_idx(light_value, 2, json_object_new_double(.72));
+    assert(SceneEditorDocumentSetSurfaceGraph(0, json_object_to_json_string(graph),
+                                              SceneEditorDocumentRevision(), diagnostic,
+                                              sizeof(diagnostic)));
+    lod = SceneEditorMeshPreviewStoreGetForQuality(0, true);
+    double minimum_roughness = 1, maximum_roughness = 0;
+    for (int sample = 1; sample <= 24; ++sample) {
+        const RuntimeTriangle3D *tri = &scene.triangleMesh.triangles[0];
+        double w[] = {.02 + sample * .025, .19, .79 - sample * .025};
+        Vec3 point = vec3_add(vec3_add(vec3_scale(tri->p0, w[0]), vec3_scale(tri->p1, w[1])),
+                              vec3_scale(tri->p2, w[2]));
+        Vec3 n = vec3_normalize(vec3_cross(vec3_sub(tri->p1, tri->p0), vec3_sub(tri->p2, tri->p0)));
+        Ray3D ray = RuntimeRay3D_Make(vec3_add(point, vec3_scale(n, 2)), vec3_scale(n, -1));
+        HitInfo3D hit;
+        RuntimeMaterialPayload3D payload;
+        assert(RuntimeRay3D_TraceSceneFirstHit(&scene, &ray, 1e-5, 4, &hit));
+        hit.hasPixelFootprint = true;
+        hit.pixelDpDx = vec3(.003, .001, 0);
+        hit.pixelDpDy = vec3(0, .002, .001);
+        assert(RuntimeMaterialPayload3D_ResolveFromHit(&hit, &payload));
+        double roughness = payload.bsdf.roughness;
+        minimum_roughness = fmin(minimum_roughness, roughness);
+        maximum_roughness = fmax(maximum_roughness, roughness);
+        assert(fabs((payload.baseColorR - .05) / .75 - roughness) < 1e-8);
+        assert(fabs((payload.baseColorG - .08) / .37 - roughness) < 1e-8);
+        assert(fabs((payload.baseColorB - .12) / .60 - roughness) < 1e-8);
+        if (lod) {
+            RuntimeMaterialSurfaceEval preview;
+            assert(RuntimeSurfaceMaterialSampleMeshFootprint(0, 0, tri->localTriangleIndex, w,
+                point, hit.shadingNormal, lod, &hit.pixelDpDx, &hit.pixelDpDy, &preview));
+            assert(fabs(preview.colorR - payload.baseColorR) < 1e-8);
+            assert(fabs(preview.colorG - payload.baseColorG) < 1e-8);
+            assert(fabs(preview.colorB - payload.baseColorB) < 1e-8);
+            assert(fabs(preview.roughness - roughness) < 1e-8);
+        }
+    }
+    assert(maximum_roughness - minimum_roughness > .001);
+    assert(SceneEditorDocumentUndo(diagnostic, sizeof(diagnostic)));
+    json_object_object_add(outputs, "roughness", json_object_new_string("rough"));
+    json_object_array_put_idx(light_value, 2, json_object_new_double(.12));
+    assert(SceneEditorDocumentGetSurfaceMaterialJSON(0, after, sizeof(after)));
+    assert(!strcmp(original, after));
     unsigned long long rev = SceneEditorDocumentRevision();
     json_object *finish = json_object_array_get_idx(nodes, 5), *inputs = NULL;
     assert(json_object_object_get_ex(finish, "inputs", &inputs));
@@ -133,7 +207,7 @@ static void surface_graph_m6_probe(SceneEditor *editor) {
     assert(report);
     fprintf(report,
             "{\"samples\":%d,\"adapter_max_error\":%.12g,\"typed_ui_undo_redo\":true,\"duplicate\":"
-            "true}\n",
+            "true,\"graph_mapping_controls_gated\":true,\"nonconstant_rgb_roughness\":true}\n",
             count, error);
     fclose(report);
     RuntimeScene3D_Free(&scene);

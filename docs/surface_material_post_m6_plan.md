@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: audit-backed proposal; implementation of the slices below has not started.
+Status: T0 implemented and verified; Main Edit adoption verification in progress. T1–T5 remain planned.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -107,7 +107,8 @@ success. A failed restore must be visible and must not leave mixed scene generat
 
 ### T0 — Correctness, failure handling and adoption gate
 
-**Implement first.** Findings A2/A5, R1/R2/R6 and U4.
+**Implementation verified; adoption verification in progress.** Findings A2/A5, R1/R2/R6 and U4.
+See the [T0 contract and verification](surface_material_t0_contract.md).
 
 - T0.1 Reproduce noise period/negative-coordinate behavior in permanent tests;
   correct lattice wrapping on all axes and record compatibility policy. Prefer

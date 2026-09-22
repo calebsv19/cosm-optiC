@@ -102,3 +102,15 @@ type mismatches, invalid parameters and references. Noise fades to its statistic
 mean as footprints grow; checker uses separable box integration per projection.
 This does not promise exact noise integration or coherent triplanar brick.
 Hosts own JSON, geometry transforms, source combinations, UI and lifetime.
+
+## 0.7.1 — periodic noise correction before adoption
+
+Wrap signed value-noise coordinates and every adjacent lattice corner modulo
+2^20 on all axes. This corrects negative-coordinate periodicity and continuity
+at the period boundary. Positive interior cells keep their previous values;
+negative and boundary cells intentionally change. This is a correction to the
+unshipped M6 candidate before Main Edit adoption, not a new graph schema or an
+implicit rewrite of archived expected images. API and document version remain
+unchanged. Permanent independent Decimal-derived samples, period shifts and
+boundary convergence tests cover RGB and varying roughness. Hosts retaining
+pre-correction rendered artifacts must label those artifacts with 0.7.0.

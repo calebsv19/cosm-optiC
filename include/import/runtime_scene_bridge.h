@@ -156,3 +156,8 @@ void runtime_scene_bridge_get_last_3d_light_seed_state(
 bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,
                                                              char *out_object_id,
                                                              size_t out_object_id_size);
+
+/* Late application/restore failures invalidate objects, assets, IDs and all
+ * material caches together. Early validation/read failures preserve last-good. */
+void runtime_scene_bridge_clear_failed_generation(void);
+bool runtime_scene_bridge_empty_after_failure(void);

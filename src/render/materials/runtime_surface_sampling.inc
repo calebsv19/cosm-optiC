@@ -16,6 +16,16 @@ typedef struct SurfaceSampling {
 static SurfaceSampling sampling[MAX_OBJECTS];
 static size_t sampling_bytes;
 static unsigned long long sampling_builds;
+static bool sampling_preparing;
+static RuntimeSurfacePreparationFailure surface_failure;
+void RuntimeSurfacePreparationFailNextForTests(RuntimeSurfacePreparationFailure failure) {
+    surface_failure = failure;
+}
+static bool surface_preparation_fail(RuntimeSurfacePreparationFailure failure) {
+    if (surface_failure != failure) return false;
+    surface_failure = RUNTIME_SURFACE_FAIL_NONE;
+    return true;
+}
 static const char *sampling_channels[] = {"base_color", "roughness", "normal", "height"};
 static void sampling_free(SurfaceSampling *s) {
     core_authored_surface_pyramid_free(&s->material);
@@ -34,6 +44,8 @@ static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfaceP
     if (!json_object_is_type(field(entry, "path"), json_type_string) || !path || path[0] != '/' ||
         !ray_tracing_sha256_is_valid_hex(expected))
         return false;
+    if (sampling_preparing && surface_preparation_fail(RUNTIME_SURFACE_FAIL_IMAGE_READ))
+        return false;
     struct stat st;
     char digest[65];
     if (stat(path, &st) || !S_ISREG(st.st_mode) || st.st_size > 16 * 1024 * 1024 ||
@@ -45,6 +57,8 @@ static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfaceP
         return false;
     unsigned char *bytes = NULL;
     int w = 0, h = 0;
+    if (sampling_preparing && surface_preparation_fail(RUNTIME_SURFACE_FAIL_IMAGE_DECODE))
+        return false;
     if (!RuntimeMaterialAuthoredTextureReadPNGData(path, 1024, &bytes, &w, &h))
         return false;
     if ((w & (w - 1)) || (h & (h - 1))) {
@@ -172,10 +186,9 @@ static bool sampling_validate_scene(json_object *root, char *diagnostic, size_t 
     }
     return true;
 }
-static bool sampling_prepare_scene(json_object *root) {
-    for (int i = 0; i < MAX_OBJECTS; ++i)
-        sampling_free(&sampling[i]);
-    sampling_bytes = 0;
+static bool sampling_prepare_scene(json_object *root, const Binding *bindings,
+                                   SurfaceSampling *sampling, size_t *bytes,
+                                   unsigned long long *builds) {
     json_object *objects = field(root, "objects");
     for (size_t j = 0;
          json_object_is_type(objects, json_type_array) && j < json_object_array_length(objects);
@@ -228,6 +241,8 @@ static bool sampling_prepare_scene(json_object *root) {
                 payload.baseColorR, payload.baseColorG, payload.baseColorB, payload.bsdf.roughness,
                 payload.bsdf.reflectivity, payload.bsdf.specWeight, payload.bsdf.diffuseWeight,
                 payload.transparency);
+            if (surface_preparation_fail(RUNTIME_SURFACE_FAIL_PYRAMID_ALLOCATION))
+                goto failure;
             float *pixels =
                 malloc((size_t)SAMPLING_RESOLUTION * SAMPLING_RESOLUTION * 8 * sizeof(float));
             if (!pixels)
@@ -256,9 +271,9 @@ static bool sampling_prepare_scene(json_object *root) {
             if (!ok)
                 goto failure;
             s->valid = true;
-            sampling_bytes += sampling_size(s);
-            ++sampling_builds;
-            if (sampling_bytes > SAMPLING_MAX_BYTES)
+            *bytes += sampling_size(s);
+            ++*builds;
+            if (*bytes > SAMPLING_MAX_BYTES)
                 goto failure;
         }
     }
@@ -266,7 +281,7 @@ static bool sampling_prepare_scene(json_object *root) {
 failure:
     for (int i = 0; i < MAX_OBJECTS; ++i)
         sampling_free(&sampling[i]);
-    sampling_bytes = 0;
+    *bytes = 0;
     return false;
 }
 bool RuntimeSurfaceSamplingActive(int i) {

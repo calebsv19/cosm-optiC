@@ -225,3 +225,6 @@ normal scene preflight additionally checks graph/source/geometry combinations.
 See the [audit-backed next-step plan](surface_material_post_m6_plan.md) and its
 three independent source audits for open correctness, authoring, preparation and
 composition work. These are proposed implementation slices, not shipped features.
+
+T0 hardens noise periodicity, material generation recovery, graph diagnostics and
+control availability. See [T0 correctness and recovery](surface_material_t0_contract.md).

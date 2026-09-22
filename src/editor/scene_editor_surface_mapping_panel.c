@@ -4,6 +4,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "render/runtime_surface_mapping.h"
 #include "render/runtime_surface_sampling.h"
+#include "render/runtime_surface_graph.h"
 #include "app/ray_tracing_deep_render_desktop_host.h"
 #include <json-c/json.h>
 #include <math.h>
@@ -59,6 +60,15 @@ int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int in
     if(index!=selected) {cancel();selected=index;status[0]=0;}
     enabled=editable;memset(methods,0,sizeof(methods));memset(fields,0,sizeof(fields));space=axis=(SDL_Rect){0};
     expand=(SDL_Rect){b.x,y,b.w,25};button(r,expand,opened?"Surface mapping  -":"Surface mapping  +",opened);y+=29;
+    if(RuntimeSurfaceGraphActive(index)) {
+        /* Graph coordinates belong to retained nodes, not a second mapping declaration. */
+        cancel();enabled=false;
+        if(opened) {
+            SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},"Coordinates: material graph nodes",(SDL_Color){185,200,210,255});y+=26;
+            SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},"Edit in the Material inspector.",(SDL_Color){185,200,210,255});y+=26;
+        }
+        return y;
+    }
     if(!opened || index<0) return y;
     json_object* m=current(index);int version=m?json_object_get_int(get(m,"version")):0;
     if(RuntimeSurfaceSamplingActive(index)){
@@ -112,6 +122,13 @@ int SceneEditorSurfaceMappingPanelRender(SDL_Renderer* r,SDL_Rect b,int y,int in
 }
 bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
     if(!e || index!=selected) return false;
+    /* Recheck the active source even before the next layout clears old hit targets. */
+    if(RuntimeSurfaceGraphActive(index)) {
+        cancel();
+        if(e->type==SDL_MOUSEBUTTONDOWN && e->button.button==SDL_BUTTON_LEFT &&
+           inside(expand,e->button.x,e->button.y)) {opened=!opened;return true;}
+        return false;
+    }
     if(edit>=0) {
         if(SceneEditorDocumentRevision()!=edit_revision) {cancel();return false;}
         if(e->type==SDL_TEXTINPUT) {if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}

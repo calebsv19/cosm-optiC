@@ -260,12 +260,15 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     preflight.runtime_scene_apply_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     ray_tracing_runtime_mesh_assets_timing_snapshot(&preflight.mesh_asset_timing_stats);
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-    runtime_scene_bridge_preflight_file(request->runtime_scene_path, &preflight.scene_summary);
+    bool scene_validated = runtime_scene_bridge_preflight_file(
+        request->runtime_scene_path, &preflight.scene_summary);
     preflight.runtime_scene_preflight_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     if (!preflight.scene_applied) {
         snprintf(preflight.diagnostics,
                  sizeof(preflight.diagnostics),
-                 "failed to apply runtime scene");
+                 "failed to apply runtime scene%s%s",
+                 scene_validated ? "" : ": ",
+                 scene_validated ? "" : preflight.scene_summary.diagnostics);
         ray_tracing_render_headless_write_progress_and_job_status(request->progress_path,
                                       request,
                                       "failed",

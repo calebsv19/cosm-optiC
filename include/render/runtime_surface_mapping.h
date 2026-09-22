@@ -42,3 +42,13 @@ bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
 bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t triangle,
     const double barycentric[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh *lod,
     const Vec3 *dpdx,const Vec3 *dpdy,RuntimeMaterialSurfaceEval *out);
+
+/* Clear all prepared mappings, sampled resources and graph programs together. */
+void RuntimeSurfaceMappingReset(void);
+/* Deterministic one-shot failures for lifecycle verification; disabled by default. */
+typedef enum RuntimeSurfacePreparationFailure {
+    RUNTIME_SURFACE_FAIL_NONE, RUNTIME_SURFACE_FAIL_ALLOCATION,
+    RUNTIME_SURFACE_FAIL_IMAGE_READ, RUNTIME_SURFACE_FAIL_IMAGE_DECODE,
+    RUNTIME_SURFACE_FAIL_PYRAMID_ALLOCATION
+} RuntimeSurfacePreparationFailure;
+void RuntimeSurfacePreparationFailNextForTests(RuntimeSurfacePreparationFailure failure);

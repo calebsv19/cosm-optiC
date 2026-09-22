@@ -41,9 +41,7 @@ typedef struct Binding {
 static Binding bindings[MAX_OBJECTS];
 static unsigned long long revision;
 static bool sampling_validate_scene(json_object*,char*,size_t);
-static bool sampling_prepare_scene(json_object*);
 static bool graph_validate_scene(json_object*,char*,size_t);
-static bool graph_prepare_scene(json_object*,double);
 
 static json_object* field(json_object* o,const char* key) {
     json_object* v=NULL; if(o) json_object_object_get_ex(o,key,&v); return v;
@@ -488,8 +486,7 @@ bool RuntimeSurfaceMappingValidateScene(json_object* root,char* diagnostic,size_
     }
     return sampling_validate_scene(root,diagnostic,size) && graph_validate_scene(root,diagnostic,size);
 }
-bool RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
-    memset(bindings,0,sizeof(bindings)); ++revision;
+static void mapping_prepare_scene(json_object* root,double world_scale,Binding* bindings) {
     RuntimeSceneBridge3DPrimitiveSeedState seeds={0};
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
     json_object* objects=field(root,"objects");
@@ -528,7 +525,7 @@ bool RuntimeSurfaceMappingLoadScene(json_object* root,double world_scale) {
             prepare_regions(b,material_row(root,p->object_id));
         }
     }
-    return sampling_prepare_scene(root) && graph_prepare_scene(root,world_scale);
+
 }
 bool RuntimeSurfaceMappingActive(int i) { return animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE && i>=0 && i<MAX_OBJECTS && bindings[i].active; }
 unsigned long long RuntimeSurfaceMappingRevision(void) {return revision;}
@@ -722,3 +719,45 @@ bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
 #include "runtime_surface_sampling.inc"
 
 #include "runtime_surface_graph.inc"
+
+/* Scene application runs at the scene-update boundary. Candidate allocations and
+ * decoding never mutate the published material arrays. The bridge invalidates
+ * the whole runtime scene if preparation fails after objects have been replaced. */
+void RuntimeSurfaceMappingReset(void) {
+    memset(bindings, 0, sizeof(bindings));
+    memset(surface_graphs, 0, sizeof(surface_graphs));
+    for (int i = 0; i < MAX_OBJECTS; ++i) sampling_free(&sampling[i]);
+    sampling_bytes = 0;
+    ++revision;
+}
+bool RuntimeSurfaceMappingLoadScene(json_object* root, double world_scale) {
+    Binding *maps = NULL;
+    SurfaceSampling *samples = NULL;
+    SurfaceGraph *graphs = NULL;
+    size_t bytes = 0;
+    unsigned long long builds = 0;
+    bool ok = false;
+    if (surface_preparation_fail(RUNTIME_SURFACE_FAIL_ALLOCATION)) return false;
+    maps = calloc(MAX_OBJECTS, sizeof(*maps));
+    samples = calloc(MAX_OBJECTS, sizeof(*samples));
+    graphs = calloc(MAX_OBJECTS, sizeof(*graphs));
+    if (!maps || !samples || !graphs) goto done;
+    mapping_prepare_scene(root, world_scale, maps);
+    sampling_preparing = true;
+    ok = sampling_prepare_scene(root, maps, samples, &bytes, &builds) &&
+         graph_prepare_scene(root, world_scale, graphs);
+    sampling_preparing = false;
+    if (ok) {
+        RuntimeSurfaceMappingReset();
+        memcpy(bindings, maps, sizeof(bindings));
+        memcpy(sampling, samples, sizeof(sampling));
+        memcpy(surface_graphs, graphs, sizeof(surface_graphs));
+        memset(samples, 0, sizeof(sampling)); /* ownership transferred */
+        sampling_bytes = bytes;
+        sampling_builds += builds;
+    }
+done:
+    if (samples) for (int i = 0; i < MAX_OBJECTS; ++i) sampling_free(&samples[i]);
+    free(maps); free(samples); free(graphs);
+    return ok;
+}

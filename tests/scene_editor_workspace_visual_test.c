@@ -398,6 +398,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_surface_mapping_m4.h"
 #include "scene_editor_surface_mapping_m5.h"
 #include "scene_editor_surface_graph_m6.h"
+#include "scene_editor_surface_lifecycle_t0.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -427,6 +428,9 @@ int main(int argc, char** argv) {
     }
     if(argc==4 && !strcmp(argv[3],"--sampling-ray-motion-m5")) {
         surface_sampling_ray_motion_m5_probe();DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--surface-lifecycle-t0")) {
+        surface_lifecycle_t0_probe(argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }
     if(argc==4 && !strcmp(argv[3],"--graph-m6")) {
         surface_graph_m6_probe(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;

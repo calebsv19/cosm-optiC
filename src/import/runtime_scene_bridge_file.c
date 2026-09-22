@@ -233,10 +233,11 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
                  "%s",
                  runtime_scene_path_copy);
     } else {
-        snprintf(animSettings.runtimeScenePath,
-                 sizeof(animSettings.runtimeScenePath),
-                 "%s",
-                 previous_runtime_scene_path);
+        if (runtime_scene_bridge_empty_after_failure())
+            animSettings.runtimeScenePath[0] = '\0';
+        else
+            snprintf(animSettings.runtimeScenePath,
+                     sizeof(animSettings.runtimeScenePath), "%s", previous_runtime_scene_path);
         ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
         ray_tracing_runtime_curve_asset_set_free(curve_assets);
     }

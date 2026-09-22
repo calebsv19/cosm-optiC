@@ -73,11 +73,15 @@ static double sg_hash(int64_t x, int64_t y, int64_t z, uint32_t seed) {
     v ^= v >> 27;
     return (double)(v >> 11) / 9007199254740992.0;
 }
+/* Wrap both positions and adjacent lattice corners to keep the periodic field
+ * continuous, including negative coordinates and cells straddling the seam. */
 static double sg_noise(const double *p, uint32_t seed) {
     int64_t cell[3];
     double f[3];
     for (int a = 0; a < 3; ++a) {
         double v = fmod(p[a], 1048576.0);
+        if (v < 0)
+            v += 1048576.0;
         cell[a] = (int64_t)floor(v);
         f[a] = v - floor(v);
         f[a] = f[a] * f[a] * (3 - 2 * f[a]);
@@ -86,7 +90,8 @@ static double sg_noise(const double *p, uint32_t seed) {
     for (int z = 0; z < 2; ++z)
         for (int y = 0; y < 2; ++y)
             for (int x = 0; x < 2; ++x)
-                out += sg_hash(cell[0] + x, cell[1] + y, cell[2] + z, seed) *
+                out += sg_hash((cell[0] + x) % 1048576, (cell[1] + y) % 1048576,
+                               (cell[2] + z) % 1048576, seed) *
                        (x ? f[0] : 1 - f[0]) * (y ? f[1] : 1 - f[1]) * (z ? f[2] : 1 - f[2]);
     return out;
 }

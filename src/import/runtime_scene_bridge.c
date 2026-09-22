@@ -71,6 +71,21 @@ static void scaffold_state_reset(void) {
     memset(&g_last_3d_light_seeds, 0, sizeof(g_last_3d_light_seeds));
 }
 
+static bool s_empty_after_failure;
+void runtime_scene_bridge_clear_failed_generation(void) {
+    scene_defaults_reset();
+    scaffold_state_reset();
+    RuntimeSurfaceMappingReset();
+    ray_tracing_runtime_mesh_assets_reset_last();
+    ray_tracing_runtime_curve_assets_reset_last();
+    RuntimeNative3DPreparedSceneMarkDirty("failed scene generation cleared");
+    animSettings.runtimeScenePath[0] = '\0';
+    animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
+    animSettings.useFluidScene = false;
+    s_empty_after_failure = true;
+}
+bool runtime_scene_bridge_empty_after_failure(void) { return s_empty_after_failure; }
+
 static double runtime_scene_bridge_scale_scene_length(
     double scene_length FISICS_DIM(length) FISICS_UNIT(meter),
     double world_scale) {
@@ -850,9 +865,6 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
 
     if (!runtime_scene_json || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
-    ray_tracing_runtime_mesh_assets_reset_last();
-    ray_tracing_runtime_curve_assets_reset_last();
-    RuntimeNative3DPreparedSceneMarkDirty("runtime_scene_bridge_apply_json");
 
     root = json_tokener_parse(runtime_scene_json);
     if (!root || !json_object_is_type(root, json_type_object)) {
@@ -866,6 +878,9 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
         return false;
     }
 
+    ray_tracing_runtime_mesh_assets_reset_last();
+    ray_tracing_runtime_curve_assets_reset_last();
+    RuntimeNative3DPreparedSceneMarkDirty("runtime_scene_bridge_apply_json");
     scene_defaults_reset();
     scaffold_state_reset();
     runtime_scene_bridge_apply_space_mode(root);
@@ -887,13 +902,16 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     g_last_3d_digest.valid = true;
     g_last_3d_primitive_seeds.valid = true;
     if(!RuntimeSurfaceMappingLoadScene(root,world_scale)) {
-        runtime_scene_bridge_preflight_diag(out_summary,"surface material preparation failed");
+        runtime_scene_bridge_clear_failed_generation();
+        out_summary->object_count = 0;
+        runtime_scene_bridge_preflight_diag(out_summary,"surface material preparation failed; runtime scene cleared");
         json_object_put(root);return false;
     }
     animSettings.runtimeScenePath[0] = '\0';
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.useFluidScene = false;
 
+    s_empty_after_failure = false;
     runtime_scene_bridge_preflight_diag(out_summary, "ok");
     json_object_put(root);
     return true;

@@ -1,6 +1,17 @@
 # optiC Current Truth
 
-## September 21 post-M6 independent audit
+## September 21 T0 hardening checkpoint
+
+T0 corrects shared noise lattice wrapping, stages all material tables before
+publication, defines early last-good versus late empty runtime recovery, and
+preserves retained documents through failed restore. Graph diagnostics identify
+object/node/property and stable reason; incompatible graph mapping controls are
+gated. See the [T0 contract](surface_material_t0_contract.md) for compatibility,
+failure policy and independent/native verification. Shared authored texture is
+0.7.1; Main Edit source adoption verification is in progress. T1–T5 remain planned,
+and hands-on acceptance remains separate from scripted native proof.
+
+## September 21 post-M6 independent audit (historical findings)
 
 Three independent architecture, authoring and runtime audits found additional
 work before Main Edit adoption. A compiled-library probe reproduces a noise-period

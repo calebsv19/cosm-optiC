@@ -99,4 +99,12 @@ bool SceneEditorDocumentSetSurfaceLayerValue(int index,const char* layer_id,
 bool SceneEditorDocumentSetSurfaceGraph(int index, const char *graph_json,
     unsigned long long revision, char *diagnostic, size_t size);
 
+
+/* One-shot deterministic lifecycle faults, disabled during normal operation. */
+typedef enum SceneEditorDocumentFailure {
+    SCENE_DOCUMENT_FAIL_NONE, SCENE_DOCUMENT_FAIL_SNAPSHOT,
+    SCENE_DOCUMENT_FAIL_HISTORY, SCENE_DOCUMENT_FAIL_RESTORE
+} SceneEditorDocumentFailure;
+void SceneEditorDocumentFailNextForTests(SceneEditorDocumentFailure failure);
+
 #endif

@@ -33,11 +33,22 @@ typedef struct SceneEditorDocumentState {
     char* redo[SCENE_EDITOR_DOCUMENT_HISTORY_LIMIT];
     int redo_count;
     char* pending_before;
+    json_object* pending_root;
     unsigned long long revision;
     bool dirty;
 } SceneEditorDocumentState;
 
 static SceneEditorDocumentState s_document;
+
+static SceneEditorDocumentFailure document_failure;
+void SceneEditorDocumentFailNextForTests(SceneEditorDocumentFailure failure) {
+    document_failure = failure;
+}
+static bool document_fail(SceneEditorDocumentFailure failure) {
+    if (document_failure != failure) return false;
+    document_failure = SCENE_DOCUMENT_FAIL_NONE;
+    return true;
+}
 
 static bool document_parent_path(const char* path, char* out, size_t out_size);
 
@@ -228,38 +239,60 @@ static bool document_apply_saved_file(char* diagnostics, size_t diagnostics_size
 }
 
 bool document_begin_command(char* diagnostics, size_t diagnostics_size) {
-    char* before = document_serialize_root(s_document.root, NULL);
+    char* before = NULL;
     if (s_document.pending_before) {
         document_diag(diagnostics, diagnostics_size, "another document command is pending");
         return false;
     }
-    if (!before) {
+    if (!document_fail(SCENE_DOCUMENT_FAIL_SNAPSHOT))
+        before = document_serialize_root(s_document.root, NULL);
+    json_object* retained = before ? json_tokener_parse(before) : NULL;
+    if (!before || !retained) {
+        free(before);
+        if (retained) json_object_put(retained);
         document_diag(diagnostics, diagnostics_size, "failed to snapshot undo state");
         return false;
     }
     s_document.pending_before = before;
+    s_document.pending_root = retained;
     return true;
 }
 
 static bool document_commit_command_history(void) {
     char* before = s_document.pending_before;
-    if (!before) return false;
+    if (!before || document_fail(SCENE_DOCUMENT_FAIL_HISTORY)) return false;
     if (!document_push(s_document.undo, &s_document.undo_count, before)) return false;
     s_document.pending_before = NULL;
+    json_object_put(s_document.pending_root);
+    s_document.pending_root = NULL;
     document_clear_stack(s_document.redo, &s_document.redo_count);
     return true;
 }
 
 static void document_rollback_command(void) {
-    json_object* restored = NULL;
-    char* snapshot = s_document.pending_before;
-    if (!snapshot) return;
-    restored = json_tokener_parse(snapshot);
-    free(snapshot);
-    s_document.pending_before = NULL;
-    if (!restored) return;
+    if (!s_document.pending_root) return;
     json_object_put(s_document.root);
-    s_document.root = restored;
+    s_document.root = s_document.pending_root;
+    s_document.pending_root = NULL;
+    free(s_document.pending_before);
+    s_document.pending_before = NULL;
+}
+
+static void document_restore_runtime(char* diagnostics, size_t size) {
+    char restore[512] = {0};
+    bool ok = !document_fail(SCENE_DOCUMENT_FAIL_RESTORE) &&
+              document_apply_current(restore, sizeof(restore));
+    if (!ok) {
+        runtime_scene_bridge_clear_failed_generation();
+        if (diagnostics && size) {
+            char cause[160];
+            snprintf(cause, sizeof(cause), "%s", diagnostics);
+            /* Put recovery status first so even a small inspector buffer shows it. */
+            snprintf(diagnostics, size,
+                "restore failed: runtime scene cleared; retained document available. %s (%s)",
+                cause, restore[0] ? restore : "restore failure");
+        }
+    }
 }
 
 json_object* document_object_for_scene_index(int scene_object_index,
@@ -318,13 +351,13 @@ static json_object* document_vec3_new(const double value[3]) {
 bool document_finish_command(char* diagnostics, size_t diagnostics_size) {
     if (!document_apply_current(diagnostics, diagnostics_size)) {
         document_rollback_command();
-        (void)document_apply_current(NULL, 0u);
+        document_restore_runtime(diagnostics, diagnostics_size);
         return false;
     }
     if (!document_commit_command_history()) {
         document_rollback_command();
-        (void)document_apply_current(NULL, 0u);
         document_diag(diagnostics, diagnostics_size, "failed to commit document history");
+        document_restore_runtime(diagnostics, diagnostics_size);
         return false;
     }
     s_document.dirty = true;
@@ -375,6 +408,7 @@ void SceneEditorDocumentClose(void) {
     if (s_document.root) json_object_put(s_document.root);
     free(s_document.baseline_bytes);
     free(s_document.pending_before);
+    if (s_document.pending_root) json_object_put(s_document.pending_root);
     document_clear_stack(s_document.undo, &s_document.undo_count);
     document_clear_stack(s_document.redo, &s_document.redo_count);
     memset(&s_document, 0, sizeof(s_document));
@@ -783,7 +817,7 @@ static bool document_history_move(char** from,
         json_object_put(root);
         from[(*from_count)++] = target;
         free(current);
-        (void)document_apply_current(NULL, 0u);
+        document_restore_runtime(diagnostics, diagnostics_size);
         return false;
     }
     if (!document_push(to, to_count, current)) {
@@ -791,7 +825,7 @@ static bool document_history_move(char** from,
         json_object_put(root);
         from[(*from_count)++] = target;
         free(current);
-        (void)document_apply_current(NULL, 0u);
+        document_restore_runtime(diagnostics, diagnostics_size);
         return false;
     }
     json_object_put(previous_root);
@@ -982,26 +1016,46 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
     if (!root) {
         return false;
     }
+    /* History owns an already allocated snapshot. Reserve the failure boundary
+     * before changing runtime or disk, so a rejected history commit cannot leave
+     * a saved candidate with an unrelated active scene or a pending command. */
+    if (document_fail(SCENE_DOCUMENT_FAIL_HISTORY)) {
+        json_object_put(root);
+        document_diag(diagnostics, diagnostics_size, "failed to reserve candidate history");
+        return false;
+    }
     if (!document_begin_command(diagnostics, diagnostics_size)) {
         json_object_put(root);
         return false;
     }
     json_object_put(s_document.root);
     s_document.root = root;
+    if (!document_apply_current(diagnostics, diagnostics_size)) {
+        document_rollback_command();
+        document_restore_runtime(diagnostics, diagnostics_size);
+        return false;
+    }
     s_document.dirty = true;
     s_document.revision += 1u;
     if (!SceneEditorDocumentSave(diagnostics, diagnostics_size)) {
         document_rollback_command();
         s_document.dirty = was_dirty;
         s_document.revision = previous_revision;
-        (void)document_apply_current(NULL, 0u);
+        document_restore_runtime(diagnostics, diagnostics_size);
         return false;
     }
     if (!document_commit_command_history()) {
-        document_diag(diagnostics, diagnostics_size, "managed candidate saved but history commit failed");
+        /* Defensive invariant failure: disk, document and runtime already agree.
+         * Release pending ownership rather than wedging all later commands. */
+        free(s_document.pending_before);
+        s_document.pending_before = NULL;
+        if (s_document.pending_root) json_object_put(s_document.pending_root);
+        s_document.pending_root = NULL;
+        document_diag(diagnostics, diagnostics_size,
+                      "managed candidate saved and applied but history commit failed");
         return false;
     }
-    return document_apply_saved_file(diagnostics, diagnostics_size);
+    return true;
 }
 
 const char* SceneEditorDocumentUnitLabel(void) {
