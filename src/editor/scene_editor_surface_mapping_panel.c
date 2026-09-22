@@ -28,6 +28,14 @@ static json_object* current(int index) {
     char json[8192];if(!SceneEditorDocumentGetSurfaceMappingJSON(index,json,sizeof(json))) return NULL;
     return json_tokener_parse(json);
 }
+static bool mapping_graph_owned(int index) {
+    if(!RuntimeSurfaceGraphActive(index))return false;
+    size_t size=SceneEditorDocumentSurfaceMaterialJSONSize(index);char *text=size?malloc(size):NULL;
+    json_object *row=text && SceneEditorDocumentGetSurfaceMaterialJSON(index,text,size)?json_tokener_parse(text):NULL;
+    json_object *g=get(row,"surface_graph");const char *cap=json_object_get_string(get(g,"required_capability"));
+    bool composition=json_object_get_int(get(g,"version"))==2 && cap && !strcmp(cap,"optic.surface_composition_v1");
+    if(row)json_object_put(row);free(text);return !composition;
+}
 static const char* field_key(json_object* m,int i) {
     if(json_object_get_int(get(m,"version"))==3 && i<4) return i<2?"uv_scale":"uv_offset";
     return keys[i];
@@ -62,7 +70,7 @@ static int mapping_panel_render_content(SDL_Renderer* r,SDL_Rect b,int y,int ind
     if(index!=selected) {cancel();selected=index;status[0]=0;}
     enabled=editable;memset(methods,0,sizeof(methods));memset(fields,0,sizeof(fields));space=axis=(SDL_Rect){0};
     expand=(SDL_Rect){b.x,y,b.w,25};button(r,expand,opened?"Surface mapping  -":"Surface mapping  +",opened);y+=29;
-    if(RuntimeSurfaceGraphActive(index)) {
+    if(mapping_graph_owned(index)) {
         /* Graph coordinates belong to retained nodes, not a second mapping declaration. */
         cancel();enabled=false;
         if(opened) {
@@ -91,7 +99,9 @@ static int mapping_panel_render_content(SDL_Renderer* r,SDL_Rect b,int y,int ind
         if(status[0]) {SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},status,(SDL_Color){225,195,150,255});y+=27;}
         json_object_put(m);return y;
     }
-    for(int i=0;i<3;++i) {methods[i]=(SDL_Rect){b.x+i*b.w/3,y,b.w/3-3,25};button(r,methods[i],(const char*[]){"Legacy","Planar","Axial brick"}[i],version==i);}y+=29;
+    if(RuntimeSurfaceGraphActive(index)) {
+        SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,25},"Image chart: Planar (procedural XYZ in Sources)",(SDL_Color){185,200,210,255});y+=29;
+    } else {for(int i=0;i<3;++i) {methods[i]=(SDL_Rect){b.x+i*b.w/3,y,b.w/3-3,25};button(r,methods[i],(const char*[]){"Legacy","Planar","Axial brick"}[i],version==i);}y+=29;}
     if(m) {
         const char* sp=json_object_get_string(get(m,"space"));
         space=(SDL_Rect){b.x,y,b.w/2-2,25};axis=(SDL_Rect){b.x+b.w/2,y,b.w/2,25};
@@ -153,7 +163,7 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
         return true;
     }
     /* Recheck the active source even before the next layout clears old hit targets. */
-    if(RuntimeSurfaceGraphActive(index)) {
+    if(mapping_graph_owned(index)) {
         cancel();
         if(e->type==SDL_MOUSEBUTTONDOWN && e->button.button==SDL_BUTTON_LEFT &&
            inside(expand,e->button.x,e->button.y)) {opened=!opened;return true;}

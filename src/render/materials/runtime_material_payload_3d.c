@@ -556,6 +556,7 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
         return false;
     }
 
+    if(hit && RuntimeSurfaceGraphCompositionActive(scene_object_index)) return RuntimeSurfaceGraphResolve(hit,out_payload);
     if(hit && RuntimeSurfaceSamplingActive(scene_object_index) && !hit->hasRegionMaterial &&
        !hit->hasRegionAuthoredMaterial && !hit->hasProceduralSurfaceMaterial)
         return RuntimeSurfaceSamplingResolve(hit,out_payload);

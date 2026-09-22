@@ -1,5 +1,6 @@
 #pragma once
 #include "render/runtime_material_payload_3d.h"
+#include "core_authored_surface_graph.h"
 /* Immutable resources prepared with the retained scene. No shading-time IO. */
 bool RuntimeSurfaceSamplingActive(int index);
 bool RuntimeSurfaceSamplingResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload);
@@ -27,3 +28,7 @@ bool RuntimeSurfaceSamplingCacheResetForTests(void);
  * Relative channels cannot escape the scene's parent directory. */
 bool RuntimeSurfaceSamplingSetScenePathContext(const char *scene_path);
 const char *RuntimeSurfaceSamplingScenePathContext(void);
+
+/* T3: image inputs precede graph evaluation; basis response follows it once. */
+bool RuntimeSurfaceSamplingGraphInputs(const HitInfo3D*,const CoreSurfaceGraph*,CoreSurfaceGraphInputs*);
+bool RuntimeSurfaceSamplingApplyResponse(const HitInfo3D*,RuntimeMaterialPayload3D*);

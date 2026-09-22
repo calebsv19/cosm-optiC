@@ -24,6 +24,9 @@ The new capability is additive and does not reinterpret legacy material_graph v1
 or surface_sampling v1. M6 is a bounded procedural DAG, not a universal shader
 language or automatic distortion-minimizing unwrap system.
 
+The opt-in [T3 composition contract](surface_material_t3_contract.md) extends this
+with graph version 2; the version 1 interpretation below remains unchanged.
+
 ## Capability and graph contract
 
 `ray_tracing_render_headless --surface-capabilities` emits the executable's JSON

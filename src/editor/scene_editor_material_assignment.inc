@@ -8,8 +8,8 @@ static int assignment_selected = -1, assignment_section = 1, assignment_mode,
            assignment_choice = -1, assignment_scroll, assignment_sources[MAX_OBJECTS];
 static bool assignment_expanded = true;
 static unsigned long long assignment_revision;
-static const char *assignment_presets[] = {"noise3d", "triplanar_checker", "solid"};
-static const char *assignment_preset_labels[] = {"Noise", "Triplanar checker", "Solid color"};
+static const char *assignment_presets[] = {"noise3d", "triplanar_checker", "solid", "composition"};
+static const char *assignment_preset_labels[] = {"Noise", "Triplanar checker", "Solid color", "Image + procedural composition"};
 static const char *assignment_section_names[] = {"Appearance", "Sources", "Coordinates", "Preview"};
 static void assignment_invalidate(void) {
     assignment_bounds=assignment_title=assignment_preview=assignment_confirm=assignment_cancel=(SDL_Rect){0};
@@ -34,7 +34,7 @@ static void assignment_open(int mode) {
 int SceneEditorSurfaceMaterialSection(void) { return assignment_section; }
 bool SceneEditorSurfaceMaterialHeaderModal(void) { return assignment_mode != 0; }
 static int assignment_rows(void) {
-    if (assignment_mode != 2) return assignment_mode == 1 || assignment_mode == 3 ? 3 : 0;
+    if (assignment_mode != 2) return assignment_mode == 1 || assignment_mode == 3 ? 4 : 0;
     int count = 0;
     SceneEditorDocumentObjectInfo item;
     for (int i = 0; i < SceneEditorDocumentObjectCount() && count < MAX_OBJECTS; ++i)
@@ -77,7 +77,7 @@ int SceneEditorSurfaceMaterialHeaderRender(SDL_Renderer *r, SDL_Rect b, int inde
     assignment_title = (SDL_Rect){b.x, y, b.w, 26}; draw(r, assignment_title, text, false); y += 29;
     if (!selected_object) return assignment_limit(y,b);
     if (assignment_mode) {
-        const char *description = assignment_mode == 1 ? "New source: choose a procedural preset" :
+        const char *description = assignment_mode == 1 ? "New source: choose a preset" :
             assignment_mode == 2 ? "Assign an independent copy from an object" :
             assignment_mode == 3 ? "Replace source; retain previous declaration" :
             assignment_mode == 4 ? "Reset source values; keep coordinates" : "Reset coordinates; keep source values";
@@ -102,7 +102,7 @@ int SceneEditorSurfaceMaterialHeaderRender(SDL_Renderer *r, SDL_Rect b, int inde
     }
     if (assignment_expanded) {
         json_object *row=current(index);
-        const char *family=RuntimeSurfaceGraphActive(index)?"Procedural graph":
+        const char *family=composition_row(row)?"Image + procedural composition":RuntimeSurfaceGraphActive(index)?"Procedural graph":
             RuntimeSurfaceMappingActive(index)?"Mapped material":"Legacy material";
         json_object *meta=get(row,"material_authoring");
         const char *name=json_object_get_string(get(meta,"name"));
@@ -187,7 +187,7 @@ static bool assignment_control(const char *name,SDL_Rect *out) {
         for(int i=0;i<4;++i)if(!strcmp(name+8,assignment_section_names[i])){*out=assignment_sections[i];return out->w>0;}
         return false;
     } else if(!strncmp(name,"preset:",7)) {
-        for(int i=0;i<3;++i)if(!strcmp(name+7,assignment_presets[i])){*out=assignment_choices[i];return out->w>0;}
+        for(int i=0;i<4;++i)if(!strcmp(name+7,assignment_presets[i])){*out=assignment_choices[i];return out->w>0;}
         return false;
     } else if(!strncmp(name,"assign:",7)) {
         for(int i=0;i<assignment_rows();++i){SceneEditorDocumentObjectInfo info;

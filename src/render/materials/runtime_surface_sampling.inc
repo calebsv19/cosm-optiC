@@ -8,7 +8,7 @@
 #define SAMPLING_RESOLUTION 256u
 #include "runtime_surface_resource_cache.inc"
 typedef struct SurfaceSampling {
-    bool declared, valid;
+    bool declared, valid, composition;
     double period[2], normal_strength, height_m;
     RuntimeMaterialPayload3D base;
     Vec3 coordinate_gradient[3];
@@ -41,7 +41,7 @@ static json_object *sampling_declaration(json_object *o) {
     return field(field(field(o, "extensions"), "ray_tracing"), "surface_sampling");
 }
 static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfacePyramid *out,
-                           SamplingResource **resource) {
+                           SamplingResource **resource, bool composition) {
     if (!json_object_is_type(entry, json_type_object))
         return false;
     const char *declared = json_object_get_string(field(entry, "path")),
@@ -65,7 +65,7 @@ static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfaceP
     if (sampling_preparing && surface_preparation_fail(RUNTIME_SURFACE_FAIL_IMAGE_DECODE))
         return false;
     char key[96];
-    snprintf(key, sizeof(key), "image-v1:%d:%d:%s", channel, srgb, expected);
+    snprintf(key, sizeof(key), "image-v%d:%d:%d:%s", composition && channel==2 ? 2 : 1, channel, srgb, expected);
     SamplingResource *cached = sampling_resource_find(key);
     if (cached) {
         *resource = cached;
@@ -109,7 +109,7 @@ static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfaceP
         if (channel == 2) {
             double n[3];
             for (int c = 0; c < 3; ++c)
-                n[c] = 2 * pixels[4 * p + c] - 1;
+                n[c] = composition && c<2 ? fmax(-1,((double)bytes[4*p+c]-128)/127) : 2 * pixels[4 * p + c] - 1;
             double length = hypot(hypot(n[0], n[1]), n[2]);
             if (length < 1e-6 || n[2] < 0) {
                 valid = false;
@@ -137,6 +137,7 @@ static bool sampling_read(json_object *o, json_object *row, SurfaceSampling *s) 
     if (!decl)
         return true;
     s->declared = true;
+    s->composition = composition_source(row);
     if (!json_object_is_type(decl, json_type_object) ||
         !token(decl, "required_capability", "optic.surface_sampling_v1") ||
         !json_object_is_type(field(decl, "version"), json_type_int) ||
@@ -151,7 +152,7 @@ static bool sampling_read(json_object *o, json_object *row, SurfaceSampling *s) 
         if (s->period[c] < 1 || s->period[c] > 32 || floor(s->period[c]) != s->period[c])
             return false;
     CoreAuthoredSurfaceMapping map;
-    if (!parse(mapping(o), &map))
+    if (!parse(mapping(o), &map) || (s->composition && map.version!=1 && map.version!=3))
         return false;
     /* Axial U wraps exactly once per declared circumference; no chart-edge seam. */
     if (map.version == 2 &&
@@ -175,7 +176,7 @@ static bool sampling_read(json_object *o, json_object *row, SurfaceSampling *s) 
             for (; c < 4; ++c)
                 if (!strcmp(key, sampling_channels[c]))
                     break;
-            if (c == 4 || !sampling_image(value, c, &s->images[c], &s->image_resources[c]))
+            if (c == 4 || !sampling_image(value, c, &s->images[c], &s->image_resources[c], s->composition))
                 return false;
         }
     }
@@ -220,7 +221,7 @@ static bool sampling_validate_scene(json_object *root, char *diagnostic, size_t 
         const char *id = json_object_get_string(field(o, "object_id"));
         json_object *row = id ? material_row(root, id) : NULL;
         bool ok = sampling_read(o, row, &s);
-        if (ok && s.declared) {
+        if (ok && s.declared && !s.composition) {
             char key[65];
             ok = sampling_program_estimate_key(o, row, s.period, key);
             bool duplicate = false;
@@ -271,8 +272,8 @@ static bool sampling_prepare_scene(json_object *root, const Binding *bindings,
             RuntimeMaterialPayload3D payload;
             RuntimeMaterialTextureStack stack;
             if (!RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(i, &payload) ||
-                !SceneEditorMaterialStackGetEffectiveObjectStack(&sceneSettings.sceneObjects[i], i,
-                                                                 &stack))
+                (!s->composition && !SceneEditorMaterialStackGetEffectiveObjectStack(&sceneSettings.sceneObjects[i], i,
+                                                                 &stack)))
                 goto failure;
             s->base = payload;
             const Binding *binding = &bindings[i];
@@ -301,6 +302,7 @@ static bool sampling_prepare_scene(json_object *root, const Binding *bindings,
                 s->coordinate_gradient[axis] = gradient;
                 s->coordinate_offset[axis] = -vec3_dot(origin, gradient);
             }
+            if(s->composition) {s->valid=true;continue;}
             RuntimeMaterialSurfaceEval base = RuntimeMaterialSurfaceEvalMakeBase(
                 payload.baseColorR, payload.baseColorG, payload.baseColorB, payload.bsdf.roughness,
                 payload.bsdf.reflectivity, payload.bsdf.specWeight, payload.bsdf.diffuseWeight,
@@ -459,47 +461,18 @@ bool RuntimeSurfaceSamplingCoordinates(const HitInfo3D *hit, double uv[2], doubl
                                        double dy[2], Vec3 *du, Vec3 *dv) {
     return sampling_coordinates(hit, uv, dx, dy, du, dv, NULL);
 }
-bool RuntimeSurfaceSamplingResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload) {
-    if (!hit || !payload || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))
-        return false;
-    *payload = sampling[hit->sceneObjectIndex].base;
-    payload->valid = RuntimeSurfaceSamplingApply(hit, payload);
-    return payload->valid;
-}
-bool RuntimeSurfaceSamplingApply(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload) {
-    if (!hit || !payload || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))
-        return true;
-    HitInfo3D unperturbed = *hit;
-    if (hit->hasUnperturbedShadingNormal) {
-        unperturbed.shadingNormal = unperturbed.normal = hit->unperturbedShadingNormal;
-        hit = &unperturbed;
+static bool sampling_finish_response(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload,
+                                      RuntimeMaterialSurfaceEval e) {
+    HitInfo3D unperturbed=*hit;
+    if(hit->hasUnperturbedShadingNormal) {
+        unperturbed.shadingNormal=unperturbed.normal=hit->unperturbedShadingNormal;hit=&unperturbed;
     }
-    RuntimeMaterialSurfaceEval base = RuntimeMaterialSurfaceEvalMakeBase(
-        payload->baseColorR, payload->baseColorG, payload->baseColorB, payload->bsdf.roughness,
-        payload->bsdf.reflectivity, payload->bsdf.specWeight, payload->bsdf.diffuseWeight,
-        payload->transparency);
-    double source_weight = 1;
-    SurfaceSampling *s = &sampling[hit->sceneObjectIndex];
-    double uv[2], dx[2], dy[2], v[8], lod;
-    Vec3 du, dv;
-    if (!sampling_coordinates(hit, uv, dx, dy, &du, &dv, &source_weight) ||
-        !core_authored_surface_pyramid_sample(&s->material, uv, dx, dy, v, &lod))
-        return false;
-    RuntimeMaterialSurfaceEval e = RuntimeMaterialSurfaceEvalMakeBase(
-        v[0], v[1], v[2], sqrt(fmax(0, v[3])), v[4], v[5], v[6], v[7]);
-    e.active = true;
-    if (s->images[0].values) {
-        if (!core_authored_surface_pyramid_sample(&s->images[0], uv, dx, dy, v, NULL))
-            return false;
-        e.colorR = v[0] + e.colorR * (1 - v[3]);
-        e.colorG = v[1] + e.colorG * (1 - v[3]);
-        e.colorB = v[2] + e.colorB * (1 - v[3]);
-    }
-    if (s->images[1].values) {
-        if (!core_authored_surface_pyramid_sample(&s->images[1], uv, dx, dy, v, NULL))
-            return false;
-        e.roughness = sqrt(fmax(0, v[0]));
-    }
+    RuntimeMaterialSurfaceEval base=RuntimeMaterialSurfaceEvalMakeBase(
+        payload->baseColorR,payload->baseColorG,payload->baseColorB,payload->bsdf.roughness,
+        payload->bsdf.reflectivity,payload->bsdf.specWeight,payload->bsdf.diffuseWeight,payload->transparency);
+    SurfaceSampling *s=&sampling[hit->sceneObjectIndex];
+    double uv[2],dx[2],dy[2],v[8],lod,source_weight=1;Vec3 du,dv;
+    if(!sampling_coordinates(hit,uv,dx,dy,&du,&dv,&source_weight))return false;
     double n[] = {hit->shadingNormal.x, hit->shadingNormal.y, hit->shadingNormal.z},
            t[] = {du.x, du.y, du.z}, out[3];
     bool perturbed = false;
@@ -513,7 +486,8 @@ bool RuntimeSurfaceSamplingApply(const HitInfo3D *hit, RuntimeMaterialPayload3D 
         v[0] *= s->normal_strength;
         v[1] *= s->normal_strength;
         double sign = vec3_dot(vec3_cross(hit->shadingNormal, du), dv) < 0 ? -1 : 1;
-        perturbed = core_authored_surface_normal(n, t, sign, v, out);
+        if(!(s->composition && (s->normal_strength==0 || (v[0]==0 && v[1]==0 && v[2]>0))))
+            perturbed = core_authored_surface_normal(n, t, sign, v, out);
     }
     if (s->images[3].values && s->height_m > 0 && frame) {
         CoreAuthoredSurfacePyramid *p = &s->images[3];
@@ -543,6 +517,88 @@ bool RuntimeSurfaceSamplingApply(const HitInfo3D *hit, RuntimeMaterialPayload3D 
         if (vec3_dot(normal, hit->geometricNormal) > 1e-6) {
             payload->hasMicrodetailNormal = true;
             payload->microdetailShadingNormal = normal;
+        }
+    }
+    return true;
+}
+
+bool RuntimeSurfaceSamplingResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload) {
+    if (!hit || !payload || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))
+        return false;
+    if(sampling[hit->sceneObjectIndex].composition)return RuntimeSurfaceGraphResolve(hit,payload);
+    *payload = sampling[hit->sceneObjectIndex].base;
+    payload->valid = RuntimeSurfaceSamplingApply(hit, payload);
+    return payload->valid;
+}
+bool RuntimeSurfaceSamplingApply(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload) {
+    if(hit && RuntimeSurfaceSamplingActive(hit->sceneObjectIndex) && sampling[hit->sceneObjectIndex].composition)
+        return RuntimeSurfaceSamplingApplyResponse(hit,payload);
+    if (!hit || !payload || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))
+        return true;
+    HitInfo3D unperturbed = *hit;
+    if (hit->hasUnperturbedShadingNormal) {
+        unperturbed.shadingNormal = unperturbed.normal = hit->unperturbedShadingNormal;
+        hit = &unperturbed;
+    }
+    double source_weight = 1;
+    SurfaceSampling *s = &sampling[hit->sceneObjectIndex];
+    double uv[2], dx[2], dy[2], v[8], lod;
+    Vec3 du, dv;
+    if (!sampling_coordinates(hit, uv, dx, dy, &du, &dv, &source_weight) ||
+        !core_authored_surface_pyramid_sample(&s->material, uv, dx, dy, v, &lod))
+        return false;
+    RuntimeMaterialSurfaceEval e = RuntimeMaterialSurfaceEvalMakeBase(
+        v[0], v[1], v[2], sqrt(fmax(0, v[3])), v[4], v[5], v[6], v[7]);
+    e.active = true;
+    if (s->images[0].values) {
+        if (!core_authored_surface_pyramid_sample(&s->images[0], uv, dx, dy, v, NULL))
+            return false;
+        e.colorR = v[0] + e.colorR * (1 - v[3]);
+        e.colorG = v[1] + e.colorG * (1 - v[3]);
+        e.colorB = v[2] + e.colorB * (1 - v[3]);
+    }
+    if (s->images[1].values) {
+        if (!core_authored_surface_pyramid_sample(&s->images[1], uv, dx, dy, v, NULL))
+            return false;
+        e.roughness = sqrt(fmax(0, v[0]));
+    }
+    return sampling_finish_response(hit,payload,e);
+}
+
+bool RuntimeSurfaceSamplingApplyResponse(const HitInfo3D *hit,RuntimeMaterialPayload3D *payload) {
+    if(!hit || !payload || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))return false;
+    RuntimeMaterialSurfaceEval e=RuntimeMaterialSurfaceEvalMakeBase(
+        payload->baseColorR,payload->baseColorG,payload->baseColorB,payload->bsdf.roughness,
+        payload->bsdf.reflectivity,payload->bsdf.specWeight,payload->bsdf.diffuseWeight,payload->transparency);
+    e.active=true;
+    return sampling_finish_response(hit,payload,e);
+}
+bool RuntimeSurfaceSamplingGraphInputs(const HitInfo3D *hit,const CoreSurfaceGraph *program,
+                                      CoreSurfaceGraphInputs *inputs) {
+    if(!hit || !program || !inputs || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))return false;
+    memset(inputs,0,sizeof(*inputs));
+    SurfaceSampling *s=&sampling[hit->sceneObjectIndex];
+    if(!s->composition)return false;
+    HitInfo3D unperturbed=*hit;
+    if(hit->hasUnperturbedShadingNormal){unperturbed.shadingNormal=unperturbed.normal=hit->unperturbedShadingNormal;hit=&unperturbed;}
+    double uv[2],dx[2],dy[2],sampled[4][8]={{0}};bool ready[4]={0};Vec3 du,dv;
+    if(!sampling_coordinates(hit,uv,dx,dy,&du,&dv,NULL))return false;
+    for(size_t i=0;i<program->count;++i) {
+        const CoreSurfaceGraphNode *node=&program->nodes[i];
+        if(node->kind!=CORE_SG_IMAGE_COLOR && node->kind!=CORE_SG_IMAGE_SCALAR)continue;
+        int channel=node->resource==CORE_SG_RESOURCE_BASE_COLOR || node->resource==CORE_SG_RESOURCE_BASE_COLOR_ALPHA ? 0 :
+                    node->resource==CORE_SG_RESOURCE_ROUGHNESS ? 1 : node->resource==CORE_SG_RESOURCE_HEIGHT ? 3 : -1;
+        if(channel<0 || !s->images[channel].values)return false;
+        if(!ready[channel]) {
+            if(!core_authored_surface_pyramid_sample(&s->images[channel],uv,dx,dy,sampled[channel],NULL))return false;
+            ready[channel]=true;
+        }
+        CoreSurfaceGraphInput *out=&inputs->nodes[i];out->kind=node->kind;out->valid=true;
+        for(int c=0;c<3;++c) {
+            double value=node->kind==CORE_SG_IMAGE_COLOR ? (sampled[0][3]>1e-12?sampled[0][c]/sampled[0][3]:0) :
+                node->resource==CORE_SG_RESOURCE_ROUGHNESS ? sqrt(fmax(0,sampled[1][0])) :
+                node->resource==CORE_SG_RESOURCE_BASE_COLOR_ALPHA ? sampled[0][3] : sampled[3][0];
+            out->value[c]=fmax(0,fmin(1,value));
         }
     }
     return true;

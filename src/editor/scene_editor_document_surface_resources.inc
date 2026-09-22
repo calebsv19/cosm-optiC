@@ -29,8 +29,9 @@ bool SceneEditorDocumentSurfaceSamplingSupported(int index,char* diagnostic,size
     if(!object || !document_member(material_ray(object,false),"surface_mapping")) {
         document_diag(diagnostic,size,"Choose a supported chart in Coordinates before assigning images");return false;
     }
+    bool composition=material_composition(document_member(row,"surface_graph"));
     const char* rejected[]={"surface_graph","material_graph","materialGraph","authored_texture","surface_material_binding"};
-    for(size_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i)if(material_has(row,rejected[i])) {
+    for(size_t i=0;i<sizeof(rejected)/sizeof(*rejected);++i)if(material_has(row,rejected[i]) && !(composition && !strcmp(rejected[i],"surface_graph"))) {
         document_diag(diagnostic,size,"Image channels require a mapped brick/solid stack; this source needs explicit replacement");return false;
     }
     if(material_has(object,"procedural_solid_material_ref")) {
@@ -38,7 +39,8 @@ bool SceneEditorDocumentSurfaceSamplingSupported(int index,char* diagnostic,size
     }
     json_object* stack=document_member(row,"material_texture_stack");
     if(!stack)stack=document_member(row,"materialTextureStack");
-    if(!stack) {document_diag(diagnostic,size,"Image channels require a retained brick/solid stack");return false;}
+    if(composition && stack){document_diag(diagnostic,size,"Composition cannot retain a legacy stack");return false;}
+    if(!stack && !composition) {document_diag(diagnostic,size,"Image channels require a retained brick/solid stack");return false;}
     document_diag(diagnostic,size,"Supported mapped image channels");return true;
 }
 static json_object* resource_defaults(int index) {
@@ -51,6 +53,7 @@ static json_object* resource_defaults(int index) {
 }
 bool SceneEditorDocumentSetSurfaceSampling(int index,const char* text,unsigned long long revision,char* diagnostic,size_t size) {
     if(!material_guard(index,revision,diagnostic,size))return false;
+    if(!text && material_composition(document_member(document_material_row(index),"surface_graph"))){document_diag(diagnostic,size,"Composition requires image sampling; remove individual unused channels instead");return false;}
     if(text && !SceneEditorDocumentSurfaceSamplingSupported(index,diagnostic,size))return false;
     json_object* value=text?json_tokener_parse(text):NULL;
     if(text && !json_object_is_type(value,json_type_object)) {

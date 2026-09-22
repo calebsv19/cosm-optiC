@@ -114,3 +114,20 @@ implicit rewrite of archived expected images. API and document version remain
 unchanged. Permanent independent Decimal-derived samples, period shifts and
 boundary convergence tests cover RGB and varying roughness. Hosts retaining
 pre-correction rendered artifacts must label those artifacts with 0.7.0.
+
+## 0.8.0 — host-sampled surface composition
+
+The additive `core_surface_graph_evaluate_with_inputs` entry point accepts bounded,
+finite, typed host samples indexed by graph node index. `IMAGE_COLOR` uses linear
+straight RGB; `IMAGE_SCALAR` supports host-interpreted RMS roughness, linear height,
+and filtered base-color alpha. The host retains all resource ownership, file IO,
+color decoding, UV mapping and filtering responsibilities. Missing samples or
+mismatched types fail; the original evaluator remains unchanged for old graphs
+and fails explicitly when external image inputs are required.
+
+`ROUGHNESS_MIX` takes three scalar inputs and returns
+`sqrt((1-mask)*a*a + mask*b*b)`. This is an explicit RMS material-mixture rule,
+not exact covariance filtering of spatially correlated fields. Ordinary scalar
+nodes, multiply and color mix keep their previous meanings. New node kinds are
+appended; existing enum values remain stable. `CoreSurfaceGraphNode` gains a
+resource selector, so consumers must rebuild against the new header/library.

@@ -2,10 +2,12 @@
 #include <stdio.h>
 /* Type checking and DFS happen once, never in the per-sample evaluator. */
 static int sg_type(CoreSurfaceGraphKind k) {
-    return k == CORE_SG_COORDINATE ? 2 : (k == CORE_SG_COLOR || k == CORE_SG_MIX ? 1 : 0);
+    return k == CORE_SG_COORDINATE
+               ? 2
+               : (k == CORE_SG_COLOR || k == CORE_SG_MIX || k == CORE_SG_IMAGE_COLOR ? 1 : 0);
 }
 static int sg_arity(CoreSurfaceGraphKind k) {
-    return k == CORE_SG_MIX        ? 3
+    return (k == CORE_SG_MIX || k == CORE_SG_ROUGHNESS_MIX) ? 3
            : k == CORE_SG_MULTIPLY ? 2
                                    : (k == CORE_SG_NOISE3D || k == CORE_SG_TRIPLANAR ? 1 : 0);
 }
@@ -18,9 +20,9 @@ static bool sg_visit(CoreSurfaceGraph *g, int i, unsigned char *state, size_t *w
     CoreSurfaceGraphNode *n = &g->nodes[i];
     for (int a = 0; a < sg_arity(n->kind); ++a) {
         int j = n->inputs[a];
-        int expected = n->kind == CORE_SG_MIX        ? (a < 2 ? 1 : 0)
-                       : n->kind == CORE_SG_MULTIPLY ? 0
-                                                     : 2;
+        int expected = n->kind == CORE_SG_MIX ? (a < 2 ? 1 : 0)
+                       : (n->kind == CORE_SG_MULTIPLY || n->kind == CORE_SG_ROUGHNESS_MIX) ? 0
+                                                                                           : 2;
         if (j < 0 || (size_t)j >= g->count || sg_type(g->nodes[j].kind) != expected ||
             !sg_visit(g, j, state, written))
             return false;
@@ -36,7 +38,7 @@ bool core_surface_graph_prepare(CoreSurfaceGraph *g, char *diagnostic, size_t si
     bool ok = g->count > 0 && g->count <= CORE_SURFACE_GRAPH_MAX_NODES;
     for (size_t i = 0; ok && i < g->count; ++i) {
         CoreSurfaceGraphNode *n = &g->nodes[i];
-        ok = n->kind >= CORE_SG_SCALAR && n->kind <= CORE_SG_MIX;
+        ok = n->kind >= CORE_SG_SCALAR && n->kind <= CORE_SG_ROUGHNESS_MIX;
         for (int a = 0; a < 3; ++a)
             ok = ok && isfinite(n->value[a]) && fabs(n->value[a]) <= 1e6;
         if (n->kind == CORE_SG_SCALAR || n->kind == CORE_SG_COLOR)
@@ -44,6 +46,12 @@ bool core_surface_graph_prepare(CoreSurfaceGraph *g, char *diagnostic, size_t si
                 ok = ok && n->value[a] >= 0 && n->value[a] <= 1;
         if (n->kind == CORE_SG_COORDINATE)
             ok = ok && isfinite(n->scale_m) && n->scale_m >= 1e-6 && n->scale_m <= 1e6;
+        if (n->kind == CORE_SG_IMAGE_COLOR)
+            ok = ok && n->resource == CORE_SG_RESOURCE_BASE_COLOR;
+        if (n->kind == CORE_SG_IMAGE_SCALAR)
+            ok = ok && (n->resource == CORE_SG_RESOURCE_ROUGHNESS ||
+                        n->resource == CORE_SG_RESOURCE_HEIGHT ||
+                        n->resource == CORE_SG_RESOURCE_BASE_COLOR_ALPHA);
         if (n->kind == CORE_SG_TRIPLANAR)
             ok = ok && isfinite(n->sharpness) && n->sharpness >= 1 && n->sharpness <= 16;
     }
@@ -107,8 +115,10 @@ static double sg_wave(double x, double width) {
         return fmod(floor(x), 2) == 0 ? 1 : -1;
     return (sg_wave_integral(x + width / 2) - sg_wave_integral(x - width / 2)) / width;
 }
-bool core_surface_graph_evaluate(const CoreSurfaceGraph *g, const CoreSurfaceGraphQuery *q,
-                                 CoreSurfaceGraphResult *out) {
+bool core_surface_graph_evaluate_with_inputs(const CoreSurfaceGraph *g,
+                                             const CoreSurfaceGraphQuery *q,
+                                             const CoreSurfaceGraphInputs *inputs,
+                                             CoreSurfaceGraphResult *out) {
     if (!g || !g->valid || !q || !out)
         return false;
     typedef struct {
@@ -126,7 +136,21 @@ bool core_surface_graph_evaluate(const CoreSurfaceGraph *g, const CoreSurfaceGra
         int i = g->order[step];
         const CoreSurfaceGraphNode *n = &g->nodes[i];
         Value *v = &values[i];
-        if (n->kind == CORE_SG_SCALAR || n->kind == CORE_SG_COLOR)
+        if (n->kind == CORE_SG_IMAGE_COLOR || n->kind == CORE_SG_IMAGE_SCALAR) {
+            if (!inputs || !inputs->nodes[i].valid || inputs->nodes[i].kind != n->kind)
+                return false;
+            int count = n->kind == CORE_SG_IMAGE_COLOR ? 3 : 1;
+            for (int a = 0; a < count; ++a) {
+                double value = inputs->nodes[i].value[a];
+                if (!isfinite(value) || value < 0 || value > 1)
+                    return false;
+                v->v[a] = value;
+            }
+        } else if (n->kind == CORE_SG_ROUGHNESS_MIX) {
+            double a = values[n->inputs[0]].v[0], b = values[n->inputs[1]].v[0];
+            double t = values[n->inputs[2]].v[0];
+            v->v[0] = sqrt((1 - t) * a * a + t * b * b);
+        } else if (n->kind == CORE_SG_SCALAR || n->kind == CORE_SG_COLOR)
             memcpy(v->v, n->value, sizeof(v->v));
         else if (n->kind == CORE_SG_COORDINATE) {
             int d = n->world_space ? 1 : 0;
@@ -165,4 +189,9 @@ bool core_surface_graph_evaluate(const CoreSurfaceGraph *g, const CoreSurfaceGra
     out->has_roughness = g->roughness_output >= 0;
     out->roughness = out->has_roughness ? values[g->roughness_output].v[0] : 0;
     return true;
+}
+
+bool core_surface_graph_evaluate(const CoreSurfaceGraph *g, const CoreSurfaceGraphQuery *q,
+                                 CoreSurfaceGraphResult *out) {
+    return core_surface_graph_evaluate_with_inputs(g, q, NULL, out);
 }

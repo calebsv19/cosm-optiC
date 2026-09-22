@@ -60,6 +60,7 @@ static bool resource_eligible(int index, json_object *row) {
     char diagnostic[256];
     if (!SceneEditorDocumentSurfaceSamplingSupported(index, diagnostic, sizeof(diagnostic)))
         return false;
+    if(composition_row(row))return true;
     if (!RuntimeSurfaceMappingActive(index) || RuntimeSurfaceGraphActive(index))
         return false;
     const char *blocked[] = {
@@ -178,7 +179,7 @@ static int resource_render(SDL_Renderer *r, SDL_Rect b, int index) {
             snprintf(text, sizeof(text), "%s: %s", resource_property_labels[i], resource_draft);
         resource_row(r, b, line++, &resource_fields[i], text, resource_edit == i);
     }
-    if (sampling)
+    if (sampling && !composition_index(index))
         resource_row(r, b, line++, &resource_disable, "Remove image sampling declaration", false);
     resource_row(r, b, line++, &resource_adopt, "Adopt reviewed UV candidate...", false);
     if (resource_picker.active)

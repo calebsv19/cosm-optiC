@@ -82,7 +82,86 @@ static void noise_periodic_oracle(void) {
     }
 }
 
+/* Independent arithmetic oracle: RMS(.2,.8,.25) = sqrt(.19).
+ * Images are host-sampled inputs, not decoded or read by this evaluator. */
+static void composition_oracle(void) {
+    CoreSurfaceGraph g = {0};
+    CoreSurfaceGraphQuery q = {0};
+    CoreSurfaceGraphResult out;
+    CoreSurfaceGraphInputs inputs = {0};
+    g.count = 6;
+    g.color_output = 0;
+    g.roughness_output = 5;
+    g.nodes[0] = (CoreSurfaceGraphNode){.kind = CORE_SG_IMAGE_COLOR,
+                                        .resource = CORE_SG_RESOURCE_BASE_COLOR};
+    g.nodes[1] = (CoreSurfaceGraphNode){.kind = CORE_SG_IMAGE_SCALAR,
+                                        .resource = CORE_SG_RESOURCE_ROUGHNESS};
+    g.nodes[2] = (CoreSurfaceGraphNode){.kind = CORE_SG_SCALAR, .value = {.8}};
+    g.nodes[3] = (CoreSurfaceGraphNode){.kind = CORE_SG_IMAGE_SCALAR,
+                                        .resource = CORE_SG_RESOURCE_BASE_COLOR_ALPHA};
+    g.nodes[4] =
+        (CoreSurfaceGraphNode){.kind = CORE_SG_IMAGE_SCALAR, .resource = CORE_SG_RESOURCE_HEIGHT};
+    g.nodes[5] = (CoreSurfaceGraphNode){.kind = CORE_SG_ROUGHNESS_MIX, .inputs = {1, 2, 3}};
+    inputs.nodes[0] = (CoreSurfaceGraphInput){
+        .kind = CORE_SG_IMAGE_COLOR, .valid = true, .value = {.125, .5, .875}};
+    inputs.nodes[1] =
+        (CoreSurfaceGraphInput){.kind = CORE_SG_IMAGE_SCALAR, .valid = true, .value = {.2}};
+    inputs.nodes[3] =
+        (CoreSurfaceGraphInput){.kind = CORE_SG_IMAGE_SCALAR, .valid = true, .value = {.25}};
+    inputs.nodes[4] =
+        (CoreSurfaceGraphInput){.kind = CORE_SG_IMAGE_SCALAR, .valid = true, .value = {.7}};
+    assert(core_surface_graph_prepare(&g, NULL, 0));
+    assert(!core_surface_graph_evaluate(&g, &q, &out));
+    assert(core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    assert(fabs(out.roughness - .43588989435406735522) < 1e-14);
+    assert(out.color[0] == .125 && out.color[1] == .5 && out.color[2] == .875);
+    inputs.nodes[3].value[0] = 0;
+    assert(core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out) &&
+           fabs(out.roughness - .2) < 1e-14);
+    inputs.nodes[3].value[0] = 1;
+    assert(core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out) &&
+           fabs(out.roughness - .8) < 1e-14);
+    inputs.nodes[3].value[0] = NAN;
+    assert(!core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    inputs.nodes[3].value[0] = 1.01;
+    assert(!core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    inputs.nodes[3].value[0] = -.01;
+    assert(!core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    inputs.nodes[3].value[0] = .25;
+    inputs.nodes[0].value[2] = INFINITY;
+    assert(!core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    inputs.nodes[0].value[2] = .875;
+    inputs.nodes[1].valid = false;
+    assert(!core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    inputs.nodes[1].valid = true;
+    inputs.nodes[1].kind = CORE_SG_IMAGE_COLOR;
+    assert(!core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    CoreSurfaceGraph bad = g;
+    bad.nodes[5].inputs[0] = 0;
+    assert(!core_surface_graph_prepare(&bad, NULL, 0));
+    bad = g;
+    bad.nodes[5].inputs[0] = 5;
+    assert(!core_surface_graph_prepare(&bad, NULL, 0));
+    bad = g;
+    bad.nodes[0].resource = CORE_SG_RESOURCE_HEIGHT;
+    assert(!core_surface_graph_prepare(&bad, NULL, 0));
+    bad = g;
+    bad.nodes[1].resource = CORE_SG_RESOURCE_BASE_COLOR;
+    assert(!core_surface_graph_prepare(&bad, NULL, 0));
+    /* Ordinary multiply remains linear, and direct image roughness remains RMS supplied by host. */
+    inputs.nodes[1].kind = CORE_SG_IMAGE_SCALAR;
+    g.nodes[5].kind = CORE_SG_MULTIPLY;
+    assert(core_surface_graph_prepare(&g, NULL, 0));
+    assert(core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    assert(fabs(out.roughness - .16) < 1e-14);
+    g.roughness_output = 1;
+    assert(core_surface_graph_prepare(&g, NULL, 0));
+    assert(core_surface_graph_evaluate_with_inputs(&g, &q, &inputs, &out));
+    assert(out.roughness == .2);
+}
+
 int main(void) {
+    composition_oracle();
     noise_periodic_oracle();
     CoreSurfaceGraph g = {0};
     g.count = 7;

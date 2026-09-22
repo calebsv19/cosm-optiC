@@ -1,6 +1,8 @@
 /* Typed graph controls edit the retained document through validated commands. */
 static int graph_node_index, graph_scroll, graph_picker, graph_page, graph_input;
 static bool graph_search_active;
+static int graph_scope;
+static SDL_Rect graph_scope_rect,graph_resource_rect;
 static char graph_node_id[64], graph_key[6][24], graph_search[64];
 static int graph_component[6];
 static SDL_Rect graph_edges[3], graph_outputs[2], graph_list, graph_add, graph_delete;
@@ -11,14 +13,31 @@ static bool graph_choice_valid[32];
 static int graph_choice_count, graph_page_size, graph_total_rows;
 static unsigned long long graph_picker_revision;
 static const char *graph_kinds[] = {
-    "scalar", "color", "coordinate", "noise3d", "triplanar_checker", "multiply", "mix"};
+    "scalar", "color", "coordinate", "noise3d", "triplanar_checker", "multiply", "mix", "image_color", "image_scalar", "roughness_mix"};
 
 static int graph_panel_type(json_object *node) {
     const char *kind = json_object_get_string(get(node, "kind"));
     if (!kind)
         return -1;
     return !strcmp(kind, "coordinate") ? 2
-                                       : (!strcmp(kind, "color") || !strcmp(kind, "mix") ? 1 : 0);
+                                       : (!strcmp(kind, "color") || !strcmp(kind, "mix") || !strcmp(kind,"image_color") ? 1 : 0);
+}
+static bool graph_channel_available(int index,const char *resource) {
+    size_t size=SceneEditorDocumentSurfaceSamplingJSONSize(index);char *text=size?malloc(size):NULL;
+    json_object *sampling=text && SceneEditorDocumentGetSurfaceSamplingJSON(index,text,size)?json_tokener_parse(text):NULL;
+    bool yes=get(get(sampling,"channels"),!strcmp(resource,"base_color_alpha")?"base_color":resource)!=NULL;
+    if(sampling)json_object_put(sampling);free(text);return yes;
+}
+static json_object *graph_scoped_outputs(json_object *graph,bool create) {
+    if(!graph_scope)return get(graph,"outputs");
+    json_object *regions=get(graph,"regions");
+    for(size_t i=0;regions && i<json_object_array_length(regions);++i){json_object *region=json_object_array_get_idx(regions,i);
+        const char *role=json_object_get_string(get(region,"face_role"));if(role && !strcmp(role,roles[graph_scope]))return get(region,"outputs");}
+    if(!create)return NULL;
+    if(!regions){regions=json_object_new_array();json_object_object_add(graph,"regions",regions);}
+    json_object *region=json_object_new_object(),*outputs=json_object_new_object();
+    json_object_object_add(region,"face_role",json_object_new_string(roles[graph_scope]));
+    json_object_object_add(region,"outputs",outputs);json_object_array_add(regions,region);return outputs;
 }
 static json_object *graph_node(json_object *row) {
     json_object *nodes = get(get(row, "surface_graph"), "nodes");
@@ -43,13 +62,14 @@ static bool graph_panel_select_coordinates(int index) {
     return found;
 }
 static void graph_panel_invalidate(void) {
+    graph_scope_rect=graph_resource_rect=(SDL_Rect){0};
     memset(graph_edges,0,sizeof(graph_edges));memset(graph_outputs,0,sizeof(graph_outputs));
     memset(graph_choices,0,sizeof(graph_choices));
     graph_list=graph_add=graph_delete=graph_search_rect=graph_cancel_rect=graph_prev=graph_next=graph_bounds=(SDL_Rect){0};
 }
 static void graph_panel_reset(void) {
     graph_panel_invalidate();
-    graph_node_index = graph_scroll = graph_picker = graph_page = 0;
+    graph_node_index = graph_scroll = graph_picker = graph_page = graph_scope = 0;
     graph_search_active = false;
     graph_search[0] = 0;
     graph_bounds = (SDL_Rect){0};
@@ -60,6 +80,7 @@ static const char *graph_port(json_object *node, int input) {
     const char *kind = json_object_get_string(get(node, "kind"));
     if (!strcmp(kind, "mix"))
         return (const char *[]){"a", "b", "factor"}[input];
+    if(!strcmp(kind,"roughness_mix"))return (const char *[]){"a","b","mask"}[input];
     if (!strcmp(kind, "multiply"))
         return input ? "b" : "a";
     return "coordinates";
@@ -68,6 +89,7 @@ static const char *graph_port_label(json_object *node, int input) {
     const char *kind = json_object_get_string(get(node, "kind"));
     if (!strcmp(kind, "mix"))
         return (const char *[]){"Color A", "Color B", "Mask"}[input];
+    if(!strcmp(kind,"roughness_mix"))return (const char *[]){"Roughness A","Roughness B","Mask"}[input];
     if (!strcmp(kind, "multiply"))
         return input ? "Scalar B" : "Scalar A";
     return "Coordinates";
@@ -104,7 +126,7 @@ static bool graph_candidate_valid(json_object *row, const char *id) {
         json_object *node = json_object_array_get_idx(get(candidate, "nodes"), graph_node_index);
         json_object_array_put_idx(get(node, "inputs"), graph_input, json_object_new_string(id));
     } else {
-        json_object *outputs = get(candidate, "outputs");
+        json_object *outputs = graph_scoped_outputs(candidate,true);
         const char *key = graph_picker == 4 ? "base_color" : "roughness";
         if (id[0])
             json_object_object_add(outputs, key, json_object_new_string(id));
@@ -140,13 +162,13 @@ static int graph_picker_render(SDL_Renderer *r, SDL_Rect b, json_object *row) {
         : graph_picker == 5
             ? 0
             : (!strcmp(json_object_get_string(get(node, "kind")), "mix") ? (graph_input < 2 ? 1 : 0)
-               : !strcmp(json_object_get_string(get(node, "kind")), "multiply") ? 0
+               : (!strcmp(json_object_get_string(get(node, "kind")), "multiply") || !strcmp(json_object_get_string(get(node,"kind")),"roughness_mix")) ? 0
                                                                                 : 2);
-    if (graph_picker == 5 && !graph_search[0]) {
+    if ((graph_picker == 5 || (graph_scope && graph_picker==4)) && !graph_search[0]) {
         ids[count] = "";
         valid[count++] = true;
     }
-    int total = graph_picker == 2 ? 7 : (int)json_object_array_length(nodes);
+    int total = graph_picker == 2 ? (composition_row(row)?10:7) : (int)json_object_array_length(nodes);
     for (int i = 0; i < total; ++i) {
         json_object *item = graph_picker == 2 ? NULL : json_object_array_get_idx(nodes, i);
         const char *id =
@@ -180,7 +202,7 @@ static int graph_picker_render(SDL_Renderer *r, SDL_Rect b, json_object *row) {
         snprintf(graph_choice_ids[slot], sizeof(graph_choice_ids[slot]), "%s", ids[i]);
         graph_choice_valid[slot] = valid[i];
         graph_choices[slot] = (SDL_Rect){b.x, y, b.w, 25};
-        snprintf(text, sizeof(text), "%s%s", ids[i][0] ? ids[i] : "Use base roughness",
+        snprintf(text, sizeof(text), "%s%s", ids[i][0] ? ids[i] : (graph_scope?"Inherit object output":"Use base roughness"),
                  valid[i] ? "" : " (cycle: unavailable)");
         draw(r, graph_choices[slot], text, false);
         y += 29;
@@ -206,8 +228,9 @@ static int graph_picker_render(SDL_Renderer *r, SDL_Rect b, json_object *row) {
     return y;
 }
 static int graph_panel_render(SDL_Renderer *r, SDL_Rect b, int index, json_object *row) {
-    (void)index;
+    SDL_Rect clip;if(SDL_RenderIsClipEnabled(r)){SDL_RenderGetClipRect(r,&clip);SDL_IntersectRect(&b,&clip,&b);}
     graph_bounds = b;
+    graph_scope_rect=graph_resource_rect=(SDL_Rect){0};
     memset(graph_edges, 0, sizeof(graph_edges));
     memset(graph_outputs, 0, sizeof(graph_outputs));
     graph_list = graph_add = graph_delete = scope_rect = layer_rect = (SDL_Rect){0};
@@ -233,7 +256,7 @@ static int graph_panel_render(SDL_Renderer *r, SDL_Rect b, int index, json_objec
                                      : 0);
     json_object *declared_inputs = get(node, "inputs");
     int input_count = declared_inputs ? (int)json_object_array_length(declared_inputs) : 0;
-    int maximum = 1 + parameter_count + input_count + 4 + (status[0] ? 1 : 0) - b.h / 29;
+    int maximum = 1 + parameter_count + input_count + (composition_row(row)?1:0) + (!strncmp(kind,"image_",6)?1:0) + 4 + (status[0] ? 1 : 0) - b.h / 29;
     if (maximum < 0)
         maximum = 0;
     if (graph_scroll > maximum)
@@ -306,11 +329,22 @@ static int graph_panel_render(SDL_Renderer *r, SDL_Rect b, int index, json_objec
                  json_object_get_string(json_object_array_get_idx(inputs, a)));
         graph_row(r, b, row_number++, &graph_edges[a], text, false);
     }
-    json_object *outputs = get(get(row, "surface_graph"), "outputs");
+    if(!strncmp(kind,"image_",6)){
+        snprintf(text,sizeof(text),"Image resource: %s >",json_object_get_string(get(node,"resource")));
+        graph_row(r,b,row_number++,&graph_resource_rect,text,false);
+    }
+    if(composition_row(row)){
+        SceneEditorDocumentObjectInfo info;int count=1;
+        if(assignment_object(index,&info))count=!strcmp(info.type,"rect_prism_primitive")?7:!strcmp(info.type,"plane_primitive")?2:1;
+        graph_scope%=count;
+        snprintf(text,sizeof(text),"Output scope: %s >",roles[graph_scope]);
+        graph_row(r,b,row_number++,&graph_scope_rect,text,false);
+    }
+    json_object *outputs = graph_scoped_outputs(get(row,"surface_graph"),false);
     for (int a = 0; a < 2; ++a) {
         const char *output = json_object_get_string(get(outputs, a ? "roughness" : "base_color"));
         snprintf(text, sizeof(text), "%s output: %s", a ? "Roughness" : "Color",
-                 output ? output : "base response");
+                 output ? output : graph_scope?"inherit object":"base response");
         graph_row(r, b, row_number++, &graph_outputs[a], text, false);
     }
     graph_row(r, b, row_number++, &graph_add, "Add node...", false);
@@ -378,12 +412,18 @@ static bool graph_add_kind(int index, json_object *row, const char *kind) {
         json_object_object_add(node, "space", json_object_new_string("object_rest"));
         json_object_object_add(node, "scale_m", json_object_new_double(.2));
         json_object_object_add(node, "offset", json_tokener_parse("[0,0,0]"));
+    } else if(!strcmp(kind,"image_color") || !strcmp(kind,"image_scalar")) {
+        const char *resource=NULL;
+        if(!strcmp(kind,"image_color")){if(graph_channel_available(index,"base_color"))resource="base_color";}
+        else {const char *choices[]={"roughness","height","base_color_alpha"};for(int i=0;i<3 && !resource;++i)if(graph_channel_available(index,choices[i]))resource=choices[i];}
+        if(!resource){snprintf(status,sizeof(status),"Assign a compatible channel in Image resources first");json_object_put(node);return false;}
+        json_object_object_add(node,"resource",json_object_new_string(resource));
     } else {
         json_object *inputs = json_object_new_array();
         json_object_object_add(node, "inputs", inputs);
-        int count = !strcmp(kind, "mix") ? 3 : !strcmp(kind, "multiply") ? 2 : 1;
+        int count = (!strcmp(kind, "mix") || !strcmp(kind,"roughness_mix")) ? 3 : !strcmp(kind, "multiply") ? 2 : 1;
         for (int i = 0; i < count; ++i) {
-            int type = !strcmp(kind, "mix") ? (i < 2 ? 1 : 0) : !strcmp(kind, "multiply") ? 0 : 2;
+            int type = !strcmp(kind, "mix") ? (i < 2 ? 1 : 0) : (!strcmp(kind, "multiply") || !strcmp(kind,"roughness_mix")) ? 0 : 2;
             const char *source = graph_first_type(nodes, type);
             if (!source) {
                 snprintf(status, sizeof(status), "Add a %s node first",
@@ -428,7 +468,19 @@ static bool graph_panel_click(int index, int x, int y) {
         return false;
     }
     bool handled = false;
-    if (inside(graph_delete, x, y)) {
+    if(inside(graph_scope_rect,x,y)) {
+        SceneEditorDocumentObjectInfo info;int count=1;
+        if(assignment_object(index,&info))count=!strcmp(info.type,"rect_prism_primitive")?7:!strcmp(info.type,"plane_primitive")?2:1;
+        graph_scope=(graph_scope+1)%count;cancel();handled=true;
+    } else if(inside(graph_resource_rect,x,y)) {
+        const char *kind=json_object_get_string(get(node,"kind"));
+        if(!strcmp(kind,"image_scalar")){
+            const char *choices[]={"roughness","height","base_color_alpha"};const char *old=json_object_get_string(get(node,"resource"));int at=0;
+            for(int i=0;i<3;++i)if(!strcmp(old,choices[i]))at=i;
+            for(int step=1;step<=3;++step){const char *next=choices[(at+step)%3];if(graph_channel_available(index,next)){json_object_object_add(node,"resource",json_object_new_string(next));graph_panel_commit(index,row,SceneEditorDocumentRevision());break;}}
+        }else snprintf(status,sizeof(status),"Color images use the base_color card");
+        handled=true;
+    } else if (inside(graph_delete, x, y)) {
         if (SceneEditorDocumentSurfaceGraphDeleteNode(
                 index, graph_node_id, SceneEditorDocumentRevision(), status, sizeof(status))) {
             graph_node_index = 0;
@@ -566,6 +618,8 @@ static bool graph_panel_event(const SDL_Event *e, int index) {
                 ok = SceneEditorDocumentSurfaceGraphConnect(
                     index, json_object_get_string(get(node, "id")), graph_port(node, graph_input),
                     graph_choice_ids[a], graph_picker_revision, status, sizeof(status));
+            else if(graph_scope)
+                ok=SceneEditorDocumentSurfaceGraphSetRegionOutput(index,roles[graph_scope],graph_picker==4?"base_color":"roughness",graph_choice_ids[a][0]?graph_choice_ids[a]:NULL,graph_picker_revision,status,sizeof(status));
             else
                 ok = SceneEditorDocumentSurfaceGraphSetOutput(
                     index, graph_picker == 4 ? "base_color" : "roughness",
@@ -580,7 +634,9 @@ static bool graph_panel_event(const SDL_Event *e, int index) {
     return inside(graph_bounds, x, y);
 }
 static bool graph_panel_control(const char *name, SDL_Rect *out) {
-    if (!strcmp(name, "node_list"))
+    if(!strcmp(name,"graph_scope"))*out=graph_scope_rect;
+    else if(!strcmp(name,"image_resource"))*out=graph_resource_rect;
+    else if (!strcmp(name, "node_list"))
         *out = graph_list;
     else if (!strcmp(name, "node_search"))
         *out = graph_search_rect;

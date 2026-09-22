@@ -298,9 +298,13 @@ static bool material_abort(char *diagnostic, size_t size, const char *message) {
     document_diag(diagnostic, size, message);
     return false;
 }
+static bool material_composition(json_object *graph) {
+    const char *cap=json_object_get_string(document_member(graph,"required_capability"));
+    return json_object_get_int(document_member(graph,"version"))==2 && cap && !strcmp(cap,"optic.surface_composition_v1");
+}
 static json_object *material_preset(const char *preset) {
     if (!preset || (strcmp(preset, "noise3d") && strcmp(preset, "triplanar_checker") &&
-                    strcmp(preset, "solid")))
+                    strcmp(preset, "solid") && strcmp(preset,"composition")))
         return NULL;
     const char *template =
         "{\"version\":1,\"required_capability\":\"optic.surface_graph_v1\",\"color_space\":"
@@ -316,6 +320,10 @@ static json_object *material_preset(const char *preset) {
     if (!graph)
         return NULL;
     json_object *nodes = document_member(graph, "nodes");
+    if(!strcmp(preset,"composition")) {
+        json_object_object_add(graph,"version",json_object_new_int(2));
+        json_object_object_add(graph,"required_capability",json_object_new_string("optic.surface_composition_v1"));
+    }
     if (!strcmp(preset, "triplanar_checker")) {
         json_object *pattern = json_object_array_get_idx(nodes, 1);
         json_object_object_add(pattern, "kind", json_object_new_string("triplanar_checker"));
@@ -351,7 +359,7 @@ bool SceneEditorDocumentMaterialPreset(int index, const char *preset, bool repla
     }
     json_object *graph = material_preset(preset);
     if (!graph) {
-        document_diag(diagnostic, size, "choose noise3d, triplanar_checker or solid preset");
+        document_diag(diagnostic, size, "choose noise3d, triplanar_checker, solid or composition preset");
         return false;
     }
     if (!document_begin_command(diagnostic, size)) {
@@ -363,7 +371,27 @@ bool SceneEditorDocumentMaterialPreset(int index, const char *preset, bool repla
         json_object_put(graph);
         return material_abort(diagnostic, size, "cannot preserve existing material metadata");
     }
+    bool composition=!strcmp(preset,"composition");
+    json_object *chart=NULL,*sampling=NULL;
+    if(composition) {
+        json_object *ray=material_ray(object,false);
+        chart=material_clone(document_member(ray,"surface_mapping"));
+        sampling=material_clone(document_member(ray,"surface_sampling"));
+        const char *type=json_object_get_string(document_member(object,"object_type"));
+        if(!strcmp(type,"mesh_asset_instance") && (!chart || json_object_get_int(document_member(chart,"version"))!=3)) {
+            if(chart)json_object_put(chart);if(sampling)json_object_put(sampling);json_object_put(graph);
+            return material_abort(diagnostic,size,"Composition on meshes requires an existing named UV mapping");
+        }
+        if(chart && json_object_get_int(document_member(chart,"version"))==2) {
+            json_object_put(chart);if(sampling)json_object_put(sampling);json_object_put(graph);
+            return material_abort(diagnostic,size,"Composition requires a planar or named UV chart; choose Planar in Coordinates first");
+        }
+        if(!chart)chart=json_tokener_parse("{\"version\":1,\"required_capability\":\"optic.planar_surface_v1\",\"method\":\"planar\",\"space\":\"object_rest\",\"source_domain\":\"brick_cells_v1\",\"scale_policy\":\"stretch_with_object\",\"origin_m\":[0,0,0],\"axis_u\":[1,0,0],\"axis_v\":[0,1,0],\"tile_m\":[0.5,0.25],\"offset_m\":[0,0],\"pivot_m\":[0,0],\"rotation_rad\":0,\"seed\":1729}");
+        if(!sampling)sampling=json_tokener_parse("{\"version\":1,\"required_capability\":\"optic.surface_sampling_v1\",\"filter\":\"trilinear\",\"address\":\"repeat\",\"color_space\":\"linear\",\"period_tiles\":[8,8],\"normal_strength\":1,\"height_m\":0,\"channels\":{}}");
+        if(!chart || !sampling){if(chart)json_object_put(chart);if(sampling)json_object_put(sampling);json_object_put(graph);return material_abort(diagnostic,size,"Cannot prepare composition mapping");}
+    }
     material_clear_source(row, object);
+    if(composition){json_object *ray=material_ray(object,true);json_object_object_add(ray,"surface_mapping",chart);json_object_object_add(ray,"surface_sampling",sampling);}
     json_object_object_add(row, "surface_graph", graph);
     if (!material_fresh_identity(row, preset, NULL))
         return material_abort(diagnostic, size, "cannot allocate material source identity");
@@ -578,6 +606,15 @@ bool SceneEditorDocumentSurfaceGraphDeleteNode(int index, const char *node_id,
                 used += (size_t)count;
         }
     }
+    json_object *regions=document_member(graph,"regions");
+    for(size_t i=0;i<material_array_size(regions);++i) {
+        json_object *region=json_object_array_get_idx(regions,i),*ports=document_member(region,"outputs");
+        if(ports){json_object_object_foreach(ports,region_key,region_value) {
+            (void)region_key;
+            const char *source=json_object_get_string(region_value);
+            if(source && !strcmp(source,node_id)){json_object_put(graph);document_diag(diagnostic,size,"Node is referenced by a face output; reset or rewire the face first");return false;}
+        }}
+    }
     if (used) {
         if (diagnostic && size)
             snprintf(diagnostic, size, "cannot delete %s; referenced by %s", node_id, dependents);
@@ -594,13 +631,14 @@ static int material_named_port(json_object *node, const char *port) {
     if ((!strcmp(kind, "noise3d") || !strcmp(kind, "triplanar_checker")) &&
         !strcmp(port, "coordinates"))
         return 0;
-    if (!strcmp(kind, "multiply") || !strcmp(kind, "mix")) {
+    if (!strcmp(kind, "multiply") || !strcmp(kind, "mix") || !strcmp(kind,"roughness_mix")) {
         if (!strcmp(port, "a"))
             return 0;
         if (!strcmp(port, "b"))
             return 1;
         if (!strcmp(kind, "mix") && !strcmp(port, "factor"))
             return 2;
+        if(!strcmp(kind,"roughness_mix") && !strcmp(port,"mask"))return 2;
     }
     return -1;
 }
@@ -642,6 +680,38 @@ bool SceneEditorDocumentSurfaceGraphSetOutput(int index, const char *output,
     else
         json_object_object_del(outputs, output);
     return material_publish_graph(index, graph, revision, diagnostic, size);
+}
+bool SceneEditorDocumentSurfaceGraphSetRegionOutput(int index, const char *face_role,
+    const char *output, const char *source_node_id, unsigned long long revision,
+    char *diagnostic, size_t size) {
+    json_object *graph=material_graph_copy(index,revision,diagnostic,size);
+    if(!graph)return false;
+    json_object *object=document_object_for_scene_index(index,diagnostic,size);
+    const char *type=json_object_get_string(document_member(object,"object_type"));
+    const char *roles[]={"front","back","left","right","top","bottom"};
+    int count=type && !strcmp(type,"rect_prism_primitive")?6:type && !strcmp(type,"plane_primitive")?1:0;
+    bool valid=false;for(int i=0;i<count;++i)if(face_role && !strcmp(face_role,roles[i]))valid=true;
+    if(!material_composition(graph) || !valid || !output || (strcmp(output,"base_color") && strcmp(output,"roughness"))) {
+        json_object_put(graph);document_diag(diagnostic,size,"Choose a supported primitive face and composition output");return false;
+    }
+    if(source_node_id && !material_find_node(graph,source_node_id,NULL)) {
+        json_object_put(graph);document_diag(diagnostic,size,"Output node does not exist");return false;
+    }
+    json_object *regions=document_member(graph,"regions"),*region=NULL;size_t at=0;
+    for(;at<material_array_size(regions);++at){json_object *item=json_object_array_get_idx(regions,at);
+        const char *role=json_object_get_string(document_member(item,"face_role"));
+        if(role && !strcmp(role,face_role)){region=item;break;}}
+    if(!region && source_node_id){
+        if(!regions){regions=json_object_new_array();json_object_object_add(graph,"regions",regions);}
+        region=json_object_new_object();json_object_object_add(region,"face_role",json_object_new_string(face_role));
+        json_object_object_add(region,"outputs",json_object_new_object());json_object_array_add(regions,region);
+    }
+    if(region){json_object *outputs=document_member(region,"outputs");
+        if(source_node_id)json_object_object_add(outputs,output,json_object_new_string(source_node_id));
+        else json_object_object_del(outputs,output);
+        if(!json_object_object_length(outputs))json_object_array_del_idx(regions,at,1);
+        if(!json_object_array_length(regions))json_object_object_del(graph,"regions");}
+    return material_publish_graph(index,graph,revision,diagnostic,size);
 }
 /* Source reset changes only known response/source parameters, never coordinates,
  * graph wiring, stable IDs, or optional producer metadata. */
@@ -722,7 +792,7 @@ bool SceneEditorDocumentMaterialResetMapping(int index, unsigned long long revis
     if (!material_guard(index, revision, diagnostic, size))
         return false;
     json_object *graph = document_member(document_material_row(index), "surface_graph");
-    if (graph) {
+    if (graph && !material_composition(graph)) {
         json_object *copy = material_clone(graph);
         if (!copy)
             return false;

@@ -49,6 +49,9 @@ bool SceneEditorDocumentEnsureMappingSource(json_object* root,json_object* objec
         if(key && id && !strcmp(key,id)) {row=candidate;break;}
     }
     if(row) {
+        json_object* graph=member(row,"surface_graph");
+        const char* capability=json_object_get_string(member(graph,"required_capability"));
+        if(capability && !strcmp(capability,"optic.surface_composition_v1") && json_object_get_int(member(graph,"version"))==2) return true;
         if(member(row,"material_texture_stack") || member(row,"materialTextureStack") ||
            member(row,"material_graph") || member(row,"materialGraph") || member(row,"authored_texture") ||
            member(row,"procedural_texture")) return true;

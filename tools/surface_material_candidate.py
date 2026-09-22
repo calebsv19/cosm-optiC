@@ -56,7 +56,9 @@ def candidate(scene_path, scene_pin, source, source_pin, object_id, output, comp
         raise ValueError('managed/procedural geometry requires its owning workflow')
     rows = scene.get('extensions', {}).get('ray_tracing', {}).get('authoring', {}).get('object_materials', [])
     row = next((r for r in rows if r['object_id'] == object_id), {})
-    if any(k in row for k in ('surface_graph', 'surface_material_binding')):
+    graph=row.get('surface_graph')
+    composition=isinstance(graph,dict) and graph.get('version')==2 and graph.get('required_capability')=='optic.surface_composition_v1'
+    if 'surface_material_binding' in row or (graph is not None and not composition):
         raise ValueError('selected source does not support authored-UV mapping; replace explicitly first')
     old_id = obj['geometry_ref']['id']
     old_mesh_path = source_path(scene_path.parent, obj['extensions'].get('line_drawing', {}).get(

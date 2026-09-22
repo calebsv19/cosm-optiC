@@ -123,6 +123,9 @@ bool SceneEditorDocumentSurfaceGraphDeleteNode(int index, const char* node_id,
 bool SceneEditorDocumentSurfaceGraphConnect(int index, const char* node_id,
     const char* port, const char* source_node_id, unsigned long long revision,
     char* diagnostic, size_t size);
+bool SceneEditorDocumentSurfaceGraphSetRegionOutput(int index, const char* face_role,
+    const char* output, const char* source_node_id, unsigned long long revision,
+    char* diagnostic, size_t size);
 bool SceneEditorDocumentSurfaceGraphSetOutput(int index, const char* output,
     const char* source_node_id, unsigned long long revision, char* diagnostic, size_t size);
 

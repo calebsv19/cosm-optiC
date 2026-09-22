@@ -5,6 +5,7 @@
 bool RuntimeSurfaceGraphParse(json_object *source, CoreSurfaceGraph *out, char *diagnostic,
                               size_t size);
 bool RuntimeSurfaceGraphActive(int index);
+bool RuntimeSurfaceGraphCompositionActive(int index);
 bool RuntimeSurfaceGraphResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *out);
 const char *RuntimeSurfaceGraphCapabilities(void);
 

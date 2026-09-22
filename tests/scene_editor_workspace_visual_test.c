@@ -413,6 +413,8 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_surface_resources_t2.h"
 #include "scene_editor_surface_resources_t2_cache.h"
 #include "scene_editor_surface_candidate_t2.h"
+#include "scene_editor_surface_composition_t3.h"
+#include "scene_editor_composition_authoring_t3.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -454,6 +456,12 @@ int main(int argc, char** argv) {
     }
     if(argc==4 && !strcmp(argv[3],"--surface-candidate-t2")) {
         surface_candidate_t2_probe(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--composition-t3") || !strcmp(argv[3],"--composition-t3-reopen"))) {
+        surface_composition_t3_probe(&editor,!strcmp(argv[3],"--composition-t3-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--composition-authoring-t3") || !strcmp(argv[3],"--composition-authoring-t3-reopen"))) {
+        composition_authoring_t3_probe(&editor,!strcmp(argv[3],"--composition-authoring-t3-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }
     if(argc==4 && !strcmp(argv[3],"--surface-lifecycle-t0")) {
         surface_lifecycle_t0_probe(argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;

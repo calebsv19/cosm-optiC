@@ -1,5 +1,7 @@
 #include "render/runtime_surface_mapping.h"
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_surface_graph.h"
+#include "render/runtime_surface_sampling.h"
 #include "import/runtime_scene_bridge.h"
 #include <math.h>
 #include <string.h>
@@ -77,5 +79,15 @@ bool RuntimeSurfaceMaterialSamplePrimitive(int index,int face,double u,double v,
     *out=RuntimeMaterialSurfaceEvalMakeBase(payload.baseColorR,payload.baseColorG,payload.baseColorB,
         payload.bsdf.roughness,payload.bsdf.reflectivity,payload.bsdf.specWeight,payload.bsdf.diffuseWeight,payload.transparency);
     out->textureU=payload.textureU;out->textureV=payload.textureV;out->textureMask=payload.textureMask;
+    out->active=true;
+    out->linearColor=RuntimeSurfaceGraphActive(index) || RuntimeSurfaceSamplingActive(index);
+    out->worldNormalActive=payload.hasMicrodetailNormal;
+    out->worldNormal[0]=payload.microdetailShadingNormal.x;
+    out->worldNormal[1]=payload.microdetailShadingNormal.y;
+    out->worldNormal[2]=payload.microdetailShadingNormal.z;
+    out->microdetailNormalActive=payload.hasMicrodetailNormal;
+    out->microdetailHeight=payload.microdetailHeight;
+    out->microdetailSlopeU=payload.microdetailSlopeU;
+    out->microdetailSlopeV=payload.microdetailSlopeV;
     return true;
 }

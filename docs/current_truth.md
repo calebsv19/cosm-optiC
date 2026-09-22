@@ -1,5 +1,15 @@
 # optiC Current Truth
 
+## September 22 T3 composition candidate
+
+The isolated branch implements and verifies opt-in image/procedural composition, typed image inputs,
+RMS roughness mixing, per-channel primitive face overrides, and one final
+normal-or-height response. The inspector exposes graph/resources and supported
+chart/region controls. See the [T3 contract](surface_material_t3_contract.md) for
+compatibility, explicit exclusions and verification status. Canonical shared-core
+0.8.0 synchronization and Main Edit adoption remain pending; Main Edit is at the
+T2 closeout `ea6fcdf`. This source candidate is not an installed release.
+
 ## September 22 T2 resources and preparation
 
 T2 adds shared immutable image/program preparation, project-relative pinned PNGs,
@@ -7,8 +17,7 @@ Sources resource cards with relink and repair, portable bundles, and reviewed
 generated-UV candidates with undoable adoption. A 100-object fixture shares one
 image decode and one program bake; warm loads, transforms and preview frames
 produce no new decodes. See the [T2 contract](surface_material_t2_contract.md) for
-budgets, measured timings, portability scope and native evidence. T3 composition
-is next. Main Edit adopted T1/T2 through `3819af1` by clean fast-forward and
+budgets, measured timings, portability scope and native evidence. Main Edit adopted T1/T2 through `3819af1` by clean fast-forward and
 passes fresh authoring, resources, portable candidate, recovery and editor/headless
 checks under `build/surface_material_t2_adoption/`. T0–T2 source adoption is
 complete; installed release and human hands-on acceptance are separate.

@@ -2,15 +2,18 @@
  * per-object frame. */
 #include "render/runtime_surface_graph.h"
 typedef struct {
-    bool active;
+    bool active, composition;
+    bool region_active[6];
+    CoreSurfaceGraph regions[6];
     CoreSurfaceGraph program;
     RuntimeMaterialPayload3D base;
     Vec3 gradient[3], axes[3];
     double offset[3], lengths[3], world_scale;
 } SurfaceGraph;
 static SurfaceGraph surface_graphs[MAX_OBJECTS];
-static const char *sg_kinds[] = {"scalar",   "color", "coordinate", "noise3d", "triplanar_checker",
-                                 "multiply", "mix"};
+static const char *sg_kinds[] = {
+    "scalar",   "color", "coordinate",  "noise3d",      "triplanar_checker",
+    "multiply", "mix",   "image_color", "image_scalar", "roughness_mix"};
 const char *RuntimeSurfaceGraphCapabilities(void) {
     return "{\"version\":1,\"capability\":\"optic.surface_graph_v1\",\"max_"
            "nodes\":32,"
@@ -21,7 +24,15 @@ const char *RuntimeSurfaceGraphCapabilities(void) {
            "\"roughness\"],"
            "\"color_space\":\"linear\",\"combinations\":\"exclusive_source\","
            "\"filter\":\"box_checker_noise_fade\",\"secondary_footprint\":"
-           "\"source_mean\"}";
+           "\"source_mean\",\"composition\":{\"version\":2,\"capability\":\"optic.surface_"
+           "composition_v1\","
+           "\"nodes\":[\"scalar\",\"color\",\"coordinate\",\"noise3d\",\"triplanar_checker\","
+           "\"multiply\",\"mix\",\"image_color\",\"image_scalar\",\"roughness_mix\"],"
+           "\"image_resources\":[\"base_color\",\"roughness\",\"height\",\"base_color_alpha\"],"
+           "\"mapping\":\"single_object_surface_mapping\",\"color_alpha\":\"straight_linear_"
+           "explicit_alpha\","
+           "\"roughness_mix\":\"rms_material_mixture\",\"regions\":[\"front\",\"back\",\"left\","
+           "\"right\",\"top\",\"bottom\"]}}";
 }
 static int graph_reference(json_object *nodes, json_object *reference) {
     if (!json_object_is_type(reference, json_type_string))
@@ -63,10 +74,13 @@ static const char *graph_node_id(json_object *nodes, int index) {
     return json_object_is_type(id, json_type_string) ? json_object_get_string(id) : NULL;
 }
 static int graph_node_type(CoreSurfaceGraphKind kind) {
-    return kind == CORE_SG_COORDINATE ? 2 : (kind == CORE_SG_COLOR || kind == CORE_SG_MIX ? 1 : 0);
+    return kind == CORE_SG_COORDINATE
+               ? 2
+               : (kind == CORE_SG_COLOR || kind == CORE_SG_MIX || kind == CORE_SG_IMAGE_COLOR ? 1
+                                                                                              : 0);
 }
 static int graph_node_arity(CoreSurfaceGraphKind kind) {
-    return kind == CORE_SG_MIX ? 3
+    return (kind == CORE_SG_MIX || kind == CORE_SG_ROUGHNESS_MIX) ? 3
            : kind == CORE_SG_MULTIPLY
                ? 2
                : (kind == CORE_SG_NOISE3D || kind == CORE_SG_TRIPLANAR ? 1 : 0);
@@ -91,6 +105,9 @@ static bool graph_check_cycle(const CoreSurfaceGraph *g, json_object *nodes, int
     state[index] = 2;
     return true;
 }
+static bool graph_regions(json_object *source, json_object *object, const char *id,
+                          const CoreSurfaceGraph *base, CoreSurfaceGraph programs[6],
+                          bool active[6], RuntimeSurfaceGraphDiagnostic *d);
 bool RuntimeSurfaceGraphParseDetailed(json_object *source, const char *object_id,
                                       CoreSurfaceGraph *out,
                                       RuntimeSurfaceGraphDiagnostic *diagnostic) {
@@ -104,13 +121,17 @@ bool RuntimeSurfaceGraphParseDetailed(json_object *source, const char *object_id
     g.roughness_output = -1;
     if (!json_object_is_type(source, json_type_object))
         return graph_error(d, NULL, "surface_graph", "invalid_type", "Provide a graph object.");
-    if (!token(source, "required_capability", "optic.surface_graph_v1"))
+    bool composition = token(source, "required_capability", "optic.surface_composition_v1");
+    if (!composition && !token(source, "required_capability", "optic.surface_graph_v1"))
         return graph_error(d, NULL, "required_capability", "unsupported_capability",
-                           "Use optic.surface_graph_v1 with this renderer.");
+                           "Use optic.surface_graph_v1 or optic.surface_composition_v1.");
     if (!json_object_is_type(field(source, "version"), json_type_int) ||
-        json_object_get_int(field(source, "version")) != 1)
+        json_object_get_int(field(source, "version")) != (composition ? 2 : 1))
         return graph_error(d, NULL, "version", "unsupported_version",
-                           "Use integer graph version 1.");
+                           "Use graph version 1, or version 2 for surface composition.");
+    if (!composition && graph_has_field(source, "regions"))
+        return graph_error(d, NULL, "regions", "unsupported_feature",
+                           "Regions require surface composition version 2.");
     if (!token(source, "color_space", "linear"))
         return graph_error(d, NULL, "color_space", "unsupported_encoding",
                            "Declare linear graph colors.");
@@ -140,7 +161,7 @@ bool RuntimeSurfaceGraphParseDetailed(json_object *source, const char *object_id
                                    "Give this node a unique ID and update its references.");
         CoreSurfaceGraphNode *n = &g.nodes[i];
         n->kind = (CoreSurfaceGraphKind)-1;
-        for (int k = 0; k < 7; ++k)
+        for (int k = 0; k < (composition ? 10 : 7); ++k)
             if (token(node, "kind", sg_kinds[k]))
                 n->kind = (CoreSurfaceGraphKind)k;
         if ((int)n->kind < 0)
@@ -149,6 +170,24 @@ bool RuntimeSurfaceGraphParseDetailed(json_object *source, const char *object_id
         if (graph_has_field(node, "required_features"))
             return graph_error(d, name, "required_features", "unsupported_feature",
                                "This renderer cannot execute additional required node features.");
+        if (n->kind == CORE_SG_IMAGE_COLOR || n->kind == CORE_SG_IMAGE_SCALAR) {
+            if (graph_has_field(node, "mapping") || graph_has_field(node, "space") ||
+                graph_has_field(node, "coordinates"))
+                return graph_error(d, name, "mapping", "unsupported_mapping",
+                                   "Image nodes use the shared object surface mapping.");
+            if (n->kind == CORE_SG_IMAGE_COLOR && token(node, "resource", "base_color"))
+                n->resource = CORE_SG_RESOURCE_BASE_COLOR;
+            else if (n->kind == CORE_SG_IMAGE_SCALAR && token(node, "resource", "roughness"))
+                n->resource = CORE_SG_RESOURCE_ROUGHNESS;
+            else if (n->kind == CORE_SG_IMAGE_SCALAR && token(node, "resource", "height"))
+                n->resource = CORE_SG_RESOURCE_HEIGHT;
+            else if (n->kind == CORE_SG_IMAGE_SCALAR && token(node, "resource", "base_color_alpha"))
+                n->resource = CORE_SG_RESOURCE_BASE_COLOR_ALPHA;
+            else
+                return graph_error(d, name, "resource", "unsupported_resource",
+                                   "Choose base_color for color, or roughness, height, "
+                                   "base_color_alpha for scalar.");
+        }
         int arity = graph_node_arity(n->kind);
         if ((arity || inputs) && (!json_object_is_type(inputs, json_type_array) ||
                                   json_object_array_length(inputs) != (size_t)arity))
@@ -211,9 +250,9 @@ bool RuntimeSurfaceGraphParseDetailed(json_object *source, const char *object_id
     for (size_t i = 0; i < g.count; ++i) {
         const CoreSurfaceGraphNode *n = &g.nodes[i];
         for (int port = 0; port < graph_node_arity(n->kind); ++port) {
-            int expected = n->kind == CORE_SG_MIX        ? (port < 2 ? 1 : 0)
-                           : n->kind == CORE_SG_MULTIPLY ? 0
-                                                         : 2;
+            int expected = n->kind == CORE_SG_MIX ? (port < 2 ? 1 : 0)
+                           : (n->kind == CORE_SG_MULTIPLY || n->kind == CORE_SG_ROUGHNESS_MIX) ? 0
+                                                                                               : 2;
             if (graph_node_type(g.nodes[n->inputs[port]].kind) != expected) {
                 char property[32];
                 snprintf(property, sizeof(property), "inputs[%d]", port);
@@ -256,6 +295,12 @@ bool RuntimeSurfaceGraphParseDetailed(json_object *source, const char *object_id
     char shared_diagnostic[160] = {0};
     if (!core_surface_graph_prepare(&g, shared_diagnostic, sizeof(shared_diagnostic)))
         return graph_error(d, NULL, "surface_graph", "compiler_rejected", shared_diagnostic);
+    if (composition) {
+        CoreSurfaceGraph regions[6];
+        bool active[6] = {false};
+        if (!graph_regions(source, NULL, object_id, &g, regions, active, d))
+            return false;
+    }
     if (out)
         *out = g;
     memset(d, 0, sizeof(*d));
@@ -267,6 +312,56 @@ bool RuntimeSurfaceGraphParse(json_object *source, CoreSurfaceGraph *out, char *
     bool ok = RuntimeSurfaceGraphParseDetailed(source, NULL, out, &detail);
     graph_format_error(&detail, diagnostic, size);
     return ok;
+}
+/* Region outputs override each channel independently; node program remains shared in meaning. */
+static bool graph_regions(json_object *source, json_object *object, const char *id,
+                          const CoreSurfaceGraph *base, CoreSurfaceGraph programs[6],
+                          bool active[6], RuntimeSurfaceGraphDiagnostic *d) {
+    json_object *regions = field(source, "regions"), *nodes = field(source, "nodes");
+    if (!regions)
+        return true;
+    if (!json_object_is_type(regions, json_type_array) || json_object_array_length(regions) > 6)
+        return graph_error(d, NULL, "regions", "region_limit",
+                           "Provide at most six primitive face overrides.");
+    if (token(object, "object_type", "mesh_asset_instance"))
+        return graph_error(d, NULL, "regions", "unsupported_geometry",
+                           "Face-role overrides require a plane or prism.");
+    for (size_t i = 0; i < json_object_array_length(regions); ++i) {
+        json_object *region = json_object_array_get_idx(regions, i),
+                    *outputs = field(region, "outputs");
+        int face = region_face(region);
+        if (face < 0 || (token(object, "object_type", "plane_primitive") && face != 0) ||
+            active[face])
+            return graph_error(d, NULL, "regions.face_role", "invalid_region",
+                               "Use a unique supported primitive face role (plane: front only).");
+        if (!json_object_is_type(outputs, json_type_object) || !json_object_object_length(outputs))
+            return graph_error(d, NULL, "regions.outputs", "invalid_type",
+                               "Provide at least one named output override.");
+        programs[face] = *base;
+        json_object_object_foreach(outputs, key, value) {
+            int expected = !strcmp(key, "base_color") ? 1 : !strcmp(key, "roughness") ? 0 : -1;
+            int reference = graph_reference(nodes, value);
+            if (expected < 0 || reference < 0 ||
+                graph_node_type(base->nodes[reference].kind) != expected) {
+                char property[96];
+                snprintf(property, sizeof(property), "regions[%zu].outputs.%s", i, key);
+                return graph_error(
+                    d, reference >= 0 ? graph_node_id(nodes, reference) : NULL, property,
+                    "invalid_region_output",
+                    "Reference an existing node with the output's color or scalar type.");
+            }
+            if (expected == 1)
+                programs[face].color_output = reference;
+            else
+                programs[face].roughness_output = reference;
+        }
+        if (!core_surface_graph_prepare(&programs[face], NULL, 0))
+            return graph_error(d, NULL, "regions.outputs", "compiler_rejected",
+                               "Invalid region graph outputs.");
+        active[face] = true;
+    }
+    (void)id;
+    return true;
 }
 static bool graph_validate_scene(json_object *root, char *diagnostic, size_t size) {
     json_object *rows = field(field(field(field(root, "extensions"), "ray_tracing"), "authoring"),
@@ -328,11 +423,35 @@ static bool graph_validate_scene(json_object *root, char *diagnostic, size_t siz
                         "Use valid primitive dimensions and an orthonormal frame.");
             goto failed;
         }
+        bool composition = token(source, "required_capability", "optic.surface_composition_v1");
+        CoreSurfaceGraph region_programs[6];
+        bool region_active[6] = {false};
+        if (!graph_regions(source, object, id, &g, region_programs, region_active, &d))
+            goto failed;
         json_object *ray = field(field(object, "extensions"), "ray_tracing");
+        if (composition) {
+            if (!field(ray, "surface_mapping") || !field(ray, "surface_sampling")) {
+                graph_error(&d, NULL, "surface_sampling", "missing_mapping",
+                            "Composition requires surface_mapping and surface_sampling.");
+                goto failed;
+            }
+            json_object *channels = field(field(ray, "surface_sampling"), "channels");
+            const char *resources[] = {"base_color", "roughness", "height", "base_color"};
+            for (size_t n = 0; n < g.count; ++n)
+                if (g.nodes[n].kind == CORE_SG_IMAGE_COLOR ||
+                    g.nodes[n].kind == CORE_SG_IMAGE_SCALAR)
+                    if (!field(channels, resources[g.nodes[n].resource])) {
+                        graph_error(
+                            &d, graph_node_id(field(source, "nodes"), (int)n), "resource",
+                            "missing_resource",
+                            "Declare this image channel in object surface_sampling.channels.");
+                        goto failed;
+                    }
+        }
         const char *object_conflicts[] = {"surface_mapping", "surface_sampling",
                                           "procedural_solid_material_ref"};
         for (size_t c = 0; c < sizeof(object_conflicts) / sizeof(*object_conflicts); ++c)
-            if (field(c == 2 ? object : ray, object_conflicts[c])) {
+            if ((!composition || c == 2) && field(c == 2 ? object : ray, object_conflicts[c])) {
                 graph_error(&d, NULL, object_conflicts[c], "mixed_source",
                             "Keep one supported material source; replace this "
                             "conflicting declaration explicitly.");
@@ -386,7 +505,8 @@ static bool graph_validate_scene(json_object *root, char *diagnostic, size_t siz
     }
     return true;
 }
-static bool graph_prepare_scene(json_object *root, double world_scale, SurfaceGraph *surface_graphs) {
+static bool graph_prepare_scene(json_object *root, double world_scale,
+                                SurfaceGraph *surface_graphs) {
     memset(surface_graphs, 0, sizeof(*surface_graphs) * MAX_OBJECTS);
     RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
@@ -405,6 +525,11 @@ static bool graph_prepare_scene(json_object *root, double world_scale, SurfaceGr
         for (size_t j = 0; j < json_object_array_length(objects); ++j)
             if (token(json_object_array_get_idx(objects, j), "object_id", id))
                 o = json_object_array_get_idx(objects, j);
+        s->composition = token(source, "required_capability", "optic.surface_composition_v1");
+        RuntimeSurfaceGraphDiagnostic region_diagnostic = {0};
+        if (!graph_regions(source, o, id, &s->program, s->regions, s->region_active,
+                           &region_diagnostic))
+            goto failed;
         double angles[3] = {0}, scale[3] = {1, 1, 1}, pos[3] = {0};
         json_object *t = field(o, "transform");
         for (int a = 0; a < 3; ++a) {
@@ -461,13 +586,17 @@ bool RuntimeSurfaceGraphActive(int index) {
     return animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE && index >= 0 &&
            index < MAX_OBJECTS && surface_graphs[index].active;
 }
+bool RuntimeSurfaceGraphCompositionActive(int index) {
+    return RuntimeSurfaceGraphActive(index) && surface_graphs[index].composition;
+}
 bool RuntimeSurfaceGraphResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *out) {
     if (!hit || !out || !RuntimeSurfaceGraphActive(hit->sceneObjectIndex))
         return false;
     const SurfaceGraph *s = &surface_graphs[hit->sceneObjectIndex];
     CoreSurfaceGraphQuery q = {0};
     double p[] = {hit->position.x, hit->position.y, hit->position.z};
-    Vec3 normal = hit->shadingNormal;
+    Vec3 normal =
+        hit->hasUnperturbedShadingNormal ? hit->unperturbedShadingNormal : hit->shadingNormal;
     double n[] = {normal.x, normal.y, normal.z},
            dx[] = {hit->pixelDpDx.x, hit->pixelDpDx.y, hit->pixelDpDx.z},
            dy[] = {hit->pixelDpDy.x, hit->pixelDpDy.y, hit->pixelDpDy.z};
@@ -489,7 +618,24 @@ bool RuntimeSurfaceGraphResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *
             q.normal[0][a] /= length;
     q.unbounded = hit->footprintUnbounded;
     CoreSurfaceGraphResult result;
-    if (!core_surface_graph_evaluate(&s->program, &q, &result))
+    const CoreSurfaceGraph *program = &s->program;
+    bool has_regions = false;
+    for (int i = 0; i < 6; ++i)
+        has_regions |= s->region_active[i];
+    if (has_regions) {
+        int face;
+        double u, v;
+        if (!RuntimeSurfaceMaterialPrimitiveIsland(hit->sceneObjectIndex, hit->position,
+                                                   hit->geometricNormal, &face, &u, &v))
+            return false;
+        if (face >= 0 && face < 6 && s->region_active[face])
+            program = &s->regions[face];
+    }
+    CoreSurfaceGraphInputs inputs = {0};
+    if (s->composition && !RuntimeSurfaceSamplingGraphInputs(hit, program, &inputs))
+        return false;
+    if (!core_surface_graph_evaluate_with_inputs(program, &q, s->composition ? &inputs : NULL,
+                                                 &result))
         return false;
     *out = s->base;
     out->baseColorR = out->bsdf.baseColorR = result.color[0];
@@ -497,5 +643,5 @@ bool RuntimeSurfaceGraphResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *
     out->baseColorB = out->bsdf.baseColorB = result.color[2];
     if (result.has_roughness)
         out->bsdf.roughness = result.roughness;
-    return true;
+    return !s->composition || RuntimeSurfaceSamplingApplyResponse(hit, out);
 }

@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0–T2 complete, including verified Main Edit source adoption through `3819af1`. Fresh adoption checks are recorded in the T2 contract. T3 composition is next; T4/T5 remain planned.
+Status: T0–T2 complete, including verified Main Edit source adoption through `3819af1`. Fresh adoption checks are recorded in the T2 contract. T3 implementation and isolated verification are complete; canonical shared/Main Edit adoption is pending. See the [T3 contract](surface_material_t3_contract.md). T4/T5 remain planned.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -260,8 +260,16 @@ This audit changed planning documents only and added a standalone reproduction
 probe. It did not merge Main Edit, patch product behavior, launch the user's app,
 change installed artifacts or run a release lane.
 
-**Next execution slice is T0.** Its first reviewable change should pair the noise
+**Original audit handoff (historical): next execution slice was T0.** Its first reviewable change paired the noise
 regression/correction and compatibility note; the generation/failure work then
 lands as its own bounded change with fault-injection proof. UI and wider composition
 start against those verified contracts. A later instruction to start a named slice
 authorizes implementation; this audit's planning status is not a perpetual approval gate.
+
+## Current handoff after isolated T3 implementation
+
+T0–T2 remain adopted in Main Edit. T3 has source/native proof in its isolated
+candidate; canonical shared 0.8.0 synchronization and Main Edit fast-forward
+remain explicit adoption actions. Complete those with fresh adoption checks
+before T4. T4 starts by declaring secondary-image error and interactive timing
+budgets, measuring current costs, then optimizing the measured bottleneck.

@@ -50,6 +50,11 @@ static bool token(json_object* o,const char* k,const char* value) {
     json_object* v=field(o,k);
     return value && v && json_object_is_type(v,json_type_string) && !strcmp(json_object_get_string(v),value);
 }
+static bool composition_source(json_object* row) {
+    json_object* graph=field(row,"surface_graph");
+    return token(graph,"required_capability","optic.surface_composition_v1") &&
+        json_object_is_type(field(graph,"version"),json_type_int) && json_object_get_int(field(graph,"version"))==2;
+}
 static json_object* mapping(json_object* object) {
     return field(field(field(object,"extensions"),"ray_tracing"),"surface_mapping");
 }
@@ -227,6 +232,7 @@ static bool layers_supported(json_object* root,const char* id,bool axial) {
         if(!token(row,"object_id",id)) continue;
         for(size_t k=i+1;k<json_object_array_length(rows);++k)
             if(token(json_object_array_get_idx(rows,k),"object_id",id)) return false;
+        if(composition_source(row)) return !axial;
         /* Graph integration is explicit; M1/M2 documents retain their gate. */
         json_object* binding=field(row,"surface_material_binding");
         bool m3=binding && token(binding,"required_capability","optic.surface_material_v3") &&
@@ -335,6 +341,7 @@ static bool external_mapping_supported(json_object* row,json_object* object,json
     return true;
 }
 static bool regions_supported(json_object* row,json_object* object,const CoreAuthoredSurfaceMapping* map) {
+    if(composition_source(row)) return !field(row,"surface_material_binding") && (map->version==1 || map->version==3);
     json_object* binding=field(row,"surface_material_binding");
     if(!binding) return layer_maps(row,NULL,token(object,"object_type","mesh_asset_instance"),NULL);
     json_object* maps=field(binding,"mappings");

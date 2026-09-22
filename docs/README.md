@@ -224,8 +224,8 @@ normal scene preflight additionally checks graph/source/geometry combinations.
 
 See the [audit-backed next-step plan](surface_material_post_m6_plan.md) and its
 three independent source audits for the correctness, authoring, preparation and
-composition roadmap. T0–T2 are adopted and freshly verified in Main Edit through `3819af1`. T3 composition
-is next; T4/T5 remain planned. Source adoption is separate from installed product releases.
+composition roadmap. T0–T2 are adopted and freshly verified in Main Edit through `3819af1`. The isolated T3 composition
+candidate awaits canonical shared/Main Edit adoption; T4/T5 remain planned. Source adoption is separate from installed product releases.
 
 T0 hardens noise periodicity, material generation recovery, graph diagnostics and
 control availability. See [T0 correctness and recovery](surface_material_t0_contract.md).
@@ -236,3 +236,7 @@ workflow, preservation rules, constrained layout and native verification.
 
 T2 adds immutable resource sharing, PNG cards/relink, portable bundles and reviewed
 UV candidate adoption. See [T2 resource workflow](surface_material_t2_contract.md).
+
+T3 combines image and procedural sources with explicit roughness and primitive
+region outputs. See [T3 composition](surface_material_t3_contract.md) for the
+opt-in schema, editor workflow, response policy and adoption status.
