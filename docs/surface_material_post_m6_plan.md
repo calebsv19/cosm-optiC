@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0–T3 complete and adopted in Main Edit through `808b2b6`; canonical shared authored texture is 0.8.0. Fresh adoption checks are recorded in the [T3 contract](surface_material_t3_contract.md). T4/T5 remain planned.
+Status: T0–T3 complete and adopted in Main Edit through `808b2b6`; canonical shared authored texture is 0.8.0. Fresh adoption checks are recorded in the [T3 contract](surface_material_t3_contract.md). T4 is source-complete in the isolated lane; Main Edit adoption is next. T5 remains deferred. See the [T4 contract](surface_material_t4_contract.md).
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -244,8 +244,11 @@ cannot trade away source semantics or independent correctness gates.
    measured dominant preview cost; preserve UV charts, tangent handedness, source
    semantics and declared image-error limits through any sharing or reduction.
 
-These are planned T4 behaviors, not implemented by the T3 adoption pass. T4 has
-no promised frame rate until the fixture budgets and measurements are recorded.
+These steps are now implemented in the isolated T4 lane. The [T4 contract](surface_material_t4_contract.md)
+records frozen and passing image/performance gates, exact pixel preservation,
+production transport/parity and retained T0–T3 checks. The instance stress cell is
+64 because the importer explicitly rejects the originally proposed 100. There is
+no whole-app frame-rate claim. Main Edit adoption remains pending.
 
 ### T5 — Broader artist tools
 
@@ -285,10 +288,12 @@ lands as its own bounded change with fault-injection proof. UI and wider composi
 start against those verified contracts. A later instruction to start a named slice
 authorizes implementation; this audit's planning status is not a perpetual approval gate.
 
-## Current handoff after T3 adoption
+## Current handoff after T4 source completion
 
-T0–T3 are adopted in Main Edit, canonical shared core is synchronized, and fresh
-adoption checks pass. T4 is next: establish secondary-image reference limits
-and fixed-resolution preview timing budgets, then implement bounded ideal
-reflection/refraction footprints and optimize the measured preview bottleneck.
-The first execution steps above define this boundary. T5 remains deferred.
+T0–T3 remain adopted in Main Edit. T4 is implemented and verified in the isolated
+material lane; adopt it and run fresh Main Edit checks next. T4 needs no canonical
+shared-module synchronization or version change. Its defined image/performance
+gates pass; the contract separately discloses one preexisting legacy emission-unit
+assertion and the diagnostic-ledger counting limitation. Installed-package and
+operator acceptance remain separate. T5 is deferred until its next bounded artist
+workflow is selected; the optional features above are not one automatic expansion.

@@ -678,18 +678,18 @@ bool RuntimeSurfaceMappingNeedsMeshAttributes(int index) {
     if(RuntimeSurfaceGraphActive(index)) return true;
     return RuntimeSurfaceMappingActive(index) && (bindings[index].asset_graph || bindings[index].map.version==3 || RuntimeSurfaceSamplingActive(index));
 }
-bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t triangle,
-    const double weights[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh* lod,
-    const Vec3 *dpdx,const Vec3 *dpdy,RuntimeMaterialSurfaceEval* out) {
-    if((!RuntimeSurfaceMappingActive(index) && !RuntimeSurfaceGraphActive(index)) || !weights || !lod || triangle>=lod->triangle_count || !out) return false;
-    HitInfo3D hit;HitInfo3D_Reset(&hit);hit.sceneObjectIndex=index;hit.localTriangleIndex=(int)triangle;
-    hit.triangleIndex=(int)triangle;hit.position=world;hit.normal=hit.geometricNormal=hit.shadingNormal=normal;
-    hit.baryU=weights[0];hit.baryV=weights[1];hit.baryW=weights[2];
-    if(dpdx&&dpdy){hit.hasPixelFootprint=true;hit.pixelDpDx=*dpdx;hit.pixelDpDy=*dpdy;}
-
+bool RuntimeSurfaceMaterialPrepareMeshTriangle(int index,int asset_index,size_t triangle,
+    const CoreMeshPreviewLodMesh *lod,const Vec3 *dpdx,const Vec3 *dpdy,
+    RuntimeSurfaceMeshSamplePrepared *prepared) {
+    if(!prepared)return false;
+    prepared->valid=false;prepared->corners=NULL;
+    if((!RuntimeSurfaceMappingActive(index) && !RuntimeSurfaceGraphActive(index)) || !lod || triangle>=lod->triangle_count)return false;
+    HitInfo3D *hit=&prepared->hit;HitInfo3D_Reset(hit);
+    hit->sceneObjectIndex=index;hit->localTriangleIndex=(int)triangle;hit->triangleIndex=(int)triangle;
+    if(dpdx&&dpdy){hit->hasPixelFootprint=true;hit->pixelDpDx=*dpdx;hit->pixelDpDy=*dpdy;}
     if(lod->surface_corners && lod->surface_corner_count==lod->triangle_count*3) {
-        hit.hasSurfaceUV=true;memcpy(hit.uvSetId,lod->uv_set_id,sizeof(hit.uvSetId));
-        for(int k=0;k<3;++k) for(int a=0;a<2;++a) hit.surfaceUV[a]+=weights[k]*lod->surface_corners[triangle*3+k].uv[a];
+        hit->hasSurfaceUV=true;memcpy(hit->uvSetId,lod->uv_set_id,sizeof(hit->uvSetId));
+        prepared->corners=lod->surface_corners+triangle*3;
         const CoreMeshAssetSurfaceCorner *c=lod->surface_corners+triangle*3;
         double u1=c[1].uv[0]-c[0].uv[0],v1=c[1].uv[1]-c[0].uv[1],u2=c[2].uv[0]-c[0].uv[0],v2=c[2].uv[1]-c[0].uv[1],det=u1*v2-u2*v1;
         if(c[0].tangent_valid&&c[1].tangent_valid&&c[2].tangent_valid&&fabs(det)>1e-30){
@@ -697,26 +697,43 @@ bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t 
             Vec3 local[2]={vec3(b.x-a.x,b.y-a.y,b.z-a.z),vec3(d.x-a.x,d.y-a.y,d.z-a.z)},edge[2];
             for(int k=0;k<2;++k){double v[]={local[k].x,local[k].y,local[k].z};edge[k]=vec3(0,0,0);
                 for(int axis=0;axis<3;++axis)edge[k]=vec3_add(edge[k],vec3_scale(vec3(bindings[index].basis[axis][0],bindings[index].basis[axis][1],bindings[index].basis[axis][2]),v[axis]*bindings[index].scale[axis]*bindings[index].world_scale));}
-            hit.surfaceDpDu=vec3_scale(vec3_sub(vec3_scale(edge[0],v2),vec3_scale(edge[1],v1)),1/det);
-            hit.surfaceDpDv=vec3_scale(vec3_sub(vec3_scale(edge[1],u1),vec3_scale(edge[0],u2)),1/det);hit.hasSurfaceDifferentials=true;
+            hit->surfaceDpDu=vec3_scale(vec3_sub(vec3_scale(edge[0],v2),vec3_scale(edge[1],v1)),1/det);
+            hit->surfaceDpDv=vec3_scale(vec3_sub(vec3_scale(edge[1],u1),vec3_scale(edge[0],u2)),1/det);hit->hasSurfaceDifferentials=true;
         }
-
     }
     const RayTracingRuntimeMeshAssetSet *assets=ray_tracing_runtime_mesh_assets_last();
     if(bindings[index].asset_graph) {
         if(!assets || asset_index<0 || asset_index>=assets->asset_count || !lod->attribute_protected) return false;
         const ProceduralSolidMaterialRuntimeProgramV1 *program=&assets->assets[asset_index].procedural_solid_material_runtime_program;
         if(!program->valid || !program->graph.surface_mapping_ref[0]) return false;
-        hit.hasRegionAuthoredMaterial=true;hit.proceduralSolidMaterialRuntimeProgram=program;
+        hit->hasRegionAuthoredMaterial=true;hit->proceduralSolidMaterialRuntimeProgram=program;
     }
+    prepared->revision=RuntimeSurfaceMappingRevision();prepared->valid=true;return true;
+}
+bool RuntimeSurfaceMaterialSamplePreparedMesh(RuntimeSurfaceMeshSamplePrepared *prepared,
+    const double weights[3],Vec3 world,Vec3 normal,RuntimeMaterialSurfaceEval *out) {
+    if(!prepared || !prepared->valid || prepared->revision!=RuntimeSurfaceMappingRevision() || !weights || !out)return false;
+    HitInfo3D *hit=&prepared->hit;
+    hit->position=world;hit->normal=hit->geometricNormal=hit->shadingNormal=normal;
+    hit->baryU=weights[0];hit->baryV=weights[1];hit->baryW=weights[2];
+    if(prepared->corners){hit->surfaceUV[0]=hit->surfaceUV[1]=0;
+        for(int k=0;k<3;++k)for(int a=0;a<2;++a)hit->surfaceUV[a]+=weights[k]*prepared->corners[k].uv[a];}
     RuntimeMaterialPayload3D payload;
-    if(!RuntimeMaterialPayload3D_ResolveFromHit(&hit,&payload)) return false;
+    if(!RuntimeMaterialPayload3D_ResolveFromHit(hit,&payload)) return false;
     *out=RuntimeMaterialSurfaceEvalMakeBase(payload.baseColorR,payload.baseColorG,payload.baseColorB,
         payload.bsdf.roughness,payload.bsdf.reflectivity,payload.bsdf.specWeight,payload.bsdf.diffuseWeight,payload.transparency);
     out->active=true;
-    out->linearColor=RuntimeSurfaceSamplingActive(index) || RuntimeSurfaceGraphActive(index);
+    out->linearColor=RuntimeSurfaceSamplingActive(hit->sceneObjectIndex) || RuntimeSurfaceGraphActive(hit->sceneObjectIndex);
     if(payload.hasMicrodetailNormal){out->worldNormalActive=true;out->worldNormal[0]=payload.microdetailShadingNormal.x;out->worldNormal[1]=payload.microdetailShadingNormal.y;out->worldNormal[2]=payload.microdetailShadingNormal.z;}
     return true;
+}
+bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t triangle,
+    const double weights[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh *lod,
+    const Vec3 *dpdx,const Vec3 *dpdy,RuntimeMaterialSurfaceEval *out) {
+    if(!weights || !out)return false;
+    RuntimeSurfaceMeshSamplePrepared prepared;
+    return RuntimeSurfaceMaterialPrepareMeshTriangle(index,asset_index,triangle,lod,dpdx,dpdy,&prepared) &&
+        RuntimeSurfaceMaterialSamplePreparedMesh(&prepared,weights,world,normal,out);
 }
 
 bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,

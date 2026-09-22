@@ -1,5 +1,21 @@
 # optiC Current Truth
 
+## September 22 T4 secondary detail and measured preview costs
+
+T4 source work is complete in the isolated material lane. Bounded ideal reflection
+and refraction retain adjacent ray origins/directions; four subfootprint samples
+preserve secondary detail within frozen linear error/contrast/motion budgets.
+Unknown normal derivatives and rough/stochastic events stay conservative. Exact
+preview preparation and reuse reduce measured raster/shading medians by 24–65%
+across five supported fixtures, with unchanged frame hashes and all p95/memory
+gates met. The existing mesh-instance limit is 64; 100 is explicitly unsupported.
+
+See the [T4 contract](surface_material_t4_contract.md) for fixture hardware, image
+and performance receipts, actual headless transport/parity checks and fresh
+T0–T3 regressions. One preexisting legacy nested-transmission unit assertion still
+fails and is disclosed there. Main Edit remains at T3 pending T4 adoption; this
+source checkpoint is not an installed-package or hands-on acceptance claim.
+
 ## September 22 T3 composition adopted
 
 T3 is implemented and adopted in Main Edit: image/procedural composition, typed

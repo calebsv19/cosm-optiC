@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_surface_sampling.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
 static const double kRuntimeSpecularReflection3DEpsilon = 1e-4;
@@ -66,6 +67,10 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
                                          HitInfo3D_OffsetNormal(hit),
                                          reflection_dir,
                                          kRuntimeSpecularReflection3DEpsilon);
+    if(payload->bsdf.roughness<=0.08 && !payload->hasMicrodetailNormal &&
+       !RuntimeSurfaceSamplingNormalResponseActive(hit->sceneObjectIndex))
+        (void)RuntimeRay3D_TransportIdealFootprint(hit,reflection_normal,
+            RUNTIME_RAY_IDEAL_REFLECTION,1,1,&result.ray);
     result.traced = true;
     RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
         RUNTIME_RENDER_TRACE_COST_RAY_REFLECTION_SPECULAR,

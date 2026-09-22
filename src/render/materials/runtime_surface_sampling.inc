@@ -364,6 +364,12 @@ failure:
 bool RuntimeSurfaceSamplingActive(int i) {
     return RuntimeSurfaceMappingActive(i) && sampling[i].declared && sampling[i].valid;
 }
+bool RuntimeSurfaceSamplingNormalResponseActive(int index) {
+    if (!RuntimeSurfaceSamplingActive(index)) return false;
+    const SurfaceSampling *s = &sampling[index];
+    return (s->images[2].values && s->normal_strength > 0) ||
+           (s->images[3].values && s->height_m > 0);
+}
 unsigned long long RuntimeSurfaceSamplingBuildCount(void) { return sampling_builds; }
 size_t RuntimeSurfaceSamplingPreparedBytes(void) { return sampling_bytes; }
 static bool sampling_gradient_basis(Vec3 du, Vec3 dv, Vec3 *gu, Vec3 *gv) {
@@ -461,10 +467,48 @@ bool RuntimeSurfaceSamplingCoordinates(const HitInfo3D *hit, double uv[2], doubl
                                        double dy[2], Vec3 *du, Vec3 *dv) {
     return sampling_coordinates(hit, uv, dx, dy, du, dv, NULL);
 }
-static bool sampling_finish_response(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload,
-                                      RuntimeMaterialSurfaceEval e) {
-    HitInfo3D unperturbed=*hit;
+/* A transported pixel covers a parallelogram at the receiver. Integrate four
+ * equal-area subfootprints instead of replacing that box by one broad mip tap.
+ * Stored channels are moments (premultiplied color, squared roughness, normal
+ * vectors): average them before material decoding. Primary/editor sampling and
+ * unknown secondary footprints retain their existing policy. */
+static bool sampling_pyramid_sample(const HitInfo3D *hit,
+    const CoreAuthoredSurfacePyramid *p,const double uv[2],const double dx[2],
+    const double dy[2],double *values,double *lod) {
+    if(!hit || !hit->footprintTransported || !hit->hasPixelFootprint || hit->footprintUnbounded)
+        return core_authored_surface_pyramid_sample(p,uv,dx,dy,values,lod);
+    if(!p || !values || p->channels<1 || p->channels>8)return false;
+    double half_dx[2]={dx[0]*.5,dx[1]*.5},half_dy[2]={dy[0]*.5,dy[1]*.5};
+    for(unsigned c=0;c<p->channels;++c)values[c]=0;
+    for(int y=-1;y<=1;y+=2)for(int x=-1;x<=1;x+=2) {
+        double center[2]={uv[0]+.25*(x*dx[0]+y*dy[0]),uv[1]+.25*(x*dx[1]+y*dy[1])};
+        double tap[8];
+        if(!core_authored_surface_pyramid_sample(p,center,half_dx,half_dy,tap,lod))return false;
+        for(unsigned c=0;c<p->channels;++c)values[c]+=.25*tap[c];
+    }
+    return true;
+}
+
+/* Composition image inputs and surface response query the same unperturbed hit.
+ * Keep the exact coordinate result only for this resolve call; never across rays,
+ * triangles, object revisions or material updates. */
+typedef struct SamplingCoordinatesPrepared {
+    double uv[2],dx[2],dy[2],source_weight;
+    Vec3 du,dv;
+} SamplingCoordinatesPrepared;
+static bool sampling_prepare_coordinates(const HitInfo3D *hit,SamplingCoordinatesPrepared *out) {
+    if(!hit || !out)return false;
+    HitInfo3D unperturbed;
+    if(hit->hasUnperturbedShadingNormal){unperturbed=*hit;
+        unperturbed.shadingNormal=unperturbed.normal=hit->unperturbedShadingNormal;hit=&unperturbed;}
+    out->source_weight=1;
+    return sampling_coordinates(hit,out->uv,out->dx,out->dy,&out->du,&out->dv,&out->source_weight);
+}
+static bool sampling_finish_response_prepared(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload,
+                                      RuntimeMaterialSurfaceEval e,const SamplingCoordinatesPrepared *prepared) {
+    HitInfo3D unperturbed;
     if(hit->hasUnperturbedShadingNormal) {
+        unperturbed=*hit;
         unperturbed.shadingNormal=unperturbed.normal=hit->unperturbedShadingNormal;hit=&unperturbed;
     }
     RuntimeMaterialSurfaceEval base=RuntimeMaterialSurfaceEvalMakeBase(
@@ -472,13 +516,14 @@ static bool sampling_finish_response(const HitInfo3D *hit, RuntimeMaterialPayloa
         payload->bsdf.reflectivity,payload->bsdf.specWeight,payload->bsdf.diffuseWeight,payload->transparency);
     SurfaceSampling *s=&sampling[hit->sceneObjectIndex];
     double uv[2],dx[2],dy[2],v[8],lod,source_weight=1;Vec3 du,dv;
-    if(!sampling_coordinates(hit,uv,dx,dy,&du,&dv,&source_weight))return false;
+    if(prepared){memcpy(uv,prepared->uv,sizeof(uv));memcpy(dx,prepared->dx,sizeof(dx));memcpy(dy,prepared->dy,sizeof(dy));du=prepared->du;dv=prepared->dv;source_weight=prepared->source_weight;}
+    else if(!sampling_coordinates(hit,uv,dx,dy,&du,&dv,&source_weight))return false;
     double n[] = {hit->shadingNormal.x, hit->shadingNormal.y, hit->shadingNormal.z},
            t[] = {du.x, du.y, du.z}, out[3];
     bool perturbed = false;
     bool frame = vec3_length(du) > 1e-12 && vec3_length(dv) > 1e-12;
     if (s->images[2].values && frame) {
-        if (!core_authored_surface_pyramid_sample(&s->images[2], uv, dx, dy, v, NULL))
+        if (!sampling_pyramid_sample(hit,&s->images[2], uv, dx, dy, v, NULL))
             return false;
         double coherence = fmin(1, hypot(hypot(v[0], v[1]), v[2]));
         e.roughness = sqrt(fmin(1, e.roughness * e.roughness +
@@ -491,7 +536,7 @@ static bool sampling_finish_response(const HitInfo3D *hit, RuntimeMaterialPayloa
     }
     if (s->images[3].values && s->height_m > 0 && frame) {
         CoreAuthoredSurfacePyramid *p = &s->images[3];
-        if (!core_authored_surface_pyramid_sample(p, uv, dx, dy, v, &lod))
+        if (!sampling_pyramid_sample(hit,p, uv, dx, dy, v, &lod))
             return false;
         double gradient[2], value[2][8];
         for (int k = 0; k < 2; ++k) {
@@ -499,8 +544,8 @@ static bool sampling_finish_response(const HitInfo3D *hit, RuntimeMaterialPayloa
                    b[2] = {uv[0], uv[1]};
             a[k] -= step;
             b[k] += step;
-            if (!core_authored_surface_pyramid_sample(p, a, dx, dy, value[0], NULL) ||
-                !core_authored_surface_pyramid_sample(p, b, dx, dy, value[1], NULL))
+            if (!sampling_pyramid_sample(hit,p, a, dx, dy, value[0], NULL) ||
+                !sampling_pyramid_sample(hit,p, b, dx, dy, value[1], NULL))
                 return false;
             gradient[k] = (value[1][0] - value[0][0]) * s->height_m / (2 * step);
         }
@@ -520,6 +565,11 @@ static bool sampling_finish_response(const HitInfo3D *hit, RuntimeMaterialPayloa
         }
     }
     return true;
+}
+
+static bool sampling_finish_response(const HitInfo3D *hit,RuntimeMaterialPayload3D *payload,
+                                     RuntimeMaterialSurfaceEval e) {
+    return sampling_finish_response_prepared(hit,payload,e,NULL);
 }
 
 bool RuntimeSurfaceSamplingResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload) {
@@ -545,44 +595,48 @@ bool RuntimeSurfaceSamplingApply(const HitInfo3D *hit, RuntimeMaterialPayload3D 
     double uv[2], dx[2], dy[2], v[8], lod;
     Vec3 du, dv;
     if (!sampling_coordinates(hit, uv, dx, dy, &du, &dv, &source_weight) ||
-        !core_authored_surface_pyramid_sample(&s->material, uv, dx, dy, v, &lod))
+        !sampling_pyramid_sample(hit,&s->material, uv, dx, dy, v, &lod))
         return false;
     RuntimeMaterialSurfaceEval e = RuntimeMaterialSurfaceEvalMakeBase(
         v[0], v[1], v[2], sqrt(fmax(0, v[3])), v[4], v[5], v[6], v[7]);
     e.active = true;
     if (s->images[0].values) {
-        if (!core_authored_surface_pyramid_sample(&s->images[0], uv, dx, dy, v, NULL))
+        if (!sampling_pyramid_sample(hit,&s->images[0], uv, dx, dy, v, NULL))
             return false;
         e.colorR = v[0] + e.colorR * (1 - v[3]);
         e.colorG = v[1] + e.colorG * (1 - v[3]);
         e.colorB = v[2] + e.colorB * (1 - v[3]);
     }
     if (s->images[1].values) {
-        if (!core_authored_surface_pyramid_sample(&s->images[1], uv, dx, dy, v, NULL))
+        if (!sampling_pyramid_sample(hit,&s->images[1], uv, dx, dy, v, NULL))
             return false;
         e.roughness = sqrt(fmax(0, v[0]));
     }
     return sampling_finish_response(hit,payload,e);
 }
 
-bool RuntimeSurfaceSamplingApplyResponse(const HitInfo3D *hit,RuntimeMaterialPayload3D *payload) {
+static bool sampling_apply_response_prepared(const HitInfo3D *hit,RuntimeMaterialPayload3D *payload,
+                                              const SamplingCoordinatesPrepared *prepared) {
     if(!hit || !payload || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))return false;
     RuntimeMaterialSurfaceEval e=RuntimeMaterialSurfaceEvalMakeBase(
         payload->baseColorR,payload->baseColorG,payload->baseColorB,payload->bsdf.roughness,
         payload->bsdf.reflectivity,payload->bsdf.specWeight,payload->bsdf.diffuseWeight,payload->transparency);
     e.active=true;
-    return sampling_finish_response(hit,payload,e);
+    return sampling_finish_response_prepared(hit,payload,e,prepared);
 }
-bool RuntimeSurfaceSamplingGraphInputs(const HitInfo3D *hit,const CoreSurfaceGraph *program,
-                                      CoreSurfaceGraphInputs *inputs) {
+bool RuntimeSurfaceSamplingApplyResponse(const HitInfo3D *hit,RuntimeMaterialPayload3D *payload) {
+    return sampling_apply_response_prepared(hit,payload,NULL);
+}
+static bool sampling_graph_inputs_prepared(const HitInfo3D *hit,const CoreSurfaceGraph *program,
+                                      CoreSurfaceGraphInputs *inputs,const SamplingCoordinatesPrepared *prepared) {
     if(!hit || !program || !inputs || !RuntimeSurfaceSamplingActive(hit->sceneObjectIndex))return false;
     memset(inputs,0,sizeof(*inputs));
     SurfaceSampling *s=&sampling[hit->sceneObjectIndex];
     if(!s->composition)return false;
-    HitInfo3D unperturbed=*hit;
-    if(hit->hasUnperturbedShadingNormal){unperturbed.shadingNormal=unperturbed.normal=hit->unperturbedShadingNormal;hit=&unperturbed;}
-    double uv[2],dx[2],dy[2],sampled[4][8]={{0}};bool ready[4]={0};Vec3 du,dv;
-    if(!sampling_coordinates(hit,uv,dx,dy,&du,&dv,NULL))return false;
+    SamplingCoordinatesPrepared local;
+    if(!prepared){if(!sampling_prepare_coordinates(hit,&local))return false;prepared=&local;}
+    const double *uv=prepared->uv,*dx=prepared->dx,*dy=prepared->dy;
+    double sampled[4][8]={{0}};bool ready[4]={0};
     for(size_t i=0;i<program->count;++i) {
         const CoreSurfaceGraphNode *node=&program->nodes[i];
         if(node->kind!=CORE_SG_IMAGE_COLOR && node->kind!=CORE_SG_IMAGE_SCALAR)continue;
@@ -590,16 +644,24 @@ bool RuntimeSurfaceSamplingGraphInputs(const HitInfo3D *hit,const CoreSurfaceGra
                     node->resource==CORE_SG_RESOURCE_ROUGHNESS ? 1 : node->resource==CORE_SG_RESOURCE_HEIGHT ? 3 : -1;
         if(channel<0 || !s->images[channel].values)return false;
         if(!ready[channel]) {
-            if(!core_authored_surface_pyramid_sample(&s->images[channel],uv,dx,dy,sampled[channel],NULL))return false;
+            if(!sampling_pyramid_sample(hit,&s->images[channel],uv,dx,dy,sampled[channel],NULL))return false;
             ready[channel]=true;
         }
         CoreSurfaceGraphInput *out=&inputs->nodes[i];out->kind=node->kind;out->valid=true;
-        for(int c=0;c<3;++c) {
-            double value=node->kind==CORE_SG_IMAGE_COLOR ? (sampled[0][3]>1e-12?sampled[0][c]/sampled[0][3]:0) :
-                node->resource==CORE_SG_RESOURCE_ROUGHNESS ? sqrt(fmax(0,sampled[1][0])) :
+        if(node->kind==CORE_SG_IMAGE_COLOR) {
+            for(int c=0;c<3;++c){double value=sampled[0][3]>1e-12?sampled[0][c]/sampled[0][3]:0;
+                out->value[c]=fmax(0,fmin(1,value));}
+        } else {
+            double value=node->resource==CORE_SG_RESOURCE_ROUGHNESS ? sqrt(fmax(0,sampled[1][0])) :
                 node->resource==CORE_SG_RESOURCE_BASE_COLOR_ALPHA ? sampled[0][3] : sampled[3][0];
-            out->value[c]=fmax(0,fmin(1,value));
+            value=fmax(0,fmin(1,value));
+            for(int c=0;c<3;++c)out->value[c]=value;
         }
     }
     return true;
+}
+
+bool RuntimeSurfaceSamplingGraphInputs(const HitInfo3D *hit,const CoreSurfaceGraph *program,
+                                      CoreSurfaceGraphInputs *inputs) {
+    return sampling_graph_inputs_prepared(hit,program,inputs,NULL);
 }

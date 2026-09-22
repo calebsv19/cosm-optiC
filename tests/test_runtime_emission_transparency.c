@@ -804,6 +804,10 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_behin
 
 static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitter(void) {
     SceneConfig saved_scene = sceneSettings;
+    /* This hand-built triangle fixture has no prepared TLAS/instance contract.
+     * Select the explicit compatibility route instead of borrowing prior scene acceleration. */
+    RuntimeRay3DTraceRoute saved_route = RuntimeRay3D_CurrentTraceRoute();
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     RuntimeScene3D scene;
     RuntimeCameraProjector3D projector = {0};
     RuntimeMaterialResponse3DResult material_result = {0};
@@ -849,6 +853,7 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
     if (!scene.primitives || !scene.triangleMesh.triangles) {
         RuntimeScene3D_Free(&scene);
         sceneSettings = saved_scene;
+        RuntimeRay3D_SetTraceRouteForTests(saved_route);
         return 0;
     }
     scene.primitiveCount = 1;
@@ -871,6 +876,7 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
     if (!ok) {
         RuntimeScene3D_Free(&scene);
         sceneSettings = saved_scene;
+        RuntimeRay3D_SetTraceRouteForTests(saved_route);
         return 0;
     }
 
@@ -923,11 +929,16 @@ static int test_runtime_emission_transparency_3d_transparent_prism_reaches_emitt
 
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
+    RuntimeRay3D_SetTraceRouteForTests(saved_route);
     return 0;
 }
 
 static int test_runtime_emission_transparency_3d_clear_surface_reduces_legacy_front_floor(void) {
     SceneConfig saved_scene = sceneSettings;
+    /* This hand-built triangle fixture has no prepared TLAS/instance contract.
+     * Select the explicit compatibility route instead of borrowing prior scene acceleration. */
+    RuntimeRay3DTraceRoute saved_route = RuntimeRay3D_CurrentTraceRoute();
+    RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     char dir_template[] = "/tmp/ray_tracing_clear_front_floorXXXXXX";
     char clear_path[PATH_MAX];
     RuntimeScene3D scene;
@@ -948,6 +959,7 @@ static int test_runtime_emission_transparency_3d_clear_surface_reduces_legacy_fr
     if (!mkdtemp(dir_template)) {
         RuntimeScene3D_Free(&scene);
         sceneSettings = saved_scene;
+        RuntimeRay3D_SetTraceRouteForTests(saved_route);
         return 0;
     }
 
@@ -1008,6 +1020,7 @@ static int test_runtime_emission_transparency_3d_clear_surface_reduces_legacy_fr
         MaterialManagerResetDefaults();
         RuntimeScene3D_Free(&scene);
         sceneSettings = saved_scene;
+        RuntimeRay3D_SetTraceRouteForTests(saved_route);
         return 0;
     }
     scene.primitiveCount = 1;
@@ -1033,6 +1046,7 @@ static int test_runtime_emission_transparency_3d_clear_surface_reduces_legacy_fr
         MaterialManagerResetDefaults();
         RuntimeScene3D_Free(&scene);
         sceneSettings = saved_scene;
+        RuntimeRay3D_SetTraceRouteForTests(saved_route);
         return 0;
     }
 
@@ -1079,6 +1093,7 @@ static int test_runtime_emission_transparency_3d_clear_surface_reduces_legacy_fr
     MaterialManagerResetDefaults();
     RuntimeScene3D_Free(&scene);
     sceneSettings = saved_scene;
+    RuntimeRay3D_SetTraceRouteForTests(saved_route);
     return 0;
 }
 

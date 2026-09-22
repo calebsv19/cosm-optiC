@@ -135,7 +135,11 @@ static int test_runtime_scene_3d_builder_uses_retained_seed_scope(void) {
 }
 
 static int test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_center_stable(void) {
-    RayTracingRuntimeMeshAssetSet set;
+    /* The bounded asset set contains large inline procedural metadata. Keep
+     * test scratch off the thread stack; its geometry arrays remain borrowed. */
+    RayTracingRuntimeMeshAssetSet* set = calloc(1, sizeof(*set));
+    assert_true("runtime_scene_3d_builder_mesh_set_allocation", set != NULL);
+    if (!set) return 1;
     RayTracingRuntimeMeshAssetInstance instance;
     CoreMeshAssetRuntimeVertex vertices[3];
     CoreMeshAssetRuntimeTriangle triangles[1];
@@ -146,14 +150,14 @@ static int test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_cente
     double max_y = 0.0;
     bool ok = false;
 
-    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(&set,
+    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(set,
                                                           &instance,
                                                           vertices,
                                                           triangles);
-    set.instances[0].rotation_pivot_policy =
+    set->instances[0].rotation_pivot_policy =
         RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER;
     RuntimeScene3D_Init(&scene);
-    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, set);
     assert_true("runtime_scene_3d_builder_mesh_bounds_center_append_ok", ok);
     assert_true("runtime_scene_3d_builder_mesh_bounds_center_triangle_count",
                 scene.triangleMesh.triangleCount == 1);
@@ -173,11 +177,16 @@ static int test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_cente
     assert_true("runtime_scene_3d_builder_mesh_bounds_center_source_index",
                 triangles[0].b == 1u);
     RuntimeScene3D_Free(&scene);
+    free(set); /* Do not free borrowed stack vertices/triangles through the set. */
     return 0;
 }
 
 static int test_runtime_scene_3d_builder_mesh_authored_origin_rotation_remains_compatible(void) {
-    RayTracingRuntimeMeshAssetSet set;
+    /* The bounded asset set contains large inline procedural metadata. Keep
+     * test scratch off the thread stack; its geometry arrays remain borrowed. */
+    RayTracingRuntimeMeshAssetSet* set = calloc(1, sizeof(*set));
+    assert_true("runtime_scene_3d_builder_mesh_set_allocation", set != NULL);
+    if (!set) return 1;
     RayTracingRuntimeMeshAssetInstance instance;
     CoreMeshAssetRuntimeVertex vertices[3];
     CoreMeshAssetRuntimeTriangle triangles[1];
@@ -188,14 +197,14 @@ static int test_runtime_scene_3d_builder_mesh_authored_origin_rotation_remains_c
     double max_y = 0.0;
     bool ok = false;
 
-    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(&set,
+    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(set,
                                                           &instance,
                                                           vertices,
                                                           triangles);
-    set.instances[0].rotation_pivot_policy =
+    set->instances[0].rotation_pivot_policy =
         RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_AUTHORED_ORIGIN;
     RuntimeScene3D_Init(&scene);
-    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, set);
     assert_true("runtime_scene_3d_builder_mesh_authored_origin_append_ok", ok);
     assert_true("runtime_scene_3d_builder_mesh_authored_origin_triangle_count",
                 scene.triangleMesh.triangleCount == 1);
@@ -209,11 +218,16 @@ static int test_runtime_scene_3d_builder_mesh_authored_origin_rotation_remains_c
                  1.0,
                  1e-9);
     RuntimeScene3D_Free(&scene);
+    free(set); /* Do not free borrowed stack vertices/triangles through the set. */
     return 0;
 }
 
 static int test_runtime_scene_3d_builder_mesh_custom_rotation_pivot(void) {
-    RayTracingRuntimeMeshAssetSet set;
+    /* The bounded asset set contains large inline procedural metadata. Keep
+     * test scratch off the thread stack; its geometry arrays remain borrowed. */
+    RayTracingRuntimeMeshAssetSet* set = calloc(1, sizeof(*set));
+    assert_true("runtime_scene_3d_builder_mesh_set_allocation", set != NULL);
+    if (!set) return 1;
     RayTracingRuntimeMeshAssetInstance instance;
     CoreMeshAssetRuntimeVertex vertices[3];
     CoreMeshAssetRuntimeTriangle triangles[1];
@@ -224,17 +238,17 @@ static int test_runtime_scene_3d_builder_mesh_custom_rotation_pivot(void) {
     double max_y = 0.0;
     bool ok = false;
 
-    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(&set,
+    test_runtime_scene_3d_builder_init_asymmetric_mesh_set(set,
                                                           &instance,
                                                           vertices,
                                                           triangles);
-    set.instances[0].rotation_pivot_policy =
+    set->instances[0].rotation_pivot_policy =
         RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM;
-    set.instances[0].rotation_pivot_x = 2.0;
-    set.instances[0].rotation_pivot_y = 0.0;
-    set.instances[0].rotation_pivot_z = 0.0;
+    set->instances[0].rotation_pivot_x = 2.0;
+    set->instances[0].rotation_pivot_y = 0.0;
+    set->instances[0].rotation_pivot_z = 0.0;
     RuntimeScene3D_Init(&scene);
-    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, &set);
+    ok = RuntimeScene3DBuilder_AppendMeshAssetSet(&scene, set);
     assert_true("runtime_scene_3d_builder_mesh_custom_pivot_append_ok", ok);
     assert_true("runtime_scene_3d_builder_mesh_custom_pivot_triangle_count",
                 scene.triangleMesh.triangleCount == 1);
@@ -262,6 +276,7 @@ static int test_runtime_scene_3d_builder_mesh_custom_rotation_pivot(void) {
     assert_true("runtime_scene_3d_builder_mesh_custom_pivot_source_index",
                 triangles[0].b == 1u);
     RuntimeScene3D_Free(&scene);
+    free(set); /* Do not free borrowed stack vertices/triangles through the set. */
     return 0;
 }
 
@@ -563,7 +578,9 @@ static int test_runtime_scene_3d_builder_builds_ps4d_triangle_scene(void) {
     bool ok = false;
 
     RuntimeScene3D_Init(&scene);
-    ok = runtime_scene_bridge_apply_file("../physics_sim/config/samples/ps4d_runtime_scene_visual_test.json",
+    /* Self-contained snapshot of the generated PhysicsSim PS4D scene contract;
+     * the fixture must not depend on an adjacent producer checkout. */
+    ok = runtime_scene_bridge_apply_file("tests/fixtures/ps4d_runtime_scene_visual_test.json",
                                          &summary);
     assert_true("runtime_scene_3d_builder_ps4d_apply_ok", ok);
     if (!ok) {

@@ -39,6 +39,20 @@ bool RuntimeSurfaceMaterialSampleMesh(int index,int asset_index,size_t triangle,
     const double barycentric[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh* lod,
     RuntimeMaterialSurfaceEval* out);
 
+/* Frame-local triangle preparation. No retained cache or heap allocation; a
+ * runtime mapping revision change invalidates the prepared pointers. */
+typedef struct RuntimeSurfaceMeshSamplePrepared {
+    HitInfo3D hit;
+    const CoreMeshAssetSurfaceCorner *corners;
+    unsigned long long revision;
+    bool valid;
+} RuntimeSurfaceMeshSamplePrepared;
+bool RuntimeSurfaceMaterialPrepareMeshTriangle(int index,int asset_index,size_t triangle,
+    const CoreMeshPreviewLodMesh *lod,const Vec3 *dpdx,const Vec3 *dpdy,
+    RuntimeSurfaceMeshSamplePrepared *prepared);
+bool RuntimeSurfaceMaterialSamplePreparedMesh(RuntimeSurfaceMeshSamplePrepared *prepared,
+    const double barycentric[3],Vec3 world,Vec3 normal,RuntimeMaterialSurfaceEval *out);
+
 bool RuntimeSurfaceMaterialSampleMeshFootprint(int index,int asset_index,size_t triangle,
     const double barycentric[3],Vec3 world,Vec3 normal,const CoreMeshPreviewLodMesh *lod,
     const Vec3 *dpdx,const Vec3 *dpdy,RuntimeMaterialSurfaceEval *out);

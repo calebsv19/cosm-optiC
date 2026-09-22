@@ -1,3 +1,4 @@
+#include "editor/scene_editor_material_perf.h"
 #include "render/runtime_surface_graph.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_surface_mapping_cache.h"
@@ -245,6 +246,33 @@ static bool scene_editor_mesh_surface_project(
     return true;
 }
 
+/* Cleared per instance/raster: this bounds scratch memory independently of asset
+ * size and cannot outlive an object transform, projector or LOD. Collisions
+ * recompute the original arithmetic; seam/corner normals are never cached here. */
+#define SCENE_EDITOR_VERTEX_CACHE_ENTRIES 4096u
+typedef struct SceneEditorMeshSurfaceVertexCacheEntry {
+    SceneEditorMeshSurfacePoint3 world;
+    SceneEditorMeshSurfaceVertex screen;
+    uint32_t index;
+    bool valid, projected;
+} SceneEditorMeshSurfaceVertexCacheEntry;
+static bool scene_editor_mesh_surface_cached_vertex(
+    SceneEditorMeshSurfaceVertexCacheEntry *cache,uint32_t index,
+    const CoreMeshPreviewLodMesh *lod,const CoreMeshAssetRuntimeContract *contract,
+    const RayTracingRuntimeMeshAssetInstance *instance,
+    const SceneEditorDigestOverlayProjector *projector,double scale,
+    SceneEditorMeshSurfacePoint3 *world,SceneEditorMeshSurfaceVertex *screen) {
+    if(!cache){*world=scene_editor_mesh_surface_world(lod->vertices[index],contract,instance);
+        return scene_editor_mesh_surface_project(projector,*world,scale,screen);}
+    SceneEditorMeshSurfaceVertexCacheEntry *entry=&cache[index&(SCENE_EDITOR_VERTEX_CACHE_ENTRIES-1)];
+    if(!entry->valid || entry->index!=index){
+        entry->world=scene_editor_mesh_surface_world(lod->vertices[index],contract,instance);
+        entry->projected=scene_editor_mesh_surface_project(projector,entry->world,scale,&entry->screen);
+        entry->index=index;entry->valid=true;
+    }
+    *world=entry->world;if(entry->projected)*screen=entry->screen;return entry->projected;
+}
+
 static double scene_editor_mesh_surface_edge(double ax,
                                              double ay,
                                              double bx,
@@ -436,6 +464,8 @@ static void scene_editor_mesh_surface_rasterize(
     const SceneEditorSurfaceMappingCache* mapped=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL ? SceneEditorSurfaceMappingCachePrepare(instance->scene_object_index) : NULL;
     const SceneEditorViewportMaterial* material=mode==SCENE_EDITOR_MESH_DISPLAY_MATERIAL && !mapped && !unsupported_mapping && !direct_mapping ? SceneEditorViewportMaterialPrepare(instance->scene_object_index) : NULL;
     SceneEditorMeshPreviewShadeNormal view=material_view(projector);
+    SceneEditorMeshSurfaceVertexCacheEntry *vertex_cache=calloc(
+        SCENE_EDITOR_VERTEX_CACHE_ENTRIES,sizeof(*vertex_cache));
     for (size_t triangle = 0u; triangle < lod->triangle_count; ++triangle) {
         const uint32_t ia = lod->indices[triangle * 3u + 0u];
         const uint32_t ib = lod->indices[triangle * 3u + 1u];
@@ -459,12 +489,9 @@ static void scene_editor_mesh_surface_rasterize(
         if (ia >= lod->vertex_count || ib >= lod->vertex_count || ic >= lod->vertex_count) {
             continue;
         }
-        wa = scene_editor_mesh_surface_world(lod->vertices[ia], contract, instance);
-        wb = scene_editor_mesh_surface_world(lod->vertices[ib], contract, instance);
-        wc = scene_editor_mesh_surface_world(lod->vertices[ic], contract, instance);
-        if (!scene_editor_mesh_surface_project(projector, wa, scale, &a) ||
-            !scene_editor_mesh_surface_project(projector, wb, scale, &b) ||
-            !scene_editor_mesh_surface_project(projector, wc, scale, &c)) {
+        if (!scene_editor_mesh_surface_cached_vertex(vertex_cache,ia,lod,contract,instance,projector,scale,&wa,&a) ||
+            !scene_editor_mesh_surface_cached_vertex(vertex_cache,ib,lod,contract,instance,projector,scale,&wb,&b) ||
+            !scene_editor_mesh_surface_cached_vertex(vertex_cache,ic,lod,contract,instance,projector,scale,&wc,&c)) {
             continue;
         }
         area = scene_editor_mesh_surface_edge(a.x, a.y, b.x, b.y, c.x, c.y);
@@ -480,26 +507,27 @@ static void scene_editor_mesh_surface_rasterize(
         if (min_y < 0) min_y = 0;
         if (max_x >= g_surface.width) max_x = g_surface.width - 1;
         if (max_y >= g_surface.height) max_y = g_surface.height - 1;
-        face_normal = scene_editor_mesh_surface_normal(wa, wb, wc);
-        normal_a = face_normal;
-        normal_b = face_normal;
-        normal_c = face_normal;
-        {
-            CoreObjectVec3 local_normal;
-            if (SceneEditorMeshPreviewStoreGetVertexNormal(
-                    instance->asset_index, ia, interactive, &local_normal)) {
-                normal_a = scene_editor_mesh_surface_world_normal(local_normal, instance);
+        if(!lod->surface_corners) {
+            face_normal = scene_editor_mesh_surface_normal(wa, wb, wc);
+            normal_a = face_normal;
+            normal_b = face_normal;
+            normal_c = face_normal;
+            {
+                CoreObjectVec3 local_normal;
+                if (SceneEditorMeshPreviewStoreGetVertexNormal(
+                        instance->asset_index, ia, interactive, &local_normal)) {
+                    normal_a = scene_editor_mesh_surface_world_normal(local_normal, instance);
+                }
+                if (SceneEditorMeshPreviewStoreGetVertexNormal(
+                        instance->asset_index, ib, interactive, &local_normal)) {
+                    normal_b = scene_editor_mesh_surface_world_normal(local_normal, instance);
+                }
+                if (SceneEditorMeshPreviewStoreGetVertexNormal(
+                        instance->asset_index, ic, interactive, &local_normal)) {
+                    normal_c = scene_editor_mesh_surface_world_normal(local_normal, instance);
+                }
             }
-            if (SceneEditorMeshPreviewStoreGetVertexNormal(
-                    instance->asset_index, ib, interactive, &local_normal)) {
-                normal_b = scene_editor_mesh_surface_world_normal(local_normal, instance);
-            }
-            if (SceneEditorMeshPreviewStoreGetVertexNormal(
-                    instance->asset_index, ic, interactive, &local_normal)) {
-                normal_c = scene_editor_mesh_surface_world_normal(local_normal, instance);
-            }
-        }
-        if(lod->surface_corners) {
+        } else {
             normal_a=scene_editor_mesh_surface_world_normal(lod->surface_corners[triangle*3].normal,instance);
             normal_b=scene_editor_mesh_surface_world_normal(lod->surface_corners[triangle*3+1].normal,instance);
             normal_c=scene_editor_mesh_surface_world_normal(lod->surface_corners[triangle*3+2].normal,instance);
@@ -514,6 +542,8 @@ static void scene_editor_mesh_surface_rasterize(
     double wy[3]={(b.x-c.x)/area,(c.x-a.x)/area,(a.x-b.x)/area};
     Vec3 dpdx=vec3(wx[0]*wa.x+wx[1]*wb.x+wx[2]*wc.x,wx[0]*wa.y+wx[1]*wb.y+wx[2]*wc.y,wx[0]*wa.z+wx[1]*wb.z+wx[2]*wc.z);
     Vec3 dpdy=vec3(wy[0]*wa.x+wy[1]*wb.x+wy[2]*wc.x,wy[0]*wa.y+wy[1]*wb.y+wy[2]*wc.y,wy[0]*wa.z+wy[1]*wb.z+wy[2]*wc.z);
+    RuntimeSurfaceMeshSamplePrepared prepared_material;
+    bool prepared_direct=false,prepare_attempted=false;
     for (int y = min_y; y <= max_y; ++y) {
             for (int x = min_x; x <= max_x; ++x) {
                 const double px = (double)x + 0.5;
@@ -526,11 +556,19 @@ static void scene_editor_mesh_surface_rasterize(
                 if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
                 depth = w0 * a.depth + w1 * b.depth + w2 * c.depth;
                 if (!SceneEditorMeshPreviewDepthWins(depth, g_surface.depth[pixel])) continue;
-                SceneEditorMeshPreviewShadeNormal shading_normal={w0*normal_a.x+w1*normal_b.x+w2*normal_c.x,
+                SceneEditorMeshPreviewShadeNormal shading_normal={0};
+                if(!direct_mapping)shading_normal=(SceneEditorMeshPreviewShadeNormal){w0*normal_a.x+w1*normal_b.x+w2*normal_c.x,
                     w0*normal_a.y+w1*normal_b.y+w2*normal_c.y,w0*normal_a.z+w1*normal_b.z+w2*normal_c.z};
-                color=material ? SceneEditorViewportMaterialShade(material,shading_normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
-                               : SceneEditorMeshPreviewShadeColor(base,shading_normal);
+                /* Direct/mapped material paths below replace the fallback color.
+                 * Avoid evaluating studio-free fallback lighting only to discard it. */
+                if(!direct_mapping && !mapped && !unsupported_mapping)
+                    color=material ? SceneEditorViewportMaterialShade(material,shading_normal,view,w0*ua+w1*ub+w2*uc,w0*va+w1*vb+w2*vc)
+                                   : SceneEditorMeshPreviewShadeColor(base,shading_normal);
                 if(direct_mapping) {
+                    /* Prepare only after coverage/depth wins; subpixel or occluded
+                     * triangles must not pay setup they previously never needed. */
+                    if(!prepare_attempted){prepared_direct=RuntimeSurfaceMaterialPrepareMeshTriangle(
+                        instance->scene_object_index,instance->asset_index,triangle,lod,&dpdx,&dpdy,&prepared_material);prepare_attempted=true;}
                     /* Coverage admits a small edge tolerance. Material queries stay
                      * on the triangle so prepared geometry fields remain valid. */
                     double weights[3]={fmax(0,w0),fmax(0,w1),fmax(0,w2)};
@@ -541,8 +579,8 @@ static void scene_editor_mesh_surface_rasterize(
                     shading_normal=(SceneEditorMeshPreviewShadeNormal){u*normal_a.x+v*normal_b.x+w*normal_c.x,
                         u*normal_a.y+v*normal_b.y+w*normal_c.y,u*normal_a.z+v*normal_b.z+w*normal_c.z};
                     RuntimeMaterialSurfaceEval eval;
-                    color=RuntimeSurfaceMaterialSampleMeshFootprint(instance->scene_object_index,instance->asset_index,triangle,weights,world,
-                        vec3(shading_normal.x,shading_normal.y,shading_normal.z),lod,&dpdx,&dpdy,&eval) ?
+                    color=prepared_direct && RuntimeSurfaceMaterialSamplePreparedMesh(&prepared_material,weights,world,
+                        vec3(shading_normal.x,shading_normal.y,shading_normal.z),&eval) ?
                         SceneEditorViewportMaterialShadeSample(&eval,sceneSettings.sceneObjects[instance->scene_object_index].emissiveStrength,shading_normal,view):(SDL_Color){255,0,255,255};
                 }
                 if(unsupported_mapping) color=((x/12+y/12)%2)?(SDL_Color){92,70,92,255}:(SDL_Color){142,115,142,255};
@@ -570,6 +608,7 @@ static void scene_editor_mesh_surface_rasterize(
         }
         stats->rendered_triangles += 1u;
     }
+    free(vertex_cache);
 }
 
 static bool scene_editor_mesh_surface_prepare(int width, int height) {
@@ -585,6 +624,7 @@ static bool scene_editor_mesh_surface_prepare(int width, int height) {
             free(owner);
             return false;
         }
+        SceneEditorMaterialPerfPixels(NULL,0);
         free(g_surface.rgba);
         free(g_surface.depth);
         free(g_surface.owner);
@@ -654,15 +694,19 @@ bool SceneEditorMeshPreviewSurfaceRender(
         return false;
     }
 
+    uint64_t stage_start=SceneEditorMaterialPerfNow();
+    size_t submitted_triangles=0;
     signature = scene_editor_mesh_surface_signature(projector,
                                                     active_editor_mode,
                                                     selected_object_index,
                                                     mode);
+    SceneEditorMaterialPerfAdd(SCENE_MATERIAL_PERF_SIGNATURE,stage_start);
     changed = !g_surface.signature_valid || signature != g_surface.signature;
     if (changed) g_surface.changed_at = now;
     interactive = now != 0u &&
                   core_time_diff_ns(now, g_surface.changed_at) <
                       SCENE_EDITOR_MESH_SURFACE_SETTLE_NS;
+    if(SceneEditorMaterialPerfForceSettled())interactive=false;
     reraster = changed || !g_surface.pixels_valid ||
                interactive != g_surface.rendered_interactive;
     g_surface.signature = signature;
@@ -673,11 +717,14 @@ bool SceneEditorMeshPreviewSurfaceRender(
         scale = interactive ? SCENE_EDITOR_MESH_SURFACE_INTERACTIVE_SCALE
                             : SCENE_EDITOR_MESH_SURFACE_SETTLED_SCALE;
         stats.mode = mode;
+        stage_start=SceneEditorMaterialPerfNow();
         if (!scene_editor_mesh_surface_prepare(
                 (int)ceil((double)projector->viewport.w * scale),
                 (int)ceil((double)projector->viewport.h * scale))) {
             return false;
         }
+        SceneEditorMaterialPerfAdd(SCENE_MATERIAL_PERF_BUFFER,stage_start);
+        stage_start=SceneEditorMaterialPerfNow();
         runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
         for (int i = 0; seeds.valid && i < seeds.primitive_count; ++i) {
             const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds.primitives[i];
@@ -721,6 +768,7 @@ bool SceneEditorMeshPreviewSurfaceRender(
             instance=&display_instance;
             SceneEditorDigestOverlayProjector object_projector;
             SceneEditorObjectMoveGizmoPreviewProjector(instance->scene_object_index,projector,&object_projector);
+            submitted_triangles+=lod->triangle_count;
             scene_editor_mesh_surface_rasterize(&object_projector,
                                                 instance,
                                                 contract,
@@ -731,6 +779,8 @@ bool SceneEditorMeshPreviewSurfaceRender(
                                                 &stats);
             stats.rendered_instances += 1;
         }
+        SceneEditorMaterialPerfAdd(SCENE_MATERIAL_PERF_RASTER_SHADE,stage_start);
+        stage_start=SceneEditorMaterialPerfNow();
         stats.rendered_outline_pixels = SceneEditorMeshPreviewApplyOutlines(
             g_surface.rgba,
             g_surface.depth,
@@ -739,12 +789,17 @@ bool SceneEditorMeshPreviewSurfaceRender(
             g_surface.height,
             selected_object_index,
             hover_object_index);
+        SceneEditorMaterialPerfAdd(SCENE_MATERIAL_PERF_OUTLINE,stage_start);
+        stage_start=SceneEditorMaterialPerfNow();
         if (!scene_editor_mesh_surface_upload(vk)) return false;
+        SceneEditorMaterialPerfAdd(SCENE_MATERIAL_PERF_UPLOAD,stage_start);
         g_surface.renderer = vk;
         g_surface.stats = stats;
         g_surface.rendered_interactive = interactive;
         g_surface.pixels_valid = true;
     }
+    SceneEditorMaterialPerfPixels(g_surface.rgba,(size_t)g_surface.width*g_surface.height*4);
+    SceneEditorMaterialPerfFrame(reraster,interactive,g_surface.width,g_surface.height,submitted_triangles,g_surface.stats.rendered_triangles,g_surface.stats.rendered_instances);
     if (!g_surface.texture_valid || g_surface.stats.rendered_instances == 0) return false;
     destination = projector->viewport;
     vk_renderer_draw_texture(vk, &g_surface.texture, NULL, &destination);
@@ -759,6 +814,7 @@ void SceneEditorMeshPreviewSurfaceReset(SDL_Renderer* renderer) {
         vk_renderer_wait_idle(vk);
         vk_renderer_texture_destroy(vk, &g_surface.texture);
     }
+    SceneEditorMaterialPerfPixels(NULL,0);
     free(g_surface.rgba);
     free(g_surface.depth);
     free(g_surface.owner);

@@ -21,7 +21,10 @@ typedef struct {
     Vec3 origin;
     Vec3 direction;
     bool hasDifferentials, footprintUnbounded;
-    Vec3 directionDx, directionDy; /* adjacent primary pixel directions */
+    bool footprintTransported; /* bounded ideal-secondary footprint */
+    Vec3 directionDx, directionDy; /* absolute adjacent ray directions */
+    bool hasDifferentialOrigins;
+    Vec3 originDx, originDy; /* absolute origins; otherwise use central origin */
 } Ray3D;
 
 typedef struct {
@@ -55,6 +58,9 @@ typedef struct {
     Vec3 surfaceTangent;
     bool hasSurfaceDifferentials, hasPixelFootprint, footprintUnbounded;
     Vec3 surfaceDpDu, surfaceDpDv, pixelDpDx, pixelDpDy;
+    bool hasIncidentDifferentials, constantShadingNormal;
+    bool footprintTransported;
+    Vec3 incidentDirection, incidentDirectionDx, incidentDirectionDy;
     bool hasObjectTextureCoord;
     Vec3 objectTextureCoord;
     bool hasProceduralSurfaceMaterial;
@@ -113,6 +119,14 @@ Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
                               Vec3 normal,
                               Vec3 direction,
                               FISICS_DIM(length) FISICS_UNIT(meter) double epsilon);
+#define RUNTIME_RAY_3D_IDEAL_FOOTPRINT_VERSION 1
+typedef enum {
+    RUNTIME_RAY_IDEAL_REFLECTION, RUNTIME_RAY_IDEAL_REFRACTION, RUNTIME_RAY_IDEAL_STRAIGHT
+} RuntimeRay3DIdealFootprintEvent;
+/* Preserves central ray exactly. Failure clears differential flags and marks
+ * unbounded. Caller must exclude stochastic/rough events and material microdetail. */
+bool RuntimeRay3D_TransportIdealFootprint(const HitInfo3D* hit, Vec3 normal,
+    RuntimeRay3DIdealFootprintEvent event, double eta_from, double eta_to, Ray3D* io_ray);
 void HitInfo3D_Reset(HitInfo3D* hit);
 Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit);
 /*

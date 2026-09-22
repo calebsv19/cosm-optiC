@@ -233,6 +233,67 @@ Ray3D RuntimeRay3D_MakeOffset(Vec3 origin,
     return ray;
 }
 
+static bool runtime_ray_3d_finite_vector(Vec3 v) {
+    return isfinite(v.x) && isfinite(v.y) && isfinite(v.z);
+}
+static bool runtime_ray_3d_ideal_direction(Vec3 incident, Vec3 normal,
+    RuntimeRay3DIdealFootprintEvent event, double ratio, Vec3* out) {
+    if (!runtime_ray_3d_finite_vector(incident) || vec3_length(incident)<1e-12) return false;
+    incident=vec3_normalize(incident);
+    double cosine=-vec3_dot(incident,normal);
+    if (!isfinite(cosine) || cosine<=1e-8) return false;
+    if (event==RUNTIME_RAY_IDEAL_STRAIGHT) *out=incident;
+    else if (event==RUNTIME_RAY_IDEAL_REFLECTION)
+        *out=vec3_sub(incident,vec3_scale(normal,-2*cosine));
+    else {
+        double k=1-ratio*ratio*fmax(0,1-cosine*cosine);
+        /* Critical-angle and TIR branches have no bounded refraction footprint. */
+        if (!isfinite(k) || k<=1e-12) return false;
+        *out=vec3_add(vec3_scale(incident,ratio),vec3_scale(normal,ratio*cosine-sqrt(k)));
+    }
+    *out=vec3_normalize(*out);
+    return runtime_ray_3d_finite_vector(*out) && vec3_length(*out)>1e-12;
+}
+bool RuntimeRay3D_TransportIdealFootprint(const HitInfo3D* hit, Vec3 normal,
+    RuntimeRay3DIdealFootprintEvent event, double eta_from, double eta_to, Ray3D* ray) {
+    if (!ray) return false;
+    ray->hasDifferentials=false;ray->hasDifferentialOrigins=false;ray->footprintUnbounded=true;
+    ray->footprintTransported=false;
+    ray->originDx=ray->originDy=ray->directionDx=ray->directionDy=vec3(0,0,0);
+    if (!hit || !hit->hasIncidentDifferentials || !hit->hasPixelFootprint ||
+        hit->footprintUnbounded || !hit->constantShadingNormal || hit->hasCurveTangent ||
+        event<RUNTIME_RAY_IDEAL_REFLECTION || event>RUNTIME_RAY_IDEAL_STRAIGHT ||
+        !runtime_ray_3d_finite_vector(normal) || vec3_length(normal)<1e-12 ||
+        !runtime_ray_3d_finite_vector(ray->origin) || !runtime_ray_3d_finite_vector(ray->direction) ||
+        !runtime_ray_3d_finite_vector(hit->pixelDpDx) || !runtime_ray_3d_finite_vector(hit->pixelDpDy)) return false;
+    normal=vec3_normalize(normal);
+    Vec3 shading=vec3_normalize(hit->shadingNormal), geometric=vec3_normalize(hit->geometricNormal);
+    if (!runtime_ray_3d_finite_vector(shading) || !runtime_ray_3d_finite_vector(geometric) ||
+        vec3_length(shading)<1e-12 || vec3_length(geometric)<1e-12 ||
+        vec3_dot(normal,shading)<1-1e-10 ||
+        (hit->hasUnperturbedShadingNormal && vec3_length(vec3_sub(shading,vec3_normalize(hit->unperturbedShadingNormal)))>1e-10)) return false;
+    double ratio=1;
+    if(event==RUNTIME_RAY_IDEAL_REFRACTION) {
+        if(!isfinite(eta_from) || !isfinite(eta_to) || eta_from<=0 || eta_to<=0)return false;
+        ratio=eta_from/eta_to;if(!isfinite(ratio))return false;
+    }
+    Vec3 incoming[]={hit->incidentDirection,hit->incidentDirectionDx,hit->incidentDirectionDy},out[3];
+    for(int i=0;i<3;++i) {
+        if(!runtime_ray_3d_finite_vector(incoming[i]) || vec3_dot(vec3_normalize(incoming[i]),geometric)>=-1e-8 ||
+           !runtime_ray_3d_ideal_direction(incoming[i],normal,event,ratio,&out[i]))return false;
+        double side=vec3_dot(out[i],geometric);
+        if(event==RUNTIME_RAY_IDEAL_REFLECTION ? side<=1e-8 : side>=-1e-8)return false;
+    }
+    if(vec3_length(ray->direction)<1e-12 ||
+       vec3_length(vec3_sub(vec3_normalize(ray->direction),out[0]))>1e-8)return false;
+    Vec3 ox=vec3_add(ray->origin,hit->pixelDpDx),oy=vec3_add(ray->origin,hit->pixelDpDy);
+    if(!runtime_ray_3d_finite_vector(ox) || !runtime_ray_3d_finite_vector(oy))return false;
+    ray->originDx=ox;ray->originDy=oy;ray->directionDx=out[1];ray->directionDy=out[2];
+    ray->hasDifferentials=ray->hasDifferentialOrigins=true;ray->footprintUnbounded=false;
+    ray->footprintTransported=true;
+    return true;
+}
+
 void HitInfo3D_Reset(HitInfo3D* hit) {
     if (!hit) return;
     memset(hit, 0, sizeof(*hit));
@@ -399,6 +460,13 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                        &hit.geometricNormal,
                                        &hit.shadingNormal);
     hit.normal = hit.shadingNormal;
+    hit.constantShadingNormal = !triangle->hasVertexNormals;
+    if(triangle->hasVertexNormals) {
+        Vec3 a=vec3_normalize(triangle->vertexNormal0),b=vec3_normalize(triangle->vertexNormal1),c=vec3_normalize(triangle->vertexNormal2);
+        hit.constantShadingNormal=runtime_ray_3d_finite_vector(a) && runtime_ray_3d_finite_vector(b) && runtime_ray_3d_finite_vector(c) &&
+            vec3_length(a)>1e-12 && vec3_length(b)>1e-12 && vec3_length(c)>1e-12 &&
+            vec3_length(vec3_sub(a,b))<=1e-12 && vec3_length(vec3_sub(a,c))<=1e-12;
+    }
     hit.triangleIndex = triangle_index;
     hit.localTriangleIndex = triangle->localTriangleIndex;
     hit.primitiveIndex = triangle->primitiveIndex;
@@ -909,17 +977,38 @@ bool RuntimeRay3D_TraceSceneFirstHitWithContext(RuntimeRay3DTraceContext* contex
         runtime_ray_3d_counter_increment(&stats->flattenedTraceCalls);
         found=runtime_ray_3d_trace_scene_first_hit_flattened(scene,ray,t_min,t_max,out_hit);
     }
-    if(found) out_hit->footprintUnbounded=ray->footprintUnbounded;
-    if(found && ray->hasDifferentials) {
-        out_hit->footprintUnbounded=true;
-        Vec3 normal=out_hit->geometricNormal;
-        double plane=vec3_dot(vec3_sub(out_hit->position,ray->origin),normal);
-        double dx=vec3_dot(ray->directionDx,normal),dy=vec3_dot(ray->directionDy,normal);
-        if(fabs(dx)>1e-12 && fabs(dy)>1e-12 && plane/dx>0 && plane/dy>0) {
-            out_hit->pixelDpDx=vec3_sub(vec3_add(ray->origin,vec3_scale(ray->directionDx,plane/dx)),out_hit->position);
-            out_hit->pixelDpDy=vec3_sub(vec3_add(ray->origin,vec3_scale(ray->directionDy,plane/dy)),out_hit->position);
-            out_hit->hasPixelFootprint=true;
-            out_hit->footprintUnbounded=false;
+    if(found) {
+        out_hit->hasPixelFootprint=false;out_hit->hasIncidentDifferentials=false;
+        out_hit->footprintTransported=false;
+        out_hit->footprintUnbounded=ray->footprintUnbounded || ray->hasDifferentials;
+        if(ray->hasDifferentials && !ray->footprintUnbounded) {
+            Vec3 normal=vec3_normalize(out_hit->geometricNormal);
+            Vec3 origins[]={ray->hasDifferentialOrigins?ray->originDx:ray->origin,
+                            ray->hasDifferentialOrigins?ray->originDy:ray->origin};
+            Vec3 directions[]={ray->directionDx,ray->directionDy},offsets[2];
+            bool valid=runtime_ray_3d_finite_vector(normal) && vec3_length(normal)>1e-12 &&
+                runtime_ray_3d_finite_vector(ray->direction) && vec3_length(ray->direction)>1e-12 &&
+                vec3_dot(vec3_normalize(ray->direction),normal)<-1e-8;
+            for(int i=0;i<2 && valid;++i) {
+                valid=runtime_ray_3d_finite_vector(origins[i]) && runtime_ray_3d_finite_vector(directions[i]) && vec3_length(directions[i])>1e-12;
+                if(!valid)break;
+                Vec3 direction=vec3_normalize(directions[i]);
+                double denominator=vec3_dot(direction,normal);
+                double distance=vec3_dot(vec3_sub(out_hit->position,origins[i]),normal)/denominator;
+                valid=isfinite(denominator) && denominator<-1e-8 && isfinite(distance) && distance>0;
+                if(!valid)break;
+                offsets[i]=vec3_sub(vec3_add(origins[i],vec3_scale(direction,distance)),out_hit->position);
+                valid=runtime_ray_3d_finite_vector(offsets[i]);
+            }
+            if(valid) {
+                out_hit->pixelDpDx=offsets[0];out_hit->pixelDpDy=offsets[1];
+                out_hit->hasPixelFootprint=out_hit->hasIncidentDifferentials=true;
+                out_hit->incidentDirection=vec3_normalize(ray->direction);
+                out_hit->incidentDirectionDx=vec3_normalize(ray->directionDx);
+                out_hit->incidentDirectionDy=vec3_normalize(ray->directionDy);
+                out_hit->footprintUnbounded=false;
+                out_hit->footprintTransported=ray->footprintTransported;
+            }
         }
     }
     return found;

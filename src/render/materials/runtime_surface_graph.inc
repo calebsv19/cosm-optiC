@@ -631,8 +631,10 @@ bool RuntimeSurfaceGraphResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *
         if (face >= 0 && face < 6 && s->region_active[face])
             program = &s->regions[face];
     }
-    CoreSurfaceGraphInputs inputs = {0};
-    if (s->composition && !RuntimeSurfaceSamplingGraphInputs(hit, program, &inputs))
+    CoreSurfaceGraphInputs inputs;
+    SamplingCoordinatesPrepared prepared_sampling;
+    if (s->composition && (!sampling_prepare_coordinates(hit,&prepared_sampling) ||
+        !sampling_graph_inputs_prepared(hit,program,&inputs,&prepared_sampling)))
         return false;
     if (!core_surface_graph_evaluate_with_inputs(program, &q, s->composition ? &inputs : NULL,
                                                  &result))
@@ -643,5 +645,5 @@ bool RuntimeSurfaceGraphResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *
     out->baseColorB = out->bsdf.baseColorB = result.color[2];
     if (result.has_roughness)
         out->bsdf.roughness = result.roughness;
-    return !s->composition || RuntimeSurfaceSamplingApplyResponse(hit, out);
+    return !s->composition || sampling_apply_response_prepared(hit,out,&prepared_sampling);
 }

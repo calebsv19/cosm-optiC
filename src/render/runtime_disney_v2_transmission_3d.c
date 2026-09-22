@@ -7,6 +7,7 @@
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_disney_v2_transmitted_caustic_3d.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_surface_sampling.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
 static double runtime_disney_v2_3d_direction_delta_degrees(Vec3 a, Vec3 b) {
@@ -243,6 +244,8 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
     const RuntimeScene3D* scene,
     const HitInfo3D* source_hit,
     Vec3 direction,
+    const RuntimeDielectricTransport3D* footprint_interface,
+    bool footprint_straight,
     RuntimeRenderTraceCostTransmissionSource3D ledger_source,
     int path_depth,
     HitInfo3D* out_hit,
@@ -264,6 +267,12 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
                                   HitInfo3D_OffsetNormal(source_hit),
                                   direction,
                                   kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon);
+    if (footprint_interface) {
+        (void)RuntimeRay3D_TransportIdealFootprint(
+            source_hit, footprint_interface->orientedNormal,
+            footprint_straight ? RUNTIME_RAY_IDEAL_STRAIGHT : RUNTIME_RAY_IDEAL_REFRACTION,
+            footprint_interface->etaFrom, footprint_interface->etaTo, &ray);
+    }
     for (int skip_count = 0;
          skip_count <= RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_SKIP_CAP &&
          remaining_distance > kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon;
@@ -313,6 +322,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     const RuntimeNative3DSamplingContext* sampling,
     const RuntimeDisneyV2_3DTransmissionSample* initial_sample,
     Vec3 sample_direction,
+    bool ideal_sample,
     double blend_weight,
     RuntimeDisneyV2_3DResult* io_result,
     RuntimeDirectLight3DResult* out_direct,
@@ -366,6 +376,12 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         *out_termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
     }
     source_hit = primary_hit->hitInfo;
+    /* This flag describes the selected deterministic event, not merely authored
+     * roughness. Rough-cone samples and unknown normal derivatives stay broad. */
+    RuntimeDielectricTransport3D footprint_interface = initial_sample->dielectric;
+    bool footprint_eligible = ideal_sample && !io_result->payload.hasMicrodetailNormal &&
+                              !RuntimeSurfaceSamplingNormalResponseActive(source_hit.sceneObjectIndex);
+    bool footprint_straight = io_result->payload.thinWalled;
     runtime_disney_v2_3d_medium_stack_init(&medium_stack);
     if (runtime_disney_v2_3d_policy_is_physical_transmission(&io_result->payload,
                                                              &io_result->principled) &&
@@ -389,6 +405,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         if (!runtime_disney_v2_3d_trace_transmission_next_hit(scene,
                                                               &source_hit,
                                                               direction,
+                                                              footprint_eligible ? &footprint_interface : NULL,
+                                                              footprint_straight,
                                                               ledger_source,
                                                               depth,
                                                               &hit,
@@ -631,6 +649,13 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             break;
         }
         source_hit = hit;
+        footprint_interface = interface_transport;
+        footprint_straight = transparent_policy.thinWalled;
+        footprint_eligible = interface_transport_resolved &&
+                             interface_transport.hasRefraction &&
+                             !interface_transport.totalInternalReflection &&
+                             !payload.hasMicrodetailNormal &&
+                             !RuntimeSurfaceSamplingNormalResponseActive(hit.sceneObjectIndex);
     }
 
     if (!contributed) {
@@ -865,6 +890,7 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                                       sampling,
                                                                       &sample_path,
                                                                       sample_direction,
+                                                                      sample_count <= 1 || io_result->principled.roughness <= 1e-6,
                                                                       blend_weight,
                                                                       io_result,
                                                                       &continuation_direct,

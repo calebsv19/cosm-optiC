@@ -1,3 +1,4 @@
+#include "editor/scene_editor_material_perf.h"
 #include "editor/scene_editor_mesh_preview_store.h"
 
 #include "editor/scene_editor_mesh_preview_contract.h"
@@ -100,7 +101,7 @@ static bool scene_editor_mesh_preview_store_build_vertex_normals(
     return true;
 }
 
-void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* assets) {
+static void scene_editor_mesh_preview_store_prepare(const RayTracingRuntimeMeshAssetSet* assets) {
     SceneEditorMeshPreviewStoreReset();
     if (!assets) return;
     for (int i = 0; i < assets->asset_count &&
@@ -329,4 +330,10 @@ bool SceneEditorMeshPreviewStoreGetVertexNormal(int asset_index,
     if (!normals || vertex_index >= normal_count) return false;
     *out_normal = normals[vertex_index];
     return true;
+}
+
+void SceneEditorMeshPreviewStorePrepare(const RayTracingRuntimeMeshAssetSet* assets) {
+    uint64_t start=SceneEditorMaterialPerfNow();
+    scene_editor_mesh_preview_store_prepare(assets);
+    SceneEditorMaterialPerfAdd(SCENE_MATERIAL_PERF_GEOMETRY,start);
 }

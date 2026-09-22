@@ -83,6 +83,7 @@ Ray3D RuntimeCameraProjector3D_MakePrimaryRay(const RuntimeCameraProjector3D* pr
                           vec3_scale(projector->up, ndc_y * projector->tanHalfFovY)));
     Ray3D ray=RuntimeRay3D_Make(projector->origin,direction);
     ray.hasDifferentials=true;
+    ray.hasDifferentialOrigins=true;ray.originDx=ray.originDy=ray.origin;
     ray.directionDx=vec3_normalize(vec3_add(direction,vec3_scale(projector->right,2*projector->tanHalfFovX/projector->viewportWidth)));
     ray.directionDy=vec3_normalize(vec3_sub(direction,vec3_scale(projector->up,2*projector->tanHalfFovY/projector->viewportHeight)));
     return ray;

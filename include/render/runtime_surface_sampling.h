@@ -3,6 +3,8 @@
 #include "core_authored_surface_graph.h"
 /* Immutable resources prepared with the retained scene. No shading-time IO. */
 bool RuntimeSurfaceSamplingActive(int index);
+/* Source-presence gate: a neutral center sample does not prove constant normals. */
+bool RuntimeSurfaceSamplingNormalResponseActive(int index);
 bool RuntimeSurfaceSamplingResolve(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload);
 bool RuntimeSurfaceSamplingApply(const HitInfo3D *hit, RuntimeMaterialPayload3D *payload);
 bool RuntimeSurfaceSamplingCoordinates(const HitInfo3D *hit, double uv[2], double dx[2],
