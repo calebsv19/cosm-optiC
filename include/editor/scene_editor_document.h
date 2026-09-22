@@ -103,7 +103,8 @@ bool SceneEditorDocumentSetSurfaceGraph(int index, const char *graph_json,
 /* One-shot deterministic lifecycle faults, disabled during normal operation. */
 typedef enum SceneEditorDocumentFailure {
     SCENE_DOCUMENT_FAIL_NONE, SCENE_DOCUMENT_FAIL_SNAPSHOT,
-    SCENE_DOCUMENT_FAIL_HISTORY, SCENE_DOCUMENT_FAIL_RESTORE
+    SCENE_DOCUMENT_FAIL_HISTORY, SCENE_DOCUMENT_FAIL_RESTORE,
+    SCENE_DOCUMENT_FAIL_SAVE_SYNC, SCENE_DOCUMENT_FAIL_DIRECTORY_SYNC
 } SceneEditorDocumentFailure;
 void SceneEditorDocumentFailNextForTests(SceneEditorDocumentFailure failure);
 

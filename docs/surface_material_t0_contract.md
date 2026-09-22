@@ -44,12 +44,16 @@ The bridge applies a defined failure policy across the entire runtime:
 An empty failed runtime has no scene path. A later early rejection cannot attach a
 rejected candidate path to it. Candidate adoption reserves history before changing
 runtime or disk, prepares runtime before saving, and rolls back on preparation/save
-failure. Successful adoption remains one undo command. An early rejected command
+failure before file publication. After a successful rename, a directory-sync
+warning retains the committed candidate and undo entry; the caller receives the
+durability warning without rolling runtime back to a different disk generation.
+Successful adoption remains one undo command. An early rejected command
 does not advance revision or dirty/history state.
 
 The deterministic `*FailNextForTests` APIs are disabled by default. Permanent native
 acceptance injects candidate allocation, image read, image decode, pyramid allocation,
-snapshot, history and restore failures. It also checks candidate-adoption failure,
+snapshot, history, restore, pre-rename file-sync and post-rename directory-sync
+failures. It also checks candidate-adoption failure,
 successful adoption/undo/save, repeated recovery and late-clear followed by early
 rejection. Original fixture files are hash-checked and never edited by the runner.
 
@@ -85,7 +89,7 @@ with actual inspector input, duplicate/undo/redo/save/fresh-process reopen and
 matching flattened/TLAS renders. Producer metadata and Sculpts output are retained.
 
 Local receipts are under ignored `build/surface_material_t0/`, including
-`regressions.json`, `diagnostics-final/acceptance.json`, `lifecycle-complete/acceptance.json`
+`regressions.json`, `diagnostics-final/acceptance.json`, `lifecycle-save-verified/acceptance.json`
 and `m6-final/acceptance.json`. The [plan](surface_material_post_m6_plan.md) records
 source adoption status. Scripted native proof and inspected captures are not a claim
 of the user's hands-on acceptance. App/worker versions and installed packages are

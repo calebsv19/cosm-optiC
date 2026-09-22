@@ -190,11 +190,30 @@ static void surface_lifecycle_t0_probe(const char *graph_scene) {
     lifecycle_t0_transform(&before);
     assert(SceneEditorDocumentSave(diagnostic, sizeof(diagnostic)));
 
+    revision = SceneEditorDocumentRevision();
+    assert(ray_tracing_sha256_file(graph_scene, disk_before));
+    SceneEditorDocumentFailNextForTests(SCENE_DOCUMENT_FAIL_SAVE_SYNC);
+    assert(!SceneEditorDocumentAdoptCandidateAsCommand(candidate_path, diagnostic, sizeof(diagnostic)));
+    assert(strstr(diagnostic, "sync runtime scene temporary"));
+    lifecycle_t0_transform(&before);
+    assert(SceneEditorDocumentRevision() == revision && !SceneEditorDocumentIsDirty());
+    assert(ray_tracing_sha256_file(graph_scene, disk_after) && !strcmp(disk_before, disk_after));
+    SceneEditorDocumentFailNextForTests(SCENE_DOCUMENT_FAIL_DIRECTORY_SYNC);
+    assert(!SceneEditorDocumentAdoptCandidateAsCommand(candidate_path, diagnostic, sizeof(diagnostic)));
+    assert(strstr(diagnostic, "committed but directory sync failed"));
+    lifecycle_t0_transform(&adopted);
+    assert(RuntimeSurfaceGraphActive(0) && SceneEditorDocumentRevision() == revision + 1);
+    assert(!SceneEditorDocumentIsDirty() && SceneEditorDocumentCanUndo());
+    assert(ray_tracing_sha256_file(graph_scene, disk_after) && strcmp(disk_before, disk_after));
+    assert(SceneEditorDocumentUndo(diagnostic, sizeof(diagnostic)));
+    lifecycle_t0_transform(&before);
+    assert(SceneEditorDocumentSave(diagnostic, sizeof(diagnostic)));
+
     FILE *receipt = fopen("surface_lifecycle_t0.json", "w");
     assert(receipt);
     fprintf(receipt, "{\"early_failures_preserved\":2,\"late_failures_cleared\":4,"
                      "\"snapshot_preserved\":true,\"history_rollback\":true,"
                      "\"restore_failure_explicit_empty\":true,\"retained_document_preserved\":true,"
-                     "\"candidate_history_preserved\":true,\"candidate_prepare_rollback_and_adopt_undo\":true,\"empty_path_preserved\":true,\"recovery_verified\":true}\n");
+                     "\"candidate_history_preserved\":true,\"save_before_and_after_publish\":true,\"candidate_prepare_rollback_and_adopt_undo\":true,\"empty_path_preserved\":true,\"recovery_verified\":true}\n");
     assert(fclose(receipt) == 0);
 }

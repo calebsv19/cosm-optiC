@@ -36,6 +36,7 @@ typedef struct SceneEditorDocumentState {
     json_object* pending_root;
     unsigned long long revision;
     bool dirty;
+    bool last_save_published;
 } SceneEditorDocumentState;
 
 static SceneEditorDocumentState s_document;
@@ -865,6 +866,7 @@ static bool document_parent_path(const char* path, char* out, size_t out_size) {
 }
 
 bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
+    s_document.last_save_published = false;
     char lock_path[PATH_MAX] = {0};
     char parent[PATH_MAX] = {0};
     char temp_path[PATH_MAX] = {0};
@@ -925,9 +927,13 @@ bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
         }
         written += (size_t)count;
     }
-    if (fsync(temp_fd) != 0 || close(temp_fd) != 0) {
-        temp_fd = -1;
+    if (document_fail(SCENE_DOCUMENT_FAIL_SAVE_SYNC) || fsync(temp_fd) != 0) {
         document_diag(diagnostics, diagnostics_size, "failed to sync runtime scene temporary file");
+        goto done; /* done closes the still-owned descriptor */
+    }
+    if (close(temp_fd) != 0) {
+        temp_fd = -1;
+        document_diag(diagnostics, diagnostics_size, "failed to close runtime scene temporary file");
         goto done;
     }
     temp_fd = -1;
@@ -936,13 +942,14 @@ bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
         goto done;
     }
     temp_path[0] = '\0';
+    s_document.last_save_published = true;
     free(s_document.baseline_bytes);
     s_document.baseline_bytes = new_baseline;
     new_baseline = NULL;
     s_document.baseline_size = serialized_size;
     s_document.dirty = false;
     dir_fd = open(parent, O_RDONLY);
-    if (dir_fd < 0 || fsync(dir_fd) != 0) {
+    if (document_fail(SCENE_DOCUMENT_FAIL_DIRECTORY_SYNC) || dir_fd < 0 || fsync(dir_fd) != 0) {
         document_diag(diagnostics, diagnostics_size, "runtime scene committed but directory sync failed");
         goto done;
     }
@@ -1037,7 +1044,8 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
     }
     s_document.dirty = true;
     s_document.revision += 1u;
-    if (!SceneEditorDocumentSave(diagnostics, diagnostics_size)) {
+    bool saved = SceneEditorDocumentSave(diagnostics, diagnostics_size);
+    if (!saved && !s_document.last_save_published) {
         document_rollback_command();
         s_document.dirty = was_dirty;
         s_document.revision = previous_revision;
@@ -1055,7 +1063,9 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
                       "managed candidate saved and applied but history commit failed");
         return false;
     }
-    return true;
+    /* A directory-sync warning follows publication. Preserve the coherent
+     * candidate and its undo entry while returning the durability warning. */
+    return saved;
 }
 
 const char* SceneEditorDocumentUnitLabel(void) {
