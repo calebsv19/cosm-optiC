@@ -24,13 +24,12 @@ from smooth_mesh_reflection.prepare_reflection_matrix import build_request
 from vf3d_initial_state_preset_tool import read_bmp, write_rgb_png
 
 
-def run(renderer, scene, root, route, kind, env):
+def run(renderer, scene, root, route, kind, env, workers):
     root.mkdir(parents=True)
     request = build_request(root, 'direct', route)
     request['scene']['runtime_scene_path'] = str(scene)
-    # Strict diagnostic accounting: the ledger is process-global, so this
-    # integration proof deliberately uses one worker rather than racing counts.
-    request['resources'] = {'max_workers': 1}
+    # The synchronized ledger must preserve exact accounting with parallel workers.
+    request['resources'] = {'max_workers': workers}
     request['render'].update(width=WIDTH, height=HEIGHT, temporal_frames=1, denoise_enabled=False)
     request['inspection'].update(camera_position={'x': .013123, 'y': -.180629, 'z': 1},
         camera_look_at={'x': .013123, 'y': .019371, 'z': 0}, camera_zoom=1.5,
@@ -55,8 +54,8 @@ def run(renderer, scene, root, route, kind, env):
     transport = {'primary_rays': counts['primary'], 'reflection_rays': counts['reflection_specular'],
                  'transmission_rays': counts['transmission']}
     transport['primary_diagnostic_coverage'] = counts['primary'] / (WIDTH * HEIGHT)
-    transport['requested_max_workers'] = 1
-    assert counts['primary'] >= WIDTH * HEIGHT
+    transport['requested_max_workers'] = workers
+    assert counts['primary'] == WIDTH * HEIGHT
     assert stats['temporal_pixels_rendered'] >= WIDTH * HEIGHT
     if kind == 'mirror':
         transport['geometry_reflection_pixels'] = stats['mirror_geometry_reflection_pixels']
@@ -97,6 +96,7 @@ def main():
     parser.add_argument('--renderer', type=Path, default=ROOT / f'build/toolchains/clang/{platform.machine()}/tools/cli/ray_tracing_render_headless')
     parser.add_argument('--cases', nargs='+', choices=['mirror', 'refraction'], default=['mirror', 'refraction'])
     parser.add_argument('--fixtures-only', action='store_true')
+    parser.add_argument('--workers', type=int, choices=range(1, 9), default=1)
     args = parser.parse_args(); out = args.output_root.resolve(); out.mkdir(parents=True, exist_ok=False)
     paths = fixture(out / 'fixtures', ['direct', 'mirror', 'refraction'])
     flat = out / 'flat.png'; png(flat, 64, 64, lambda x, y: (128, 128, 128, 255))
@@ -129,7 +129,7 @@ def main():
             if args.fixtures_only:
                 continue
             for route in ('flattened', 'tlas_blas'):
-                image, receipt = run(args.renderer.resolve(), scene_path, out / f'{kind}-{variation}-{route}', route, kind, env)
+                image, receipt = run(args.renderer.resolve(), scene_path, out / f'{kind}-{variation}-{route}', route, kind, env, args.workers)
                 case[variation + '_' + route] = receipt
                 if route == 'flattened': images[variation] = image
             assert case[variation + '_flattened']['bmp_sha256'] == case[variation + '_tlas_blas']['bmp_sha256'], (kind, variation, 'route mismatch')

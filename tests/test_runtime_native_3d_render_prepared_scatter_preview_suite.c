@@ -22,6 +22,7 @@
 #include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/runtime_native_3d_temporal_accum.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
+#include <pthread.h>
 #include "render/runtime_scene_accel_3d.h"
 #include "render/runtime_scene_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
@@ -1510,6 +1511,57 @@ static int test_runtime_native_3d_adaptive_pixel_state_t6_probe_only_does_not_pa
     return 0;
 }
 
+/* Exercise compound transmission counters and snapshots under actual writers. */
+static void* trace_cost_parallel_writer(void* unused) {
+    (void)unused;
+    for (int i = 0; i < 10000; ++i) {
+        RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(RUNTIME_RENDER_TRACE_COST_RAY_PRIMARY, 0);
+        RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+            RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY, 2);
+    }
+    return NULL;
+}
+
+static int test_runtime_render_trace_cost_ledger_parallel_records(void) {
+    pthread_t workers[8];
+    int started = 0;
+    RuntimeRenderTraceCostLedger3D ledger = {0};
+    RuntimeRenderTraceCostLedger3D_SetEnabled(true);
+    RuntimeRenderTraceCostLedger3D_Reset();
+    for (int i = 0; i < 8; ++i) {
+        int result = pthread_create(&workers[i], NULL, trace_cost_parallel_writer, NULL);
+        assert_true("trace_cost_parallel_start", result == 0);
+        if (result) break;
+        ++started;
+    }
+    for (int i = 0; i < 1000; ++i) {
+        RuntimeRenderTraceCostLedger3D_Snapshot(&ledger);
+        assert_true("trace_cost_parallel_snapshot_total",
+            ledger.totalRays == ledger.rayClassCounts[RUNTIME_RENDER_TRACE_COST_RAY_PRIMARY] +
+                                ledger.rayClassCounts[RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION]);
+        assert_true("trace_cost_parallel_snapshot_compound",
+            ledger.transmissionPathPolicy.rayTraces ==
+                ledger.rayClassCounts[RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION]);
+    }
+    for (int i = 0; i < started; ++i) pthread_join(workers[i], NULL);
+    RuntimeRenderTraceCostLedger3D_Snapshot(&ledger);
+    uint64_t expected = (uint64_t)started * 10000u;
+    assert_true("trace_cost_parallel_exact_total", ledger.totalRays == expected * 2u);
+    assert_true("trace_cost_parallel_exact_primary",
+                ledger.rayClassCounts[RUNTIME_RENDER_TRACE_COST_RAY_PRIMARY] == expected);
+    assert_true("trace_cost_parallel_exact_transmission",
+                ledger.transmissionPathPolicy.rayTraces == expected &&
+                ledger.transmissionPathPolicy.sourceRayTraces[RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_PRIMARY] == expected);
+    RuntimeRenderTraceCostLedger3D_SetEnabled(false);
+    RuntimeRenderTraceCostLedger3D_RecordRay(RUNTIME_RENDER_TRACE_COST_RAY_PRIMARY);
+    RuntimeRenderTraceCostLedger3D_Snapshot(&ledger);
+    assert_true("trace_cost_parallel_disabled", ledger.totalRays == expected * 2u);
+    RuntimeRenderTraceCostLedger3D_Reset();
+    RuntimeRenderTraceCostLedger3D_Snapshot(&ledger);
+    assert_true("trace_cost_parallel_reset", !ledger.enabled && ledger.totalRays == 0u);
+    return 0;
+}
+
 static int test_runtime_render_trace_cost_ledger_direct_light_visibility_attribution(void) {
     RuntimeRenderTraceCostLedger3D ledger = {0};
 
@@ -2319,6 +2371,7 @@ int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     test_runtime_native_3d_adaptive_pixel_state_t4_activity_mask_contract();
     test_runtime_native_3d_adaptive_pixel_state_t5_conservative_stop_contract();
     test_runtime_native_3d_adaptive_pixel_state_t6_probe_only_does_not_pad();
+    test_runtime_render_trace_cost_ledger_parallel_records();
     test_runtime_render_trace_cost_ledger_direct_light_visibility_attribution();
     test_runtime_render_trace_cost_ledger_transmission_sample_index_attribution();
     test_runtime_native_3d_render_unit_setup_defers_feature_prepass();
@@ -2328,4 +2381,11 @@ int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     test_runtime_native_3d_tiled_first_frame_occupancy_culls_empty_tiles();
     test_runtime_native_3d_tiled_cancel_before_dispatch_blocks_publish();
     return test_support_failures() - before;
+}
+
+int run_test_runtime_render_trace_cost_ledger_suite(void) {
+    test_runtime_render_trace_cost_ledger_parallel_records();
+    test_runtime_render_trace_cost_ledger_direct_light_visibility_attribution();
+    test_runtime_render_trace_cost_ledger_transmission_sample_index_attribution();
+    return 0;
 }

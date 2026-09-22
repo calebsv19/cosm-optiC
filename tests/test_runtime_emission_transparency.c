@@ -1209,8 +1209,41 @@ static int test_runtime_emission_transparency_3d_nested_transparent_layers_do_no
                 transparent_result.payloadResolved);
     assert_true("runtime_emission_transparency_nested_layers_front_is_transparent",
                 transparent_result.payload.transparency > 0.5);
+    /* Absolute brightness is not a reachability oracle: two tinted glass
+     * filters attenuate the emitter. Isolate its contribution and check the
+     * linear emission response without relaxing a brightness threshold. */
+    RuntimeEmissionTransparency3DResult dark = {0}, half = {0}, deep = {0};
+    sceneSettings.sceneObjects[2].emissiveStrength = 0.0;
+    assert_true("runtime_emission_transparency_nested_dark_build",
+                RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0));
+    assert_true("runtime_emission_transparency_nested_dark_shade",
+                RuntimeEmissionTransparency3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &dark));
+    sceneSettings.sceneObjects[2].emissiveStrength = 0.5;
+    assert_true("runtime_emission_transparency_nested_half_build",
+                RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0));
+    assert_true("runtime_emission_transparency_nested_half_shade",
+                RuntimeEmissionTransparency3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &half));
+    double receiver = transparent_result.transmittedDirectRadiance - dark.transmittedDirectRadiance;
+    double half_receiver = half.transmittedDirectRadiance - dark.transmittedDirectRadiance;
     assert_true("runtime_emission_transparency_nested_layers_reaches_behind_layers",
-                transparent_result.transmittedDirectRadiance > 0.05);
+                receiver > 0.0 && half_receiver > 0.0);
+    assert_true("runtime_emission_transparency_nested_layers_emission_linear",
+                fabs(receiver - 2.0 * half_receiver) < 1e-8);
+    assert_true("runtime_emission_transparency_nested_layers_emission_linear_rgb",
+                fabs((transparent_result.transmittedDirectRadianceR - dark.transmittedDirectRadianceR) -
+                     2.0 * (half.transmittedDirectRadianceR - dark.transmittedDirectRadianceR)) < 1e-8 &&
+                fabs((transparent_result.transmittedDirectRadianceG - dark.transmittedDirectRadianceG) -
+                     2.0 * (half.transmittedDirectRadianceG - dark.transmittedDirectRadianceG)) < 1e-8 &&
+                fabs((transparent_result.transmittedDirectRadianceB - dark.transmittedDirectRadianceB) -
+                     2.0 * (half.transmittedDirectRadianceB - dark.transmittedDirectRadianceB)) < 1e-8);
+    sceneSettings.sceneObjects[2].emissiveStrength = 1.0;
+    animSettings.bounceDepth3D = 4;
+    assert_true("runtime_emission_transparency_nested_deep_build",
+                RuntimeScene3DBuilder_BuildFromBridgeSeedsAtT(&scene, 0.0));
+    assert_true("runtime_emission_transparency_nested_deep_shade",
+                RuntimeEmissionTransparency3D_ShadePixel(&scene, &projector, 50.0, 50.0, NULL, &deep));
+    assert_true("runtime_emission_transparency_nested_layers_independent_of_diffuse_depth",
+                fabs(deep.transmittedDirectRadiance - transparent_result.transmittedDirectRadiance) < 1e-8);
     assert_true("runtime_emission_transparency_nested_layers_mixes_front_and_transmission",
                 transparent_result.radiance > transparent_result.transmittedDirectRadiance &&
                     transparent_result.radiance > material_result.radiance * 0.5);

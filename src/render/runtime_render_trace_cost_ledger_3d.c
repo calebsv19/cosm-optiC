@@ -4,11 +4,82 @@
 #include "render/runtime_material_payload_3d.h"
 
 #include <math.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <strings.h>
 #include <string.h>
 
 static RuntimeRenderTraceCostLedger3D gRuntimeRenderTraceCostLedger3D;
+/* Diagnostics are optional. Serialize whole records so snapshots preserve
+ * cross-counter invariants, including min/max and floating-point aggregates.
+ * Disabled rendering takes only an atomic flag read, with no mutex traffic. */
+static pthread_mutex_t gLedgerMutex = PTHREAD_MUTEX_INITIALIZER;
+static atomic_bool gLedgerEnabled = ATOMIC_VAR_INIT(false);
+
+static void RuntimeRenderTraceCostLedger3D_SetEnabled_locked(bool enabled);
+static void RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment_locked(void);
+static void RuntimeRenderTraceCostLedger3D_Reset_locked(void);
+static void RuntimeRenderTraceCostLedger3D_RecordRay_locked(RuntimeRenderTraceCostRayClass3D ray_class);
+static void RuntimeRenderTraceCostLedger3D_RecordRayAtDepth_locked(
+    RuntimeRenderTraceCostRayClass3D ray_class,
+    int path_depth);
+static void RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily_locked(const HitInfo3D* hit);
+static void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy_locked(
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
+    RuntimeRenderTraceCostDirectLightSourceKind3D source_kind,
+    RuntimeRenderTraceCostDirectLightSourceOrigin3D source_origin,
+    RuntimeRenderTraceCostDirectLightEmissionProfile3D emission_profile,
+    RuntimeRenderTraceCostDirectLightOutcome3D outcome,
+    RuntimeRenderTraceCostDirectLightStopReason3D stop_reason,
+    int light_sample_count,
+    int light_sample_decision_count,
+    int light_sample_evaluated_count,
+    int visibility_trace_count,
+    double light_distance,
+    double contribution_peak,
+    double transmittance_luma_min,
+    double transmittance_luma_max);
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation_locked(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int requested_sample_count);
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth_locked(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int path_depth);
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface_locked(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit);
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution_locked(
+    const HitInfo3D* hit,
+    double contribution_r,
+    double contribution_g,
+    double contribution_b);
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface_locked(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    double optical_ior,
+    bool entering,
+    bool thin_walled,
+    bool physical_transmission,
+    double refraction_angle_delta_deg,
+    bool direction_changed);
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample_locked(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionTermination3D termination,
+    int sample_index,
+    double direction_alignment,
+    RuntimeRenderTraceCostTransmissionScreenRegion3D screen_region,
+    RuntimeRenderTraceCostTransmissionPixelStability3D pixel_stability,
+    int terminal_depth,
+    int ray_trace_count,
+    int transparent_surface_count,
+    bool receiver_found,
+    double throughput_peak,
+    double contribution_peak);
+static void RuntimeRenderTraceCostLedger3D_Snapshot_locked(RuntimeRenderTraceCostLedger3D* out_ledger);
 
 const char* RuntimeRenderTraceCostRayClass3DLabel(RuntimeRenderTraceCostRayClass3D ray_class) {
     switch (ray_class) {
@@ -388,27 +459,27 @@ const char* RuntimeRenderTraceCostThroughputBucket3DLabel(
     }
 }
 
-void RuntimeRenderTraceCostLedger3D_SetEnabled(bool enabled) {
+static void RuntimeRenderTraceCostLedger3D_SetEnabled_locked(bool enabled) {
     gRuntimeRenderTraceCostLedger3D.enabled = enabled;
 }
 
-void RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment(void) {
+static void RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment_locked(void) {
     const char* value = getenv("RAY_TRACING_RENDER_TRACE_COST_LEDGER");
-    RuntimeRenderTraceCostLedger3D_SetEnabled(value && value[0] != '\0' && value[0] != '0');
+    RuntimeRenderTraceCostLedger3D_SetEnabled_locked(value && value[0] != '\0' && value[0] != '0');
 }
 
 bool RuntimeRenderTraceCostLedger3D_IsEnabled(void) {
-    return gRuntimeRenderTraceCostLedger3D.enabled;
+    return atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed);
 }
 
-void RuntimeRenderTraceCostLedger3D_Reset(void) {
+static void RuntimeRenderTraceCostLedger3D_Reset_locked(void) {
     const bool enabled = gRuntimeRenderTraceCostLedger3D.enabled;
     memset(&gRuntimeRenderTraceCostLedger3D, 0, sizeof(gRuntimeRenderTraceCostLedger3D));
     gRuntimeRenderTraceCostLedger3D.enabled = enabled;
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordRay(RuntimeRenderTraceCostRayClass3D ray_class) {
-    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(ray_class, 0);
+static void RuntimeRenderTraceCostLedger3D_RecordRay_locked(RuntimeRenderTraceCostRayClass3D ray_class) {
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth_locked(ray_class, 0);
 }
 
 static RuntimeRenderTraceCostPathDepthBucket3D runtime_render_trace_cost_depth_bucket(
@@ -419,7 +490,7 @@ static RuntimeRenderTraceCostPathDepthBucket3D runtime_render_trace_cost_depth_b
     return RUNTIME_RENDER_TRACE_COST_DEPTH_3_PLUS;
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+static void RuntimeRenderTraceCostLedger3D_RecordRayAtDepth_locked(
     RuntimeRenderTraceCostRayClass3D ray_class,
     int path_depth) {
     RuntimeRenderTraceCostPathDepthBucket3D depth_bucket =
@@ -505,7 +576,7 @@ runtime_render_trace_cost_transmission_eta_pair(double optical_ior, bool enterin
                     : RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ETA_MATERIAL_TO_AIR;
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(const HitInfo3D* hit) {
+static void RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily_locked(const HitInfo3D* hit) {
     RuntimeMaterialPayload3D payload = {0};
     RuntimeRenderTraceCostMaterialFamily3D family =
         RUNTIME_RENDER_TRACE_COST_MATERIAL_UNKNOWN;
@@ -594,7 +665,7 @@ runtime_render_trace_cost_transmission_alignment_bucket(double direction_alignme
     return RUNTIME_RENDER_TRACE_COST_TRANSMISSION_ALIGNMENT_WIDE;
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
+static void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy_locked(
     RuntimeRenderTraceCostDirectLightCaller3D caller,
     RuntimeRenderTraceCostDirectLightSourceKind3D source_kind,
     RuntimeRenderTraceCostDirectLightSourceOrigin3D source_origin,
@@ -741,7 +812,7 @@ void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
     }
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation_locked(
     RuntimeRenderTraceCostTransmissionSource3D source,
     int requested_sample_count) {
     RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
@@ -758,7 +829,7 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(
     }
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth_locked(
     RuntimeRenderTraceCostTransmissionSource3D source,
     int path_depth) {
     RuntimeRenderTraceCostTransmissionPathPolicy3D* policy =
@@ -768,7 +839,7 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
     if (source < 0 || source >= RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_COUNT) {
         source = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SOURCE_UNKNOWN;
     }
-    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth_locked(
         RUNTIME_RENDER_TRACE_COST_RAY_TRANSMISSION,
         path_depth);
     if (!gRuntimeRenderTraceCostLedger3D.enabled) return;
@@ -778,7 +849,7 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
     policy->sourceRayDepthCounts[source][depth_bucket] += 1u;
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface_locked(
     RuntimeRenderTraceCostTransmissionSource3D source,
     RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
     const HitInfo3D* hit) {
@@ -847,7 +918,7 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
     }
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution(
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution_locked(
     const HitInfo3D* hit,
     double contribution_r,
     double contribution_g,
@@ -867,7 +938,7 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution(
     policy->receiverObjectContributionB[hit->sceneObjectIndex] += contribution_b;
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface(
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface_locked(
     RuntimeRenderTraceCostTransmissionSource3D source,
     RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
     const HitInfo3D* hit,
@@ -957,7 +1028,7 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface(
     }
 }
 
-void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+static void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample_locked(
     RuntimeRenderTraceCostTransmissionSource3D source,
     RuntimeRenderTraceCostTransmissionTermination3D termination,
     int sample_index,
@@ -1068,7 +1139,153 @@ void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
     }
 }
 
-void RuntimeRenderTraceCostLedger3D_Snapshot(RuntimeRenderTraceCostLedger3D* out_ledger) {
+static void RuntimeRenderTraceCostLedger3D_Snapshot_locked(RuntimeRenderTraceCostLedger3D* out_ledger) {
     if (!out_ledger) return;
     *out_ledger = gRuntimeRenderTraceCostLedger3D;
+}
+
+/* Public entry points own the lock; internal compound records do not relock. */
+void RuntimeRenderTraceCostLedger3D_SetEnabled(bool enabled) {
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_SetEnabled_locked(enabled);
+    atomic_store_explicit(&gLedgerEnabled, gRuntimeRenderTraceCostLedger3D.enabled, memory_order_relaxed);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment(void) {
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment_locked();
+    atomic_store_explicit(&gLedgerEnabled, gRuntimeRenderTraceCostLedger3D.enabled, memory_order_relaxed);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_Reset(void) {
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_Reset_locked();
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordRay(RuntimeRenderTraceCostRayClass3D ray_class) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordRay_locked(ray_class);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
+    RuntimeRenderTraceCostRayClass3D ray_class,
+    int path_depth) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordRayAtDepth_locked(ray_class, path_depth);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(const HitInfo3D* hit) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily_locked(hit);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy(
+    RuntimeRenderTraceCostDirectLightCaller3D caller,
+    RuntimeRenderTraceCostDirectLightSourceKind3D source_kind,
+    RuntimeRenderTraceCostDirectLightSourceOrigin3D source_origin,
+    RuntimeRenderTraceCostDirectLightEmissionProfile3D emission_profile,
+    RuntimeRenderTraceCostDirectLightOutcome3D outcome,
+    RuntimeRenderTraceCostDirectLightStopReason3D stop_reason,
+    int light_sample_count,
+    int light_sample_decision_count,
+    int light_sample_evaluated_count,
+    int visibility_trace_count,
+    double light_distance,
+    double contribution_peak,
+    double transmittance_luma_min,
+    double transmittance_luma_max) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordDirectLightVisibilityPolicy_locked(caller, source_kind, source_origin, emission_profile, outcome, stop_reason, light_sample_count, light_sample_decision_count, light_sample_evaluated_count, visibility_trace_count, light_distance, contribution_peak, transmittance_luma_min, transmittance_luma_max);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int requested_sample_count) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionPathEvaluation_locked(source, requested_sample_count);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    int path_depth) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionRayAtDepth_locked(source, path_depth);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionSurface_locked(source, surface_kind, hit);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution(
+    const HitInfo3D* hit,
+    double contribution_r,
+    double contribution_g,
+    double contribution_b) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionReceiverContribution_locked(hit, contribution_r, contribution_g, contribution_b);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionSurfaceKind3D surface_kind,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    double optical_ior,
+    bool entering,
+    bool thin_walled,
+    bool physical_transmission,
+    double refraction_angle_delta_deg,
+    bool direction_changed) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionInterface_locked(source, surface_kind, hit, payload, optical_ior, entering, thin_walled, physical_transmission, refraction_angle_delta_deg, direction_changed);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_RecordTransmissionSample(
+    RuntimeRenderTraceCostTransmissionSource3D source,
+    RuntimeRenderTraceCostTransmissionTermination3D termination,
+    int sample_index,
+    double direction_alignment,
+    RuntimeRenderTraceCostTransmissionScreenRegion3D screen_region,
+    RuntimeRenderTraceCostTransmissionPixelStability3D pixel_stability,
+    int terminal_depth,
+    int ray_trace_count,
+    int transparent_surface_count,
+    bool receiver_found,
+    double throughput_peak,
+    double contribution_peak) {
+    if (!atomic_load_explicit(&gLedgerEnabled, memory_order_relaxed)) return;
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_RecordTransmissionSample_locked(source, termination, sample_index, direction_alignment, screen_region, pixel_stability, terminal_depth, ray_trace_count, transparent_surface_count, receiver_found, throughput_peak, contribution_peak);
+    pthread_mutex_unlock(&gLedgerMutex);
+}
+
+void RuntimeRenderTraceCostLedger3D_Snapshot(RuntimeRenderTraceCostLedger3D* out_ledger) {
+    pthread_mutex_lock(&gLedgerMutex);
+    RuntimeRenderTraceCostLedger3D_Snapshot_locked(out_ledger);
+    pthread_mutex_unlock(&gLedgerMutex);
 }

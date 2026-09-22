@@ -222,6 +222,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_native_3d_render_prepared", run_test_runtime_native_3d_render_prepared_suite},
         {"runtime_native_3d_render_prepared_parity_volume",
          run_test_runtime_native_3d_render_prepared_parity_volume_suite},
+        {"runtime_render_trace_cost_ledger", run_test_runtime_render_trace_cost_ledger_suite},
         {"runtime_native_3d_render_prepared_scatter_preview",
          run_test_runtime_native_3d_render_prepared_scatter_preview_suite},
         {"runtime_render_metrics_export", run_test_runtime_render_metrics_export_tests},

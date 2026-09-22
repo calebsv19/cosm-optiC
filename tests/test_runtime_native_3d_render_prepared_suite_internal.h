@@ -19,3 +19,5 @@ bool prepared_suite_attach_dense_volume(RuntimeVolumeAttachment3D* volume,
 
 int run_test_runtime_native_3d_render_prepared_parity_volume_suite(void);
 int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void);
+
+int run_test_runtime_render_trace_cost_ledger_suite(void);

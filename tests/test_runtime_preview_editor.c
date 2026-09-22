@@ -102,27 +102,29 @@ static void test_preview_mesh_instance_bounds_preserve_exact_pivot_transform(voi
 }
 
 static void test_preview_retained_scene_uses_bounds_proxy_when_lod_is_unavailable(void) {
-    RayTracingRuntimeMeshAssetSet set;
+    RayTracingRuntimeMeshAssetSet* set = malloc(sizeof(*set));
+    assert_true("preview_bounds_fallback_scratch_allocated", set != NULL);
+    if (!set) return;
     PreviewRetainedSceneLineSegment segments[32];
     const RayTracingRuntimeMeshAssetSet* active = NULL;
     int count = 0;
     bool saw_translated_corner = false;
-    ray_tracing_runtime_mesh_asset_set_init(&set);
-    set.skipped_instance_count = 1;
-    snprintf(set.skipped_instances[0].asset_id,
-             sizeof(set.skipped_instances[0].asset_id),
+    ray_tracing_runtime_mesh_asset_set_init(set);
+    set->skipped_instance_count = 1;
+    snprintf(set->skipped_instances[0].asset_id,
+             sizeof(set->skipped_instances[0].asset_id),
              "%s",
              "asset_bounds_only");
-    set.skipped_instances[0].preview.preview_metadata_valid = true;
-    snprintf(set.skipped_instances[0].preview.metadata.asset_id,
-             sizeof(set.skipped_instances[0].preview.metadata.asset_id),
+    set->skipped_instances[0].preview.preview_metadata_valid = true;
+    snprintf(set->skipped_instances[0].preview.metadata.asset_id,
+             sizeof(set->skipped_instances[0].preview.metadata.asset_id),
              "%s",
              "asset_bounds_only");
-    set.skipped_instances[0].preview.metadata.local_bounds =
+    set->skipped_instances[0].preview.metadata.local_bounds =
         (CoreMeshAssetBounds3){
             .min = {-2.0, -1.0, -0.5},
             .max = {2.0, 1.0, 0.5}};
-    set.skipped_instances[0].preview_instance =
+    set->skipped_instances[0].preview_instance =
         (RayTracingRuntimeMeshAssetInstance){
             .asset_index = -1,
             .scene_object_index = 7,
@@ -132,11 +134,11 @@ static void test_preview_retained_scene_uses_bounds_proxy_when_lod_is_unavailabl
             .scale_x = 1.0,
             .scale_y = 1.0,
             .scale_z = 1.0};
-    snprintf(set.skipped_instances[0].preview_instance.asset_id,
-             sizeof(set.skipped_instances[0].preview_instance.asset_id),
+    snprintf(set->skipped_instances[0].preview_instance.asset_id,
+             sizeof(set->skipped_instances[0].preview_instance.asset_id),
              "%s",
              "asset_bounds_only");
-    ray_tracing_runtime_mesh_assets_take_last(&set);
+    ray_tracing_runtime_mesh_assets_take_last(set);
     active = ray_tracing_runtime_mesh_assets_last();
     SceneEditorMeshPreviewStorePrepare(active);
     PreviewRetainedSceneMeshAppendEdges(segments, 32, &count);
@@ -157,6 +159,7 @@ static void test_preview_retained_scene_uses_bounds_proxy_when_lod_is_unavailabl
                 saw_translated_corner);
     SceneEditorMeshPreviewStoreReset();
     ray_tracing_runtime_mesh_assets_reset_last();
+    free(set);
 }
 
 static int test_runtime_camera_projector_3d_preview_projection_parity(void) {

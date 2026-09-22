@@ -35,6 +35,7 @@ static void material_performance_t4_probe(SceneEditor *editor) {
     SceneEditorMaterialPerfSample preparation=SceneEditorMaterialPerfRead();
     assert(SceneEditorMeshPreviewStoreInstanceCount()==atoi(instances));
     const CoreMeshPreviewLodMesh *lod=SceneEditorMeshPreviewStoreGetForQuality(0,false);assert(lod && lod->attribute_protected && lod->surface_corners && lod->surface_corner_count==lod->triangle_count*3 && !strcmp(lod->uv_set_id,"paint_uv"));
+    assert(SceneEditorMeshPreviewStoreGetForQuality(0,true)==lod);
     RuntimeSceneBridge3DDigestState digest={0};runtime_scene_bridge_get_last_3d_digest_state(&digest);
     SDL_Rect viewport={0,0,640,480};SceneEditorDigestOverlayProjector projector;
     assert(SceneEditorDigestOverlayBuildProjectorWithView(&digest,&viewport,25,35,1,&projector));

@@ -511,6 +511,10 @@ const char* RuntimeRenderTraceCostTransmissionEtaPair3DLabel(
     RuntimeRenderTraceCostTransmissionEtaPair3D eta_pair);
 const char* RuntimeRenderTraceCostThroughputBucket3DLabel(
     RuntimeRenderTraceCostThroughputBucket3D bucket);
+/* Recording, configuration and snapshots are synchronized. Reset is an explicit
+ * collection boundary; call between render jobs for per-job totals. Integer
+ * counters are exact after workers join; floating sums retain normal rounding
+ * dependence on record order. No allocations occur on the recording path. */
 void RuntimeRenderTraceCostLedger3D_SetEnabled(bool enabled);
 void RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment(void);
 bool RuntimeRenderTraceCostLedger3D_IsEnabled(void);

@@ -115,17 +115,21 @@ static void scene_editor_mesh_preview_store_prepare(const RayTracingRuntimeMeshA
             i, assets->assets[i].document.contract.asset_id);
         core_mesh_preview_lod_mesh_init(&g_mesh_preview_store.interactive_lods[i]);
         core_mesh_preview_lod_mesh_init(&g_mesh_preview_store.lods[i]);
-        g_mesh_preview_store.interactive_valid[i] = SceneEditorMeshPreviewBuildLod(
-            &assets->assets[i].document,
-            assets->assets[i].procedural_solid_material_runtime_program.valid ? assets->assets[i].document.triangle_count : SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
-            &g_mesh_preview_store.interactive_lods[i]);
         g_mesh_preview_store.valid[i] = SceneEditorMeshPreviewBuildLod(
             &assets->assets[i].document,
             assets->assets[i].procedural_solid_material_runtime_program.valid ? assets->assets[i].document.triangle_count : SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
             &g_mesh_preview_store.lods[i]);
-        if(assets->assets[i].procedural_solid_material_runtime_program.valid) {
-            g_mesh_preview_store.lods[i].attribute_protected=true;
-            g_mesh_preview_store.interactive_lods[i].attribute_protected=true;
+        if (assets->assets[i].procedural_solid_material_runtime_program.valid) {
+            g_mesh_preview_store.lods[i].attribute_protected = true;
+        }
+        /* Protected attributes require exact geometry at both qualities. Keep
+         * one owned mesh; the quality getter already falls back to this LOD. */
+        if (!g_mesh_preview_store.valid[i] ||
+            !g_mesh_preview_store.lods[i].attribute_protected) {
+            g_mesh_preview_store.interactive_valid[i] = SceneEditorMeshPreviewBuildLod(
+                &assets->assets[i].document,
+                SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
+                &g_mesh_preview_store.interactive_lods[i]);
         }
         if (g_mesh_preview_store.valid[i]) {
             (void)scene_editor_mesh_preview_store_build_vertex_normals(
@@ -194,16 +198,16 @@ static void scene_editor_mesh_preview_store_prepare(const RayTracingRuntimeMeshA
                     &g_mesh_preview_store.lods[asset_index]);
                 core_mesh_preview_lod_mesh_init(
                     &g_mesh_preview_store.interactive_lods[asset_index]);
-                g_mesh_preview_store.interactive_valid[asset_index] =
-                    SceneEditorMeshPreviewBuildLod(
-                        &document,
-                        SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
-                        &g_mesh_preview_store.interactive_lods[asset_index]);
-                g_mesh_preview_store.valid[asset_index] =
-                    SceneEditorMeshPreviewBuildLod(
-                        &document,
-                        SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
-                        &g_mesh_preview_store.lods[asset_index]);
+                g_mesh_preview_store.valid[asset_index] = SceneEditorMeshPreviewBuildLod(
+                    &document, SCENE_EDITOR_MESH_PREVIEW_LOD_TRIANGLES,
+                    &g_mesh_preview_store.lods[asset_index]);
+                if (!g_mesh_preview_store.valid[asset_index] ||
+                    !g_mesh_preview_store.lods[asset_index].attribute_protected) {
+                    g_mesh_preview_store.interactive_valid[asset_index] =
+                        SceneEditorMeshPreviewBuildLod(
+                            &document, SCENE_EDITOR_MESH_PREVIEW_INTERACTIVE_LOD_TRIANGLES,
+                            &g_mesh_preview_store.interactive_lods[asset_index]);
+                }
                 if (g_mesh_preview_store.valid[asset_index]) {
                     (void)scene_editor_mesh_preview_store_build_vertex_normals(
                         asset_index,
