@@ -1,5 +1,20 @@
 # optiC Current Truth
 
+## September 21 post-M6 independent audit
+
+Three independent architecture, authoring and runtime audits found additional
+work before Main Edit adoption. A compiled-library probe reproduces a noise-period
+seam/negative-coordinate defect. Material preparation has a non-transactional
+failure hazard identified in control flow; visible mixed-state corruption has not
+been reproduced. Authoring gaps include the fragmented inspector, graph-incompatible
+mapping controls and missing image-resource/create-material workflows.
+
+The [post-M6 plan](surface_material_post_m6_plan.md) prioritizes correctness/failure
+handling, common authoring, resource preparation, composition and measured rendering
+quality/performance. Its slices are proposed and not implemented by this audit.
+Earlier milestone receipts remain valid for their stated tests and scope; they do
+not establish that the new findings are resolved.
+
 ## September 21 surface-material M6 source checkpoint
 
 The isolated lane completes the bounded M0–M6 implementation. M6 adds typed

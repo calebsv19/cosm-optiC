@@ -8,6 +8,13 @@ Keep `ray_tracing` stable as a hybrid editor/runtime while treating the shipped 
 
 ## Surface material mapping follow-up — September 21, 2026
 
+The [independent post-M6 audit and plan](surface_material_post_m6_plan.md) now
+controls the proposed next-step order. Start with T0 correctness and transactional
+preparation before adopting the candidate into Main Edit; then complete the common
+authoring/resource workflows and broader composition. The source capabilities
+below are implemented, while the audit findings remain open.
+
+
 The isolated surface-material lane completes the bounded M0–M6 implementation. The
 [M4 explicit UV contract](surface_material_m4_contract.md) records per-corner UVs,
 named sets, tangent frames, import/storage/cache transport and protected exact LOD.
@@ -20,8 +27,8 @@ M5 adds explicitly declared filtering, color/data encoding and tangent/height
 response; see the [M5 sampling contract](surface_material_m5_contract.md) for
 measured cost and scope. The [M6 contract](surface_material_m6_contract.md) adds
 typed graph editing, 3D/triplanar sources, bounded producer/unwrap tools and
-executable capability reporting. Next is Main Edit integration and hands-on
-acceptance of the isolated checkpoint. Broader
+executable capability reporting. Next is T0 hardening, followed by Main Edit
+integration and hands-on acceptance of the isolated checkpoint. Broader
 sampling of graph/region/manifest bindings, transported secondary differentials,
 measured anisotropic response and attribute-aware LOD remain explicit extensions.
 The full-detail M5 fixture measures 102 ms per full-quality Material orbit frame

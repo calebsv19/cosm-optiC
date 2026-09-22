@@ -219,3 +219,9 @@ use `ray_tracing` where repo/runtime identifiers need to stay exact.
 See [M6 graph and producer tools](surface_material_m6_contract.md). The headless
 renderer exposes `--surface-capabilities` and `--validate-surface-graph <file>`;
 normal scene preflight additionally checks graph/source/geometry combinations.
+
+## Post-M6 material design
+
+See the [audit-backed next-step plan](surface_material_post_m6_plan.md) and its
+three independent source audits for open correctness, authoring, preparation and
+composition work. These are proposed implementation slices, not shipped features.
