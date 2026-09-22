@@ -13,3 +13,6 @@ bool SceneEditorSurfaceMaterialHeaderModal(void);
 int SceneEditorSurfaceMaterialSection(void); /* Appearance, Sources, Coordinates, Preview */
 
 void SceneEditorSurfaceMaterialPanelInvalidateControls(void);
+/* Poll native image chooser without blocking the editor; shutdown cancels owned work. */
+bool SceneEditorSurfaceMaterialPanelPoll(void);
+void SceneEditorSurfaceMaterialPanelShutdown(void);

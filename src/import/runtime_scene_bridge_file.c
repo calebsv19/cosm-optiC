@@ -6,6 +6,8 @@
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "import/runtime_scene_volume_defaults.h"
+#include "render/runtime_surface_sampling.h"
+#include <limits.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,7 +74,15 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
     json_text[file_data.size] = '\0';
     core_io_buffer_free(&file_data);
 
-    ok = runtime_scene_bridge_preflight_json(json_text, out_preflight);
+    char previous_context[PATH_MAX];
+    snprintf(previous_context, sizeof(previous_context), "%s", RuntimeSurfaceSamplingScenePathContext());
+    if (RuntimeSurfaceSamplingSetScenePathContext(runtime_scene_path)) {
+        ok = runtime_scene_bridge_preflight_json(json_text, out_preflight);
+        (void)RuntimeSurfaceSamplingSetScenePathContext(previous_context);
+    } else {
+        runtime_scene_bridge_preflight_diag(out_preflight, "invalid surface resource scene path context");
+        ok = false;
+    }
     free(json_text);
     if (ok) {
         RayTracingRuntimeCurveAssetSet *curve_assets =
@@ -217,7 +227,15 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
              sizeof(animSettings.runtimeScenePath),
              "%s",
              runtime_scene_path_copy);
-    ok = runtime_scene_bridge_apply_json(json_text, out_summary);
+    char previous_context[PATH_MAX];
+    snprintf(previous_context, sizeof(previous_context), "%s", RuntimeSurfaceSamplingScenePathContext());
+    if (RuntimeSurfaceSamplingSetScenePathContext(runtime_scene_path_copy)) {
+        ok = runtime_scene_bridge_apply_json(json_text, out_summary);
+        (void)RuntimeSurfaceSamplingSetScenePathContext(previous_context);
+    } else {
+        runtime_scene_bridge_preflight_diag(out_summary, "invalid surface resource scene path context");
+        ok = false;
+    }
     if (ok) {
         ray_tracing_runtime_mesh_assets_take_last_for_scene(
             runtime_scene_path_copy, mesh_assets);

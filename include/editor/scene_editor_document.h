@@ -134,4 +134,20 @@ typedef enum SceneEditorDocumentFailure {
 } SceneEditorDocumentFailure;
 void SceneEditorDocumentFailNextForTests(SceneEditorDocumentFailure failure);
 
+
+/* M5 resource authoring. PNGs are imported once into digest-named project assets.
+ * The scene declaration is the undoable commit; immutable assets survive undo. */
+size_t SceneEditorDocumentSurfaceSamplingJSONSize(int index);
+bool SceneEditorDocumentGetSurfaceSamplingJSON(int index,char* out,size_t size);
+bool SceneEditorDocumentSurfaceSamplingSupported(int index,char* diagnostic,size_t size);
+bool SceneEditorDocumentSetSurfaceSampling(int index,const char* json,unsigned long long revision,char* diagnostic,size_t size);
+bool SceneEditorDocumentSurfaceSamplingSetChannel(int index,const char* channel,const char* path,const char* encoding,unsigned long long revision,char* diagnostic,size_t size);
+bool SceneEditorDocumentSurfaceSamplingSetValue(int index,const char* property,double value,unsigned long long revision,char* diagnostic,size_t size);
+bool SceneEditorDocumentSurfaceSamplingCheckChannel(int index,const char* channel,char* diagnostic,size_t size);
+
+/* Adopt only a preview-reviewed, hash-pinned candidate for the clean current
+ * saved document. The existing candidate command owns validation/save/undo. */
+bool SceneEditorDocumentAdoptSurfaceCandidate(const char* candidate_path,
+    const char* receipt_path,char* diagnostic,size_t size);
+
 #endif

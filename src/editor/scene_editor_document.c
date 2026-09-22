@@ -1,4 +1,7 @@
 #include "render/runtime_surface_graph.h"
+#include "render/runtime_surface_sampling.h"
+#include "render/runtime_surface_mapping.h"
+#include "app/ray_tracing_sha256.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_document.h"
 
@@ -52,6 +55,8 @@ static bool document_fail(SceneEditorDocumentFailure failure) {
 }
 
 static bool document_parent_path(const char* path, char* out, size_t out_size);
+static bool document_adopt_candidate(const char* candidate_path,const char* expected_hash,
+                                    char* diagnostics,size_t diagnostics_size);
 
 static void document_diag(char* out, size_t size, const char* text) {
     if (!out || size == 0u) return;
@@ -97,7 +102,7 @@ static bool document_read_file(const char* path, char** out_bytes, size_t* out_s
     return true;
 }
 
-static json_object* document_parse_valid(const char* bytes,
+static json_object* document_parse_valid(const char* bytes, const char* scene_path,
                                          char* diagnostics,
                                          size_t diagnostics_size) {
     json_tokener* tokener = NULL;
@@ -118,7 +123,12 @@ static json_object* document_parse_valid(const char* bytes,
         return NULL;
     }
     json_tokener_free(tokener);
-    if (!runtime_scene_bridge_preflight_json(bytes, &summary)) {
+    char prior_context[PATH_MAX];
+    snprintf(prior_context,sizeof(prior_context),"%s",RuntimeSurfaceSamplingScenePathContext());
+    bool context_ok=RuntimeSurfaceSamplingSetScenePathContext(scene_path);
+    bool valid=context_ok && runtime_scene_bridge_preflight_json(bytes, &summary);
+    RuntimeSurfaceSamplingSetScenePathContext(prior_context[0]?prior_context:NULL);
+    if (!valid) {
         json_object_put(root);
         document_diag(diagnostics, diagnostics_size, summary.diagnostics);
         return NULL;
@@ -378,7 +388,7 @@ bool SceneEditorDocumentOpen(const char* path, char* diagnostics, size_t diagnos
         document_diag(diagnostics, diagnostics_size, "failed to read runtime scene");
         return false;
     }
-    root = document_parse_valid(bytes, diagnostics, diagnostics_size);
+    root = document_parse_valid(bytes, path, diagnostics, diagnostics_size);
     if (!root) {
         free(bytes);
         return false;
@@ -708,6 +718,7 @@ bool SceneEditorDocumentSetSurfaceLayerValue(int index,const char* layer_id,
 }
 
 #include "scene_editor_document_material_authoring.inc"
+#include "scene_editor_document_surface_resources.inc"
 
 static bool document_make_unique_id(json_object* objects,
                                     const char* source_id,
@@ -813,7 +824,7 @@ static bool document_history_move(char** from,
     current = document_serialize_root(s_document.root, NULL);
     if (!current) return false;
     target = from[--(*from_count)];
-    root = document_parse_valid(target, diagnostics, diagnostics_size);
+    root = document_parse_valid(target, s_document.path, diagnostics, diagnostics_size);
     if (!root) {
         from[(*from_count)++] = target;
         free(current);
@@ -987,17 +998,25 @@ bool SceneEditorDocumentMergeOverlayAndSave(const char* overlay_json,
     if (!s_document.root || !overlay_json) return false;
     current = document_serialize_root(s_document.root, NULL);
     if (!current) return false;
+    char prior_context[PATH_MAX];
+    snprintf(prior_context, sizeof(prior_context), "%s", RuntimeSurfaceSamplingScenePathContext());
+    if (!RuntimeSurfaceSamplingSetScenePathContext(s_document.path)) {
+        free(current);
+        document_diag(diagnostics, diagnostics_size, "cannot resolve scene resource directory");
+        return false;
+    }
     ok = runtime_scene_bridge_writeback_ray_overlay_json(current,
                                                          overlay_json,
                                                          &merged,
                                                          diagnostics,
                                                          diagnostics_size);
+    RuntimeSurfaceSamplingSetScenePathContext(prior_context[0] ? prior_context : NULL);
     free(current);
     if (!ok || !merged) {
         free(merged);
         return false;
     }
-    merged_root = document_parse_valid(merged, diagnostics, diagnostics_size);
+    merged_root = document_parse_valid(merged, s_document.path, diagnostics, diagnostics_size);
     free(merged);
     if (!merged_root) return false;
     json_object_put(s_document.root);
@@ -1008,7 +1027,7 @@ bool SceneEditorDocumentMergeOverlayAndSave(const char* overlay_json,
     return document_apply_saved_file(diagnostics, diagnostics_size);
 }
 
-bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
+static bool document_adopt_candidate(const char* candidate_path,const char* expected_hash,
                                                 char* diagnostics,
                                                 size_t diagnostics_size) {
     char* bytes = NULL;
@@ -1026,7 +1045,14 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
         document_diag(diagnostics, diagnostics_size, "managed candidate is unavailable or outside the scene directory");
         return false;
     }
-    root = document_parse_valid(bytes, diagnostics, diagnostics_size);
+    char actual_hash[65];
+    if (expected_hash && (!ray_tracing_sha256_bytes(bytes,size,actual_hash) ||
+                         strcmp(actual_hash,expected_hash))) {
+        free(bytes);
+        document_diag(diagnostics,diagnostics_size,"candidate bytes changed after surface review");
+        return false;
+    }
+    root = document_parse_valid(bytes, candidate_path, diagnostics, diagnostics_size);
     free(bytes);
     if (!root) {
         return false;
@@ -1074,6 +1100,11 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
     /* A directory-sync warning follows publication. Preserve the coherent
      * candidate and its undo entry while returning the durability warning. */
     return saved;
+}
+
+bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
+                                                char* diagnostics,size_t diagnostics_size) {
+    return document_adopt_candidate(candidate_path,NULL,diagnostics,diagnostics_size);
 }
 
 const char* SceneEditorDocumentUnitLabel(void) {

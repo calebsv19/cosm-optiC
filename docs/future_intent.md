@@ -12,9 +12,10 @@ The [independent post-M6 audit and plan](surface_material_post_m6_plan.md) now
 controls the next-step order. T0 correctness, failure handling and Main Edit source
 adoption are complete; see the [T0 contract](surface_material_t0_contract.md).
 T1 common authoring and complete editing of existing graph capabilities are now
-implemented; see the [T1 contract](surface_material_t1_contract.md). Next is T2
-resource workflows/preparation, then T3 composition. Broader image-resource and
-performance findings remain planned work.
+implemented; see the [T1 contract](surface_material_t1_contract.md). T2 resource
+workflows and preparation are implemented; see the [T2 contract](surface_material_t2_contract.md).
+T3 image/procedural composition is next, followed by rendering quality/performance.
+T1/T2 source adoption in Main Edit remains pending explicit authorization.
 
 
 The adopted surface-material source completes the bounded M0–M6 implementation. The

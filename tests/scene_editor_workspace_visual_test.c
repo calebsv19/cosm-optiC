@@ -410,6 +410,9 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_surface_graph_m6.h"
 #include "scene_editor_surface_lifecycle_t0.h"
 #include "scene_editor_material_authoring_t1.h"
+#include "scene_editor_surface_resources_t2.h"
+#include "scene_editor_surface_resources_t2_cache.h"
+#include "scene_editor_surface_candidate_t2.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -442,6 +445,15 @@ int main(int argc, char** argv) {
     }
     if(argc==4 && (!strcmp(argv[3],"--material-authoring-t1") || !strcmp(argv[3],"--material-authoring-t1-reopen"))) {
         surface_material_authoring_t1_probe(&editor,!strcmp(argv[3],"--material-authoring-t1-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--resources-t2") || !strcmp(argv[3],"--resources-t2-reopen"))) {
+        surface_resources_t2_probe(&editor,!strcmp(argv[3],"--resources-t2-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--resources-t2-cache")) {
+        surface_resources_t2_cache_probe(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--surface-candidate-t2")) {
+        surface_candidate_t2_probe(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }
     if(argc==4 && !strcmp(argv[3],"--surface-lifecycle-t0")) {
         surface_lifecycle_t0_probe(argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;

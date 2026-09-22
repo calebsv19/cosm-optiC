@@ -1,10 +1,12 @@
 /* Surface mapping's prepared sampling adapter; shares its validated transforms. */
 #include "core_authored_surface_sampling.h"
 #include "render/runtime_surface_sampling.h"
+#include <limits.h>
 #include <stdlib.h>
 #include <sys/stat.h>
 #define SAMPLING_MAX_BYTES (128u * 1024u * 1024u)
 #define SAMPLING_RESOLUTION 256u
+#include "runtime_surface_resource_cache.inc"
 typedef struct SurfaceSampling {
     bool declared, valid;
     double period[2], normal_strength, height_m;
@@ -12,6 +14,7 @@ typedef struct SurfaceSampling {
     Vec3 coordinate_gradient[3];
     double coordinate_offset[3];
     CoreAuthoredSurfacePyramid material, images[4];
+    SamplingResource *material_resource, *image_resources[4];
 } SurfaceSampling;
 static SurfaceSampling sampling[MAX_OBJECTS];
 static size_t sampling_bytes;
@@ -22,27 +25,30 @@ void RuntimeSurfacePreparationFailNextForTests(RuntimeSurfacePreparationFailure 
     surface_failure = failure;
 }
 static bool surface_preparation_fail(RuntimeSurfacePreparationFailure failure) {
-    if (surface_failure != failure) return false;
+    if (surface_failure != failure)
+        return false;
     surface_failure = RUNTIME_SURFACE_FAIL_NONE;
     return true;
 }
 static const char *sampling_channels[] = {"base_color", "roughness", "normal", "height"};
 static void sampling_free(SurfaceSampling *s) {
-    core_authored_surface_pyramid_free(&s->material);
+    sampling_resource_release(s->material_resource);
     for (int c = 0; c < 4; ++c)
-        core_authored_surface_pyramid_free(&s->images[c]);
+        sampling_resource_release(s->image_resources[c]);
     memset(s, 0, sizeof(*s));
 }
 static json_object *sampling_declaration(json_object *o) {
     return field(field(field(o, "extensions"), "ray_tracing"), "surface_sampling");
 }
-static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfacePyramid *out) {
+static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfacePyramid *out,
+                           SamplingResource **resource) {
     if (!json_object_is_type(entry, json_type_object))
         return false;
-    const char *path = json_object_get_string(field(entry, "path")),
+    const char *declared = json_object_get_string(field(entry, "path")),
                *expected = json_object_get_string(field(entry, "sha256"));
-    if (!json_object_is_type(field(entry, "path"), json_type_string) || !path || path[0] != '/' ||
-        !ray_tracing_sha256_is_valid_hex(expected))
+    char path[PATH_MAX];
+    if (!json_object_is_type(field(entry, "path"), json_type_string) ||
+        !sampling_resource_path(declared, path) || !ray_tracing_sha256_is_valid_hex(expected))
         return false;
     if (sampling_preparing && surface_preparation_fail(RUNTIME_SURFACE_FAIL_IMAGE_READ))
         return false;
@@ -55,13 +61,30 @@ static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfaceP
     if (channel == 0 ? (!srgb && !token(entry, "color_space", "linear"))
                      : !token(entry, "color_space", "data"))
         return false;
-    unsigned char *bytes = NULL;
-    int w = 0, h = 0;
+    /* Faults remain preparation-boundary failures even for warm cache hits. */
     if (sampling_preparing && surface_preparation_fail(RUNTIME_SURFACE_FAIL_IMAGE_DECODE))
         return false;
+    char key[96];
+    snprintf(key, sizeof(key), "image-v1:%d:%d:%s", channel, srgb, expected);
+    SamplingResource *cached = sampling_resource_find(key);
+    if (cached) {
+        *resource = cached;
+        *out = cached->pyramid;
+        return true;
+    }
+    unsigned char *bytes = NULL;
+    int w = 0, h = 0;
+    ++sampling_cache_stats.decodes;
     if (!RuntimeMaterialAuthoredTextureReadPNGData(path, 1024, &bytes, &w, &h))
         return false;
-    if ((w & (w - 1)) || (h & (h - 1))) {
+    if (w < 1 || h < 1 || (w & (w - 1)) || (h & (h - 1)) ||
+        !ray_tracing_sha256_file(path, digest) || strcmp(digest, expected)) {
+        free(bytes);
+        return false;
+    }
+    SamplingResource *slot =
+        sampling_resource_slot(sampling_pyramid_bytes((unsigned)w, (unsigned)h, 4));
+    if (!slot) {
         free(bytes);
         return false;
     }
@@ -96,10 +119,17 @@ static bool sampling_image(json_object *entry, int channel, CoreAuthoredSurfaceP
                 pixels[4 * p + c] = (float)(n[c] / length);
         }
     }
+    CoreAuthoredSurfacePyramid built = {0};
     if (valid)
-        valid = core_authored_surface_pyramid_build(out, (unsigned)w, (unsigned)h, 4, pixels);
+        valid = core_authored_surface_pyramid_build(&built, (unsigned)w, (unsigned)h, 4, pixels);
     free(pixels);
     free(bytes);
+    if (valid) {
+        *resource = sampling_resource_publish(slot, key, &built);
+        *out = (*resource)->pyramid;
+        ++sampling_cache_stats.image_builds;
+    } else
+        core_authored_surface_pyramid_free(&built);
     return valid;
 }
 static bool sampling_read(json_object *o, json_object *row, SurfaceSampling *s) {
@@ -145,7 +175,7 @@ static bool sampling_read(json_object *o, json_object *row, SurfaceSampling *s) 
             for (; c < 4; ++c)
                 if (!strcmp(key, sampling_channels[c]))
                     break;
-            if (c == 4 || !sampling_image(value, c, &s->images[c]))
+            if (c == 4 || !sampling_image(value, c, &s->images[c], &s->image_resources[c]))
                 return false;
         }
     }
@@ -155,36 +185,70 @@ static bool sampling_read(json_object *o, json_object *row, SurfaceSampling *s) 
         return false;
     return true;
 }
-static size_t sampling_size(const SurfaceSampling *s) {
-    size_t bytes = s->material.value_count * sizeof(float);
-    for (int c = 0; c < 4; ++c)
-        bytes += s->images[c].value_count * sizeof(float);
+static size_t sampling_unique_bytes(const SurfaceSampling *samples) {
+    bool seen[SAMPLING_CACHE_MAX_ENTRIES] = {false};
+    size_t bytes = 0;
+    for (int i = 0; i < MAX_OBJECTS; ++i) {
+        SamplingResource *resources[] = {
+            samples[i].material_resource, samples[i].image_resources[0],
+            samples[i].image_resources[1], samples[i].image_resources[2],
+            samples[i].image_resources[3]};
+        for (size_t c = 0; c < 5; ++c)
+            if (resources[c]) {
+                size_t slot = (size_t)(resources[c] - sampling_resources);
+                if (!seen[slot]) {
+                    seen[slot] = true;
+                    bytes += sampling_resource_bytes(resources[c]);
+                }
+            }
+    }
     return bytes;
 }
 static bool sampling_validate_scene(json_object *root, char *diagnostic, size_t size) {
     json_object *objects = field(root, "objects");
-    size_t total = 0;
-    for (size_t i = 0;
-         json_object_is_type(objects, json_type_array) && i < json_object_array_length(objects);
-         ++i) {
+    size_t object_count =
+        json_object_is_type(objects, json_type_array) ? json_object_array_length(objects) : 0;
+    char (*programs)[65] = object_count ? calloc(object_count, sizeof(*programs)) : NULL;
+    if (object_count && !programs)
+        return false;
+    size_t program_count = 0;
+    bool valid = true;
+    sampling_validation_begin();
+    for (size_t i = 0; i < object_count; ++i) {
         json_object *o = json_object_array_get_idx(objects, i);
         SurfaceSampling s = {0};
         const char *id = json_object_get_string(field(o, "object_id"));
-        bool ok = sampling_read(o, id ? material_row(root, id) : NULL, &s);
-        if (s.declared)
-            total += sampling_size(&s) +
-                     (size_t)SAMPLING_RESOLUTION * SAMPLING_RESOLUTION * 8 * sizeof(float) * 4 / 3 +
-                     64;
+        json_object *row = id ? material_row(root, id) : NULL;
+        bool ok = sampling_read(o, row, &s);
+        if (ok && s.declared) {
+            char key[65];
+            ok = sampling_program_estimate_key(o, row, s.period, key);
+            bool duplicate = false;
+            for (size_t p = 0; ok && p < program_count; ++p)
+                if (!strcmp(key, programs[p]))
+                    duplicate = true;
+            if (ok && !duplicate)
+                snprintf(programs[program_count++], 65, "%s", key);
+        }
         sampling_free(&s);
-        if (!ok || total > SAMPLING_MAX_BYTES) {
-            snprintf(diagnostic, size,
-                     "surface_sampling object %zu: unsupported declaration, missing/stale image, "
-                     "color/data encoding, conflicting response or preparation budget",
-                     i);
-            return false;
+        size_t estimate =
+            sampling_validation_bytes() +
+            program_count * sampling_pyramid_bytes(SAMPLING_RESOLUTION, SAMPLING_RESOLUTION, 8);
+        if (!ok || estimate > sampling_cache_budget) {
+            if (diagnostic && size)
+                snprintf(
+                    diagnostic, size,
+                    "surface_sampling object %zu: unsupported declaration, missing/stale image, "
+                    "color/data encoding, conflicting response, path escape or unique-resource "
+                    "budget",
+                    i);
+            valid = false;
+            break;
         }
     }
-    return true;
+    sampling_validation_end();
+    free(programs);
+    return valid;
 }
 static bool sampling_prepare_scene(json_object *root, const Binding *bindings,
                                    SurfaceSampling *sampling, size_t *bytes,
@@ -243,40 +307,51 @@ static bool sampling_prepare_scene(json_object *root, const Binding *bindings,
                 payload.transparency);
             if (surface_preparation_fail(RUNTIME_SURFACE_FAIL_PYRAMID_ALLOCATION))
                 goto failure;
-            float *pixels =
-                malloc((size_t)SAMPLING_RESOLUTION * SAMPLING_RESOLUTION * 8 * sizeof(float));
-            if (!pixels)
+            char program_key[96];
+            if (!sampling_program_key(&stack, &base, s->period, bindings[i].map.seed, program_key))
                 goto failure;
-            bool ok = true;
-            for (unsigned y = 0; y < SAMPLING_RESOLUTION && ok; ++y)
-                for (unsigned x = 0; x < SAMPLING_RESOLUTION; ++x) {
-                    RuntimeMaterialSurfaceEval value;
-                    ok = RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(
-                        &stack, (x + .5) * s->period[0] / SAMPLING_RESOLUTION,
-                        (y + .5) * s->period[1] / SAMPLING_RESOLUTION, bindings[i].map.seed,
-                        (int)s->period[0], &base, &value);
-                    if (!ok)
-                        break;
-                    double v[] = {value.colorR,        value.colorG,
-                                  value.colorB,        value.roughness * value.roughness,
-                                  value.reflectivity,  value.specWeight,
-                                  value.diffuseWeight, value.transparency};
-                    for (int c = 0; c < 8; ++c)
-                        pixels[((size_t)y * SAMPLING_RESOLUTION + x) * 8 + c] = (float)v[c];
-                }
-            if (ok)
-                ok = core_authored_surface_pyramid_build(&s->material, SAMPLING_RESOLUTION,
-                                                         SAMPLING_RESOLUTION, 8, pixels);
-            free(pixels);
-            if (!ok)
-                goto failure;
+            s->material_resource = sampling_resource_find(program_key);
+            if (!s->material_resource) {
+                SamplingResource *slot = sampling_resource_slot(
+                    sampling_pyramid_bytes(SAMPLING_RESOLUTION, SAMPLING_RESOLUTION, 8));
+                if (!slot)
+                    goto failure;
+                float *pixels =
+                    malloc((size_t)SAMPLING_RESOLUTION * SAMPLING_RESOLUTION * 8 * sizeof(float));
+                if (!pixels)
+                    goto failure;
+                bool ok = true;
+                for (unsigned y = 0; y < SAMPLING_RESOLUTION && ok; ++y)
+                    for (unsigned x = 0; x < SAMPLING_RESOLUTION; ++x) {
+                        RuntimeMaterialSurfaceEval value;
+                        ok = RuntimeMaterialTextureStackEvaluateBrickCellsPeriodic(
+                            &stack, (x + .5) * s->period[0] / SAMPLING_RESOLUTION,
+                            (y + .5) * s->period[1] / SAMPLING_RESOLUTION, bindings[i].map.seed,
+                            (int)s->period[0], &base, &value);
+                        if (!ok)
+                            break;
+                        double v[] = {value.colorR,        value.colorG,
+                                      value.colorB,        value.roughness * value.roughness,
+                                      value.reflectivity,  value.specWeight,
+                                      value.diffuseWeight, value.transparency};
+                        for (int c = 0; c < 8; ++c)
+                            pixels[((size_t)y * SAMPLING_RESOLUTION + x) * 8 + c] = (float)v[c];
+                    }
+                if (ok)
+                    ok = core_authored_surface_pyramid_build(&s->material, SAMPLING_RESOLUTION,
+                                                             SAMPLING_RESOLUTION, 8, pixels);
+                free(pixels);
+                if (!ok)
+                    goto failure;
+                s->material_resource = sampling_resource_publish(slot, program_key, &s->material);
+                ++sampling_cache_stats.program_builds;
+                ++*builds;
+            }
+            s->material = s->material_resource->pyramid;
             s->valid = true;
-            *bytes += sampling_size(s);
-            ++*builds;
-            if (*bytes > SAMPLING_MAX_BYTES)
-                goto failure;
         }
     }
+    *bytes = sampling_unique_bytes(sampling);
     return true;
 failure:
     for (int i = 0; i < MAX_OBJECTS; ++i)

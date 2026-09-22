@@ -56,13 +56,15 @@ UV-set matching keep the M1–M4 meanings. A 256×256, eight-channel bake repres
 the procedural chart; detail smaller than that bake's texels is not reconstructed.
 Images have independent power-of-two dimensions from 1 through 1024, including
 rectangular images. PNG files must be at most 16 MiB, and the scene's prepared
-pyramids must fit a 128 MiB budget. The current adapter uses absolute SHA-256-pinned
-paths; portable asset bundles and UDIMs are outside this capability.
+pyramids must fit a 128 MiB unique resident budget. T2 adds shared immutable
+resources, scene-relative SHA-256-pinned paths and portable bundles; see the
+[T2 contract](surface_material_t2_contract.md). UDIMs remain outside this capability.
 
 The inspector reports `Sampling: filtered / linear color`. Existing mapping
 controls edit the retained declaration through normal document commands. Undo,
 redo, save and fresh-process reopen preserve channel pins and producer metadata.
-Image authoring and channel-selection controls are not added to the UI in M5.
+Image authoring and channel-selection controls were not added in M5; T2 now
+provides those resource cards for the supported M5 combinations.
 Unknown required capabilities, unsupported combinations, invalid parameters,
 missing/stale images and invalid encoding declarations fail validation.
 Preparation failure clears the incomplete prepared state and aborts the load.

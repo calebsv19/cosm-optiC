@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0 complete, including verified Main Edit source adoption. T1 authoring complete in isolated source; Main Edit adoption awaits explicit authorization. Verification is recorded in its contract. T2–T5 remain planned.
+Status: T0 complete, including verified Main Edit source adoption. T1 authoring and T2 resources complete in isolated source; Main Edit adoption awaits explicit authorization. Verification is recorded in their contracts. T3–T5 remain planned.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -163,6 +163,9 @@ or rejected edits preserve source/draft; save/reopen preserves IDs and provenanc
 normal-size and constrained-layout native captures are reviewed.
 
 ### T2 — Resource workflow and efficient preparation
+
+Implemented; see the [T2 contract](surface_material_t2_contract.md) for cache
+ownership, resource commands, portable candidates, evidence and remaining limits.
 
 Depends on T0 generations; uses T1's shell. Findings U3/U10, R4/R7.
 

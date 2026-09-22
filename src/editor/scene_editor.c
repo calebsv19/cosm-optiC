@@ -1,3 +1,4 @@
+#include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_tool_state.h"
 #include "editor/scene_editor_lifecycle.h"
@@ -1062,6 +1063,7 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 
 void DestroySceneEditor(SceneEditor* editor) {
+    SceneEditorSurfaceMaterialPanelShutdown();
     SceneEditorRenameCancel();
     if (!editor) {
         return;

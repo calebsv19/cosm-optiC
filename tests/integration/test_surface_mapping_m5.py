@@ -91,6 +91,8 @@ def main():
         else:
             for i in range(1,49):
                 obj=copy.deepcopy(candidate['objects'][0]);obj['object_id']='copy_'+str(i);candidate['objects'].append(obj)
+                # T2 shares identical bakes; unique seeds still exercise the resident budget.
+                obj['extensions']['ray_tracing']['surface_mapping']['seed']=1000+i
                 row=copy.deepcopy(candidate['extensions']['ray_tracing']['authoring']['object_materials'][0]);row['object_id']=obj['object_id'];candidate['extensions']['ray_tracing']['authoring']['object_materials'].append(row)
         bad=folder/(name+'.json');bad.write_text(json.dumps(candidate));req=build_request(out/name,'direct','flattened');req['scene']['runtime_scene_path']=str(bad);request=out/(name+'-request.json');request.write_text(json.dumps(req));m4.run([binary/'tools/cli/ray_tracing_render_headless','--request',request,'--preflight'],out/(name+'.log'),env,False);negatives.append(name)
     if (out/'normal/mapping_m5_ray_motion.json').exists():results['camera_ray_motion']=json.loads((out/'normal/mapping_m5_ray_motion.json').read_text())

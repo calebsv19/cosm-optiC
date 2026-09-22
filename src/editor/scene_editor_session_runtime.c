@@ -246,6 +246,7 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
             if (SceneEditorLightTimelineAdvancePlayback()) {
                 frame_dirty = true;
             }
+            if (SceneEditorSurfaceMaterialPanelPoll()) frame_dirty = true;
             if (MaterialEditorAuthoredTextureBindingPoll()) {
                 frame_dirty = true;
             }

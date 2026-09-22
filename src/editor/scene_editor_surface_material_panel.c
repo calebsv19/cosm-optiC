@@ -58,13 +58,15 @@ static void graph_panel_reset(void);
 static bool graph_panel_select_coordinates(int index);
 #include "scene_editor_material_assignment.inc"
 #include "scene_editor_surface_graph_panel.inc"
+#include "scene_editor_surface_resources_panel.inc"
 void SceneEditorSurfaceMaterialPanelInvalidateControls(void) {
     assignment_invalidate();
     memset(fields,0,sizeof(fields));scope_rect=layer_rect=enable_rect=reset_rect=(SDL_Rect){0};
     graph_panel_invalidate();SceneEditorSurfaceMappingPanelInvalidateControls();
+    resource_invalidate();
 }
 int SceneEditorSurfaceMaterialPanelRender(SDL_Renderer* r,SDL_Rect b,int index) {
-    if(selected!=index) {cancel();graph_panel_reset();selected=index;scope=layer_index=graph_node_index=0;}
+    if(selected!=index) {cancel();graph_panel_reset();resource_reset();selected=index;scope=layer_index=graph_node_index=0;}
     memset(fields,0,sizeof(fields));scope_rect=layer_rect=enable_rect=reset_rect=(SDL_Rect){0};
     json_object* row=current(index);if(!row) return b.y;
     int section=SceneEditorSurfaceMaterialSection();
@@ -90,6 +92,7 @@ int SceneEditorSurfaceMaterialPanelRender(SDL_Renderer* r,SDL_Rect b,int index) 
         json_object_put(row);return b.y+27;
     }
     if(RuntimeSurfaceGraphActive(index)){int end=graph_panel_render(r,b,index,row);json_object_put(row);return end;}
+    if(section==1 && resource_eligible(index,row)){int end=resource_render(r,b,index);json_object_put(row);return end;}
     int y=b.y;json_object* binding=get(row,"surface_material_binding");
     if(!binding) {
         enable_rect=(SDL_Rect){b.x,y,b.w,27};draw(r,enable_rect,"Enable retained source editing",false);
@@ -150,9 +153,11 @@ static bool apply_value(int index,double value) {
 }
 bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* e,int index) {
     if(!e) return false;
+    resource_release(e);
     SceneEditorSurfaceMappingPanelRelease(e);
     if(SceneEditorSurfaceMaterialHeaderEvent(e,index)) return true;
     if(assignment_mode)return true;
+    if(resource_event(e,index))return true;
     if(SceneEditorSurfaceMaterialSection()==2 && !RuntimeSurfaceGraphActive(index))
         return SceneEditorSurfaceMappingPanelEvent(e,index);
     if(SceneEditorSurfaceMaterialSection()!=1 && SceneEditorSurfaceMaterialSection()!=2)return false;
@@ -206,10 +211,11 @@ bool SceneEditorSurfaceMaterialPanelEvent(const SDL_Event* e,int index) {
     }
     return false;
 }
-bool SceneEditorSurfaceMaterialPanelActive(void) {return editing>=0 || assignment_mode!=0 || graph_panel_active() ||
+bool SceneEditorSurfaceMaterialPanelActive(void) {return editing>=0 || assignment_mode!=0 || graph_panel_active() || resource_active() ||
     (SceneEditorSurfaceMaterialSection()==2 && SceneEditorSurfaceMappingPanelActive());}
 bool SceneEditorSurfaceMaterialPanelControl(const char* name,SDL_Rect* out) {
     if(!name || !out) return false;
+    if(resource_control(name,out))return true;
     if(assignment_control(name,out))return true;
     if(SceneEditorSurfaceMaterialHeaderModal() || (SceneEditorSurfaceMaterialSection()!=1 && SceneEditorSurfaceMaterialSection()!=2))return false;
     if(RuntimeSurfaceGraphActive(selected) && graph_panel_control(name,out))return true;
