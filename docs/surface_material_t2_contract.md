@@ -3,9 +3,8 @@
 Main Edit adopted T1 and T2 at source checkpoint `3819af1` on September 22,
 2026, by an explicitly authorized clean fast-forward. Fresh adoption checks pass.
 This is source/native proof, not an installed or published release. App 0.16.0, worker 0.7.1 and shared authored texture 0.7.1 remain
-unchanged at that checkpoint. The isolated [T3 candidate](surface_material_t3_contract.md)
-extends composition and uses vendored shared authored texture 0.8.0, pending
-canonical shared synchronization and Main Edit adoption.
+unchanged at that checkpoint. [T3](surface_material_t3_contract.md) now extends composition and is adopted in
+Main Edit through `808b2b6`, with canonical/vendored shared authored texture 0.8.0.
 
 ## Resource ownership
 
@@ -152,4 +151,4 @@ Fresh evidence is under `build/surface_material_t2_adoption/` in Main Edit.
   recovery; archived input fixtures remain unchanged.
 
 The working tree remained clean after these checks. T0–T2 source adoption is
-complete; T3 composition is the next implementation milestone.
+complete. T3 is now also adopted; T4 detail/performance is next.

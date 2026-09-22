@@ -1,19 +1,20 @@
 # T3 surface composition contract
 
-Status: implemented and verified in the isolated working tree. Canonical shared
-synchronization and Main Edit adoption remain pending. This is source/native
-verification, not an installed release or human hands-on acceptance.
+Status: implemented, verified and adopted in Main Edit on September 22, 2026.
+Implementation checkpoint `fab3972`; test-only quantization correction `808b2b6`.
+This is source/native verification, not an installed release or human hands-on
+acceptance.
 
 ## Ownership and adoption boundary
 
-The working tree vendors `core_authored_texture` **0.8.0**. The canonical shared
-module remains **0.7.1**: automatic approval review rejected the proposed exact
-five-file cross-repository copy, and canonical synchronization awaits user
-authorization. No successful canonical synchronization is claimed here.
+Canonical and vendored `core_authored_texture` are **0.8.0**. Following explicit
+user approval, exactly five module files were synchronized with before/after
+SHA-256 guards, and three prepared shared adoption notes were applied. Unrelated
+canonical shared changes were preserved. Canonical unit and ASan/UBSan tests pass.
 
-Main Edit remains at **`ea6fcdf`**, the T2 checkpoint. T3 adoption is a separate
-pending action. A passing isolated build or test does not move that boundary.
-No package version, release, publication, or remote deployment is part of T3.
+Main Edit advanced by guarded clean fast-forward from `ea6fcdf` to `fab3972`, then
+`808b2b6`. App/native/headless/compiler targets rebuilt there. No package version,
+release, installed app refresh, publication or remote deployment is part of T3.
 
 Shared core owns typed graph preparation and evaluation. optiC owns retained
 JSON, resource files and cache lifetimes, mappings, per-hit image sampling,
@@ -227,8 +228,12 @@ use a `2e-6` numeric tolerance; maximum measured adapter error is below `3e-16`.
 Rest/world tests independently establish coordinate transport and image inputs;
 they do not claim an independent implementation of the shared noise evaluator.
 
-Directional renders exactly match independently calculated constant graph
-outputs. Flat normal, zero strength, constant height and zero height match the
+The original isolated directional renders exactly matched independently
+calculated constant graph outputs. Fresh Main Edit acceptance exposed a single
+RGB channel rounding difference in the variance case: float32 image moments
+versus double-precision reference constants. Its comparison now requires maximum
+8-bit error <= 1 and mean <= 0.0001; observed mean is 0.00000771605. All other
+constant-reference comparisons remain exact. Flat normal, zero strength, constant height and zero height match the
 absent-response render. Tilted/mirrored normal and height ramp change the
 render, with separate independently calculated basis/gradient normal checks.
 Mirrored flattened and TLAS/BLAS render bytes match. The variance fixture
@@ -254,6 +259,17 @@ python3 tests/integration/test_surface_composition_authoring_t3.py --output-root
 Native editor tests require an available macOS display session. Sandbox-only SDL
 initialization failures are retained separately from successful native runs.
 
-Canonical shared synchronization, Main Edit adoption, and package release are
-separate from these verification results. T4 is the next implementation slice:
+Canonical shared synchronization and Main Edit adoption are complete; package
+release remains separate. T4 is the next implementation slice:
 secondary texture footprints/reference quality and measured interactive costs.
+
+## Fresh Main Edit adoption receipts
+
+`build/surface_material_t3_adoption/adoption.json` binds the fresh execution to
+`808b2b6` (implementation remains `fab3972`). It records T3 runtime/reference
+renders, all 14 cases with fresh reopen and 10 negative preflights, native T3
+creation/edit/Undo/Save/reopen, T1 authoring, T2 resources/cache and T0 recovery.
+The first variance-reference failure and its deterministic repeat remain in the
+original `runtime/` and `variance-repeat.log`; the corrected full run is
+`runtime-02/`. Numeric payload tolerance was unchanged. Flat/zero-response and
+flattened/TLAS comparisons remain byte-exact. No renderer change was needed.

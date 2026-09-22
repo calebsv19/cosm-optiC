@@ -14,9 +14,10 @@ adoption are complete; see the [T0 contract](surface_material_t0_contract.md).
 T1 common authoring and complete editing of existing graph capabilities are now
 implemented; see the [T1 contract](surface_material_t1_contract.md). T2 resource
 workflows and preparation are implemented; see the [T2 contract](surface_material_t2_contract.md).
-T3 image/procedural composition is implemented in the isolated candidate; its
-[contract](surface_material_t3_contract.md) records verification and pending shared/Main Edit
-adoption. T4 rendering quality and measured performance follows T3 adoption.
+T3 image/procedural composition and canonical shared/Main Edit adoption are
+complete through `808b2b6`; its [contract](surface_material_t3_contract.md) records
+fresh verification. T4 secondary texture quality and measured preview performance
+is the next implementation slice.
 T0–T2 are adopted in Main Edit through `3819af1` with fresh native authoring,
 resource/candidate, recovery and editor/headless checks.
 

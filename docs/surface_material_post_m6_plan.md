@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0–T2 complete, including verified Main Edit source adoption through `3819af1`. Fresh adoption checks are recorded in the T2 contract. T3 implementation and isolated verification are complete; canonical shared/Main Edit adoption is pending. See the [T3 contract](surface_material_t3_contract.md). T4/T5 remain planned.
+Status: T0–T3 complete and adopted in Main Edit through `808b2b6`; canonical shared authored texture is 0.8.0. Fresh adoption checks are recorded in the [T3 contract](surface_material_t3_contract.md). T4/T5 remain planned.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -228,6 +228,25 @@ once relevant interfaces are stable. Findings R3/R5 and A4.
 then met on named fixtures without hidden quality fallback. Performance changes
 cannot trade away source semantics or independent correctness gates.
 
+#### First T4 execution steps
+
+1. Freeze a small T3 mixed-material scene viewed directly, in a sharp mirror and
+   through ideal refraction. Capture supersampled references across camera distance
+   and motion, with explicit contrast, temporal stability and composition-average
+   error limits. Current offset secondary rays mark their footprint unbounded and
+   therefore lose fine material detail; this is the first behavior to improve.
+2. Record a fixed-resolution preview baseline on named hardware: separate geometry,
+   rasterization/shading and document reapply costs; use 1/10/100 instances and
+   8K/100K/1M triangles; report edit/orbit p50/p95 and peak memory. Existing T2 cache
+   timings are historical fixture evidence, not T4 latency targets.
+3. Transport bounded footprints for ideal reflection/refraction and compare against
+   those references. Define rough/diffuse policy separately. Optimize only the
+   measured dominant preview cost; preserve UV charts, tangent handedness, source
+   semantics and declared image-error limits through any sharing or reduction.
+
+These are planned T4 behaviors, not implemented by the T3 adoption pass. T4 has
+no promised frame rate until the fixture budgets and measurements are recorded.
+
 ### T5 — Broader artist tools
 
 Schedule after the workflows above are usable: general seam/atlas unwrap, richer
@@ -266,10 +285,10 @@ lands as its own bounded change with fault-injection proof. UI and wider composi
 start against those verified contracts. A later instruction to start a named slice
 authorizes implementation; this audit's planning status is not a perpetual approval gate.
 
-## Current handoff after isolated T3 implementation
+## Current handoff after T3 adoption
 
-T0–T2 remain adopted in Main Edit. T3 has source/native proof in its isolated
-candidate; canonical shared 0.8.0 synchronization and Main Edit fast-forward
-remain explicit adoption actions. Complete those with fresh adoption checks
-before T4. T4 starts by declaring secondary-image error and interactive timing
-budgets, measuring current costs, then optimizing the measured bottleneck.
+T0–T3 are adopted in Main Edit, canonical shared core is synchronized, and fresh
+adoption checks pass. T4 is next: establish secondary-image reference limits
+and fixed-resolution preview timing budgets, then implement bounded ideal
+reflection/refraction footprints and optimize the measured preview bottleneck.
+The first execution steps above define this boundary. T5 remains deferred.

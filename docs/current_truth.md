@@ -1,14 +1,16 @@
 # optiC Current Truth
 
-## September 22 T3 composition candidate
+## September 22 T3 composition adopted
 
-The isolated branch implements and verifies opt-in image/procedural composition, typed image inputs,
-RMS roughness mixing, per-channel primitive face overrides, and one final
-normal-or-height response. The inspector exposes graph/resources and supported
-chart/region controls. See the [T3 contract](surface_material_t3_contract.md) for
-compatibility, explicit exclusions and verification status. Canonical shared-core
-0.8.0 synchronization and Main Edit adoption remain pending; Main Edit is at the
-T2 closeout `ea6fcdf`. This source candidate is not an installed release.
+T3 is implemented and adopted in Main Edit: image/procedural composition, typed
+image inputs, RMS roughness mixing, per-channel primitive face overrides, and
+one final normal-or-height response. The inspector exposes graph/resources and
+supported chart/region controls. See the [T3 contract](surface_material_t3_contract.md)
+for boundaries and fresh Main Edit evidence. Canonical and vendored shared core
+are 0.8.0. Implementation is `fab3972`; `808b2b6` corrects the variance reference
+check for a one-code-value float32/double quantization difference. T0–T3 source
+adoption is complete. T4 secondary texture detail and measured preview costs are
+next. Installed release and human hands-on acceptance remain separate.
 
 ## September 22 T2 resources and preparation
 
