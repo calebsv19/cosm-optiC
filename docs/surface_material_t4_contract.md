@@ -337,9 +337,10 @@ pass. Geometry, lighting/material, topology, emission and focused ledger units
 pass. Preview units exposed another preexisting 52 MiB stack-local asset set;
 moving only that test scratch to the heap makes the complete preview group pass.
 
-The broader adaptive-scatter/preview suite still has 14 failures. The unchanged
-Main Edit control binary produces the identical failure list. They are separate
-from the three requested cleanup items and remain recorded in
+At that cleanup checkpoint, the broader adaptive-scatter/preview suite had 14
+failures (resolved by the test-only correction below). The unchanged
+Main Edit control binary produces the identical failure list. They were separate
+from the three requested cleanup items and remain historically recorded in
 `ledger-unit.log` and `ledger-broad-control.log`; no full-unit-suite green claim
 is made. T5 is explicitly paused. Rough/stochastic/varying-normal footprints,
 silhouette reconstruction, the 64-instance limit, hands-on acceptance and release
@@ -360,3 +361,26 @@ variation remains visible, so no universal memory-reduction claim is made.
 Main Edit receipts are in `build/surface_material_t4_cleanup_adoption/`, including
 `results.json`, `performance-1m/baseline.json` and the combined `closeout.json`.
 The three requested cleanup items are closed. No T5 implementation was started.
+
+
+## Adaptive regression fixture closeout
+
+The 14 remaining assertions came from three fixtures expecting stable pixels
+after only 3 or 4 samples. The existing renderer requires at least 8 samples and
+3 consecutive low-error checks, so a constant signal first qualifies at sample
+10. This was an outdated fixture assumption, not a reproduced renderer defect.
+
+The test-only correction derives the convergence boundary from the declared
+constants. It measures every intermediate sample and asserts zero stable pixels
+before that boundary; both activity masks must keep every pixel active. After
+convergence, the measurement fixture reaches sample 12 to exercise the periodic
+probe, while activity/early-stop fixtures reach sample 11 between probes. Existing
+risk, padding, stable-pixel and work-reduction assertions remain in place. The
+budget histogram expectation now uses the >8-sample bucket for the longer run.
+
+The complete `runtime_native_3d_render_prepared_scatter_preview` group passes;
+the original 14-failure receipt is retained under
+`build/adaptive_regression_cleanup/before.log`. No renderer source, convergence
+threshold, material behavior or feature scope changed. T5 remains paused. This
+closes that specific stability qualification without claiming a full repository
+regression or packaged/hands-on acceptance pass.

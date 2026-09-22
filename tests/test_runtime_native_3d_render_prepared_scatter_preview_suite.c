@@ -1178,7 +1178,12 @@ static int test_runtime_native_3d_adaptive_pixel_state_t3_measurement_contract(v
     features.directLightVisibilityOutcomeBuffer[2] =
         RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_MIXED_PARTIAL;
 
-    for (int pass = 0; pass < 4; ++pass) {
+    /* A constant signal first converges after the minimum sample count plus
+     * the required consecutive checks. Preserve the intended probe phase. */
+    const int first_converged_sample = RUNTIME_NATIVE_3D_CONVERGENCE_MIN_SAMPLES +
+                                       RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS - 1;
+    const int settled_samples = ((first_converged_sample + 3) / 4) * 4;
+    for (int pass = 0; pass < settled_samples; ++pass) {
         ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation,
                                                            samples,
                                                            width,
@@ -1188,6 +1193,19 @@ static int test_runtime_native_3d_adaptive_pixel_state_t3_measurement_contract(v
                                                            height);
         assert_true("runtime_native_3d_adaptive_state_t3_scatter_add_ok", ok);
         RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+        ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(
+            &state, &accumulation, &features, width, 2, 4);
+        assert_true("adaptive_t3_convergence_measure_ok", ok);
+        const bool enough_evidence = pass + 1 >= first_converged_sample;
+        assert_true("adaptive_t3_convergence_boundary",
+                    state.summary.stablePixelCount ==
+                        (enough_evidence ? (int)pixel_count - 2 : 0));
+        if (!enough_evidence) {
+            assert_true("adaptive_t3_insufficient_evidence_keeps_sampling",
+                        state.summary.activePixelCount == (int)pixel_count &&
+                        state.summary.probePixelCount == 0);
+        }
+
     }
 
     ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(&state,
@@ -1278,7 +1296,12 @@ static int test_runtime_native_3d_adaptive_pixel_state_t4_activity_mask_contract
     features.directLightVisibilityOutcomeBuffer[2] =
         RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_STABLE_PARTIAL;
 
-    for (int pass = 0; pass < 3; ++pass) {
+    /* A constant signal first converges after the minimum sample count plus
+     * the required consecutive checks. Preserve the intended probe phase. */
+    const int first_converged_sample = RUNTIME_NATIVE_3D_CONVERGENCE_MIN_SAMPLES +
+                                       RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS - 1;
+    const int settled_samples = (first_converged_sample / 4) * 4 + 3;
+    for (int pass = 0; pass < settled_samples; ++pass) {
         ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation,
                                                            samples,
                                                            width,
@@ -1288,6 +1311,26 @@ static int test_runtime_native_3d_adaptive_pixel_state_t4_activity_mask_contract
                                                            height);
         assert_true("runtime_native_3d_adaptive_state_t4_add_ok", ok);
         RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+        ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(
+            &state, &accumulation, &features, width, 2, 4);
+        assert_true("adaptive_t4_convergence_measure_ok", ok);
+        const bool enough_evidence = pass + 1 >= first_converged_sample;
+        assert_true("adaptive_t4_convergence_boundary",
+                    state.summary.stablePixelCount ==
+                        (enough_evidence ? (int)pixel_count - 2 : 0));
+        if (!enough_evidence) {
+            assert_true("adaptive_t4_insufficient_evidence_keeps_sampling",
+                        state.summary.activePixelCount == (int)pixel_count &&
+                        state.summary.probePixelCount == 0);
+            assert_true("adaptive_t4_early_mask_ok",
+                        RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(&mask, &state, width));
+            assert_true("adaptive_t4_early_mask_keeps_every_pixel",
+                        mask.activePixelCount == (int)pixel_count);
+            for (size_t pixel = 0; pixel < pixel_count; ++pixel) {
+                assert_true("adaptive_t4_early_pixel_active", mask.activeSampleMask[pixel] != 0u);
+            }
+        }
+
     }
 
     ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(&state,
@@ -1371,7 +1414,12 @@ static int test_runtime_native_3d_adaptive_pixel_state_t5_conservative_stop_cont
     features.directLightVisibilityOutcomeBuffer[2] =
         RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_STABLE_PARTIAL;
 
-    for (int pass = 0; pass < 3; ++pass) {
+    /* A constant signal first converges after the minimum sample count plus
+     * the required consecutive checks. Preserve the intended probe phase. */
+    const int first_converged_sample = RUNTIME_NATIVE_3D_CONVERGENCE_MIN_SAMPLES +
+                                       RUNTIME_NATIVE_3D_CONVERGENCE_STABLE_CHECKS - 1;
+    const int settled_samples = (first_converged_sample / 4) * 4 + 3;
+    for (int pass = 0; pass < settled_samples; ++pass) {
         ok = RuntimeNative3DTemporalAccumulation_AddRegion(&accumulation,
                                                            samples,
                                                            width,
@@ -1381,6 +1429,26 @@ static int test_runtime_native_3d_adaptive_pixel_state_t5_conservative_stop_cont
                                                            height);
         assert_true("runtime_native_3d_adaptive_state_t5_add_ok", ok);
         RuntimeNative3DTemporalAccumulation_CommitSubpass(&accumulation);
+        ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(
+            &state, &accumulation, &features, width, 2, 4);
+        assert_true("adaptive_t5_convergence_measure_ok", ok);
+        const bool enough_evidence = pass + 1 >= first_converged_sample;
+        assert_true("adaptive_t5_convergence_boundary",
+                    state.summary.stablePixelCount ==
+                        (enough_evidence ? (int)pixel_count - 2 : 0));
+        if (!enough_evidence) {
+            assert_true("adaptive_t5_insufficient_evidence_keeps_sampling",
+                        state.summary.activePixelCount == (int)pixel_count &&
+                        state.summary.probePixelCount == 0);
+            assert_true("adaptive_t5_early_mask_ok",
+                        RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelState(&mask, &state, width));
+            assert_true("adaptive_t5_early_mask_keeps_every_pixel",
+                        mask.activePixelCount == (int)pixel_count);
+            for (size_t pixel = 0; pixel < pixel_count; ++pixel) {
+                assert_true("adaptive_t5_early_pixel_active", mask.activeSampleMask[pixel] != 0u);
+            }
+        }
+
     }
 
     ok = RuntimeNative3DAdaptiveSampling_MeasurePixelState(&state,
@@ -1408,11 +1476,12 @@ static int test_runtime_native_3d_adaptive_pixel_state_t5_conservative_stop_cont
                     state.summary.earlyStopHeldPixelCount > 0 &&
                     state.summary.earlyStopHoldMaterialRiskPixelCount == 1 &&
                     state.summary.earlyStopHoldDirectLightRiskPixelCount == 1);
+    /* The converged fixture now belongs to the >8-sample budget bucket. */
     assert_true("runtime_native_3d_adaptive_state_t5_budget_counts",
-                state.summary.budgetBucketPixelCounts[1] == (int)pixel_count &&
-                    state.summary.budgetEligibleBucketPixelCounts[1] ==
+                state.summary.budgetBucketPixelCounts[3] == (int)pixel_count &&
+                    state.summary.budgetEligibleBucketPixelCounts[3] ==
                         state.summary.earlyStopEligiblePixelCount &&
-                    state.summary.budgetHeldBucketPixelCounts[1] ==
+                    state.summary.budgetHeldBucketPixelCounts[3] ==
                         state.summary.earlyStopHeldPixelCount &&
                     state.summary.budgetPartialHeldPixelCount == 1 &&
                     state.summary.budgetClearVisibleEligiblePixelCount == 0);

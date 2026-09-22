@@ -11,9 +11,10 @@ memory fix; the fresh Main Edit 1M repeat also passes (RSS +2.09%, allowance +5%
 The full emission unit group and focused parallel ledger checks pass.
 
 See the [T4 contract](surface_material_t4_contract.md#t4-cleanup-and-stop-before-t5)
-for evidence, adoption verification and historical failures. A separate broad
-adaptive-scatter suite has 14 failures reproduced by the unchanged control build;
-this is not a full-unit-suite green claim. T5 is paused. The 64-instance limit,
+for evidence, adoption verification and historical failures. The 14 separate
+adaptive-scatter assertions are now resolved by a test-only convergence-fixture
+correction; the complete affected suite passes. This is not a full-unit-suite
+green claim. T5 is paused. The 64-instance limit,
 conservative unsupported secondary footprints, installed-build refresh and
 hands-on acceptance remain separate.
 

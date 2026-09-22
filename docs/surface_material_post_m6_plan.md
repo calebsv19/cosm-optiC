@@ -297,9 +297,10 @@ are synchronized. The [T4 contract](surface_material_t4_contract.md#t4-cleanup-a
 records checks, original failures and adoption evidence. No shared synchronization
 or version change is required. T5 is paused at the user's explicit boundary.
 
-A separate broad adaptive-scatter suite still has 14 assertions reproduced by
-the unchanged Main Edit control. Record that follow-up independently of material
-T4 acceptance; do not silently expand into a new adaptive-rendering workstream.
+The separate 14 adaptive-scatter assertions are resolved by updating three
+fixtures to the existing convergence policy. The affected suite passes with new
+checks that prevent early stopping before sufficient evidence. Renderer behavior
+is unchanged; T5 remains paused.
 
 T5 is worthwhile as a selected artist workflow, not one combined expansion.
 For imported meshes needing controlled texture placement, seam selection and
