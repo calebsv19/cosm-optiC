@@ -8,7 +8,8 @@ preserves retained documents through failed restore. Graph diagnostics identify
 object/node/property and stable reason; incompatible graph mapping controls are
 gated. See the [T0 contract](surface_material_t0_contract.md) for compatibility,
 failure policy and independent/native verification. Shared authored texture is
-0.7.1; Main Edit source adoption verification is in progress. T1–T5 remain planned,
+0.7.1. Main Edit adopted the hardened history by clean fast-forward and passes
+fresh retained M3–M6 workflows and T0 recovery checks. T1 is next; T2–T5 remain planned,
 and hands-on acceptance remains separate from scripted native proof.
 
 ## September 21 post-M6 independent audit (historical findings)

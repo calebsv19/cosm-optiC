@@ -1,6 +1,6 @@
 # Post-M6 material design and implementation plan
 
-Status: T0 implemented and verified; Main Edit adoption verification in progress. T1–T5 remain planned.
+Status: T0 complete, including verified Main Edit source adoption. T1 is next; T2–T5 remain planned.
 Date: 2026-09-21. Baseline: optiC `5afa2b7`, Sculpts `b28e82c`.
 The user requested independent design audits and a better next-step plan before
 working through further improvements. This document is the resulting execution
@@ -107,7 +107,7 @@ success. A failed restore must be visible and must not leave mixed scene generat
 
 ### T0 — Correctness, failure handling and adoption gate
 
-**Implementation verified; adoption verification in progress.** Findings A2/A5, R1/R2/R6 and U4.
+**Complete — implementation and Main Edit source adoption verified.** Findings A2/A5, R1/R2/R6 and U4.
 See the [T0 contract and verification](surface_material_t0_contract.md).
 
 - T0.1 Reproduce noise period/negative-coordinate behavior in permanent tests;
@@ -134,9 +134,14 @@ errors identify the offending field; every exposed control is supported or expla
 its restriction; legacy receipts remain unchanged except explicitly approved bugfix
 expectations. Adoption must use a fresh source/dirty-state readback.
 
-At audit time Main Edit was clean at `c8f6477`, the direct ancestor of this branch's
-seven M0–M6 commits. That makes the history easy to review, but is not authorization
-to overwrite later concurrent work or evidence of installed-build adoption.
+Main Edit adopted the M0–M6/T0 history from its freshly verified clean `c8f6477`
+ancestor by fast-forward. T0 implementation is `a8ed1e1` plus the save-publication
+correction `a0569ea`. Adopted application/native/headless builds and fresh M3–M6
+retained workflows pass; final lifecycle and M3/M4 checks include the save correction.
+Independent shared noise references, 29 diagnostic cases, injected generation and
+save failures, and all eight unchanged legacy render hashes pass. Shared authored
+texture minimum is 0.7.1. Installed builds and user hands-on acceptance remain
+separate. **T1 is the next implementation slice.**
 
 ### T1 — Complete authoring of existing capabilities
 
