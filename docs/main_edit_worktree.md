@@ -1,5 +1,60 @@
 # RayTracing Main Edit Worktree
 
+## September 22 registered-lane reconciliation (local source only)
+
+This entry supersedes earlier material-lane usage of “Main Edit” where the
+actual command target was canonical `ray_tracing`. The three checkout identities
+are distinct, even when their commits match:
+
+| Lane | Local path | Branch | Verified HEAD |
+| --- | --- | --- | --- |
+| Canonical | `<workspace>/ray_tracing` | `main` | `97f0064a23773dbe512dd7f857fee8c37f10327a` |
+| Registered Main Edit | `<workspace>/_worktrees/ray_tracing_main_edit` | `codex/ray-tracing-main-edit` | `97f0064a23773dbe512dd7f857fee8c37f10327a` |
+| Material specialist | `/Users/calebsv/.codex/worktrees/d786/ray_tracing` | `codex/surface-material-m0` | `97f0064a23773dbe512dd7f857fee8c37f10327a` |
+
+The material adoption commands and receipts through T4 and the adaptive fixture
+cleanup targeted canonical, not the registered Main Edit worktree. Their build
+and test evidence remains valid for the source identities and paths actually
+recorded; it is not evidence that the registered checkout or installed app had
+already been refreshed. Historical “Main Edit adoption” wording in those material
+closeouts must be read with this correction.
+
+Under the explicit bounded node-B authorization, registered Main Edit now
+fast-forwarded from `c8f64772d0953f82d56374ee399e47d18ea44d0e` to the accepted
+canonical `97f0064a23773dbe512dd7f857fee8c37f10327a`. Before mutation, all three
+checkouts were clean; registered Main Edit was 23 behind and zero ahead, with
+ancestry verified and no unique commits. Process command/cwd and open-write-handle
+checks found no RayTracing writer, build or render conflict. The observed `make`
+process belonged to the unrelated DAW checkout. Retained tool-host processes in
+the specialist cwd were not RayTracing builds or writers; the UI coordinator task
+was not running. No process was stopped. These are point-in-time checks and must
+be repeated before later mutation.
+
+App `VERSION` remains `0.16.0`; `WORKER_VERSION` remains `0.7.1` in every lane.
+No commit was created by this reconciliation. Canonical and specialist branch
+heads did not move. This runbook correction is the only intentional uncommitted
+change, in canonical `docs/main_edit_worktree.md`; the registered and specialist
+checkouts remain clean at the accepted commit. It is not yet committed or copied
+into those other worktree files. Preserve this owned documentation change during
+subsequent release planning; do not misclassify it as source implementation drift.
+
+Source-bound evidence remains in canonical:
+
+- `build/surface_material_t4_cleanup_adoption/closeout.json`: cleanup source
+  `1f49771`, documentation `332abfc`, fixed memory gate and parallel diagnostics.
+- `build/adaptive_regression_cleanup/closeout.json`: `97f0064`, test-only closure
+  of all 14 stale convergence assertions, affected and adjacent suites passing.
+- [T4 cleanup contract](surface_material_t4_contract.md#t4-cleanup-and-stop-before-t5)
+  and [adaptive fixture closeout](surface_material_t4_contract.md#adaptive-regression-fixture-closeout).
+
+No tests were rerun for this exact fast-forward, and no registered-worktree build
+or installed-package acceptance is inferred. Ignored evidence was retained.
+Human material/interaction acceptance and acceptance of the chosen installed
+package remain unresolved. No version decision, release build, app launch,
+replacement, publication, Registry mutation or remote work occurred. T5 stays
+paused. The coordinator owns shared handoff and subsequent release preparation.
+
+
 ## September 20 UI source closeout
 
 The current source includes the compact document bar and pane headers, shared
