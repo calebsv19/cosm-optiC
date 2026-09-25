@@ -15,7 +15,7 @@ static RuntimeRenderTraceCostLedger3D gRuntimeRenderTraceCostLedger3D;
  * cross-counter invariants, including min/max and floating-point aggregates.
  * Disabled rendering takes only an atomic flag read, with no mutex traffic. */
 static pthread_mutex_t gLedgerMutex = PTHREAD_MUTEX_INITIALIZER;
-static atomic_bool gLedgerEnabled = ATOMIC_VAR_INIT(false);
+static atomic_bool gLedgerEnabled = false;
 
 static void RuntimeRenderTraceCostLedger3D_SetEnabled_locked(bool enabled);
 static void RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment_locked(void);

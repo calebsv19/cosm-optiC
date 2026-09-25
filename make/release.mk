@@ -20,6 +20,8 @@ release-clean:
 release-build: all
 	@echo "Release build complete: $(APP_TARGET)"
 
+# Keep audit evidence beside the exact ZIP/checksum/manifest output set.
+release-bundle-audit: RELEASE_DIR = $(RELEASE_ROOT).audit
 release-bundle-audit: PACKAGE_REQUIRE_FFMPEG=1
 release-bundle-audit: package-desktop-self-test
 	@mkdir -p "$(RELEASE_DIR)"
@@ -78,8 +80,8 @@ release-local-artifact: release-bundle-audit
 	@echo "release-local-artifact complete: $(RELEASE_APP_ZIP)"
 
 release-output-root-contract:
-	@case "$(RELEASE_ROOT)" in build/release-authenticated/*) ;; *) echo "RELEASE_ROOT must be a job-scoped build/release-authenticated path"; exit 1;; esac
-	@case "$(RELEASE_ROOT)" in */../*|../*|*/..|build/release-authenticated/|*/./*|./*) echo "RELEASE_ROOT must not contain traversal or dot segments"; exit 1;; esac
+	@case "$(RELEASE_ROOT)" in build/release-authenticated/*|/*/ray_tracing/build/release-authenticated/*) ;; *) echo "RELEASE_ROOT must be a job-scoped build/release-authenticated path"; exit 1;; esac
+	@case "$(RELEASE_ROOT)" in */../*|../*|*/..|*/release-authenticated/|*/./*|./*|*/.) echo "RELEASE_ROOT must not contain traversal or dot segments"; exit 1;; esac
 	@case "$(RELEASE_ROOT)" in *'//'*) echo "RELEASE_ROOT must not contain empty path segments"; exit 1;; esac
 
 release-output-root-conformance: release-output-root-contract

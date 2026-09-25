@@ -15,6 +15,21 @@ The remaining ignored Main Edit `build/` products were archived separately as
 removed locally after checksum readback. Its restore archive SHA-256 is
 `2767b786a3c5750a021994a7cca4f6b6e4c21f42b8cc6f6d0de477b578813384`.
 
+## September 24 canonical build-evidence archival
+
+Completed surface-material adoption outputs formerly under
+`build/surface_material_t{0,2,3,4}_adoption/` and
+`build/surface_material_t4_cleanup_adoption/` are retained in Linux PC cold
+archive batch `ray-canonical-surface-material-adoption-evidence-20260924a`
+under `generated-runs`. Historical `build/...` paths below identify paths
+inside those restore archives rather than current laptop-local files.
+
+The old `build/release/` and `build/release-authenticated/` trees are retained
+separately in cold-archive batch
+`ray-canonical-historical-release-builds-20260924a` under `release-artifacts`.
+This was storage archival only; it did not publish, promote, or change the
+current release.
+
 ## September 22 T4 adopted and cleanup implemented
 
 Main Edit adopted T4 `51cfb1f` and cleanup `1f49771`. Bounded ideal reflection and
