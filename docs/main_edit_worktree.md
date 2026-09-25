@@ -1,5 +1,14 @@
 # RayTracing Main Edit Worktree
 
+## September 24 canonical evidence archival note
+
+Canonical surface-material adoption receipts previously retained under ignored
+`build/` paths are now in cold-archive batch
+`ray-canonical-surface-material-adoption-evidence-20260924a`. Historical release
+and authenticated-release build trees are in
+`ray-canonical-historical-release-builds-20260924a`. Historical `build/...`
+references below are archive-relative unless a fresh local run regenerates them.
+
 ## September 22 registered-lane reconciliation (local source only)
 
 This entry supersedes earlier material-lane usage of “Main Edit” where the
