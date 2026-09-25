@@ -1,5 +1,20 @@
 # optiC Current Truth
 
+## September 24 ignored proof-history archival
+
+The 30.806 GB logical `build/editor_ui_recovery/` history was moved off the
+laptop after a checksum-verified copy into Linux PC cold-archive batch
+`ray-main-edit-editor-ui-recovery-20260924a` (`generated-runs`). The retained
+archive payload SHA-256 is
+`48ca9fcf71c04816e63a5beb998c96b78e7584ee88c9c49f44dc439fa82d363c`.
+Historical references to that build path now identify paths inside the archive;
+they are not claims of laptop-local retention.
+
+The remaining ignored Main Edit `build/` products were archived separately as
+`ray-main-edit-remaining-build-products-20260924a` in `generated-runs` and then
+removed locally after checksum readback. Its restore archive SHA-256 is
+`2767b786a3c5750a021994a7cca4f6b6e4c21f42b8cc6f6d0de477b578813384`.
+
 ## September 22 T4 adopted and cleanup implemented
 
 Main Edit adopted T4 `51cfb1f` and cleanup `1f49771`. Bounded ideal reflection and
