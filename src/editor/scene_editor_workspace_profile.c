@@ -54,7 +54,7 @@ static int menu_count(void) {
     if (document_menu==0) return 2;
     if (document_menu==1) return 2;
     if (document_menu==2) return 8;
-    return add_menu ? 2 : SCENE_WORKSPACE_PROFILE_COUNT;
+    return add_menu ? 12 : SCENE_WORKSPACE_PROFILE_COUNT;
 }
 static SDL_Rect menu_row(const SceneEditorWorkspaceChrome* chrome,int i) {
     SDL_Rect anchor=document_menu==3 ? chrome->display_mode : document_menu>=0 ? chrome->menus[document_menu] :
@@ -70,28 +70,43 @@ static const char* menu_label(int i) {
     if(document_menu==0) return file[i];
     if(document_menu==1) return edit[i];
     if(document_menu==2) return view[i];
-    return add_menu ? (i==0 ? "Place from library" : "Import STL...") : SceneEditorWorkspaceProfileLabel(i);
+    if(add_menu) {
+        static const char* entries[]={"PRIMITIVE", "Sphere (unavailable)", "Box (1 m at origin)",
+            "Plane (1 m at origin)", "IMPORT", "Mesh from STL...", "SCENE",
+            "Light (unavailable)", "Camera (unavailable)", "RESOURCE",
+            "Volume / water (inspect only)", "ASSET  Place from library"};
+        return entries[i];
+    }
+    return SceneEditorWorkspaceProfileLabel(i);
 }
 static void select_add(SceneEditor* editor,int i) {
-    SceneEditorWorkspaceProfileSelect(editor,SCENE_WORKSPACE_SCENE);
-    if (i==0) {
+    (void)editor;
+    if (i==2 || i==3) {
+        char diagnostics[256]={0}; int selected=-1;
+        bool ok=SceneEditorDocumentCreatePrimitive(i==2 ? "box" : "plane",&selected,diagnostics,sizeof(diagnostics));
+        if(ok) ObjectEditorSetSelectedObjectIndex(selected);
+        SceneEditorChromeShellSetActionFeedback(ok ? "Object created at world origin. Undo is available." : diagnostics,5000);
+    } else if (i==11) {
         SceneEditorSidebarShowLibrary(true);
         SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_ADD);
         SceneEditorChromeShellSetActionFeedback("Choose a library object, then click the viewport to place it. Escape cancels.",5000);
-    } else {
+    } else if(i==5) {
         SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
         SceneEditorTransformPanelOpenImport();
-        SceneEditorChromeShellSetActionFeedback("Choose STL source units in the inspector, then Import STL",5000);
+        SceneEditorChromeShellSetActionFeedback("Choose an STL, review source units and destination, then Apply import.",5000);
+    } else if(i==1 || i==7 || i==8 || i==10) {
+        SceneEditorChromeShellSetActionFeedback("Creation is not available in this runtime scene yet.",5000);
     }
 }
 static bool menu_enabled(int i) {
+    if(add_menu && document_menu<0) return i==2 || i==3 || i==5 || i==11;
     if(document_menu==1) return i==0 ? SceneEditorDocumentCanUndo() : SceneEditorDocumentCanRedo();
     if(document_menu==2 && i==1) return ObjectEditorGetSelectedObjectIndex()>=0;
     if(document_menu==2 && (i==4 || i==5)) return active==SCENE_WORKSPACE_SCENE;
     return true;
 }
 static void select_menu(SceneEditor* editor,int i) {
-    if(!menu_enabled(i)) return;
+    if(!menu_enabled(i)) { if(add_menu && document_menu<0) select_add(editor,i); return; }
     menu_open=false;
     if (document_menu<0) {
         if(add_menu) select_add(editor,i); else SceneEditorWorkspaceProfileSelect(editor,i);

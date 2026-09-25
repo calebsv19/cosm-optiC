@@ -774,6 +774,60 @@ bool SceneEditorDocumentDuplicateForSceneIndex(int scene_object_index,
     return true;
 }
 
+bool SceneEditorDocumentCreatePrimitive(const char* kind, int* out_scene_object_index,
+                                        char* diagnostics, size_t diagnostics_size) {
+    const char* type = NULL;
+    const char* primitive_json = NULL;
+    json_object *objects = NULL, *object = NULL, *primitive = NULL;
+    char id[64];
+    if (!kind || !s_document.root ||
+        !json_object_object_get_ex(s_document.root, "objects", &objects) ||
+        !json_object_is_type(objects, json_type_array)) {
+        document_diag(diagnostics, diagnostics_size, "open a runtime scene before adding an object");
+        return false;
+    }
+    if (!strcmp(kind,"box")) {
+        type="rect_prism_primitive";
+        primitive_json="{\"kind\":\"rect_prism_primitive\",\"width\":1,\"height\":1,\"depth\":1}";
+    } else if (!strcmp(kind,"plane")) {
+        type="plane_primitive";
+        primitive_json="{\"kind\":\"plane_primitive\",\"width\":1,\"height\":1,\"frame\":{\"origin\":{\"x\":0,\"y\":0,\"z\":0},\"axis_u\":{\"x\":1,\"y\":0,\"z\":0},\"axis_v\":{\"x\":0,\"y\":1,\"z\":0},\"normal\":{\"x\":0,\"y\":0,\"z\":1}}}";
+    } else {
+        document_diag(diagnostics, diagnostics_size, "this primitive is not supported by the runtime scene");
+        return false;
+    }
+    for (unsigned long n=1;n<1000000;++n) {
+        bool used=false;
+        snprintf(id,sizeof(id),"%s_%lu",kind,n);
+        for(size_t i=0;i<json_object_array_length(objects);++i) {
+            json_object *entry=json_object_array_get_idx(objects,(int)i), *entry_id=NULL;
+            if(entry && json_object_object_get_ex(entry,"object_id",&entry_id) &&
+                !strcmp(json_object_get_string(entry_id),id)) {used=true;break;}
+        }
+        if(!used) break;
+        if(n==999999) {document_diag(diagnostics,diagnostics_size,"no free object ID");return false;}
+    }
+    object=json_object_new_object();
+    primitive=json_tokener_parse(primitive_json);
+    if(!object || !primitive) {
+        if(object) json_object_put(object);
+        if(primitive) json_object_put(primitive);
+        document_diag(diagnostics,diagnostics_size,"could not allocate primitive");return false;
+    }
+    json_object_object_add(object,"object_id",json_object_new_string(id));
+    json_object_object_add(object,"display_name",json_object_new_string(id));
+    json_object_object_add(object,"object_type",json_object_new_string(type));
+    json_object_object_add(object,"space_mode_intent",json_object_new_string("3d"));
+    json_object_object_add(object,"dimensional_mode",json_object_new_string("full_3d"));
+    json_object_object_add(object,"transform",json_tokener_parse("{\"position\":{\"x\":0,\"y\":0,\"z\":0},\"rotation\":{\"x\":0,\"y\":0,\"z\":0},\"scale\":{\"x\":1,\"y\":1,\"z\":1}}"));
+    json_object_object_add(object,"primitive",primitive);
+    if(!document_begin_command(diagnostics,diagnostics_size)) {json_object_put(object);return false;}
+    json_object_array_add(objects,object);
+    if(!document_finish_command(diagnostics,diagnostics_size)) return false;
+    if(out_scene_object_index) *out_scene_object_index=sceneSettings.objectCount-1;
+    return true;
+}
+
 bool SceneEditorDocumentRemoveForSceneIndex(int scene_object_index,
                                             char* diagnostics,
                                             size_t diagnostics_size) {

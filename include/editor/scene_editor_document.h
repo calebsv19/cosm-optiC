@@ -45,6 +45,9 @@ bool SceneEditorDocumentDuplicateForSceneIndex(int scene_object_index,
                                                int* out_new_scene_object_index,
                                                char* diagnostics,
                                                size_t diagnostics_size);
+/* Create a one-meter primitive at the world origin as one retained command. */
+bool SceneEditorDocumentCreatePrimitive(const char* kind, int* out_scene_object_index,
+                                        char* diagnostics, size_t diagnostics_size);
 bool SceneEditorDocumentRemoveForSceneIndex(int scene_object_index,
                                             char* diagnostics,
                                             size_t diagnostics_size);

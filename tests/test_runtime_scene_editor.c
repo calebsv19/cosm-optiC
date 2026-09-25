@@ -719,6 +719,29 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
     SceneEditorDocumentClose();
     assert_true("foundation_a_document_reopen",
                 SceneEditorDocumentOpen(runtime_path, diagnostics, sizeof(diagnostics)));
+    {
+        int created=-1;
+        unsigned long long before_revision=SceneEditorDocumentRevision();
+        assert_true("u24_box_create",
+                    SceneEditorDocumentCreatePrimitive("box",&created,diagnostics,sizeof(diagnostics)) &&
+                    created==1 && sceneSettings.objectCount==2 &&
+                    SceneEditorDocumentRevision()==before_revision+1);
+        assert_true("u24_box_undo",SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+                    sceneSettings.objectCount==1);
+        assert_true("u24_box_redo",SceneEditorDocumentRedo(diagnostics,sizeof(diagnostics)) &&
+                    sceneSettings.objectCount==2);
+        assert_true("u24_box_save",SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)));
+        assert_true("u24_box_reopen",SceneEditorDocumentOpen(runtime_path,diagnostics,sizeof(diagnostics)) &&
+                    sceneSettings.objectCount==2);
+        assert_true("u24_box_remove",SceneEditorDocumentRemoveForSceneIndex(1,diagnostics,sizeof(diagnostics)));
+        assert_true("u24_plane_create",SceneEditorDocumentCreatePrimitive("plane",&created,diagnostics,sizeof(diagnostics)) &&
+                    created==1 && sceneSettings.objectCount==2);
+        assert_true("u24_plane_undo",SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+                    sceneSettings.objectCount==1);
+        assert_true("u24_restore_fixture",SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)) &&
+                    SceneEditorDocumentOpen(runtime_path,diagnostics,sizeof(diagnostics)) &&
+                    sceneSettings.objectCount==1);
+    }
     memset(&transform, 0, sizeof(transform));
     assert_true("foundation_a_document_fresh_process_transform_readback",
                 SceneEditorDocumentGetTransformForSceneIndex(0,

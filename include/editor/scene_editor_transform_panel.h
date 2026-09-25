@@ -10,6 +10,8 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
                                     int top_y,
                                     int bottom_y);
 bool SceneEditorTransformPanelImportSTL(const char* path);
+bool SceneEditorTransformPanelStageImportSTL(const char* path);
+bool SceneEditorTransformPanelImportApplyControl(SDL_Rect* out);
 bool SceneEditorTransformPanelHistory(bool redo);
 bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* event);
 void SceneEditorTransformPanelOpenImport(void);

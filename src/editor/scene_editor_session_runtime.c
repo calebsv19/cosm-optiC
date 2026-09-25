@@ -78,7 +78,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if (SceneEditorRenameHandleEvent(event)) return;
     if (event->type == SDL_DROPFILE) {
         if (!SceneEditorTransformPanelInteractionActive())
-            (void)SceneEditorTransformPanelImportSTL(event->drop.file);
+            (void)SceneEditorTransformPanelStageImportSTL(event->drop.file);
         SDL_free(event->drop.file);
         event->drop.file = NULL;
         return;

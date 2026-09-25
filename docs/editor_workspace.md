@@ -1,5 +1,21 @@
 # Editor workspace
 
+## U2.4 Add workflow in Main Edit (development slice)
+
+Scene Add now groups Primitive, Import, Scene, Resource and Asset actions. Box and
+Plane create one-meter objects at the world origin through retained document
+commands, select the result, and support Undo/Redo and Save. Sphere, Light,
+Camera and Volume/Water are labeled unavailable because this runtime scene
+does not yet have equivalent creation transactions. Import Mesh stages a chosen
+or dropped readable STL and shows its source, source units and current-scene
+destination before Apply. Escape or closing Import cancels the staged file
+without changing the scene. Apply uses the existing managed candidate command.
+
+This is a bounded U2.4 source slice, not completion of the full workflow.
+Library placement still follows the legacy object path and has not yet been
+proved as one retained command. Native visual acceptance and semantic/UI parity
+also remain open; do not treat the source build as installed-app acceptance.
+
 ## Shared Material viewport display
 
 Material in the Bounds/Wire/Solid/Material selector now shades imported mesh LODs

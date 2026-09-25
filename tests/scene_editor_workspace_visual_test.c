@@ -606,7 +606,8 @@ int main(int argc, char** argv) {
         click(&editor,addButton);
         assert(SceneEditorWorkspaceProfileMenuOpen());
         capture(&editor,"workspace_add_menu.ppm");
-        key(&editor,SDLK_DOWN); key(&editor,SDLK_RETURN);
+        for(int step=0;step<5;++step) key(&editor,SDLK_DOWN);
+        key(&editor,SDLK_RETURN);
         SceneEditorSessionRuntimeRender(&editor);
         assert(!SceneEditorWorkspaceProfileMenuOpen());
         /* The fixture is 1000 mm wide. Exercise the actual source-unit control. */
@@ -616,6 +617,10 @@ int main(int argc, char** argv) {
         SDL_Event drop = {0}; drop.type = SDL_DROPFILE;
         drop.drop.file = SDL_strdup(argv[3]);
         SceneEditorSessionRuntimeHandleEvent(&editor, &drop);
+        SceneEditorSessionRuntimeRender(&editor);
+        SDL_Rect import_apply;
+        assert(SceneEditorTransformPanelImportApplyControl(&import_apply));
+        click(&editor,import_apply);
         capture(&editor, "workspace_import_started.ppm");
         assert(SceneEditorTransformPanelInteractionActive());
         Uint32 deadline = SDL_GetTicks() + 30000;
@@ -935,6 +940,23 @@ int main(int argc, char** argv) {
     capture(&editor,"workspace_narrow.ppm");
 
     assert(SceneEditorDocumentRevision()==revision);
+
+    /* U2.4 retained primitive creation, one-step history and fresh reopen. */
+    int before_add=sceneSettings.objectCount, added=-1;
+    assert(SceneEditorDocumentCreatePrimitive("box",&added,diagnostics,sizeof(diagnostics)));
+    assert(added==before_add && sceneSettings.objectCount==before_add+1);
+    assert(SceneEditorDocumentCanUndo());
+    assert(SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)));
+    assert(sceneSettings.objectCount==before_add);
+    assert(SceneEditorDocumentRedo(diagnostics,sizeof(diagnostics)));
+    assert(sceneSettings.objectCount==before_add+1);
+    assert(SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)));
+    assert(SceneEditorDocumentOpen(argv[2],diagnostics,sizeof(diagnostics)));
+    assert(sceneSettings.objectCount==before_add+1);
+    assert(SceneEditorDocumentCreatePrimitive("plane",&added,diagnostics,sizeof(diagnostics)));
+    assert(sceneSettings.objectCount==before_add+2);
+    assert(SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)));
+    assert(sceneSettings.objectCount==before_add+1);
 
 
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&reopened,diagnostics,sizeof(diagnostics)));
