@@ -71,6 +71,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     if(editor->currentMode==EDITOR_MODE_MATERIAL && SceneEditorSurfaceMaterialPanelActive() &&
        SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex())) return;
     if (SceneEditorRenameActive() && SceneEditorRenameHandleEvent(event)) return;
+    if (SceneEditorTransformPanelImportHandleEvent(event)) return;
     if (editor->currentMode==EDITOR_MODE_MATERIAL && MaterialEditorHandlePopupEvent(event)) return;
     if (SceneEditorWorkspaceProfileMenuOpen() && SceneEditorWorkspaceProfileHandleEvent(editor,event)) return;
     if (SceneEditorObjectMoveGizmoHandleEvent(event, editor->window)) return;
@@ -165,6 +166,11 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     }
     if (post_draw) {
         post_draw(editor, editor->renderer, context);
+    }
+    {
+        SceneEditorPaneLayout layout;
+        if (SceneEditorGetPaneLayout(&layout))
+            SceneEditorTransformPanelRenderImportOverlay(editor->renderer,layout.viewport_rect);
     }
     SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
     SceneEditorLifecycleRender(editor->renderer);
@@ -289,6 +295,7 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 SceneEditorPaneLayout layout;
                 if (SceneEditorGetPaneLayout(&layout)) {
                     SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
+                    SceneEditorTransformPanelRenderImportOverlay(editor->renderer,layout.viewport_rect);
                 }
             }
 

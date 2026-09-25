@@ -600,8 +600,6 @@ int main(int argc, char** argv) {
         int original_count = sceneSettings.objectCount;
         ObjectEditorSetSelectedObjectIndex(-1);
         SceneEditorSessionRuntimeRender(&editor);
-        SceneEditorPaneLayout import_layout;
-        assert(SceneEditorGetPaneLayout(&import_layout));
         /* Add is the single entry to import setup; keyboard choice is supported. */
         click(&editor,addButton);
         assert(SceneEditorWorkspaceProfileMenuOpen());
@@ -610,9 +608,18 @@ int main(int argc, char** argv) {
         key(&editor,SDLK_RETURN);
         SceneEditorSessionRuntimeRender(&editor);
         assert(!SceneEditorWorkspaceProfileMenuOpen());
+        SDL_Rect import_cancel;
+        assert(SceneEditorTransformPanelImportControl("cancel",&import_cancel));
+        click(&editor,import_cancel);
+        assert(!SceneEditorTransformPanelImportControl("cancel",&import_cancel));
+        click(&editor,addButton);
+        for(int step=0;step<5;++step) key(&editor,SDLK_DOWN);
+        key(&editor,SDLK_RETURN);
+        SceneEditorSessionRuntimeRender(&editor);
         /* The fixture is 1000 mm wide. Exercise the actual source-unit control. */
-        click(&editor,(SDL_Rect){import_layout.right_content_rect.x + import_layout.right_content_rect.w*3/4,
-            import_layout.right_content_rect.y + 48 + 23 + 2*29 + 8,1,1});
+        SDL_Rect import_units;
+        assert(SceneEditorTransformPanelImportControl("millimeters",&import_units));
+        click(&editor,import_units);
         capture(&editor, "workspace_import_units.ppm");
         SDL_Event drop = {0}; drop.type = SDL_DROPFILE;
         drop.drop.file = SDL_strdup(argv[3]);
@@ -957,6 +964,10 @@ int main(int argc, char** argv) {
     assert(sceneSettings.objectCount==before_add+2);
     assert(SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)));
     assert(sceneSettings.objectCount==before_add+1);
+    assert(SceneEditorDocumentRemoveForSceneIndex(before_add,diagnostics,sizeof(diagnostics)));
+    assert(SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)));
+    assert(SceneEditorDocumentOpen(argv[2],diagnostics,sizeof(diagnostics)));
+    assert(sceneSettings.objectCount==before_add);
 
 
     assert(SceneEditorDocumentGetTransformForSceneIndex(selected,&reopened,diagnostics,sizeof(diagnostics)));

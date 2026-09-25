@@ -9,6 +9,10 @@ reserves one document bar and a bottom status strip, including timeline sizing.
 The shell draws pane separators and mode-specific header controls. Popup input
 is consumed before viewport tools to prevent click-through. Changes to the
 chrome-layout struct require rebuilding all consumers before native acceptance.
+The Add > Import mesh task is rendered above the viewport by
+`scene_editor_transform_panel.c`, which retains the existing managed mesh job
+and picker state. Its early event route provides Cancel and Escape recovery while
+the chooser is pending; import setup no longer appears among object properties.
 
 Interactive tooling for shaping the scene.
 

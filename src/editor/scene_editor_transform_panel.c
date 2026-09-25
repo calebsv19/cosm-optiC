@@ -43,13 +43,12 @@ typedef enum TransformPanelJobKind {
 
 static SDL_Rect s_fields[TRANSFORM_FIELD_COUNT];
 static SDL_Rect s_name_field;
-static SDL_Rect s_import_expand, s_surface_expand;
+static SDL_Rect s_surface_expand;
 static SDL_Rect s_material_expand, s_material_edit, s_material_choices[MAX_MATERIALS];
 static bool s_material_open;
 
 static bool s_import_open, s_surface_open;
 static char s_import_source[PATH_MAX];
-void SceneEditorTransformPanelOpenImport(void) { s_import_open=true; s_import_source[0]='\0'; }
 static SDL_Rect s_duplicate_button;
 static SDL_Rect s_remove_button;
 static SDL_Rect s_import_unit_buttons[2];
@@ -71,7 +70,15 @@ static bool s_controls_active = false;
 static char s_candidate_path[PATH_MAX];
 static double s_import_scale = 1.0;
 static SDL_Rect s_import_apply_button;
+static SDL_Rect s_import_cancel_button;
 static double s_crease_angle_degrees = 60.0;
+
+void SceneEditorTransformPanelOpenImport(void) {
+    s_import_open=true;
+    s_import_source[0]='\0';
+    s_import_scale=1.0;
+    s_status[0]='\0';
+}
 
 static bool panel_point_in_rect(int x, int y, const SDL_Rect* rect) {
     return rect && rect->w > 0 && rect->h > 0 &&
@@ -376,12 +383,9 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     memset(&s_name_field, 0, sizeof(s_name_field));
     s_material_expand=(SDL_Rect){0}; s_material_edit=(SDL_Rect){0};
     memset(s_material_choices,0,sizeof(s_material_choices));
-    s_import_expand=(SDL_Rect){0};
     s_surface_expand=(SDL_Rect){0};
     memset(&s_duplicate_button, 0, sizeof(s_duplicate_button));
     memset(&s_remove_button, 0, sizeof(s_remove_button));
-    memset(s_import_unit_buttons, 0, sizeof(s_import_unit_buttons));
-    memset(&s_import_button, 0, sizeof(s_import_button));
     memset(&s_crease_angle_field, 0, sizeof(s_crease_angle_field));
     memset(s_shading_buttons, 0, sizeof(s_shading_buttons));
     if (!renderer || bounds.w < 120 || bottom_y - top_y < 270 ||
@@ -471,51 +475,6 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
         y+=field_h+gap;
     }
 
-    if (s_import_open) {
-    s_import_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
-    snprintf(line,sizeof(line),"Import STL (%s) %s",s_import_scale==0.001 ? "mm" : "meters",
-        s_import_open ? "-" : "+");
-    panel_draw_button(renderer,s_import_expand,line,true,false);
-    y+=field_h+gap;
-    }
-    if (s_import_open) {
-    s_import_unit_buttons[0] = (SDL_Rect){bounds.x, y, (bounds.w - gap) / 2, field_h};
-    s_import_unit_buttons[1] = (SDL_Rect){s_import_unit_buttons[0].x + s_import_unit_buttons[0].w + gap,
-                                         y,
-                                         bounds.w - s_import_unit_buttons[0].w - gap,
-                                         field_h};
-    panel_draw_button(renderer,
-                      s_import_unit_buttons[0],
-                      "Source: meters",
-                      s_job_pid <= 0,
-                      s_import_scale == 1.0);
-    panel_draw_button(renderer,
-                      s_import_unit_buttons[1],
-                      "Source: mm",
-                      s_job_pid <= 0,
-                      s_import_scale == 0.001);
-    y += field_h + gap;
-
-    s_import_button = (SDL_Rect){bounds.x, y, bounds.w, field_h};
-    panel_draw_button(renderer,
-                      s_import_button,
-                      s_picker.active ? "STL picker open" : "Choose STL source...",
-                      SceneEditorDocumentIsOpen() && s_job_pid <= 0,
-                      s_picker.active);
-    y += field_h + gap;
-    if (s_import_source[0]) {
-        snprintf(line,sizeof(line),"Source: %.110s",strrchr(s_import_source,'/') ? strrchr(s_import_source,'/')+1 : s_import_source);
-        panel_draw_button(renderer,(SDL_Rect){bounds.x,y,bounds.w,field_h},line,false,false);
-        y += field_h+gap;
-        snprintf(line,sizeof(line),"Destination: current scene (%s)",SceneEditorDocumentUnitLabel());
-        panel_draw_button(renderer,(SDL_Rect){bounds.x,y,bounds.w,field_h},line,false,false);
-        y += field_h+gap;
-        s_import_apply_button=(SDL_Rect){bounds.x,y,bounds.w,field_h};
-        panel_draw_button(renderer,s_import_apply_button,"Apply import (one Undo step)",s_job_pid<=0,false);
-        y += field_h+gap;
-    } else s_import_apply_button=(SDL_Rect){0};
-    }
-
     if (has_transform) {
     s_surface_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
     panel_draw_button(renderer,s_surface_expand,s_surface_open ? "Geometry / Surface -" : "Geometry / Surface +",true,false);
@@ -551,7 +510,7 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
         snprintf(visibility_text,sizeof(visibility_text),"%s | %s",identity.visible ? "Visible in viewport and render" : "Hidden in viewport and render",identity.locked ? "Locked" : "Unlocked");
         SceneEditorLabelWrapped(renderer,(SDL_Rect){bounds.x,y,bounds.w,44},visibility_text,palette.text_muted);y+=46;
     }
-    if (s_status[0] && s_status_revision==SceneEditorDocumentRevision() && y < bottom_y && !SceneEditorObjectTransformPreview(selected,NULL,NULL)) {
+    if (!s_import_open && s_status[0] && s_status_revision==SceneEditorDocumentRevision() && y < bottom_y && !SceneEditorObjectTransformPreview(selected,NULL,NULL)) {
         SceneEditorLabelWrapped(renderer,
                                    (SDL_Rect){bounds.x, y, bounds.w, bottom_y - y},
                                    s_status,
@@ -658,11 +617,6 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
             }
         }
     }
-    if (event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE && s_import_source[0]) {
-        s_import_source[0]='\0';
-        panel_status("STL import cancelled; scene unchanged",false);
-        return true;
-    }
     if (event->type != SDL_MOUSEBUTTONDOWN || event->button.button != SDL_BUTTON_LEFT) {
         return false;
     }
@@ -714,11 +668,6 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
         panel_status(ok ? "Material assigned. Undo is available." : diagnostics,!ok);
         return true;
     }
-    if (panel_point_in_rect(event->button.x,event->button.y,&s_import_expand)) {
-        s_import_open=!s_import_open;
-        if(!s_import_open) s_import_source[0]='\0';
-        return true;
-    }
     if (panel_point_in_rect(event->button.x,event->button.y,&s_surface_expand)) {
         s_surface_open=!s_surface_open; return true;
     }
@@ -741,40 +690,6 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
         if (ok) ObjectEditorSetSelectedObjectIndex(-1);
         panel_status(ok ? "Object removed" : diagnostics, !ok);
         return true;
-    }
-    if (panel_point_in_rect(event->button.x, event->button.y, &s_import_button)) {
-        char initial[PATH_MAX] = {0};
-        if (!panel_mutation_allowed()) return true;
-        if (!s_picker_initialized) {
-            RayTracing_FolderPicker_RequestInit(&s_picker);
-            s_picker_initialized = true;
-        }
-        (void)ray_tracing_resolve_import_dir(initial, sizeof(initial));
-        if (!RayTracing_FilePicker_Begin(&s_picker,
-                                         "Select STL mesh",
-                                         initial[0] ? initial : NULL)) {
-            panel_status("STL picker unavailable", true);
-        } else {
-            panel_status("STL picker open", false);
-        }
-        return true;
-    }
-    if (panel_point_in_rect(event->button.x,event->button.y,&s_import_apply_button)) {
-        if (panel_mutation_allowed() && s_job_pid<=0)
-            (void)SceneEditorTransformPanelImportSTL(s_import_source);
-        return true;
-    }
-    for (int i = 0; i < 2; ++i) {
-        if (panel_point_in_rect(event->button.x,
-                                event->button.y,
-                                &s_import_unit_buttons[i]) &&
-            panel_mutation_allowed()) {
-            s_import_scale = i == 0 ? 1.0 : 0.001;
-            panel_status(i == 0 ? "STL source units set to meters"
-                                : "STL source units set to millimeters",
-                         false);
-            return true;
-        }
     }
     if (panel_point_in_rect(event->button.x, event->button.y, &s_crease_angle_field) &&
         panel_mutation_allowed()) {
@@ -814,8 +729,119 @@ bool SceneEditorTransformPanelStageImportSTL(const char* path) {
     panel_status("Review source, units and destination; then Apply import",false);
     return true;
 }
+static void panel_cancel_import(void) {
+    if (s_picker_initialized && s_picker.active) RayTracing_FolderPicker_Cancel(&s_picker);
+    if (s_job_pid > 0 && s_job_kind == TRANSFORM_PANEL_JOB_IMPORT) {
+        (void)kill(s_job_pid,SIGTERM);
+        int attempts=0;
+        while(waitpid(s_job_pid,NULL,WNOHANG)==0 && attempts++<100) (void)usleep(1000u);
+        if(attempts>=100) { (void)kill(s_job_pid,SIGKILL); (void)waitpid(s_job_pid,NULL,0); }
+        if(s_candidate_path[0]) (void)unlink(s_candidate_path);
+        s_candidate_path[0]='\0';
+        s_job_pid=-1;
+        s_job_kind=TRANSFORM_PANEL_JOB_NONE;
+        s_job_document_revision=0u;
+    }
+    s_import_open=false;
+    s_import_source[0]='\0';
+    panel_status("Import cancelled; scene unchanged",false);
+}
+
+void SceneEditorTransformPanelRenderImportOverlay(SDL_Renderer* renderer, SDL_Rect viewport) {
+    if (!s_import_open || !renderer || viewport.w<260 || viewport.h<260) return;
+    RayTracingThemePalette palette=SceneEditorChromeShellResolvePalette();
+    SDL_Rect prior; SDL_bool clipped=SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderGetClipRect(renderer,&prior); SDL_RenderSetClipRect(renderer,NULL);
+    int width=viewport.w-24; if(width>450) width=450;
+    int height=316; if(height>viewport.h-24) height=viewport.h-24;
+    SDL_Rect panel={viewport.x+(viewport.w-width)/2,viewport.y+28,width,height};
+    if(panel.y+panel.h>viewport.y+viewport.h-12) panel.y=viewport.y+viewport.h-panel.h-12;
+    SDL_SetRenderDrawColor(renderer,palette.panel_fill.r,palette.panel_fill.g,palette.panel_fill.b,255);
+    SDL_RenderFillRect(renderer,&panel);
+    SDL_SetRenderDrawColor(renderer,palette.panel_border.r,palette.panel_border.g,palette.panel_border.b,255);
+    SDL_RenderDrawRect(renderer,&panel);
+    SDL_Rect row={panel.x+16,panel.y+12,panel.w-32,24};
+    SceneEditorLabelLeft(renderer,row,"Add > Import mesh",palette.text_primary);
+    row.y+=31;
+    SceneEditorLabelLeft(renderer,row,"1. Choose an STL file",palette.text_muted);
+    row.y+=25;
+    s_import_button=(SDL_Rect){row.x,row.y,row.w,30};
+    panel_draw_button(renderer,s_import_button,s_picker.active ? "Waiting for file chooser..." : "Choose STL file...",
+        !s_picker.active && s_job_pid<=0,false);
+    row.y+=36;
+    char line[160];
+    const char* basename=strrchr(s_import_source,'/');
+    snprintf(line,sizeof(line),"File: %.90s",s_import_source[0] ? (basename ? basename+1 : s_import_source) : "None selected");
+    SceneEditorLabelLeft(renderer,row,line,palette.text_primary);
+    row.y+=27;
+    SceneEditorLabelLeft(renderer,row,"2. Source units",palette.text_muted);
+    row.y+=24;
+    s_import_unit_buttons[0]=(SDL_Rect){row.x,row.y,(row.w-6)/2,30};
+    s_import_unit_buttons[1]=(SDL_Rect){row.x+(row.w-6)/2+6,row.y,row.w-(row.w-6)/2-6,30};
+    panel_draw_button(renderer,s_import_unit_buttons[0],"Meters",s_job_pid<=0,s_import_scale==1.0);
+    panel_draw_button(renderer,s_import_unit_buttons[1],"Millimeters",s_job_pid<=0,s_import_scale==0.001);
+    row.y+=38;
+    snprintf(line,sizeof(line),"Destination: current scene (%s)",SceneEditorDocumentUnitLabel());
+    SceneEditorLabelLeft(renderer,row,line,palette.text_primary);
+    row.y+=32;
+    s_import_apply_button=(SDL_Rect){row.x,row.y,(row.w-6)*2/3,32};
+    s_import_cancel_button=(SDL_Rect){s_import_apply_button.x+s_import_apply_button.w+6,row.y,
+        row.w-s_import_apply_button.w-6,32};
+    panel_draw_button(renderer,s_import_apply_button,s_job_pid>0 ? "Importing..." : "Import mesh",
+        s_import_source[0] && !s_picker.active && s_job_pid<=0,false);
+    panel_draw_button(renderer,s_import_cancel_button,"Cancel",true,false);
+    if(s_status[0]) {
+        row.y+=39;
+        SceneEditorLabelLeft(renderer,row,s_status,s_status_color);
+    }
+    SDL_RenderSetClipRect(renderer,clipped ? &prior : NULL);
+}
+
+bool SceneEditorTransformPanelImportControl(const char* name, SDL_Rect* out) {
+    if(!s_import_open || !name || !out) return false;
+    if(!strcmp(name,"choose")) *out=s_import_button;
+    else if(!strcmp(name,"meters")) *out=s_import_unit_buttons[0];
+    else if(!strcmp(name,"millimeters")) *out=s_import_unit_buttons[1];
+    else if(!strcmp(name,"apply")) *out=s_import_apply_button;
+    else if(!strcmp(name,"cancel")) *out=s_import_cancel_button;
+    else return false;
+    return out->w>0;
+}
+
+bool SceneEditorTransformPanelImportHandleEvent(const SDL_Event* event) {
+    if(!s_import_open || !event) return false;
+    if(event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE) {
+        panel_cancel_import(); return true;
+    }
+    if(event->type==SDL_MOUSEBUTTONDOWN && event->button.button==SDL_BUTTON_LEFT) {
+        int x=event->button.x,y=event->button.y;
+        if(panel_point_in_rect(x,y,&s_import_cancel_button)) {panel_cancel_import();return true;}
+        if(panel_point_in_rect(x,y,&s_import_button) && !s_picker.active && s_job_pid<=0) {
+            char initial[PATH_MAX]={0};
+            if(!s_picker_initialized) {RayTracing_FolderPicker_RequestInit(&s_picker);s_picker_initialized=true;}
+            (void)ray_tracing_resolve_import_dir(initial,sizeof(initial));
+            if(!RayTracing_FilePicker_Begin(&s_picker,"Select STL mesh",initial[0] ? initial : NULL))
+                panel_status("File chooser unavailable; choose again or Cancel",true);
+            else panel_status("Choose a file, or press Escape / Cancel here",false);
+            return true;
+        }
+        if(panel_point_in_rect(x,y,&s_import_apply_button)) {
+            if(s_import_source[0] && !s_picker.active && s_job_pid<=0)
+                (void)SceneEditorTransformPanelImportSTL(s_import_source);
+            return true;
+        }
+        for(int i=0;i<2;++i) if(panel_point_in_rect(x,y,&s_import_unit_buttons[i])) {
+            if(s_job_pid<=0) {s_import_scale=i==0 ? 1.0 : 0.001;
+                panel_status(i==0 ? "Source units: meters" : "Source units: millimeters",false);}
+            return true;
+        }
+    }
+    return event->type==SDL_MOUSEBUTTONDOWN || event->type==SDL_MOUSEBUTTONUP ||
+        event->type==SDL_MOUSEMOTION || event->type==SDL_MOUSEWHEEL ||
+        event->type==SDL_KEYDOWN || event->type==SDL_KEYUP || event->type==SDL_TEXTINPUT;
+}
 bool SceneEditorTransformPanelImportApplyControl(SDL_Rect* out) {
-    if(!out || !s_import_source[0] || s_import_apply_button.w<=0) return false;
+    if(!out || !s_import_open || !s_import_source[0] || s_import_apply_button.w<=0) return false;
     *out=s_import_apply_button; return true;
 }
 

@@ -6,10 +6,14 @@ Scene Add now groups Primitive, Import, Scene, Resource and Asset actions. Box a
 Plane create one-meter objects at the world origin through retained document
 commands, select the result, and support Undo/Redo and Save. Sphere, Light,
 Camera and Volume/Water are labeled unavailable because this runtime scene
-does not yet have equivalent creation transactions. Import Mesh stages a chosen
-or dropped readable STL and shows its source, source units and current-scene
-destination before Apply. Escape or closing Import cancels the staged file
-without changing the scene. Apply uses the existing managed candidate command.
+does not yet have equivalent creation transactions. Import Mesh opens an
+Add-owned viewport panel with Choose STL, source units, current-scene destination,
+Import and Cancel. The selected-object Inspector contains no import controls.
+Choosing or dropping a readable STL stages it for review; applying uses the
+existing managed candidate command. Escape or Cancel closes the panel, cancels
+an outstanding macOS chooser or import job, and leaves the scene unchanged.
+The chooser remains cancellable even if its child process does not return after
+a file selection.
 
 This is a bounded U2.4 source slice, not completion of the full workflow.
 Library placement still follows the legacy object path and has not yet been

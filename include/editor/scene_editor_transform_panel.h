@@ -12,6 +12,9 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
 bool SceneEditorTransformPanelImportSTL(const char* path);
 bool SceneEditorTransformPanelStageImportSTL(const char* path);
 bool SceneEditorTransformPanelImportApplyControl(SDL_Rect* out);
+bool SceneEditorTransformPanelImportControl(const char* name, SDL_Rect* out);
+bool SceneEditorTransformPanelImportHandleEvent(const SDL_Event* event);
+void SceneEditorTransformPanelRenderImportOverlay(SDL_Renderer* renderer, SDL_Rect viewport);
 bool SceneEditorTransformPanelHistory(bool redo);
 bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* event);
 void SceneEditorTransformPanelOpenImport(void);

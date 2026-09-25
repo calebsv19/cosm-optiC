@@ -93,7 +93,7 @@ static void select_add(SceneEditor* editor,int i) {
     } else if(i==5) {
         SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
         SceneEditorTransformPanelOpenImport();
-        SceneEditorChromeShellSetActionFeedback("Choose an STL, review source units and destination, then Apply import.",5000);
+        SceneEditorChromeShellSetActionFeedback("Choose an STL, review source units and destination, then Import mesh.",5000);
     } else if(i==1 || i==7 || i==8 || i==10) {
         SceneEditorChromeShellSetActionFeedback("Creation is not available in this runtime scene yet.",5000);
     }
