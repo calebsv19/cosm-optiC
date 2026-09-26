@@ -15,12 +15,13 @@ from smooth_mesh_reflection.prepare_reflection_matrix import build_scene
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--app', type=Path, required=True)
+    parser.add_argument('--source', type=Path)
     args = parser.parse_args()
     tools = args.app / 'Contents/Resources/bin'
     helper = tools / 'managed_mesh_assets.py'
     compiler = tools / 'compile_runtime_fixture'
     assert helper.is_file() and compiler.is_file(), 'packaged managed mesh tools missing'
-    source = ROOT / 'third_party/codework_shared/core/core_mesh_compile/tests/fixtures/imports/tetrahedron_ascii.stl'
+    source = args.source or ROOT / 'third_party/codework_shared/core/core_mesh_compile/tests/fixtures/imports/tetrahedron_ascii.stl'
     with tempfile.TemporaryDirectory(prefix='optic-packaged-stl-') as directory:
         project = Path(directory)
         scene = project / 'scene_runtime.json'
