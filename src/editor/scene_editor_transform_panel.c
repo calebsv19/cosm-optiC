@@ -225,6 +225,15 @@ static bool panel_program_tools(char* script,
                                 size_t compiler_size) {
     char root[PATH_MAX] = {0};
     struct utsname system_name;
+    const char* bundled_script=getenv("RAY_TRACING_MANAGED_MESH_HELPER");
+    const char* bundled_compiler=getenv("RAY_TRACING_MANAGED_MESH_COMPILER");
+    if (bundled_script || bundled_compiler) {
+        if (!bundled_script || !bundled_compiler ||
+            snprintf(script,script_size,"%s",bundled_script)>=(int)script_size ||
+            snprintf(compiler,compiler_size,"%s",bundled_compiler)>=(int)compiler_size)
+            return false;
+        return access(script,R_OK)==0 && access(compiler,X_OK)==0;
+    }
     if (!ray_tracing_find_program_root(root, sizeof(root)) || uname(&system_name) != 0) {
         return false;
     }
@@ -258,7 +267,7 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
     pid_t child = -1;
     if (!panel_mutation_allowed() || !scene[0]) return false;
     if (!panel_program_tools(script, sizeof(script), compiler, sizeof(compiler))) {
-        panel_status("Managed STL helper is not built for this checkout", true);
+        panel_status("Managed STL tools are unavailable in this app", true);
         return false;
     }
     if (!SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics))) {

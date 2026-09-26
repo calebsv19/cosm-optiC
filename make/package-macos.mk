@@ -1,6 +1,6 @@
 .PHONY: package-desktop-main-edit package-desktop-main-edit-self-test package-desktop-main-edit-refresh package-desktop-main-edit-open
 
-package-desktop:
+package-desktop: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	@echo "Preparing desktop package..."
 	@$(MAKE) BUILD_TOOLCHAIN="$(PACKAGE_TOOLCHAIN)" "$(PACKAGE_SOURCE_BIN)"
 	@rm -rf "$(PACKAGE_APP_DIR)"
@@ -62,6 +62,9 @@ package-desktop:
 	else \
 		echo "Skipping bundled ffmpeg for TARGET_ARCH=$(TARGET_ARCH)"; \
 	fi
+	@cp "tools/managed_mesh_assets.py" "$(PACKAGE_TOOLS_DIR)/managed_mesh_assets.py"
+	@cp "$(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)" "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"
+	@chmod +x "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"
 	@cp -R config "$(PACKAGE_RESOURCES_DIR)/"
 	@mkdir -p "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts"
 	@cp -R "$(SHARED_ASSETS_DIR)/fonts/." "$(PACKAGE_RESOURCES_DIR)/shared/assets/fonts/"
@@ -92,6 +95,7 @@ package-desktop:
 	@if [ -x "$(PACKAGE_TOOLS_DIR)/ffmpeg" ]; then \
 		/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_TOOLS_DIR)/ffmpeg"; \
 	fi
+	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"
 	@/usr/bin/codesign --force --sign "$(PACKAGE_ADHOC_SIGN_IDENTITY)" --timestamp=none "$(PACKAGE_APP_DIR)"
 	@echo "Desktop package ready: $(PACKAGE_APP_DIR)"
 
@@ -101,6 +105,8 @@ package-desktop-smoke: package-desktop
 	@test -f "$(PACKAGE_FRAMEWORKS_DIR)/libvulkan.1.dylib" || (echo "Missing bundled libvulkan.1.dylib"; exit 1)
 	@test -f "$(PACKAGE_FRAMEWORKS_DIR)/libMoltenVK.dylib" || (echo "Missing bundled libMoltenVK.dylib"; exit 1)
 	@test -f "$(PACKAGE_CONTENTS_DIR)/Info.plist" || (echo "Missing Info.plist"; exit 1)
+	@test -f "$(PACKAGE_TOOLS_DIR)/managed_mesh_assets.py" || (echo "Missing bundled managed STL helper"; exit 1)
+	@test -x "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture" || (echo "Missing bundled managed STL compiler"; exit 1)
 	@test "$$('/usr/libexec/PlistBuddy' -c 'Print :CFBundleIdentifier' "$(PACKAGE_CONTENTS_DIR)/Info.plist")" = "$(PACKAGE_BUNDLE_ID)" || (echo "Packaged bundle identifier mismatch"; exit 1)
 	@test "$$('/usr/libexec/PlistBuddy' -c 'Print :CFBundleDisplayName' "$(PACKAGE_CONTENTS_DIR)/Info.plist")" = "$(PACKAGE_DISPLAY_NAME)" || (echo "Packaged display name mismatch"; exit 1)
 	@test -f "$(PACKAGE_BUNDLED_ICON_PATH)" || (echo "Missing bundled AppIcon.icns"; exit 1)
@@ -214,6 +220,7 @@ package-desktop-main-edit-self-test: package-desktop-main-edit
 		--profile "$(MAIN_EDIT_PACKAGE_PROFILE)" \
 		--version "$(RELEASE_VERSION)"
 	@HOME="$(abspath $(BUILD_DIR_BASE)/package-main-edit-self-test/home)" "$(MAIN_EDIT_PACKAGE_APP_DIR)/Contents/MacOS/raytracing-launcher" --self-test
+	@python3 tests/integration/test_packaged_managed_mesh_import.py --app "$(MAIN_EDIT_PACKAGE_APP_DIR)"
 	@HOME="$(abspath $(BUILD_DIR_BASE)/package-main-edit-self-test/home)" "$(MAIN_EDIT_PACKAGE_APP_DIR)/Contents/MacOS/raytracing-launcher" --print-config > "$(BUILD_DIR_BASE)/package-main-edit-self-test/print-config.txt"
 	@/usr/bin/grep -F "RAY_TRACING_PACKAGE_PROFILE=$(MAIN_EDIT_PACKAGE_PROFILE)" "$(BUILD_DIR_BASE)/package-main-edit-self-test/print-config.txt" >/dev/null || (echo "Main-edit launcher profile mismatch"; exit 1)
 	@/usr/bin/grep -F "/Library/Application Support/$(MAIN_EDIT_PACKAGE_RUNTIME_NAMESPACE)/runtime" "$(BUILD_DIR_BASE)/package-main-edit-self-test/print-config.txt" >/dev/null || (echo "Main-edit runtime namespace mismatch"; exit 1)

@@ -13,6 +13,10 @@ existing managed candidate command. On macOS, Choose opens an app-owned native
 file panel; the path returns directly after Open, without waiting for a separate
 AppleScript process. Escape or Cancel closes the import panel or import job and
 leaves the scene unchanged.
+The desktop package includes the managed STL helper and mesh compiler, and the
+editor uses their app-bundle paths. A selected STL can therefore be imported
+without a source checkout or a separately built helper. Import copies the
+selected STL into the scene project while leaving the original file intact.
 
 This is a bounded U2.4 source slice, not completion of the full workflow.
 Library placement still follows the legacy object path and has not yet been

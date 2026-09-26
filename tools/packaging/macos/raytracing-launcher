@@ -187,6 +187,10 @@ export RAY_TRACING_RENDER_METRICS_DATASET_PATH="${RAY_TRACING_RENDER_METRICS_DAT
 export RAY_TRACING_PACKAGE_PROFILE="${RAY_TRACING_PACKAGE_PROFILE:-$PACKAGE_PROFILE}"
 export RAY_TRACING_BUILD_LABEL="${RAY_TRACING_BUILD_LABEL:-$BUILD_LABEL}"
 export RAY_TRACING_BUILD_IDENTITY_FILE="${RAY_TRACING_BUILD_IDENTITY_FILE:-$BUILD_IDENTITY_FILE}"
+if [ -f "$TOOLS_DIR/managed_mesh_assets.py" ] && [ -x "$TOOLS_DIR/compile_runtime_fixture" ]; then
+    export RAY_TRACING_MANAGED_MESH_HELPER="$TOOLS_DIR/managed_mesh_assets.py"
+    export RAY_TRACING_MANAGED_MESH_COMPILER="$TOOLS_DIR/compile_runtime_fixture"
+fi
 if [ -x "$TOOLS_DIR/ffmpeg" ] && [ -z "${RAY_TRACING_FFMPEG_BIN:-}" ]; then
     export RAY_TRACING_FFMPEG_BIN="$TOOLS_DIR/ffmpeg"
 fi
@@ -240,6 +244,8 @@ if [ "${1:-}" = "--print-config" ]; then
     echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
     echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
     echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    echo "RAY_TRACING_MANAGED_MESH_HELPER=${RAY_TRACING_MANAGED_MESH_HELPER:-}"
+    echo "RAY_TRACING_MANAGED_MESH_COMPILER=${RAY_TRACING_MANAGED_MESH_COMPILER:-}"
     echo "PATH=$PATH"
     echo "VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-}"
     echo "VK_DRIVER_FILES=${VK_DRIVER_FILES:-}"
@@ -279,6 +285,8 @@ if [ "${1:-}" = "--self-test" ]; then
     [ -f "$RUNTIME_DIR/shaders/line.vert.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
     [ -f "$RUNTIME_DIR/shaders/line.frag.spv" ] || { echo "missing: bundled runtime line shader" >&2; exit 1; }
     [ -f "$MOLTENVK_DYLIB" ] || { echo "missing: bundled MoltenVK dylib" >&2; exit 1; }
+    [ -f "${RAY_TRACING_MANAGED_MESH_HELPER:-}" ] || { echo "missing: bundled managed STL helper" >&2; exit 1; }
+    [ -x "${RAY_TRACING_MANAGED_MESH_COMPILER:-}" ] || { echo "missing: bundled managed STL compiler" >&2; exit 1; }
     [ -d "$RUNTIME_DIR" ] || { echo "missing: runtime state dir ($RUNTIME_DIR)" >&2; exit 1; }
     echo "self-test: ok"
     echo "RAY_TRACING_PACKAGE_PROFILE=$RAY_TRACING_PACKAGE_PROFILE"
@@ -296,6 +304,8 @@ if [ "${1:-}" = "--self-test" ]; then
     echo "RAY_TRACING_FONT_PRESET=$RAY_TRACING_FONT_PRESET"
     echo "RAY_TRACING_RENDER_METRICS_DATASET_PATH=$RAY_TRACING_RENDER_METRICS_DATASET_PATH"
     echo "RAY_TRACING_FFMPEG_BIN=${RAY_TRACING_FFMPEG_BIN:-}"
+    echo "RAY_TRACING_MANAGED_MESH_HELPER=${RAY_TRACING_MANAGED_MESH_HELPER:-}"
+    echo "RAY_TRACING_MANAGED_MESH_COMPILER=${RAY_TRACING_MANAGED_MESH_COMPILER:-}"
     echo "PATH=$PATH"
     echo "VK_ICD_FILENAMES=${VK_ICD_FILENAMES:-}"
     echo "VK_DRIVER_FILES=${VK_DRIVER_FILES:-}"
