@@ -63,6 +63,7 @@ package-desktop: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 		echo "Skipping bundled ffmpeg for TARGET_ARCH=$(TARGET_ARCH)"; \
 	fi
 	@cp "tools/managed_mesh_assets.py" "$(PACKAGE_TOOLS_DIR)/managed_mesh_assets.py"
+	@cp "tools/managed_mesh_placement.py" "$(PACKAGE_TOOLS_DIR)/managed_mesh_placement.py"
 	@cp "$(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)" "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"
 	@chmod +x "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"
 	@cp -R config "$(PACKAGE_RESOURCES_DIR)/"
@@ -106,6 +107,7 @@ package-desktop-smoke: package-desktop
 	@test -f "$(PACKAGE_FRAMEWORKS_DIR)/libMoltenVK.dylib" || (echo "Missing bundled libMoltenVK.dylib"; exit 1)
 	@test -f "$(PACKAGE_CONTENTS_DIR)/Info.plist" || (echo "Missing Info.plist"; exit 1)
 	@test -f "$(PACKAGE_TOOLS_DIR)/managed_mesh_assets.py" || (echo "Missing bundled managed STL helper"; exit 1)
+	@test -f "$(PACKAGE_TOOLS_DIR)/managed_mesh_placement.py" || (echo "Missing bundled managed STL placement helper"; exit 1)
 	@test -x "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture" || (echo "Missing bundled managed STL compiler"; exit 1)
 	@test "$$('/usr/libexec/PlistBuddy' -c 'Print :CFBundleIdentifier' "$(PACKAGE_CONTENTS_DIR)/Info.plist")" = "$(PACKAGE_BUNDLE_ID)" || (echo "Packaged bundle identifier mismatch"; exit 1)
 	@test "$$('/usr/libexec/PlistBuddy' -c 'Print :CFBundleDisplayName' "$(PACKAGE_CONTENTS_DIR)/Info.plist")" = "$(PACKAGE_DISPLAY_NAME)" || (echo "Packaged display name mismatch"; exit 1)

@@ -57,6 +57,7 @@ SceneEditorPaneHost* SceneEditorGetPaneHost(void);
 const SceneEditorDigestOverlayNavState* SceneEditorGetViewportNavState(void);
 bool SceneEditorToggleSelectedLightTimeline(void);
 bool SceneEditorFrameViewport(bool selected_only);
+bool SceneEditorFrameImportedObject(void);
 void SceneEditorRestoreViewportNav(const SceneEditorDigestOverlayNavState* state);
 
 // Scene Mode Management

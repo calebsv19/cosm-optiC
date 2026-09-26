@@ -418,10 +418,12 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_secondary_footprint_t4.h"
 #include "scene_editor_material_performance_t4.h"
 
+#include "scene_editor_skull_placement_acceptance.h"
+
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
-    assert(argc == 3 || argc == 4);
+    assert(argc == 3 || argc == 4 || argc == 5);
     bool reopen_only = argc == 4 && strcmp(argv[3], "--reopen") == 0;
     bool review_only = argc == 4 && strcmp(argv[3], "--review") == 0; /* Task-owned working directory and copied runtime scene. */
     assert(chdir(argv[1]) == 0);
@@ -438,6 +440,10 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if (argc==5 && !strcmp(argv[3],"--skull-placement")) {
+        skull_placement_acceptance(&editor,argv);
+        return 0;
+    }
     if(argc==4 && !strcmp(argv[3],"--mapping-panel")) {
         surface_mapping_panel_probe(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

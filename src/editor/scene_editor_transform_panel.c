@@ -2,6 +2,7 @@
 #include "editor/scene_editor_surface_mapping_panel.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_object_move_gizmo.h"
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "editor/scene_editor_transform_feedback.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "material/material_manager.h"
@@ -54,6 +55,8 @@ static bool s_import_open, s_surface_open;
 static char s_import_source[PATH_MAX];
 static SDL_Rect s_duplicate_button;
 static SDL_Rect s_remove_button;
+static char s_delete_confirm_id[128];
+static unsigned long long s_delete_confirm_revision;
 static SDL_Rect s_import_unit_buttons[2];
 static SDL_Rect s_import_button;
 static SDL_Rect s_crease_angle_field;
@@ -72,6 +75,8 @@ static TransformPanelJobKind s_job_kind = TRANSFORM_PANEL_JOB_NONE;
 static unsigned long long s_job_document_revision = 0u;
 static bool s_controls_active = false;
 static char s_candidate_path[PATH_MAX];
+static char s_job_object_id[65];
+static char s_pending_frame_import_id[65];
 static double s_import_scale = 1.0;
 static SDL_Rect s_import_apply_button;
 static SDL_Rect s_import_cancel_button;
@@ -95,6 +100,18 @@ static void panel_status(const char* text, bool error) {
     snprintf(s_status, sizeof(s_status), "%s", text ? text : "");
     s_status_color = error ? (SDL_Color){255, 170, 140, 255}
                            : (SDL_Color){180, 225, 190, 255};
+}
+
+static bool panel_delete_pending_for(int selected) {
+    char id[128] = {0};
+    if (selected < 0 || !s_delete_confirm_id[0] ||
+        s_delete_confirm_revision != SceneEditorDocumentRevision() ||
+        !runtime_scene_bridge_get_last_object_id_for_scene_index(selected,id,sizeof(id)) ||
+        strcmp(id,s_delete_confirm_id) != 0) {
+        s_delete_confirm_id[0] = '\0';
+        return false;
+    }
+    return true;
 }
 
 static bool panel_mutation_allowed(void) {
@@ -354,6 +371,8 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
     s_job_started_ticks = SDL_GetTicks();
     s_job_kind = kind;
     s_job_document_revision = SceneEditorDocumentRevision();
+    snprintf(s_job_object_id,sizeof(s_job_object_id),"%s",
+             kind == TRANSFORM_PANEL_JOB_IMPORT ? generated_id : "");
     panel_status(kind == TRANSFORM_PANEL_JOB_IMPORT ? "Compiling managed STL..."
                                                     : "Rebuilding shading variant...",
                  false);
@@ -454,14 +473,20 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     }
 
     if (selected >= 0) {
+    bool delete_pending = panel_delete_pending_for(selected);
     s_duplicate_button = (SDL_Rect){bounds.x, y, (bounds.w - gap) / 2, field_h};
     s_remove_button = (SDL_Rect){s_duplicate_button.x + s_duplicate_button.w + gap,
                                  y,
                                  bounds.w - s_duplicate_button.w - gap,
                                  field_h};
-    panel_draw_button(renderer, s_duplicate_button, "Duplicate", editable, false);
-    panel_draw_button(renderer, s_remove_button, "Remove", editable, false);
+    panel_draw_button(renderer, s_duplicate_button, delete_pending ? "Cancel" : "Duplicate", editable, false);
+    panel_draw_button(renderer, s_remove_button, delete_pending ? "Confirm delete" : "Delete...", editable, delete_pending);
     y += field_h + gap;
+    if (delete_pending) {
+        SceneEditorLabelLeft(renderer,(SDL_Rect){bounds.x,y,bounds.w,20},
+                             "Delete from scene? Undo can restore it.",palette.text_muted);
+        y += 22;
+    }
     }
 
     if(has_transform) y=SceneEditorSurfaceMappingPanelRender(renderer,bounds,y,selected,editable);
@@ -686,6 +711,11 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
         s_surface_open=!s_surface_open; return true;
     }
     if (panel_point_in_rect(event->button.x, event->button.y, &s_duplicate_button)) {
+        if (panel_delete_pending_for(selected)) {
+            s_delete_confirm_id[0]='\0';
+            panel_status("Delete cancelled",false);
+            return true;
+        }
         int new_index = -1;
         bool ok = panel_mutation_allowed() &&
                   SceneEditorDocumentDuplicateForSceneIndex(selected,
@@ -697,12 +727,28 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
         return true;
     }
     if (panel_point_in_rect(event->button.x, event->button.y, &s_remove_button)) {
+        if (!panel_mutation_allowed()) return true;
+        if (!SceneEditorDocumentObjectEditable(selected,diagnostics,sizeof(diagnostics))) {
+            panel_status(diagnostics,true);
+            return true;
+        }
+        if (!panel_delete_pending_for(selected)) {
+            if (!runtime_scene_bridge_get_last_object_id_for_scene_index(
+                    selected,s_delete_confirm_id,sizeof(s_delete_confirm_id))) {
+                panel_status("Selected object has no stable ID",true);
+                return true;
+            }
+            s_delete_confirm_revision=SceneEditorDocumentRevision();
+            panel_status("Press Confirm delete to remove this object; Undo restores it",false);
+            return true;
+        }
+        s_delete_confirm_id[0]='\0';
         bool ok = panel_mutation_allowed() &&
                   SceneEditorDocumentRemoveForSceneIndex(selected,
                                                           diagnostics,
                                                           sizeof(diagnostics));
         if (ok) ObjectEditorSetSelectedObjectIndex(-1);
-        panel_status(ok ? "Object removed" : diagnostics, !ok);
+        panel_status(ok ? "Object deleted; Undo can restore it" : diagnostics, !ok);
         return true;
     }
     if (panel_point_in_rect(event->button.x, event->button.y, &s_crease_angle_field) &&
@@ -877,6 +923,14 @@ bool SceneEditorTransformPanelImportApplyControl(SDL_Rect* out) {
     *out=s_import_apply_button; return true;
 }
 
+bool SceneEditorTransformPanelDeleteControl(SDL_Rect* out, bool* confirmation_pending) {
+    if (!out || s_remove_button.w<=0) return false;
+    *out=s_remove_button;
+    if (confirmation_pending) *confirmation_pending=panel_delete_pending_for(
+        ObjectEditorGetSelectedObjectIndex());
+    return true;
+}
+
 bool SceneEditorTransformPanelPoll(void) {
     bool changed = false;
     if (s_picker.active) {
@@ -913,6 +967,16 @@ bool SceneEditorTransformPanelPoll(void) {
                                                                       diagnostics,
                                                                       sizeof(diagnostics));
             }
+            if (success && s_job_kind==TRANSFORM_PANEL_JOB_IMPORT && s_job_object_id[0]) {
+                int imported_index=sceneSettings.objectCount-1;
+                char imported_id[128]={0};
+                if (imported_index>=0 && runtime_scene_bridge_get_last_object_id_for_scene_index(
+                        imported_index,imported_id,sizeof(imported_id)) &&
+                    strcmp(imported_id,s_job_object_id)==0) {
+                    ObjectEditorSetSelectedObjectIndex(imported_index);
+                    snprintf(s_pending_frame_import_id,sizeof(s_pending_frame_import_id),"%s",s_job_object_id);
+                }
+            }
             if (s_candidate_path[0]) {
                 (void)unlink(s_candidate_path);
                 s_candidate_path[0] = '\0';
@@ -926,10 +990,29 @@ bool SceneEditorTransformPanelPoll(void) {
             s_job_pid = -1;
             s_job_kind = TRANSFORM_PANEL_JOB_NONE;
             s_job_document_revision = 0u;
+            s_job_object_id[0]='\0';
             changed = true;
         }
     }
     return changed;
+}
+
+void SceneEditorTransformPanelFrameReadyImport(void) {
+    char selected_id[128]={0};
+    int selected=ObjectEditorGetSelectedObjectIndex();
+    if (!s_pending_frame_import_id[0]) return;
+    bool same=selected>=0 && runtime_scene_bridge_get_last_object_id_for_scene_index(
+        selected,selected_id,sizeof(selected_id)) &&
+        strcmp(selected_id,s_pending_frame_import_id)==0;
+    s_pending_frame_import_id[0]='\0';
+    if (!same) return;
+    if (!SceneEditorMeshPreviewStoreHasSceneObject(selected) ||
+        SceneEditorMeshPreviewStoreSceneObjectUsesBoundsFallback(selected)) {
+        panel_status("Mesh imported, but detailed viewport preview is unavailable",true);
+        return;
+    }
+    if (!SceneEditorFrameImportedObject())
+        panel_status("Mesh imported, but automatic framing failed",true);
 }
 
 bool SceneEditorTransformPanelInteractionActive(void) {
@@ -940,6 +1023,9 @@ bool SceneEditorTransformPanelInteractionActive(void) {
 void SceneEditorTransformPanelReset(void) {
     SceneEditorSurfaceMappingPanelReset();
     panel_cancel_edit();
+    s_delete_confirm_id[0]='\0';
+    s_job_object_id[0]='\0';
+    s_pending_frame_import_id[0]='\0';
     if (s_picker_initialized && s_picker.active) {
         RayTracing_FolderPicker_Cancel(&s_picker);
     }

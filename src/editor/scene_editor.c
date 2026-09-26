@@ -194,6 +194,17 @@ bool SceneEditorFrameViewport(bool selected_only) {
     return ok;
 }
 
+bool SceneEditorFrameImportedObject(void) {
+    if (!SceneEditorFrameViewport(true)) return false;
+    /* Keep the new object visible with enough surrounding scene to place it. */
+    g_viewport_nav_state.overlay_zoom *= 0.35;
+    if (g_viewport_nav_state.zoom_limits_valid &&
+        g_viewport_nav_state.overlay_zoom < g_viewport_nav_state.zoom_min)
+        g_viewport_nav_state.overlay_zoom = g_viewport_nav_state.zoom_min;
+    SceneEditorChromeShellSetActionFeedback("Imported mesh selected in scene", 2400);
+    return true;
+}
+
 static void SceneEditorResumeAfterPreview(SceneEditor* editor) {
     if (!editor || !editor->window || !editor->renderer) return;
     SDL_CaptureMouse(SDL_FALSE);

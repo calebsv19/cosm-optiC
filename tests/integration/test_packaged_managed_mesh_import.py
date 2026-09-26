@@ -19,8 +19,9 @@ def main():
     args = parser.parse_args()
     tools = args.app / 'Contents/Resources/bin'
     helper = tools / 'managed_mesh_assets.py'
+    placement = tools / 'managed_mesh_placement.py'
     compiler = tools / 'compile_runtime_fixture'
-    assert helper.is_file() and compiler.is_file(), 'packaged managed mesh tools missing'
+    assert helper.is_file() and placement.is_file() and compiler.is_file(), 'packaged managed mesh tools missing'
     source = args.source or ROOT / 'third_party/codework_shared/core/core_mesh_compile/tests/fixtures/imports/tetrahedron_ascii.stl'
     with tempfile.TemporaryDirectory(prefix='optic-packaged-stl-') as directory:
         project = Path(directory)

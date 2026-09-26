@@ -15,7 +15,12 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
+# The helper also runs inside a signed app bundle. Importing its sibling module
+# must not create __pycache__ under sealed Contents/Resources at runtime.
+sys.dont_write_bytecode = True
+from managed_mesh_placement import place_new_instance
 
 SCHEMA = 'optic_managed_mesh_assets_v1'
 MODES = {'flat', 'smooth', 'crease_aware'}
@@ -102,7 +107,9 @@ def effective(cat, setting):
 
 def recipe(asset, shading, compiler):
     return {'source_sha256': asset['source_sha256'], 'import': asset['import'],
-            'shading': shading, 'compiler_sha256': digest(compiler), 'recipe_version': 1}
+            'shading': shading, 'compiler_sha256': digest(compiler),
+            'recipe_version': 2 if asset.get('placement_policy') == 'center_floor_v1' else 1,
+            **({'placement_policy': 'center_floor_v1'} if asset.get('placement_policy') == 'center_floor_v1' else {})}
 
 
 def compile_variant(root, asset, shading, compiler):
@@ -132,13 +139,29 @@ def compile_variant(root, asset, shading, compiler):
         runtime = json.loads(r.read_text())
         if runtime['asset_id'] != runtime_id or not runtime['mesh']['triangle_count']:
             raise ValueError('compiler returned invalid runtime mesh')
-        data = r.read_bytes()
+        if asset.get('placement_policy') == 'center_floor_v1':
+            bounds = runtime['local_bounds']
+            offset = {'x': (bounds['min']['x'] + bounds['max']['x']) / 2,
+                      'y': (bounds['min']['y'] + bounds['max']['y']) / 2,
+                      'z': bounds['min']['z']}
+            for vertex in runtime['mesh']['vertices']:
+                for axis in ('x', 'y', 'z'):
+                    vertex[axis] -= offset[axis]
+            for edge in ('min', 'max'):
+                for axis in ('x', 'y', 'z'):
+                    bounds[edge][axis] -= offset[axis]
+            # Keep the derived runtime compact. Very large meshes still exceed
+            # the lightweight loader's cap and use the preview-store recovery.
+            data = (json.dumps(runtime, separators=(',', ':'), allow_nan=False) + '\n').encode()
+        else:
+            data = r.read_bytes()
     publish(path_in(root, rel), data)
     author_rel = f'assets/mesh_assets/{runtime_id}.authoring.json'
     publish(path_in(root, author_rel), encode(authoring))
     return {'runtime_id': runtime_id, 'runtime': rel, 'runtime_sha256': hashlib.sha256(data).hexdigest(),
             'authoring': author_rel, 'authoring_sha256': hashlib.sha256(encode(authoring)).hexdigest(),
-            'recipe': spec, 'normal_provenance': runtime['mesh'].get('normal_provenance', 'none')}
+            'recipe': spec, 'normal_provenance': runtime['mesh'].get('normal_provenance', 'none'),
+            **({'source_origin_offset': offset} if asset.get('placement_policy') == 'center_floor_v1' else {})}
 
 
 def resolve_all(root, scene, compiler):
@@ -195,9 +218,15 @@ def status(scene_path, compiler=None):
             continue
         chosen = effective(cat, setting)
         v = setting['compiled']
-        expected = {'source_sha256': cat['assets'][setting['asset_id']]['source_sha256'],
-                    'import': cat['assets'][setting['asset_id']]['import'], 'shading': chosen,
-                    'compiler_sha256': digest(compiler) if compiler else v['recipe']['compiler_sha256'], 'recipe_version': 1}
+        asset = cat['assets'][setting['asset_id']]
+        placement = asset.get('placement_policy')
+        if placement not in (None, 'center_floor_v1'):
+            raise ValueError('unsupported managed placement policy')
+        expected = {'source_sha256': asset['source_sha256'],
+                    'import': asset['import'], 'shading': chosen,
+                    'compiler_sha256': digest(compiler) if compiler else v['recipe']['compiler_sha256'],
+                    'recipe_version': 2 if placement else 1,
+                    **({'placement_policy': placement} if placement else {})}
         ready = v['recipe'] == expected
         key = hashlib.sha256(encode(v['recipe'])).hexdigest()
         if v['runtime_id'] != 'managed_' + key[:40]:
@@ -215,7 +244,7 @@ def status(scene_path, compiler=None):
 def update(scene_path, compiler, *, source=None, asset_id=None, object_id=None,
            shading='inherit', default_mode='flat', crease_angle=60, scale=1.0,
            weld_tolerance=1e-6, smoothing_enabled=None, spawn=None,
-           output_scene=None):
+           output_scene=None, auto_place=False):
     """Intake/bind, change policy, or rebuild. Existing objects are preserved.
 
     spawn is an optional complete scene object; its ID must not already exist.
@@ -253,7 +282,9 @@ def update(scene_path, compiler, *, source=None, asset_id=None, object_id=None,
             publish(path_in(root, rel), data)
             cat['assets'][asset_id] = {'source': rel, 'source_sha256': sha,
                 'original_name': Path(source).name, 'default_shading': policy(default_mode, crease_angle),
-                'import': {'source_to_asset_scale': scale, 'weld_vertices': True, 'weld_tolerance': weld_tolerance}}
+                'import': {'source_to_asset_scale': scale, 'weld_vertices': True, 'weld_tolerance': weld_tolerance},
+                **({'placement_policy': 'center_floor_v1'} if auto_place else {})}
+        context_objects = list(scene['objects'])
         if spawn is not None:
             scene['objects'].append(copy.deepcopy(spawn))
             check_scene(scene)
@@ -269,6 +300,11 @@ def update(scene_path, compiler, *, source=None, asset_id=None, object_id=None,
                 raise ValueError('unknown managed asset')
             ext['managed_mesh'] = {'asset_id': selected, 'shading': 'inherit' if shading == 'inherit' else policy(shading, crease_angle)}
         resolve_all(root, scene, compiler)
+        if spawn is not None and auto_place:
+            instance = scene['objects'][-1]
+            placement_scene = {'objects': context_objects, 'extensions': scene['extensions']}
+            compiled = instance['extensions']['ray_tracing']['managed_mesh']['compiled']
+            place_new_instance(placement_scene, instance, path_in(root, compiled['runtime']))
         with tempfile.NamedTemporaryFile(dir=root, suffix='.json', delete=False) as f:
             pending = Path(f.name)
             f.write(encode(scene)); f.flush(); os.fsync(f.fileno())
@@ -349,7 +385,7 @@ def main():
                 object_id=a.object_id, shading=a.shading, default_mode=a.default_mode,
                 crease_angle=a.crease_angle, scale=a.scale, weld_tolerance=a.weld_tolerance,
                 smoothing_enabled=None if a.smoothing is None else a.smoothing == 'on',
-                spawn=spawn, output_scene=a.output_scene)
+                spawn=spawn, output_scene=a.output_scene, auto_place=spawn is not None)
         print(json.dumps(result, indent=2))
         return 0 if result['status'] != 'rebuild_required' else 1
     except (ValueError, KeyError, TypeError, OSError, subprocess.CalledProcessError) as e:

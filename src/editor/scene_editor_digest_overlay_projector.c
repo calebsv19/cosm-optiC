@@ -2,6 +2,7 @@
 
 #include <math.h>
 
+#include "editor/scene_editor_mesh_preview_store.h"
 #include "import/runtime_mesh_asset_loader.h"
 
 #ifndef M_PI
@@ -265,6 +266,45 @@ static void scene_editor_digest_overlay_accumulate_mesh_asset_extents(
     }
 }
 
+/* The editor deliberately loads large runtime meshes through its bounded
+ * preview route.  Those instances are absent from the full mesh set, but the
+ * probe retains exact local bounds and the object transform.  Framing must use
+ * that geometry instead of the fallback point at the authored origin. */
+static void scene_editor_digest_overlay_accumulate_preview_mesh_extents(
+    int selected_object_index,
+    bool* seeded,
+    double* min_x, double* min_y, double* min_z,
+    double* max_x, double* max_y, double* max_z) {
+    if (selected_object_index<0) return;
+    for (int i=0;i<SceneEditorMeshPreviewStoreInstanceCount();++i) {
+        const RayTracingRuntimeMeshAssetInstance* instance=SceneEditorMeshPreviewStoreGetInstance(i);
+        if (!instance || instance->scene_object_index!=selected_object_index) continue;
+        const CoreMeshAssetBounds3* bounds=SceneEditorMeshPreviewStoreGetBounds(instance->asset_index);
+        if (!bounds) continue;
+        double pivot[3]={0};
+        if (instance->rotation_pivot_policy==RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM) {
+            pivot[0]=instance->rotation_pivot_x*instance->scale_x;
+            pivot[1]=instance->rotation_pivot_y*instance->scale_y;
+            pivot[2]=instance->rotation_pivot_z*instance->scale_z;
+        } else if (instance->rotation_pivot_policy==RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER) {
+            pivot[0]=(bounds->min.x+bounds->max.x)*0.5*instance->scale_x;
+            pivot[1]=(bounds->min.y+bounds->max.y)*0.5*instance->scale_y;
+            pivot[2]=(bounds->min.z+bounds->max.z)*0.5*instance->scale_z;
+        }
+        for (int corner=0;corner<8;++corner) {
+            double x=((corner&1) ? bounds->max.x : bounds->min.x)*instance->scale_x-pivot[0];
+            double y=((corner&2) ? bounds->max.y : bounds->min.y)*instance->scale_y-pivot[1];
+            double z=((corner&4) ? bounds->max.z : bounds->min.z)*instance->scale_z-pivot[2];
+            scene_editor_digest_overlay_rotate_mesh_point(&x,&y,&z,instance);
+            scene_editor_digest_overlay_accumulate_extents(
+                x+pivot[0]+instance->position_x,
+                y+pivot[1]+instance->position_y,
+                z+pivot[2]+instance->position_z,
+                seeded,min_x,min_y,min_z,max_x,max_y,max_z);
+        }
+    }
+}
+
 static bool scene_editor_digest_overlay_seed_matches_object(
     const RuntimeSceneBridgePrimitiveSeed* primitive,
     int scene_object_index) {
@@ -439,6 +479,8 @@ bool SceneEditorDigestOverlayResolveObjectExtents(const RuntimeSceneBridge3DDige
     double span_max = 0.0;
     bool seeded = false;
     scene_editor_digest_overlay_accumulate_mesh_asset_extents(scene_object_index,&seeded,
+        &min_x,&min_y,&min_z,&max_x,&max_y,&max_z);
+    if (!seeded) scene_editor_digest_overlay_accumulate_preview_mesh_extents(scene_object_index,&seeded,
         &min_x,&min_y,&min_z,&max_x,&max_y,&max_z);
     if (!seeded) seeded = scene_editor_digest_overlay_resolve_object_seed_extents(scene_object_index,
                                                                      &min_x,

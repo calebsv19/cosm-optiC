@@ -22,6 +22,20 @@ loop iteration, including while idle. Import displays elapsed time and keeps
 Cancel available until the helper completes; the completed candidate is then
 adopted through the document command path.
 
+New STL instances use measured scene-relative placement: the managed compiler
+recenters the imported geometry around its floor and records the source-origin
+offset without changing the STL. The Add flow sizes the object against the
+largest visible horizontal floor, places it in an open floor area, selects it,
+and frames it after the preview geometry is ready. If no suitable floor exists,
+it uses the visible object cluster or a one-meter default for an empty scene.
+Frame Selected also uses recovered preview
+bounds for large meshes omitted by the lightweight scene loader. In the Scene
+Inspector, Delete... requires a second Confirm delete press for the selected
+object; Cancel or changing selection abandons confirmation. Delete is one
+undoable document command, and saving persists the removal. The copied skull
+scene acceptance covers import, selection, frame, move, Undo/Redo, confirmation,
+save, and reopen; it does not change the original scene.
+
 This is a bounded U2.4 source slice, not completion of the full workflow.
 Library placement still follows the legacy object path and has not yet been
 proved as one retained command. Actual native-panel selection and installed-app
@@ -557,7 +571,9 @@ and dedicated native 3D/material canvas routes; show panes for legacy 2D tools.
 
 Import STL and source meters/mm are available even with no selected object.
 Dropping an STL onto the editor uses the same managed import path and selected
-source units as the file picker. Instance transforms preserve original STL bytes.
+source units as the file picker. Instance transforms preserve original STL bytes;
+new import recipes record their center/floor recentering policy and source-origin
+offset so placement does not rewrite the source mesh.
 Managed candidate adoption saves atomically and retains Undo history; subsequent
 numeric/material edits remain dirty until saved. Invalid numeric drafts cannot
 mutate the document and can be canceled with Escape.

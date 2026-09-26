@@ -50,12 +50,14 @@ bool SceneEditorObjectTransformPreviewPrimitive(const RuntimeSceneBridgePrimitiv
 void SceneEditorObjectTransformHandleOrigin(int object_index,SceneEditorObjectTransformMode mode,
     const double fallback[3],double position[3]) {
     for (int i=0;i<3;++i) position[i]=fallback[i]*SceneEditorDocumentWorldScale();
-    if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE) return;
     for (int i=0;i<SceneEditorMeshPreviewStoreInstanceCount();++i) {
         const RayTracingRuntimeMeshAssetInstance* mesh=SceneEditorMeshPreviewStoreGetInstance(i);
         if (!mesh || mesh->scene_object_index!=object_index) continue;
+        if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE &&
+            mesh->rotation_pivot_policy!=RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_BOUNDS_CENTER) return;
         position[0]=mesh->position_x;position[1]=mesh->position_y;position[2]=mesh->position_z;
-        if (mode!=SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE) return;
+        if (mode!=SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE &&
+            mode!=SCENE_EDITOR_OBJECT_TRANSFORM_MOVE) return;
         double pivot[3]={0};
         if (mesh->rotation_pivot_policy==RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM) {
             pivot[0]=mesh->rotation_pivot_x;pivot[1]=mesh->rotation_pivot_y;pivot[2]=mesh->rotation_pivot_z;
@@ -70,6 +72,7 @@ void SceneEditorObjectTransformHandleOrigin(int object_index,SceneEditorObjectTr
         position[0]+=pivot[0]*mesh->scale_x;position[1]+=pivot[1]*mesh->scale_y;position[2]+=pivot[2]*mesh->scale_z;
         return;
     }
+    if (mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE) return;
     RuntimeSceneBridge3DPrimitiveSeedState seeds={0};
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
     for (int i=0;seeds.valid && i<seeds.primitive_count;++i) if (seeds.primitives[i].scene_object_index==object_index) {

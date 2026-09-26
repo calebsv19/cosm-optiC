@@ -49,6 +49,7 @@ static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
         SceneEditorMeshPreviewRenderReset(editor->renderer);
         SceneEditorMeshPreviewModeSet(retained_mode);
         SceneEditorMeshPreviewStorePrepare(ray_tracing_runtime_mesh_assets_last());
+        SceneEditorTransformPanelFrameReadyImport();
         preview_revision=revision;
     }
 
