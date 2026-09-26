@@ -5,6 +5,8 @@
 The bounded U2.4 Add/import/placement and Inspector-delete baseline is committed
 in registered Main Edit at `041a4aa` before documentation closeout. Canonical
 `main` was a clean ancestor at `f3346f6`, with nine Main Edit-only commits.
+Canonical then fast-forwarded to the documentation closeout tip; both Git lanes
+are aligned at this source baseline.
 Foundation A, pane-host, runtime-bridge, navigation and mesh-pick contracts pass;
 the copied skull-scene native workflow and committed Main Edit package self-test
 pass. The Desktop Main Edit app identifies `main-edit-0.17.0-041a4aa82b6a` and
