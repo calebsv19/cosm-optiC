@@ -1,5 +1,19 @@
 # RayTracing Main Edit Worktree
 
+## September 26 scene-authoring adoption checkpoint
+
+The bounded U2.4 Add/import/placement and Inspector-delete baseline is committed
+in registered Main Edit at `041a4aa` before documentation closeout. Canonical
+`main` was a clean ancestor at `f3346f6`, with nine Main Edit-only commits.
+Foundation A, pane-host, runtime-bridge, navigation and mesh-pick contracts pass;
+the copied skull-scene native workflow and committed Main Edit package self-test
+pass. The Desktop Main Edit app identifies `main-edit-0.17.0-041a4aa82b6a` and
+the operator reports improved import placement. This adoption records a usable
+source baseline, not completion of library placement or Foundation B. Retain
+the registered Main Edit worktree for later feature work. Canonical source
+adoption does not replace the production app or advance VERSION, release, or
+Registry state.
+
 ## September 24 local proof-history archival
 
 The ignored `build/editor_ui_recovery/` proof tree is no longer retained in this

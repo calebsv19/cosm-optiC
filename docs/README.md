@@ -2,6 +2,10 @@
 
 Start here for public repository documentation.
 
+Scene authoring baseline (September 26, 2026):
+- [Current behavior and remaining U2.4 boundary](current_truth.md#september-26-scene-authoring-baseline)
+- [Add, placement, transform and Inspector behavior](editor_workspace.md#u24-add-workflow-in-main-edit-development-slice)
+
 Editor UI closeout and the next material lane (September 20, 2026):
 - [Editor workspace behavior](editor_workspace.md)
 - [Measured viewport/render material parity gaps](material_viewport_parity.md)

@@ -36,10 +36,11 @@ undoable document command, and saving persists the removal. The copied skull
 scene acceptance covers import, selection, frame, move, Undo/Redo, confirmation,
 save, and reopen; it does not change the original scene.
 
-This is a bounded U2.4 source slice, not completion of the full workflow.
-Library placement still follows the legacy object path and has not yet been
-proved as one retained command. Actual native-panel selection and installed-app
-acceptance must be checked separately from source tests.
+This is a bounded U2.4 baseline, not completion of the full workflow. Library
+placement still follows the legacy object path and has not yet been proved as
+one retained command. The installed Main Edit app was refreshed and the
+operator reported improved placement; a complete installed native-panel
+walkthrough and semantic-command parity remain separate acceptance gates.
 
 ## Shared Material viewport display
 

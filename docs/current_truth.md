@@ -1,5 +1,23 @@
 # optiC Current Truth
 
+## September 26 Scene authoring baseline
+
+The retained Scene document now supports the first practical STL authoring path:
+Add-owned native file selection or drop, explicit source units, managed compile,
+one-command candidate adoption, selected scene-relative placement, transform,
+Undo/Redo, Save/reopen and rendering from the saved scene. New imports preserve
+the source STL and record the runtime recentering recipe. Large mesh preview
+bounds support Frame Selected. The Inspector has two-press Delete with Cancel
+and one-step Undo. The copied skull-scene native test verifies import, selection,
+framing, move, Undo/Redo, delete confirmation, Save and reopen. The isolated
+Main Edit package passes its bundled-helper import and code-signature tests;
+the Desktop Main Edit app was refreshed for operator review. The operator
+reported that the new placement is substantially better. This is a stable
+baseline, not proof of the entire U2.4 contract: library placement, complete
+installed file-picker walkthrough and UI/semantic-command parity remain open.
+Foundation B named versions and cross-program document authority have not
+started. See [Editor workspace](editor_workspace.md) for the visible workflow.
+
 ## September 24 ignored proof-history archival
 
 The 30.806 GB logical `build/editor_ui_recovery/` history was moved off the
