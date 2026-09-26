@@ -2,23 +2,22 @@
 
 ## U2.4 Add workflow in Main Edit (development slice)
 
-Scene Add now groups Primitive, Import, Scene, Resource and Asset actions. Box and
-Plane create one-meter objects at the world origin through retained document
-commands, select the result, and support Undo/Redo and Save. Sphere, Light,
-Camera and Volume/Water are labeled unavailable because this runtime scene
-does not yet have equivalent creation transactions. Import Mesh opens an
+Scene Add lists only four usable actions: Box, Plane, Import STL, and Place from
+library. Box and Plane create one-meter objects at the world origin through
+retained document commands, select the result, and support Undo/Redo and Save.
+Import STL opens an
 Add-owned viewport panel with Choose STL, source units, current-scene destination,
 Import and Cancel. The selected-object Inspector contains no import controls.
 Choosing or dropping a readable STL stages it for review; applying uses the
-existing managed candidate command. Escape or Cancel closes the panel, cancels
-an outstanding macOS chooser or import job, and leaves the scene unchanged.
-The chooser remains cancellable even if its child process does not return after
-a file selection.
+existing managed candidate command. On macOS, Choose opens an app-owned native
+file panel; the path returns directly after Open, without waiting for a separate
+AppleScript process. Escape or Cancel closes the import panel or import job and
+leaves the scene unchanged.
 
 This is a bounded U2.4 source slice, not completion of the full workflow.
 Library placement still follows the legacy object path and has not yet been
-proved as one retained command. Native visual acceptance and semantic/UI parity
-also remain open; do not treat the source build as installed-app acceptance.
+proved as one retained command. Actual native-panel selection and installed-app
+acceptance must be checked separately from source tests.
 
 ## Shared Material viewport display
 
@@ -422,8 +421,8 @@ operator rejection of the earlier recovery. Visual acceptance remains open.
   Failed runtime-scene saving keeps the editor open. Active edits, pickers,
   managed jobs and active desktop render work block closing until resolved.
   Leaving without saving does not reverse previously saved edits or imports.
-- **Add → Import STL** reveals units and the file chooser in the inspector;
-  successful import collapses that setup. **Add → Place from library** exposes
+- **Add → Import STL** opens a viewport dialog for the file and source units;
+  successful import closes that dialog. **Add → Place from library** exposes
   the existing placement library and tool. Escape cancels placement.
 - Document commands now refresh the editor mesh cache, so imported meshes and
   transform/history changes appear without restarting. Selected-object framing

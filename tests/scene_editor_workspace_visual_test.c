@@ -604,7 +604,7 @@ int main(int argc, char** argv) {
         click(&editor,addButton);
         assert(SceneEditorWorkspaceProfileMenuOpen());
         capture(&editor,"workspace_add_menu.ppm");
-        for(int step=0;step<5;++step) key(&editor,SDLK_DOWN);
+        for(int step=0;step<2;++step) key(&editor,SDLK_DOWN);
         key(&editor,SDLK_RETURN);
         SceneEditorSessionRuntimeRender(&editor);
         assert(!SceneEditorWorkspaceProfileMenuOpen());
@@ -613,7 +613,7 @@ int main(int argc, char** argv) {
         click(&editor,import_cancel);
         assert(!SceneEditorTransformPanelImportControl("cancel",&import_cancel));
         click(&editor,addButton);
-        for(int step=0;step<5;++step) key(&editor,SDLK_DOWN);
+        for(int step=0;step<2;++step) key(&editor,SDLK_DOWN);
         key(&editor,SDLK_RETURN);
         SceneEditorSessionRuntimeRender(&editor);
         /* The fixture is 1000 mm wide. Exercise the actual source-unit control. */

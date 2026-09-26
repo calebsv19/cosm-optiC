@@ -130,6 +130,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(WORKER_VERSION_HEADER)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/platform/ray_tracing_macos_file_panel.o: $(SRC_DIR)/platform/ray_tracing_macos_file_panel.m
+	@mkdir -p $(dir $@)
+	$(CC) $(ARCH_FLAGS) -Wall -Wextra -Wpedantic -g -Isrc -x objective-c -c $< -o $@
+
 $(BUILD_DIR)/timer_hud/%.o: $(TIMER_HUD_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@

@@ -30,6 +30,9 @@
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "import/runtime_scene_bridge.h"
 #include "platform/ray_tracing_folder_picker.h"
+#if defined(__APPLE__)
+#include "platform/ray_tracing_macos_file_panel.h"
+#endif
 #include "render/render_helper.h"
 
 #define TRANSFORM_FIELD_COUNT 9
@@ -818,11 +821,23 @@ bool SceneEditorTransformPanelImportHandleEvent(const SDL_Event* event) {
         if(panel_point_in_rect(x,y,&s_import_cancel_button)) {panel_cancel_import();return true;}
         if(panel_point_in_rect(x,y,&s_import_button) && !s_picker.active && s_job_pid<=0) {
             char initial[PATH_MAX]={0};
-            if(!s_picker_initialized) {RayTracing_FolderPicker_RequestInit(&s_picker);s_picker_initialized=true;}
             (void)ray_tracing_resolve_import_dir(initial,sizeof(initial));
+#if defined(__APPLE__)
+            char selected[PATH_MAX]={0};
+            RayTracingFolderPickerResult result=RayTracing_MacOSFilePanelSelect(
+                "Choose an STL mesh",initial[0] ? initial : NULL,selected,sizeof(selected));
+            if(result==RAY_TRACING_FOLDER_PICKER_SELECTED)
+                (void)SceneEditorTransformPanelStageImportSTL(selected);
+            else if(result==RAY_TRACING_FOLDER_PICKER_CANCELLED)
+                panel_status("STL selection cancelled",false);
+            else
+                panel_status("File chooser unavailable; choose again or Cancel",true);
+#else
+            if(!s_picker_initialized) {RayTracing_FolderPicker_RequestInit(&s_picker);s_picker_initialized=true;}
             if(!RayTracing_FilePicker_Begin(&s_picker,"Select STL mesh",initial[0] ? initial : NULL))
                 panel_status("File chooser unavailable; choose again or Cancel",true);
             else panel_status("Choose a file, or press Escape / Cancel here",false);
+#endif
             return true;
         }
         if(panel_point_in_rect(x,y,&s_import_apply_button)) {
