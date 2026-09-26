@@ -17,6 +17,10 @@ The desktop package includes the managed STL helper and mesh compiler, and the
 editor uses their app-bundle paths. A selected STL can therefore be imported
 without a source checkout or a separately built helper. Import copies the
 selected STL into the scene project while leaving the original file intact.
+The menu-embedded editor polls managed import and surface-material jobs on every
+loop iteration, including while idle. Import displays elapsed time and keeps
+Cancel available until the helper completes; the completed candidate is then
+adopted through the document command path.
 
 This is a bounded U2.4 source slice, not completion of the full workflow.
 Library placement still follows the legacy object path and has not yet been

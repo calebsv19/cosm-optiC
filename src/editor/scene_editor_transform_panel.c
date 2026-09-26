@@ -67,6 +67,7 @@ static SDL_Color s_status_color = {210, 210, 215, 255};
 static RayTracingFolderPickerRequest s_picker;
 static bool s_picker_initialized = false;
 static pid_t s_job_pid = -1;
+static Uint32 s_job_started_ticks;
 static TransformPanelJobKind s_job_kind = TRANSFORM_PANEL_JOB_NONE;
 static unsigned long long s_job_document_revision = 0u;
 static bool s_controls_active = false;
@@ -350,6 +351,7 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
         _exit(127);
     }
     s_job_pid = child;
+    s_job_started_ticks = SDL_GetTicks();
     s_job_kind = kind;
     s_job_document_revision = SceneEditorDocumentRevision();
     panel_status(kind == TRANSFORM_PANEL_JOB_IMPORT ? "Compiling managed STL..."
@@ -804,7 +806,13 @@ void SceneEditorTransformPanelRenderImportOverlay(SDL_Renderer* renderer, SDL_Re
     panel_draw_button(renderer,s_import_cancel_button,"Cancel",true,false);
     if(s_status[0]) {
         row.y+=39;
-        SceneEditorLabelLeft(renderer,row,s_status,s_status_color);
+        if(s_job_pid>0) {
+            char progress[160];
+            unsigned elapsed=(unsigned)((SDL_GetTicks()-s_job_started_ticks)/1000u);
+            snprintf(progress,sizeof(progress),"%s %um %02us  (Cancel available)",
+                     s_status,elapsed/60u,elapsed%60u);
+            SceneEditorLabelLeft(renderer,row,progress,s_status_color);
+        } else SceneEditorLabelLeft(renderer,row,s_status,s_status_color);
     }
     SDL_RenderSetClipRect(renderer,clipped ? &prior : NULL);
 }

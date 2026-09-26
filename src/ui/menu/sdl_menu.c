@@ -19,6 +19,8 @@
 #include "editor/material_editor_face_preview.h"
 #include "editor/scene_editor.h"
 #include "editor/material_editor_authored_texture_binding.h"
+#include "editor/scene_editor_surface_material_panel.h"
+#include "editor/scene_editor_transform_panel.h"
 #include "engine/Render/render_font.h"
 #include "engine/Render/render_pipeline.h"
 #include "render/font_runtime.h"
@@ -611,6 +613,10 @@ bool RunMenu(void) {
             frame_dirty = true;
         frame_dirty |= menu_input_poll_folder_picker(&menuState);
         frame_dirty |= MaterialEditorAuthoredTextureBindingPoll();
+        if (sceneEditorSessionActive) {
+            frame_dirty |= SceneEditorSurfaceMaterialPanelPoll();
+            frame_dirty |= SceneEditorTransformPanelPoll();
+        }
         if (!running) {
             menu_record_loop_diag(frame_begin_counter, perf_freq, wait_blocked_ms, wait_call_count);
             break;
