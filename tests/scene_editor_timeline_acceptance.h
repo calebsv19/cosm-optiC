@@ -1,4 +1,5 @@
 #include "editor/scene_editor_timeline.h"
+#include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_document_timeline.h"
 #include "editor/camera_editor.h"
@@ -91,18 +92,20 @@ static void timeline_native_acceptance(SceneEditor* editor,const char* scene_pat
     SceneEditorPaneLayout layout;
     assert(SceneEditorGetPaneLayout(&layout) && layout.timeline_visible);
     click(editor,(SDL_Rect){layout.timeline_rect.x+10,layout.timeline_rect.y+10,20,15});
+
     static TimelineDocument timeline;
     assert(SceneEditorDocumentGetTimeline(&timeline)==TIMELINE_STATUS_OK);
     assert(timeline.track_count>=2);
     TimelineSample selection_before,selection_after;
     assert(SceneEditorTimelineCurrentSample(&selection_before));
-    click(editor,(SDL_Rect){layout.timeline_rect.x+10,layout.timeline_rect.y+58,180,18});
+    SDL_Rect channel_rect;assert(SceneEditorTimelineTrackRect(0,&channel_rect));click(editor,channel_rect);
     assert(editor->currentMode==EDITOR_MODE_PATH);
     for(size_t i=0;i<timeline.track_count;++i) if(!strcmp(timeline.tracks[i].property_id,"camera/path_progress"))
-        click(editor,(SDL_Rect){layout.timeline_rect.x+10,layout.timeline_rect.y+58+(int)i*24,180,18});
+        {assert(SceneEditorTimelineTrackRect(i,&channel_rect));click(editor,channel_rect);}
     assert(editor->currentMode==EDITOR_MODE_CAMERA && SceneEditorTimelineCurrentSample(&selection_after) &&
         selection_before.absolute_frame==selection_after.absolute_frame);
     capture(editor,"timeline_render_initial.ppm");
+    SceneEditorRenderAuthoringSetTiming(false);SceneEditorSessionRuntimeRender(editor);
     CameraEditorSetSelectedPointIndex(0);
     click(editor,(SDL_Rect){layout.right_content_rect.x+20,layout.right_content_rect.y+46+2*32+5,20,10});
     SDL_Event event={0};event.type=SDL_TEXTINPUT;
@@ -119,8 +122,8 @@ static void timeline_native_acceptance(SceneEditor* editor,const char* scene_pat
     assert(SceneEditorTimelineSetKey(.25));
     assert(SceneEditorTimelineSetInterpolation(TIMELINE_INTERPOLATION_CUBIC_BEZIER));
     assert(SceneEditorGetPaneLayout(&layout));
-    SDL_Rect graph={layout.timeline_rect.x+244,layout.timeline_rect.y+layout.timeline_rect.h/2,
-        layout.timeline_rect.w-252,layout.timeline_rect.h/2-28};
+    SDL_Rect graph,curve_button;assert(SceneEditorTimelineControl("curves",&curve_button));click(editor,curve_button);
+    assert(SceneEditorTimelineControl("graph",&graph));
     assert(SceneEditorDocumentGetTimeline(&timeline)==TIMELINE_STATUS_OK);
     TimelineKeyframe curve_key=timeline.tracks[camera_track].keys[1];
     double span=(double)(timeline.range.frame_count-1);
@@ -160,7 +163,10 @@ static void timeline_native_acceptance(SceneEditor* editor,const char* scene_pat
     for(size_t i=0;i<timeline.track_count;++i)
         if(!strcmp(timeline.tracks[i].property_id,"light/path_progress")) light_track=i;
     assert(light_track!=SIZE_MAX && SceneEditorTimelineSelectTrack(light_track));
-    click(editor,(SDL_Rect){layout.timeline_rect.x+355,layout.timeline_rect.y+33,70,18});
+    SceneEditorRenderAuthoringSelect(editor,false);SceneEditorSessionRuntimeRender(editor);
+    SDL_Rect add_channel_control;
+    assert(SceneEditorRenderAuthoringControl("animation",&add_channel_control));click(editor,add_channel_control);
+    assert(SceneEditorRenderAuthoringControl("intensity",&add_channel_control));click(editor,add_channel_control);
     TimelineTrack intensity_track;TimelineRate intensity_rate;TimelineRange intensity_range;TimelineSample intensity_sample;
     assert(SceneEditorTimelineSelectedTrack(&intensity_track,&intensity_rate,&intensity_range,&intensity_sample) &&
         !strcmp(intensity_track.property_id,"light/intensity"));
@@ -171,6 +177,7 @@ static void timeline_native_acceptance(SceneEditor* editor,const char* scene_pat
     assert(SceneEditorTimelineCopyEvaluated(&after) && after.light.intensity==before.light.intensity);
     assert(SceneEditorDocumentRedo(diagnostics,sizeof(diagnostics)));
     assert(SceneEditorTimelineCopyEvaluated(&after) && after.light.intensity==24.0);
+    assert(SceneEditorRenderAuthoringControl("path",&add_channel_control));click(editor,add_channel_control);
     assert(SceneEditorTimelineSelectTrack(camera_track));
     unsigned long long light_revision=SceneEditorDocumentRevision();
     assert(SceneEditorLightGestureBegin());

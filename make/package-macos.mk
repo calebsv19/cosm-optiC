@@ -185,6 +185,7 @@ package-desktop-main-edit:
 	dirty=false; \
 	if [ -n "$$(git -C "$(CURDIR)" status --porcelain --untracked-files=all)" ]; then dirty=true; fi; \
 	build_label="$(MAIN_EDIT_PACKAGE_PROFILE)-$(RELEASE_VERSION)-$$short_commit"; \
+	if [ "$$dirty" = true ]; then build_label="$$build_label-work-$$(printf '%.8s' "$$source_before")"; fi; \
 	$(MAKE) package-desktop-smoke \
 		DIST_DIR="$(MAIN_EDIT_PACKAGE_DIST_DIR)" \
 		PACKAGE_APP_NAME="$(MAIN_EDIT_PACKAGE_APP_NAME)" \

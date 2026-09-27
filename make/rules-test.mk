@@ -3475,3 +3475,11 @@ test-scene-timeline-entity-contract:
 		src/animation/timeline_value.c src/animation/timeline_clock.c \
 		$(shell pkg-config --libs json-c) -lm -o $(BUILD_DIR)/tests/timeline_entity_binding_contract_test
 	$(BUILD_DIR)/tests/timeline_entity_binding_contract_test
+
+# UI-free dock geometry and time navigation regression.
+.PHONY: test-scene-editor-timeline-view
+test-scene-editor-timeline-view: $(BUILD_DIR)/tests/scene_editor_timeline_view_test
+	@$<
+$(BUILD_DIR)/tests/scene_editor_timeline_view_test: tests/scene_editor_timeline_view_test.c $(BUILD_DIR)/editor/scene_editor_timeline_view.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)

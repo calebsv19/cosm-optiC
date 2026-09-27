@@ -1,3 +1,4 @@
+#include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_camera_inspector.h"
 #include "editor/camera_editor.h"
 #include "editor/scene_editor_light_authoring.h"
@@ -101,7 +102,9 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
        SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex())) return;
     if (SceneEditorRenameActive() && SceneEditorRenameHandleEvent(event)) return;
     if (SceneEditorTransformPanelImportHandleEvent(event)) return;
-    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER && editor->currentMode==EDITOR_MODE_CAMERA) {
+    if(SceneEditorWorkspaceProfileMenuOpen() && SceneEditorWorkspaceProfileHandleEvent(editor,event)) return;
+    if(SceneEditorRenderAuthoringEvent(editor,event)) return;
+    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER && !SceneEditorRenderAuthoringTiming()) {
         SceneEditorPaneLayout camera_layout;
         if(SceneEditorGetPaneLayout(&camera_layout) && SceneEditorCameraInspectorEvent(event,&camera_layout)) return;
     }
@@ -198,7 +201,11 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     {
         SceneEditorPaneLayout layout;
         if (SceneEditorGetPaneLayout(&layout)) {
-            if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {if(editor->currentMode==EDITOR_MODE_CAMERA) SceneEditorCameraInspectorRender(editor->renderer,&layout);SceneEditorTimelineRender(editor->renderer,&layout);}
+            if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {
+                if(!SceneEditorRenderAuthoringTiming()) SceneEditorCameraInspectorRender(editor->renderer,&layout);
+                SceneEditorRenderAuthoringDraw(editor,&layout);
+                SceneEditorTimelineRender(editor->renderer,&layout);
+            }
             else SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
         }
     }
@@ -332,7 +339,11 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
             {
                 SceneEditorPaneLayout layout;
                 if (SceneEditorGetPaneLayout(&layout)) {
-                    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {if(editor->currentMode==EDITOR_MODE_CAMERA) SceneEditorCameraInspectorRender(editor->renderer,&layout);SceneEditorTimelineRender(editor->renderer,&layout);}
+                    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {
+                if(!SceneEditorRenderAuthoringTiming()) SceneEditorCameraInspectorRender(editor->renderer,&layout);
+                SceneEditorRenderAuthoringDraw(editor,&layout);
+                SceneEditorTimelineRender(editor->renderer,&layout);
+            }
             else SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
                     SceneEditorTransformPanelRenderImportOverlay(editor->renderer,layout.viewport_rect);
                 }

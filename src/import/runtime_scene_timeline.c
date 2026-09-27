@@ -87,7 +87,12 @@ bool RuntimeSceneTimelineValidateScene(json_object* scene,char* diagnostics,size
             json_object_object_get_ex(scene,"lights",&lights);
             for(size_t k=0;json_object_is_type(lights,json_type_array) && k<json_object_array_length(lights);++k) {
                 json_object *entry=json_object_array_get_idx(lights,k),*id=NULL;
-                if(json_object_object_get_ex(entry,"id",&id) && json_object_is_type(id,json_type_string) &&
+                json_object_object_get_ex(entry,"id",&id);
+                if(!json_object_is_type(id,json_type_string) || !json_object_get_string(id)[0])
+                    json_object_object_get_ex(entry,"light_id",&id);
+                if(!json_object_is_type(id,json_type_string) || !json_object_get_string(id)[0])
+                    json_object_object_get_ex(entry,"object_id",&id);
+                if(json_object_is_type(id,json_type_string) &&
                    !strcmp(json_object_get_string(id),track->target_id+6)) ++matches;
             }
             if(matches!=1) status=matches?TIMELINE_STATUS_DUPLICATE_ID:TIMELINE_STATUS_TARGET_NOT_FOUND;

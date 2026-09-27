@@ -14,6 +14,18 @@ The Add > Import mesh task is rendered above the viewport by
 and picker state. Its early event route provides Cancel and Escape recovery while
 the chooser is pending; import setup no longer appears among object properties.
 
+Render authoring uses `scene_editor_render_authoring.c` for subject/task
+selection and the themed control surface. Camera and the retained animated light
+remain selectable before timeline setup. `scene_editor_camera_inspector.c`
+serves the selected camera/light point or handle; numeric edits use the existing
+retained authoring commands. Timeline transport/evaluation stays in
+`scene_editor_timeline.c`; the Render controller owns no clock or scene copy.
+Key rows start visible together, with optional temporal curve editing. Setup
+retains an unambiguous legacy light path and timing in one undoable command;
+missing/ambiguous targets remain visible errors. The ordinary-scene native
+acceptance entrypoint is `scene_editor_workspace_visual_test <scratch>
+<copied-scene> --render-authoring`. It saves only the supplied copied scene.
+
 Interactive tooling for shaping the scene.
 
 - `bezier_editor.c` – Adds/removes Bézier control points, manipulates velocity handles, and renders the path using the current camera margin so edits match the live viewport.
@@ -110,3 +122,58 @@ U2.3 object identity and commands:
   New row/header strings have persistent frame backing storage.
 - Primitive, mesh and curve importers omit explicitly hidden objects using the
   same rule, preserving runtime slot alignment across their separate passes.
+
+## Render timeline dock
+
+Render uses a full-width bottom dock below the tools, viewport, and inspector.
+The shared `core_pane` / `kit_pane` splitter resizes it; height survives workspace
+switches within the editor session. The dock defaults to 240 logical pixels.
+
+- `scene_editor_timeline.c` owns the retained timeline/session adapter and
+  document commands. It does not draw controls or interpret pointer positions.
+- `scene_editor_timeline_view.c` owns presentation-only visible time, compact
+  control geometry, frame/pixel conversion, and 1/2/5-based ruler intervals.
+- `scene_editor_timeline_ui.c` owns grouped target rows, selection, focus,
+  numeric entry, scrubbing, pan/zoom, and release/cancel behavior.
+- `scene_editor_timeline_render.c` draws toolbar, channel hierarchy, ruler,
+  key diamonds, selected-key controls, scrollbar, and hover help.
+- `scene_editor_timeline_curve.c` draws and edits the selected scalar curve in
+  the same full-height grid and visible-time window. Point frame/value movement
+  and temporal-handle movement commit through the same retained command owner.
+
+Click a channel to select camera/light animation and its inspector. Click an
+entity header to select spatial authoring; its disclosure arrow collapses rows.
+Drag the ruler to scrub. Drag a diamond to retime; Escape cancels. Arrows step
+the playhead (Shift: ten frames); Alt+arrows retime the key at the playhead.
+Space toggles playback, Home/End navigate the animation range, and F fits it.
+Ctrl/Cmd+wheel zooms around the pointer; Shift+wheel or middle drag pans time.
+Ordinary wheel scrolls channels. The visible scrollbar also supports track clicks.
+Fit channel shows its first through last key. Snapping is always to whole frames.
+
+The dock footer edits the selected channel's value at the playhead, creating or
+updating a key. Interpolation and Delete require a key at that frame; at least
+one key must remain. Bezier ease opens temporal handles in Curves. Drag a curve
+point to edit time and value atomically. Invalid property bounds or key ordering
+are rejected visibly. Resizing, focus loss, Escape, or stale document revision
+cancel uncommitted gestures. Window/navigation actions do not create history.
+
+The current selection model is one channel and the key at the playhead, not
+independent multi-key selection. Playback range/FPS remain document readbacks;
+range editing, multi-key operations, lifetime clips, and events are later scope.
+No MCP server is added. Existing semantic timeline APIs remain the mutation
+boundary; named control/track geometry readback supports native UI acceptance.
+
+Verification: `make BUILD_TOOLCHAIN=clang test-scene-editor-timeline-view
+ test-scene-editor-pane-host-contract test-scene-editor-foundation-a` (one command),
+plus isolated workspace visual modes `--timeline-dock`, `--render-authoring`, and
+`--timeline`. The dock mode exercises native routing, navigation without history,
+key/curve edits, cancellation, undo/redo, save/reopen, and compact window layout.
+
+The toolbar separates transport/key creation (left), Keys/Curves (center), and
+Fit/Zoom (right), with non-overlap guards for compact windows. The footer and
+animation inspector distinguish **Key** from **Sample**: a sample is the evaluated
+value at a frame without a key. Entering a value creates a key there; entering a
+value at an existing key updates it. The inspector's Playhead field seeks time,
+not a key's frame. Interpolation belongs to the segment after a key. Editing
+spatial path points changes the route rather than automatically inserting a
+temporal key. This pass changes presentation only, not evaluation or history.

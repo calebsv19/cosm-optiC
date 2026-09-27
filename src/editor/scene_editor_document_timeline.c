@@ -29,8 +29,8 @@ TimelineStatus SceneEditorDocumentGetTimeline(TimelineDocument* out) {
         return TIMELINE_STATUS_TARGET_NOT_FOUND;
     return SceneTimelineDocumentFromJson(timeline, out);
 }
-bool SceneEditorDocumentSetTimeline(const TimelineDocument* document,
-    unsigned long long expected_revision, char* diagnostics, size_t size) {
+bool SceneEditorDocumentSetTimelineWithLight(const TimelineDocument* document,
+    const RuntimeSceneLightTimelineDocument* light, unsigned long long expected_revision, char* diagnostics, size_t size) {
     if (!SceneEditorDocumentIsOpen() || SceneEditorDocumentRevision() != expected_revision) {
         if (diagnostics && size) snprintf(diagnostics, size, "scene revision changed; refresh timeline before editing");
         return false;
@@ -51,5 +51,15 @@ bool SceneEditorDocumentSetTimeline(const TimelineDocument* document,
         if (diagnostics && size) snprintf(diagnostics, size, "cannot retain scene timeline");
         return false;
     }
+    if(light) {
+        json_object* spatial=RuntimeSceneLightTimelineToJsonObject(light,SceneEditorDocumentWorldScale());
+        if(!spatial) {document_rollback_command();return false;}
+        json_object_object_add(root,"light_timeline",spatial);
+    }
     return document_finish_command(diagnostics, size);
+}
+
+bool SceneEditorDocumentSetTimeline(const TimelineDocument* document,
+    unsigned long long revision,char* diagnostics,size_t size) {
+    return SceneEditorDocumentSetTimelineWithLight(document,NULL,revision,diagnostics,size);
 }

@@ -91,6 +91,10 @@ static void test_pane_host_timeline_is_collapsed_then_resizable(void) {
     opened = *scene_editor_pane_host_layout(&host);
     assert(opened.timeline_visible);
     assert(opened.timeline_rect.h >= 200);
+    assert(opened.timeline_rect.x == 10 && opened.timeline_rect.w == 1260);
+    assert(opened.left_pane_rect.y+opened.left_pane_rect.h == opened.timeline_rect.y-10);
+    assert(opened.right_pane_rect.y+opened.right_pane_rect.h == opened.timeline_rect.y-10);
+    assert(opened.center_pane_rect.h == opened.left_pane_rect.h);
     assert(opened.viewport_rect.h < before.viewport_rect.h);
     pointer_x = (float)(opened.timeline_rect.x + opened.timeline_rect.w / 2);
     pointer_y = (float)(opened.timeline_rect.y - 10);

@@ -823,6 +823,13 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         target_document=spatial_binding.timeline;
         json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
         assert_true("scene_timeline_supported_consumer",RuntimeSceneTimelineValidateScene(supported_scene,diagnostics,sizeof(diagnostics)));
+        json_object *alias_lights=NULL,*alias_id=NULL;
+        json_object_object_get_ex(supported_scene,"lights",&alias_lights);
+        json_object* alias_light=json_object_array_get_idx(alias_lights,0);
+        json_object_object_get_ex(alias_light,"id",&alias_id);
+        json_object_object_add(alias_light,"light_id",json_object_get(alias_id));
+        json_object_object_del(alias_light,"id");
+        assert_true("scene_timeline_compiled_light_id",RuntimeSceneTimelineValidateScene(supported_scene,diagnostics,sizeof(diagnostics)));
         TimelineTrack future_track;
         assert_true("scene_timeline_future_track",TimelineTrackInit(&future_track,"future-position","object/future",
             "object/transform/position",TIMELINE_VALUE_VEC3)==TIMELINE_STATUS_OK &&
@@ -904,16 +911,18 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         SceneEditorPaneLayout timeline_layout={0};
         timeline_layout.timeline_visible=true;
         timeline_layout.timeline_rect=(SDL_Rect){10,20,800,240};
-        SDL_Event timeline_event={0};
+        SDL_Event timeline_event={0};timeline_event.type=SDL_MOUSEMOTION;
+        SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout);
+        SDL_Rect track_rect,control_rect;assert_true("timeline_track_geometry",SceneEditorTimelineTrackRect(0,&track_rect));
         timeline_event.type=SDL_MOUSEBUTTONDOWN;
         timeline_event.button.button=SDL_BUTTON_LEFT;
-        timeline_event.button.x=690; timeline_event.button.y=86;
+        timeline_event.button.x=SceneEditorTimelineFrameX(116); timeline_event.button.y=track_rect.y+track_rect.h/2;
         assert_true("timeline_key_mouse_down", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
-        timeline_event.type=SDL_MOUSEMOTION;timeline_event.motion.x=718;timeline_event.motion.y=86;
+        timeline_event.type=SDL_MOUSEMOTION;timeline_event.motion.x=SceneEditorTimelineFrameX(117);timeline_event.motion.y=track_rect.y+track_rect.h/2;
         assert_true("timeline_key_mouse_drag", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         assert_true("timeline_drag_not_committed_early", SceneEditorDocumentRevision()==key_revision+1);
         timeline_event.type=SDL_MOUSEBUTTONUP;timeline_event.button.button=SDL_BUTTON_LEFT;
-        timeline_event.button.x=718;timeline_event.button.y=86;
+        timeline_event.button.x=SceneEditorTimelineFrameX(117);timeline_event.button.y=track_rect.y+track_rect.h/2;
         assert_true("timeline_key_mouse_up", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         assert_true("timeline_drag_one_command", SceneEditorDocumentRevision()==key_revision+2 &&
             SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK && loaded.tracks[0].keys[1].frame==117);
@@ -932,14 +941,16 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("timeline_reorder_selection_stable", SceneEditorTimelineSetKey(76) &&
             SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK &&
             loaded.tracks[0].keys[0].value.as.scalar==0 && loaded.tracks[1].keys[1].value.as.scalar==76);
-        timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.x=270;timeline_event.button.y=30;
+        SceneEditorTimelineControl("frame",&control_rect);
+        timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.button=SDL_BUTTON_LEFT;timeline_event.button.x=control_rect.x+10;timeline_event.button.y=control_rect.y+10;
         assert_true("timeline_frame_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         timeline_event.type=SDL_TEXTINPUT;snprintf(timeline_event.text.text,sizeof(timeline_event.text.text),"118");
         assert_true("timeline_frame_entry_text", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
         assert_true("timeline_frame_entry_submit", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
             SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.frame.sample.absolute_frame==118);
-        timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.x=420;timeline_event.button.y=30;
+        SceneEditorTimelineControl("value",&control_rect);
+        timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.button=SDL_BUTTON_LEFT;timeline_event.button.x=control_rect.x+10;timeline_event.button.y=control_rect.y+10;
         assert_true("timeline_value_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         timeline_event.type=SDL_TEXTINPUT;snprintf(timeline_event.text.text,sizeof(timeline_event.text.text),"77.125");
         assert_true("timeline_value_entry_text", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
@@ -987,6 +998,8 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("camera_path_reopen", SceneEditorDocumentOpen(runtime_path,diagnostics,sizeof(diagnostics)) &&
             fabs(sceneSettings.cameraPath.points[0].x-6)<1e-9 && fabs(sceneSettings.cameraPath3D.point_z[0]-8)<1e-9 &&
             fabs(sceneSettings.cameraPath3D.point_pitch[0]-.1)<1e-9);
+        animSettings.editorMode=EDITOR_MODE_CAMERA;
+        CameraEditorSetSelectedPointIndex(0);
         SceneEditorPaneLayout inspector_layout={0};inspector_layout.right_content_rect=(SDL_Rect){800,40,300,500};
         SDL_Event inspector_event={0};inspector_event.type=SDL_MOUSEBUTTONDOWN;
         inspector_event.button.x=830;inspector_event.button.y=40+46+2*32+10;

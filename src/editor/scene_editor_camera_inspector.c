@@ -1,3 +1,7 @@
+#include "editor/editor_mode_router.h"
+#include "editor/scene_editor_render_authoring.h"
+#include "editor/scene_editor_light_authoring.h"
+#include "editor/bezier_editor.h"
 #include "editor/scene_editor_camera_inspector.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_document.h"
@@ -21,23 +25,45 @@ void SceneEditorCameraInspectorReset(void) {
     if(field>=0) SDL_StopTextInput();
     field=-1;feedback[0]=0;
 }
+static bool is_camera(void) {return animSettings.editorMode==EDITOR_MODE_CAMERA;}
+static Path* current_path(void) {return is_camera()?&sceneSettings.cameraPath:&sceneSettings.bezierPath;}
+static CameraPath3D* current_depth(void) {return is_camera()?&sceneSettings.cameraPath3D:&sceneSettings.bezierPath3D;}
+static bool selected_handle(void) {
+    return is_camera()?(CameraEditorGetSelectionKind()==CAMERA_EDITOR_SELECTION_BEZIER_HANDLE || CameraEditorGetSelectionKind()==CAMERA_EDITOR_SELECTION_ROTATION_HANDLE):BezierEditorGetSelectionKind()==BEZIER_EDITOR_SELECTION_HANDLE;
+}
+static int field_count(void) {return is_camera() && !selected_handle()?5:3;}
 static int selected_point(void) {
-    int selected=CameraEditorGetSelectedPointIndex();
-    return selected>=0 && selected<sceneSettings.cameraPath.numPoints?selected:0;
+    int selected=is_camera()?CameraEditorGetSelectedPointIndex():BezierEditorGetSelectedPointIndex();
+    return selected>=0 && selected<current_path()->numPoints?selected:-1;
 }
 static double value_at(int index,int which) {
-    bool path=sceneSettings.cameraPath.numPoints>0;
+    if(selected_handle()) {
+        double xyz[3]={0};
+        if(is_camera()) CameraEditorGetSelectedGizmoWorldPosition(&xyz[0],&xyz[1],&xyz[2]);
+        else BezierEditorGetSelectionWorldPosition3D(&xyz[0],&xyz[1],&xyz[2]);
+        return xyz[which<3?which:0];
+    }
+    bool path=index>=0 && current_path()->numPoints>0;
     switch(which) {
-        case 0:return path?sceneSettings.cameraPath.points[index].x:sceneSettings.camera.x;
-        case 1:return path?sceneSettings.cameraPath.points[index].y:sceneSettings.camera.y;
-        case 2:return path?sceneSettings.cameraPath3D.point_z[index]:sceneSettings.cameraZ;
-        case 3:return (path?sceneSettings.cameraPath.rotations[index]:sceneSettings.camera.rotation)*degrees;
-        default:return path?sceneSettings.cameraPath3D.point_pitch[index]*degrees:0;
+        case 0:return path?current_path()->points[index].x:sceneSettings.camera.x;
+        case 1:return path?current_path()->points[index].y:sceneSettings.camera.y;
+        case 2:return path?current_depth()->point_z[index]:sceneSettings.cameraZ;
+        case 3:return (path?current_path()->rotations[index]:sceneSettings.camera.rotation)*degrees;
+        default:return path?current_depth()->point_pitch[index]*degrees:0;
     }
 }
 static bool commit(double value) {
-    Path path=sceneSettings.cameraPath;
-    CameraPath3D depth=sceneSettings.cameraPath3D;
+    if(selected_handle()) {
+        if(!isfinite(value) || revision!=SceneEditorDocumentRevision()) return false;
+        double xyz[3]={value_at(0,0),value_at(0,1),value_at(0,2)};xyz[field]=value;
+        bool ok=is_camera()?SceneEditorCameraGestureBegin():SceneEditorLightGestureBegin();
+        if(!ok) return false;
+        ok=is_camera()?CameraEditorMoveSelectedGizmoTo(xyz[0],xyz[1],xyz[2]):BezierEditorMoveSelectionTo3D(xyz[0],xyz[1],xyz[2]);
+        if(!ok) {if(is_camera()) SceneEditorCameraGestureCancel();else SceneEditorLightGestureCancel();return false;}
+        return is_camera()?SceneEditorCameraGestureCommit():SceneEditorLightGestureCommit();
+    }
+    Path path=*current_path();
+    CameraPath3D depth=*current_depth();
     if(!isfinite(value) || SceneEditorDocumentRevision()!=revision) return false;
     if(path.numPoints==0) {
         memset(&path,0,sizeof(path));memset(&depth,0,sizeof(depth));
@@ -56,8 +82,10 @@ static bool commit(double value) {
         case 4:depth.point_pitch[point]=value/degrees;break;
         default:return false;
     }
-    if(!SceneEditorDocumentSetCameraPath(&path,&depth,revision,feedback,sizeof(feedback))) return false;
-    CameraEditorSetSelectedPointIndex(point);
+    bool ok=is_camera()?SceneEditorDocumentSetCameraPath(&path,&depth,revision,feedback,sizeof(feedback)):
+        SceneEditorDocumentSetLightPath(&path,&depth,revision,feedback,sizeof(feedback));
+    if(!ok) return false;
+    if(is_camera()) CameraEditorSetSelectedPointIndex(point);else BezierEditorSetSelectedPointIndex(point);
     return true;
 }
 static bool inside(SDL_Rect r,int x,int y) {return x>=r.x && y>=r.y && x<r.x+r.w && y<r.y+r.h;}
@@ -68,7 +96,7 @@ bool SceneEditorCameraInspectorEvent(SDL_Event* event,const SceneEditorPaneLayou
         if(!inside(r,event->button.x,event->button.y)) {SceneEditorCameraInspectorReset();return false;}
         SceneEditorTimelineReleaseFocus();
         int row=(event->button.y-r.y-46)/32;
-        if(event->button.y>=r.y+46 && row>=0 && row<5 && SceneEditorDocumentIsOpen()) {
+        if(event->button.y>=r.y+46 && row>=0 && row<field_count() && (selected_point()>=0 || selected_handle()) && SceneEditorDocumentIsOpen()) {
             field=row;point=selected_point();revision=SceneEditorDocumentRevision();
             input[0]=0;feedback[0]=0;SDL_StartTextInput();
         }
@@ -87,7 +115,7 @@ bool SceneEditorCameraInspectorEvent(SDL_Event* event,const SceneEditorPaneLayou
         if(key==SDLK_RETURN || key==SDLK_KP_ENTER) {
             char* end=NULL;errno=0;double value=strtod(input,&end);
             if(!errno && end!=input && !*end && commit(value)) {field=-1;SDL_StopTextInput();}
-            else snprintf(feedback,sizeof(feedback),"Invalid value or scene changed. Esc cancels.");
+            else if(!feedback[0]) snprintf(feedback,sizeof(feedback),"Invalid value or scene changed. Esc cancels.");
         }
         return true;
     }
@@ -102,16 +130,18 @@ void SceneEditorCameraInspectorRender(SDL_Renderer* renderer,const SceneEditorPa
     TTF_Font* font=ray_tracing_font_runtime_get_ui_regular(renderer,12,9);
     SDL_Color color={225,230,240,255};
     int index=selected_point();
-    snprintf(title,sizeof(title),sceneSettings.cameraPath.numPoints?"Camera path point %d":"Camera pose",index+1);
+    if(selected_handle()) snprintf(title,sizeof(title),"%s path | Selected handle",is_camera()?"Camera":"Light");
+    else if(index>=0) snprintf(title,sizeof(title),"%s path | Point %d",is_camera()?"Camera":"Light",index+1);
+    else snprintf(title,sizeof(title),"%s path | Select a point",is_camera()?"Camera":"Light");
     ray_tracing_text_draw_utf8_at(renderer,font,title,r.x+10,r.y+10,color);
-    for(int i=0;i<5;++i) {
+    for(int i=0;i<field_count() && (index>=0 || selected_handle());++i) {
         SDL_Rect box={r.x+8,r.y+46+i*32,r.w-16,28};
         SDL_SetRenderDrawColor(renderer,field==i?53:42,field==i?72:47,field==i?94:60,255);SDL_RenderFillRect(renderer,&box);
         if(field==i) snprintf(rows[i],sizeof(rows[i]),"%s: %s_",labels[i],input);
         else snprintf(rows[i],sizeof(rows[i]),"%s: %.6g",labels[i],value_at(index,i));
-        ray_tracing_text_draw_utf8_at(renderer,font,rows[i],box.x+6,box.y+5,color);
+        SceneEditorRenderButton(renderer,box,rows[i],field==i,true);
     }
-    ray_tracing_text_draw_utf8_at(renderer,font,"Select a path point to edit its pose.",r.x+10,r.y+220,color);
+    ray_tracing_text_draw_utf8_at(renderer,font,"Path geometry (not a keyframe).",r.x+10,r.y+220,color);
     ray_tracing_text_draw_utf8_at(renderer,font,"Enter commits. Escape cancels.",r.x+10,r.y+244,color);
     ray_tracing_text_draw_utf8_at(renderer,font,feedback,r.x+10,r.y+276,color);
     SDL_RenderSetClipRect(renderer,clipped?&prior:NULL);

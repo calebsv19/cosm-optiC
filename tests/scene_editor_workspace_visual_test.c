@@ -421,6 +421,9 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_skull_placement_acceptance.h"
 #include "scene_editor_timeline_acceptance.h"
 
+#include "scene_editor_render_authoring_acceptance.h"
+#include "scene_editor_timeline_dock_acceptance.h"
+
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
@@ -441,6 +444,20 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if (argc==4 && !strcmp(argv[3],"--timeline-dock")) {
+        timeline_dock_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if (argc==4 && !strcmp(argv[3],"--render-authoring")) {
+        render_authoring_acceptance(&editor,argv[2]);
+        DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if (argc==4 && !strcmp(argv[3],"--render-entry")) {
+        SceneEditorWorkspaceProfileSelect(&editor,SCENE_WORKSPACE_RENDER);
+        bool ok=SceneEditorTimelineActivate();
+        fprintf(stderr,"RENDER ENTRY: %s: %s\n",ok?"PASS":"FAIL",SceneEditorTimelineStatus());
+        capture(&editor,"render_entry.ppm");
+        DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return ok?0:1;
+    }
     if (argc==4 && !strcmp(argv[3],"--timeline")) {
         timeline_native_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

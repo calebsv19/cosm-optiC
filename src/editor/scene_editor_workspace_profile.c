@@ -1,3 +1,4 @@
+#include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_camera_inspector.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_document.h"
@@ -39,6 +40,7 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     if (entering_material) { scene_nav=*SceneEditorGetViewportNavState(); scene_nav_saved=true; }
     menu_open=false;
     SceneEditorCameraInspectorReset();
+    if(profile==SCENE_WORKSPACE_RENDER && active!=SCENE_WORKSPACE_RENDER) SceneEditorRenderAuthoringReset();
     active = profile;
     SetSceneMode(editor, profile == SCENE_WORKSPACE_MATERIALS ? EDITOR_MODE_MATERIAL :
         profile == SCENE_WORKSPACE_RENDER ? EDITOR_MODE_CAMERA : EDITOR_MODE_OBJECT);
@@ -119,7 +121,7 @@ static void select_menu(SceneEditor* editor,int i) {
     else if(i==3) action.kind=SCENE_EDITOR_CHROME_ACTION_RESTORE_WORKSPACE;
     else if(i==4) { SceneEditorTransformSpaceToggle(); return; }
     else if(i==5) { SceneEditorTransformSnapToggle(); return; }
-    else if(i==6) { SetSceneMode(editor,EDITOR_MODE_PATH); return; }
+    else if(i==6) { if(active==SCENE_WORKSPACE_RENDER) SceneEditorRenderAuthoringSelect(editor,false); else SetSceneMode(editor,EDITOR_MODE_PATH); return; }
     else action.kind=SCENE_EDITOR_CHROME_ACTION_TOGGLE_LIGHT_TIMELINE;
     SceneEditorInputRouterCallbacks callbacks=SceneEditorBuildInputRouterCallbacks(editor);
     callbacks.apply_chrome_action(callbacks.context,&action);
