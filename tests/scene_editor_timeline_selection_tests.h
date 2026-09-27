@@ -1,0 +1,42 @@
+#include "editor/scene_editor_timeline_selection.h"
+static void test_timeline_selection_commands(void) {
+    static TimelineDocument prior,fixture,readback;char diagnostics[256];
+    assert_true("selection_save_fixture",SceneEditorDocumentGetTimeline(&prior)==TIMELINE_STATUS_OK);
+    TimelineDocumentInit(&fixture,(TimelineRate){24,1},(TimelineRange){100,21});
+    TimelineTrack t;TimelineTrackInit(&t,"selection-fov","camera/main","camera/fov_y",TIMELINE_VALUE_SCALAR);
+    TimelineTrackSetUnit(&t,TIMELINE_UNIT_DEGREES);
+    const int frames[]={100,105,110,120};
+    for(size_t i=0;i<4;++i) TimelineTrackAddKey(&t,frames[i],TimelineValueScalar(50+5*i),TIMELINE_INTERPOLATION_LINEAR);
+    TimelineDocumentAddTrack(&fixture,&t);
+    assert_true("selection_fixture_commit",SceneEditorDocumentSetTimeline(&fixture,SceneEditorDocumentRevision(),diagnostics,sizeof(diagnostics)) && SceneEditorTimelineSelectTrack(0));
+    assert_true("selection_pick",SceneEditorTimelineSelectKey(105,false));
+    assert_true("selection_scrub",SceneEditorTimelineSeek(118));
+    SceneEditorTimelineKeySelection keys;TimelineSample at;
+    assert_true("selection_independent_playhead",SceneEditorTimelineSelectionRead(&keys) && keys.primary.frame==105 && SceneEditorTimelineCurrentSample(&at) && at.absolute_frame==118);
+    unsigned long long revision=SceneEditorDocumentRevision();
+    assert_true("selection_edit_value",SceneEditorTimelineSetSelectedValue(61) && SceneEditorDocumentRevision()==revision+1 && SceneEditorTimelineCurrentSample(&at) && at.absolute_frame==118);
+    assert_true("selection_edit_frame",SceneEditorTimelineMoveSelectedKeys(106) && SceneEditorTimelineSelectionRead(&keys) && keys.primary.frame==106 && SceneEditorTimelineCurrentSample(&at) && at.absolute_frame==118);
+    assert_true("selection_shift_add",SceneEditorTimelineSelectKey(110,true) && SceneEditorTimelineSelectionRead(&keys) && keys.count==2);
+    revision=SceneEditorDocumentRevision();
+    assert_true("selection_group_move",SceneEditorTimelineMoveSelectedKeys(112) && SceneEditorDocumentRevision()==revision+1 && SceneEditorTimelineKeySelected(t.track_id,108) && SceneEditorTimelineKeySelected(t.track_id,112));
+    assert_true("selection_group_undo",SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) && SceneEditorDocumentGetTimeline(&readback)==TIMELINE_STATUS_OK && readback.tracks[0].keys[1].frame==106 && readback.tracks[0].keys[2].frame==110);
+    assert_true("selection_undo_clears_stale",!SceneEditorTimelineSelectionRead(&keys));
+    assert_true("selection_group_redo",SceneEditorDocumentRedo(diagnostics,sizeof(diagnostics)) && SceneEditorDocumentGetTimeline(&readback)==TIMELINE_STATUS_OK && readback.tracks[0].keys[1].frame==108);
+    SceneEditorTimelineSelectKey(108,false);SceneEditorTimelineSelectKey(112,true);SceneEditorTimelineCopyKeys();SceneEditorTimelineSeek(113);
+    revision=SceneEditorDocumentRevision();
+    assert_true("selection_paste_spacing",SceneEditorTimelinePasteKeys() && SceneEditorDocumentRevision()==revision+1 && SceneEditorTimelineKeySelected(t.track_id,113) && SceneEditorTimelineKeySelected(t.track_id,117));
+    revision=SceneEditorDocumentRevision();
+    assert_true("selection_duplicate_collision_atomic",!SceneEditorTimelineDuplicateKeys() && SceneEditorDocumentRevision()==revision);
+    assert_true("selection_range_atomic",!SceneEditorTimelineMoveSelectedKeys(119) && SceneEditorDocumentRevision()==revision);
+    assert_true("selection_value_bounds_atomic",!SceneEditorTimelineSetSelectedValue(-1) && SceneEditorDocumentRevision()==revision);
+    assert_true("selection_delete_group",SceneEditorTimelineDeleteSelectedKeys() && SceneEditorDocumentRevision()==revision+1 && SceneEditorDocumentGetTimeline(&readback)==TIMELINE_STATUS_OK && readback.tracks[0].key_count==4);
+    SceneEditorTimelineSelectAllKeys();revision=SceneEditorDocumentRevision();
+    assert_true("selection_retain_last_key",!SceneEditorTimelineDeleteSelectedKeys() && SceneEditorDocumentRevision()==revision);
+    SceneEditorTimelineSelectKey(108,false);
+    assert_true("selection_next_key",SceneEditorTimelineNavigateKey(1) && SceneEditorTimelineSelectionRead(&keys) && keys.primary.frame==112 && SceneEditorTimelineCurrentSample(&at) && at.absolute_frame==112);
+    assert_true("selection_previous_key",SceneEditorTimelineNavigateKey(-1) && SceneEditorTimelineSelectionRead(&keys) && keys.primary.frame==108);
+    SceneEditorTimelineCopyKeys();SceneEditorTimelineSeek(114);revision=SceneEditorDocumentRevision();
+    assert_true("selection_duplicate_here",SceneEditorTimelineDuplicateKeys() && SceneEditorDocumentRevision()==revision+1 && SceneEditorTimelineKeySelected(t.track_id,114));
+    assert_true("selection_restore_fixture",SceneEditorDocumentSetTimeline(&prior,SceneEditorDocumentRevision(),diagnostics,sizeof(diagnostics)));
+    SceneEditorTimelineClearKeys();
+}

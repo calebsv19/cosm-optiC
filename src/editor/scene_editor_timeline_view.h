@@ -7,7 +7,7 @@ typedef struct { double first, span; bool valid; } TimelineView;
 typedef enum {
     TL_START, TL_PREVIOUS, TL_PLAY, TL_NEXT, TL_END, TL_FRAME, TL_ADD,
     TL_KEYS, TL_CURVES, TL_FIT, TL_FIT_CHANNEL, TL_ZOOM_OUT, TL_ZOOM_IN,
-    TL_VALUE, TL_INTERPOLATION, TL_DELETE, TL_CONTROL_COUNT
+    TL_VALUE, TL_INTERPOLATION, TL_DELETE, TL_KEY_FRAME, TL_CONTROL_COUNT
 } TimelineControl;
 typedef struct {
     SDL_Rect panel, toolbar, ruler, gutter, body, grid, footer;

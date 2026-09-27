@@ -50,7 +50,8 @@ static void timeline_dock_acceptance(SceneEditor* editor,const char* path) {
     assert(doc.tracks[camera].keys[1].frame==50);
     choose_menu(editor,1,0);assert(SceneEditorDocumentGetTimeline(&doc)==TIMELINE_STATUS_OK && doc.tracks[camera].keys[1].frame==40);
     choose_menu(editor,1,1);assert(SceneEditorDocumentGetTimeline(&doc)==TIMELINE_STATUS_OK && doc.tracks[camera].keys[1].frame==50);
-    dock_control(editor,"frame");authoring_text(editor,"50");dock_control(editor,"interpolation");
+    dock_control(editor,"frame");authoring_text(editor,"50");
+    assert(SceneEditorTimelineTrackRect(camera,&row));click(editor,(SDL_Rect){SceneEditorTimelineFrameX(50),row.y+row.h/2,1,1});dock_control(editor,"interpolation");
     SDL_Rect menu;assert(SceneEditorTimelineControl("interpolation",&menu));
     click(editor,(SDL_Rect){menu.x,menu.y-24,menu.w,24});
     assert(SceneEditorDocumentGetTimeline(&doc)==TIMELINE_STATUS_OK && doc.tracks[camera].keys[1].interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER);

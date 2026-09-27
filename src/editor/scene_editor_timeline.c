@@ -1,5 +1,7 @@
 #include "editor/scene_editor_render_authoring.h"
 #include "scene_editor_timeline_ui.h"
+#include "scene_editor_timeline_commands.h"
+#include "editor/scene_editor_timeline_selection.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -28,7 +30,7 @@ static uint64_t last_ms;
 static char status_line[256];
 static char document_path[4096];
 
-void SceneEditorTimelineClearSelection(void) {selected=SIZE_MAX;snprintf(selected_track,sizeof(selected_track),"@none");}
+void SceneEditorTimelineClearSelection(void) {SceneEditorTimelineClearKeys();selected=SIZE_MAX;snprintf(selected_track,sizeof(selected_track),"@none");}
 void SceneEditorTimelineReleaseFocus(void) { SceneEditorTimelineUIReleaseFocus(); }
 static bool sync_document(void) {
     unsigned long long revision = SceneEditorDocumentRevision();
@@ -39,6 +41,7 @@ static bool sync_document(void) {
         selected = 0;
         selected_track[0] = 0;
         SceneEditorTimelineUIReset();
+        SceneEditorTimelineSelectionReset();
         snprintf(document_path, sizeof(document_path), "%s", path ? path : "");
     }
     if (available && !changed_scene && session.scene_revision == revision) return true;
@@ -307,4 +310,24 @@ void SceneEditorTimelineRender(SDL_Renderer* renderer,const SceneEditorPaneLayou
 bool SceneEditorTimelineMoveKeyValue(int64_t frame,double value) {
     if(!isfinite(value)) return false;
     return edit_existing_key(4,frame,TIMELINE_INTERPOLATION_STEP,&value);
+}
+
+const TimelineDocument* SceneEditorTimelineDocumentView(size_t* index) {
+    if(!sync_document()) return NULL;
+    if(index) *index=selected;
+    return &document;
+}
+bool SceneEditorTimelineCommitTrack(const TimelineTrack* track,unsigned long long revision) {
+    if(!track || !sync_document() || revision!=SceneEditorDocumentRevision()) return false;
+    size_t index=SIZE_MAX;
+    for(size_t i=0;i<document.track_count;++i) if(!strcmp(track->track_id,document.tracks[i].track_id)) index=i;
+    if(index==SIZE_MAX || strcmp(track->target_id,document.tracks[index].target_id) ||
+       strcmp(track->property_id,document.tracks[index].property_id)) return false;
+    if(SceneTimelineSessionBeginEdit(&session,revision,session.timeline_revision)!=TIMELINE_STATUS_OK) return false;
+    document.tracks[index]=*track;fit_temporal_handles(&document.tracks[index]);
+    bool ok=TimelineEntityBindingsValidateDocument(&bindings,&registry,&document)==TIMELINE_STATUS_OK &&
+        SceneEditorDocumentSetTimeline(&document,revision,status_line,sizeof(status_line));
+    SceneTimelineSessionEndEdit(&session);available=false;sync_document();
+    if(!ok) snprintf(status_line,sizeof(status_line),"Edit rejected: check frame collisions, range, and property bounds.");
+    return ok;
 }

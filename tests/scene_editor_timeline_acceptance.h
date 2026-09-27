@@ -1,4 +1,5 @@
 #include "editor/scene_editor_timeline.h"
+#include "editor/scene_editor_timeline_selection.h"
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -121,6 +122,7 @@ static void timeline_native_acceptance(SceneEditor* editor,const char* scene_pat
     assert(SceneEditorTimelineSeek(timeline.range.start_frame+10));
     assert(SceneEditorTimelineSetKey(.25));
     assert(SceneEditorTimelineSetInterpolation(TIMELINE_INTERPOLATION_CUBIC_BEZIER));
+    assert(SceneEditorTimelineSelectKey(timeline.range.start_frame+10,false));
     assert(SceneEditorGetPaneLayout(&layout));
     SDL_Rect graph,curve_button;assert(SceneEditorTimelineControl("curves",&curve_button));click(editor,curve_button);
     assert(SceneEditorTimelineControl("graph",&graph));

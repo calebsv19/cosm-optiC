@@ -3,6 +3,9 @@
 /* Render's subject and task selection are independent of timeline availability. */
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_timeline.h"
+#include "editor/scene_editor_timeline_selection.h"
+#include "scene_editor_timeline_key_inspector.h"
+#include "scene_editor_timeline_view.h"
 #include "editor/scene_editor_document_timeline.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_camera_authoring.h"
@@ -45,8 +48,8 @@ void SceneEditorRenderButton(SDL_Renderer* r,SDL_Rect rect,const char* text,bool
     SDL_RenderSetClipRect(r,clipped?&prior:NULL);
 }
 bool SceneEditorRenderAuthoringTiming(void) {return timing;}
-void SceneEditorRenderAuthoringSetTiming(bool enabled) {timing=enabled;editing=-1;SDL_StopTextInput();SceneEditorCameraInspectorReset();}
-void SceneEditorRenderAuthoringReset(void) {timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
+void SceneEditorRenderAuthoringSetTiming(bool enabled) {SceneEditorTimelineKeyInspectorReset();timing=enabled;editing=-1;SDL_StopTextInput();SceneEditorCameraInspectorReset();}
+void SceneEditorRenderAuthoringReset(void) {SceneEditorTimelineKeyInspectorReset();timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
 void SceneEditorRenderAuthoringSelect(SceneEditor* editor,bool camera) {
     SceneEditorCameraGestureCancel();SceneEditorLightGestureCancel();SceneEditorCameraInspectorReset();
     SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();editing=-1;SDL_StopTextInput();
@@ -85,6 +88,7 @@ static void path_action(SceneEditor* editor,int action) {
 bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER) return false;
     SceneEditorPaneLayout layout;if(!SceneEditorGetPaneLayout(&layout) || layout.viewport_expanded) return false;
+    if(timing && SceneEditorTimelineKeyInspectorEvent(e)) {editing=-1;return true;}
     if(editing>=0 && (e->type==SDL_TEXTINPUT || e->type==SDL_KEYDOWN)) {
         if(e->type==SDL_TEXTINPUT) {if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
         SDL_Keycode key=e->key.keysym.sym;
@@ -94,9 +98,9 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
             char* end;double value=strtod(draft,&end);bool ok=false;
             if(end!=draft && !*end && isfinite(value) && edit_revision==SceneEditorDocumentRevision()) {
                 if(editing==0 && value>=-9007199254740991.0 && value<=9007199254740991.0 && floor(value)==value) ok=SceneEditorTimelineSeek((int64_t)value);
-                else if(editing==1) ok=SceneEditorTimelineSetKey(value);
+                else if(editing==1) {ok=SceneEditorTimelineSetKey(value);if(ok) {TimelineSample at;if(SceneEditorTimelineCurrentSample(&at)) SceneEditorTimelineSelectKey(at.absolute_frame,false);}}
             }
-            snprintf(feedback,sizeof(feedback),"%s",ok?"Applied. Undo is available for keys.":"Invalid value, range, or changed scene. Esc cancels.");
+            snprintf(feedback,sizeof(feedback),"%s",ok?"Applied. Undo is available for keys.":"Invalid value/range. Esc cancels.");
             if(ok) {editing=-1;SDL_StopTextInput();}
         }
         return true;
@@ -110,7 +114,7 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     if(editing>=0) {editing=-1;SDL_StopTextInput();}
     for(int i=0;i<16;++i) if(hit(layout.left_content_rect,x,y) && hit(controls[i],x,y)) {
         if(i<2) SceneEditorRenderAuthoringSelect(editor,i==0);
-        else if(i<4) {timing=i==3;left_offset=0;SceneEditorCameraInspectorReset();SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();}
+        else if(i<4) {SceneEditorTimelineKeyInspectorReset();timing=i==3;left_offset=0;SceneEditorCameraInspectorReset();SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();}
         else if(i==4) {bool ok=SceneEditorTimelineActivate();snprintf(feedback,sizeof(feedback),"%s",ok?"Scene animation ready.":SceneEditorTimelineStatus());SceneEditorRenderAuthoringSelect(editor,editor->currentMode==EDITOR_MODE_CAMERA);}
         else if(i==5) SceneEditorFrameViewport(false);
         else if(i<13) path_action(editor,i);
@@ -174,19 +178,18 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
     pane=layout->right_content_rect;SDL_RenderSetClipRect(r,&pane);
     SDL_SetRenderDrawColor(r,p.panel_fill.r,p.panel_fill.g,p.panel_fill.b,p.panel_fill.a);SDL_RenderFillRect(r,&pane);
     x=pane.x+10;y=pane.y+10;w=pane.w-20;
-    label(r,camera?"Camera animation":"Light animation",x,y);y+=32;
+    label(r,camera?"Camera animation":"Light animation",x,y);y+=26;
     if(ready) {
-        snprintf(readouts[1],sizeof(readouts[1]),"Channel: %s",strchr(track.property_id,'/')+1);label(r,readouts[1],x,y);y+=32;
+        snprintf(readouts[1],sizeof(readouts[1]),"Channel: %s",TimelineChannelLabel(track.property_id));label(r,readouts[1],x,y);y+=26;
         TimelineEvaluationContext context;TimelineEvaluationResult result;
         double value=0;if(TimelineEvaluationContextBuild(rate,range,sample,&context)==TIMELINE_STATUS_OK && TimelineTrackEvaluate(&track,&context,&result)==TIMELINE_STATUS_OK) value=result.value.as.scalar;
-        bool keyed=false;for(size_t k=0;k<track.key_count;++k) if(track.keys[k].frame==sample.absolute_frame) keyed=true;
         snprintf(readouts[2],sizeof(readouts[2]),"Playhead: %lld",(long long)sample.absolute_frame);
-        snprintf(readouts[3],sizeof(readouts[3]),"%s (%s): %.6g",keyed?"Key value":"Sample",TimelineUnitLabel(track.unit),value);
-        for(int i=0;i<2;++i) {fields[i]=(SDL_Rect){x,y,w,34};if(editing==i) snprintf(readouts[i+2],sizeof(readouts[i+2]),"%s: %s_",i?"Value":"Frame",draft);SceneEditorRenderButton(r,fields[i],readouts[i+2],editing==i,true);y+=42;}
-        snprintf(readouts[4],sizeof(readouts[4]),"Range: %lld + %llu frames",(long long)range.start_frame,(unsigned long long)range.frame_count);label(r,readouts[4],x,y);y+=27;
-        snprintf(readouts[5],sizeof(readouts[5]),"FPS: %u / %u",rate.frames_per_second_numerator,rate.frames_per_second_denominator);label(r,readouts[5],x,y);y+=32;
-        label(r,keyed?"Enter updates this key. Esc cancels.":"Enter value to create a key here.",x,y);y+=27;
-        label(r,"Path points shape the route.",x,y);y+=27;label(r,"Keys control motion over time.",x,y);y+=32;
+        snprintf(readouts[3],sizeof(readouts[3]),"At playhead (%s): %.6g",TimelineUnitLabel(track.unit),value);
+        for(int i=0;i<2;++i) {fields[i]=(SDL_Rect){x,y,w,28};if(editing==i) snprintf(readouts[i+2],sizeof(readouts[i+2]),"%s: %s_",i?"Value":"Frame",draft);SceneEditorRenderButton(r,fields[i],readouts[i+2],editing==i,true);y+=32;}
+        snprintf(readouts[4],sizeof(readouts[4]),"%llu frames | %.3g fps",(unsigned long long)range.frame_count,(double)rate.frames_per_second_numerator/rate.frames_per_second_denominator);
+        label(r,editing>=0 && feedback[0]?feedback:readouts[4],x,y);y+=26;
+        SceneEditorTimelineKeyInspectorDraw(r,(SDL_Rect){x,y,w,pane.y+pane.h-y});
+        y=pane.y+pane.h;
     } else {label(r,"Set up scene animation to add keys.",x,y);y+=32;}
     label(r,feedback,x,y);SDL_RenderSetClipRect(r,clipped?&prior:NULL);
 }
@@ -194,6 +197,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
 bool SceneEditorRenderAuthoringControl(const char* name,SDL_Rect* out) {
     const char* names[]={"camera","light","path","animation","setup","frame_paths","previous","next","select","add","delete","interpolation","handles","yaw","pitch","intensity"};
     if(!name || !out) return false;
+    if(SceneEditorTimelineKeyInspectorControl(name,out)) return true;
     for(int i=0;i<16;++i) if(!strcmp(name,names[i])) {*out=controls[i];return out->w>0;}
     if(!strcmp(name,"frame") || !strcmp(name,"value")) {*out=fields[!strcmp(name,"value")];return out->w>0;}
     return false;

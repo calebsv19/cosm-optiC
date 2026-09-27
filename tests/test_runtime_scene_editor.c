@@ -49,6 +49,7 @@
 #include "render/runtime_scene_3d_builder.h"
 #include "test_runtime_scene_editor.h"
 #include "test_support.h"
+#include "scene_editor_timeline_selection_tests.h"
 
 #include <json-c/json.h>
 
@@ -940,7 +941,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("timeline_reorder_commit", SceneEditorDocumentSetTimeline(&loaded,SceneEditorDocumentRevision(),diagnostics,sizeof(diagnostics)));
         assert_true("timeline_reorder_selection_stable", SceneEditorTimelineSetKey(76) &&
             SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK &&
-            loaded.tracks[0].keys[0].value.as.scalar==0 && loaded.tracks[1].keys[1].value.as.scalar==76);
+            loaded.tracks[0].keys[0].value.as.scalar==0 && loaded.tracks[1].keys[2].value.as.scalar==76);
         SceneEditorTimelineControl("frame",&control_rect);
         timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.button=SDL_BUTTON_LEFT;timeline_event.button.x=control_rect.x+10;timeline_event.button.y=control_rect.y+10;
         assert_true("timeline_frame_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
@@ -949,6 +950,9 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
         assert_true("timeline_frame_entry_submit", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
             SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.frame.sample.absolute_frame==118);
+        SceneEditorTimelineControl("add_key",&control_rect);
+        timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.button=SDL_BUTTON_LEFT;timeline_event.button.x=control_rect.x+10;timeline_event.button.y=control_rect.y+10;
+        assert_true("timeline_explicit_add_before_value",SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         SceneEditorTimelineControl("value",&control_rect);
         timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.button=SDL_BUTTON_LEFT;timeline_event.button.x=control_rect.x+10;timeline_event.button.y=control_rect.y+10;
         assert_true("timeline_value_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
@@ -964,6 +968,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
             loaded.range.start_frame==100 && loaded.range.frame_count==21);
         assert_true("scene_timeline_workspace_saved_value", RayEvaluatedSceneCaptureSample((TimelineSample){118,0,1},&evaluated) &&
             evaluated.snapshot.camera.fov_y_degrees==77.125);
+        test_timeline_selection_commands();
     }
     {
         Path authored_camera={0};CameraPath3D authored_depth={0};

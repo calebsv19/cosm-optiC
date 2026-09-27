@@ -31,9 +31,10 @@ TimelineLayout SceneEditorTimelineLayout(SDL_Rect r) {
         l.controls[i]=(SDL_Rect){x,r.y+3,widths[i],28};x+=widths[i]+3;
         if(i==TL_FIT_CHANNEL) x+=42;
     }
-    l.controls[TL_VALUE]=(SDL_Rect){r.x+4,l.footer.y+1,150,24};
-    l.controls[TL_INTERPOLATION]=(SDL_Rect){r.x+160,l.footer.y+1,112,24};
-    l.controls[TL_DELETE]=(SDL_Rect){r.x+278,l.footer.y+1,60,24};
+    l.controls[TL_KEY_FRAME]=(SDL_Rect){r.x+4,l.footer.y+1,120,24};
+    l.controls[TL_VALUE]=(SDL_Rect){r.x+130,l.footer.y+1,120,24};
+    l.controls[TL_INTERPOLATION]=(SDL_Rect){r.x+256,l.footer.y+1,112,24};
+    l.controls[TL_DELETE]=(SDL_Rect){r.x+374,l.footer.y+1,60,24};
     return l;
 }
 void TimelineViewFit(TimelineView* v,TimelineRange r) {

@@ -141,32 +141,61 @@ switches within the editor session. The dock defaults to 240 logical pixels.
   the same full-height grid and visible-time window. Point frame/value movement
   and temporal-handle movement commit through the same retained command owner.
 
+- `scene_editor_timeline_selection.c` owns independent key selection, matching-
+  channel clipboard and atomic batch commands. `scene_editor_timeline_key_inspector.c`
+  presents selected-key frame/value fields and explicit editing actions.
+
 Click a channel to select camera/light animation and its inspector. Click an
 entity header to select spatial authoring; its disclosure arrow collapses rows.
-Drag the ruler to scrub. Drag a diamond to retime; Escape cancels. Arrows step
-the playhead (Shift: ten frames); Alt+arrows retime the key at the playhead.
+The **playhead** is the time being previewed. A **selected key** is a saved value
+at a particular frame. They are independent: clicking a diamond selects it;
+dragging the ruler scrubs without losing that selection. Selected diamonds are
+highlighted. Previous/Next key explicitly select a neighboring key and seek it.
+
+For a first edit, select Camera > Path progress, seek a frame with Playhead,
+then edit **At playhead** to create/update a key. Alternatively, Add key records
+the evaluated value there. Select a diamond and edit **Key frame** or **Key value**
+to change that existing key while keeping the preview at its current time.
+Path progress is a unitless position along the spatial path; it does not move
+the path's control points. Edit those separately in Path authoring.
+
+Shift-click adds/removes keys in the current channel. Drag any selected diamond
+to move the group with its spacing preserved; Escape cancels. The inspector's
+**Anchor frame** is the primary (last-added) key; changing it shifts the whole
+group. **Set all values** explicitly assigns the same value to every selected key.
+Copy then seek and Paste aligns the earliest copied key to the playhead. Dup here
+copies and pastes in one action. Paste requires a matching property and unit.
+Collisions, range violations and invalid values reject the entire edit; they do
+not overwrite existing keys. Each group edit creates one undoable command.
+At least one key must remain in a channel.
+
+With timeline focus, arrows step the playhead (Shift: ten frames); Alt+arrows
+retime the selected keys. Up/Down select and seek the previous/next key.
+Ctrl/Cmd+A selects all keys in the channel; C/V/D copy/paste/duplicate.
 Space toggles playback, Home/End navigate the animation range, and F fits it.
 Ctrl/Cmd+wheel zooms around the pointer; Shift+wheel or middle drag pans time.
 Ordinary wheel scrolls channels. The visible scrollbar also supports track clicks.
 Fit channel shows its first through last key. Snapping is always to whole frames.
 
-The dock footer edits the selected channel's value at the playhead, creating or
-updating a key. Interpolation and Delete require a key at that frame; at least
-one key must remain. Bezier ease opens temporal handles in Curves. Drag a curve
-point to edit time and value atomically. Invalid property bounds or key ordering
-are rejected visibly. Resizing, focus loss, Escape, or stale document revision
-cancel uncommitted gestures. Window/navigation actions do not create history.
+Footer frame/value, interpolation and Delete edit selected keys. Interpolation
+controls the segment leaving each selected key: Hold keeps its value until the
+next key, Linear changes evenly, and Bezier ease exposes temporal handles in
+Curves. Select one curve point to edit time/value or its handles. Resizing, focus
+loss, Escape, or stale document revision cancel uncommitted gestures. Undo/redo
+and external document edits conservatively clear selection to avoid targeting a
+replacement key at the same frame. Selection and navigation create no history.
 
-The current selection model is one channel and the key at the playhead, not
-independent multi-key selection. Playback range/FPS remain document readbacks;
-range editing, multi-key operations, lifetime clips, and events are later scope.
-No MCP server is added. Existing semantic timeline APIs remain the mutation
-boundary; named control/track geometry readback supports native UI acceptance.
+Multi-key selection is limited to one channel. Marquee/cross-channel selection,
+editable playback range/FPS, lifetime clips and events remain later scope. No MCP
+server is added. The public selection API supplies semantic commands and readback;
+named control/track geometry supports native UI acceptance.
 
 Verification: `make BUILD_TOOLCHAIN=clang test-scene-editor-timeline-view
  test-scene-editor-pane-host-contract test-scene-editor-foundation-a` (one command),
 plus isolated workspace visual modes `--timeline-dock`, `--render-authoring`, and
-`--timeline`. The dock mode exercises native routing, navigation without history,
+`--timeline` and `--timeline-selection`. The selection mode covers independent
+playhead/keys, selected inspector edits, grouped operations, clipboard rejection,
+undo/redo, save/reopen and compact inspector reachability. The dock mode exercises native routing, navigation without history,
 key/curve edits, cancellation, undo/redo, save/reopen, and compact window layout.
 
 The toolbar separates transport/key creation (left), Keys/Curves (center), and

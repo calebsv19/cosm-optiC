@@ -1,6 +1,7 @@
 #include "scene_editor_timeline_curve.h"
 #include "animation/timeline_property_registry.h"
 #include "editor/scene_editor_timeline.h"
+#include "editor/scene_editor_timeline_selection.h"
 #include "editor/scene_editor_document.h"
 #include "render/font_runtime.h"
 #include "render/text_draw.h"
@@ -39,13 +40,14 @@ static bool handle_active(const TimelineTrack* t,size_t k,int side) {
 bool SceneEditorTimelineCurveEvent(SDL_Event* event,SDL_Rect graph,const TimelineView* view) {
     TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
     if(!event || !SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample) || track.value_type!=TIMELINE_VALUE_SCALAR) {drag.active=false;return false;}
-    if(drag.active && (drag.revision!=SceneEditorDocumentRevision() || sample.absolute_frame!=drag.anchor || strcmp(track.track_id,drag.track.track_id))) drag.active=false;
+    SceneEditorTimelineKeySelection keys;bool have_keys=SceneEditorTimelineSelectionRead(&keys);
+    if(drag.active && (drag.revision!=SceneEditorDocumentRevision() || !have_keys || keys.primary.frame!=drag.anchor || strcmp(track.track_id,drag.track.track_id))) drag.active=false;
     if(event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE && drag.active) {drag.active=false;return true;}
     double low,high;limits(&track,&low,&high);
     if(event->type==SDL_MOUSEBUTTONDOWN && event->button.button==SDL_BUTTON_LEFT && inside(graph,event->button.x,event->button.y)) {
         for(size_t k=0;k<track.key_count;++k) {
             const TimelineKeyframe* key=&track.keys[k];
-            if(key->frame!=sample.absolute_frame) continue;
+            if(!have_keys || keys.count!=1 || key->frame!=keys.primary.frame) continue;
             for(int side=-1;side<=1;side+=2) {
                 if(!handle_active(&track,k,side)) continue;
                 double df=side<0?key->incoming_frame_offset:key->outgoing_frame_offset;
@@ -58,7 +60,7 @@ bool SceneEditorTimelineCurveEvent(SDL_Event* event,SDL_Rect graph,const Timelin
         }
         for(size_t k=0;k<track.key_count;++k)
             if(hypot(event->button.x-TimelineViewX(view,graph,(double)track.keys[k].frame),event->button.y-py(graph,low,high,track.keys[k].value.as.scalar))<=10) {
-                SceneEditorTimelinePause();SceneEditorTimelineSeek(track.keys[k].frame);
+                SceneEditorTimelinePause();SceneEditorTimelineSelectKey(track.keys[k].frame,false);
                 drag.active=true;drag.side=0;drag.key=k;drag.revision=SceneEditorDocumentRevision();
                 drag.anchor=track.keys[k].frame;drag.track=track;drag.minimum=low;drag.maximum=high;return true;
             }
@@ -112,8 +114,8 @@ bool SceneEditorTimelineCurveEvent(SDL_Event* event,SDL_Rect graph,const Timelin
         if(SceneEditorDocumentRevision()==drag.revision) {
             if(drag.side==0) {
                 if(key.frame!=track.keys[drag.key].frame || key.value.as.scalar!=track.keys[drag.key].value.as.scalar)
-                    SceneEditorTimelineMoveKeyValue(key.frame,key.value.as.scalar);
-            } else SceneEditorTimelineSetHandles(key.incoming_frame_offset,key.incoming_value_offset,key.outgoing_frame_offset,key.outgoing_value_offset);
+                    SceneEditorTimelineMoveSelectedValue(key.frame,key.value.as.scalar);
+            } else SceneEditorTimelineSelectedHandles(key.incoming_frame_offset,key.incoming_value_offset,key.outgoing_frame_offset,key.outgoing_value_offset);
         }
         return true;
     }
@@ -122,6 +124,7 @@ bool SceneEditorTimelineCurveEvent(SDL_Event* event,SDL_Rect graph,const Timelin
 void SceneEditorTimelineCurveRender(SDL_Renderer* renderer,SDL_Rect graph,const TimelineView* view) {
     TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
     if(graph.w<10 || graph.h<10 || !SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample) || track.value_type!=TIMELINE_VALUE_SCALAR) return;
+    SceneEditorTimelineKeySelection keys;bool have_keys=SceneEditorTimelineSelectionRead(&keys);
     double low,high;limits(&track,&low,&high);
     if(drag.active && drag.revision==SceneEditorDocumentRevision() && !strcmp(track.track_id,drag.track.track_id)) {
         track=drag.track;low=drag.minimum;high=drag.maximum;
@@ -145,8 +148,11 @@ void SceneEditorTimelineCurveRender(SDL_Renderer* renderer,SDL_Rect graph,const 
     }
     for(size_t k=0;k<track.key_count;++k) {
         TimelineKeyframe* key=&track.keys[k];int x=TimelineViewX(view,graph,(double)key->frame),y=py(graph,low,high,key->value.as.scalar);
-        SDL_Rect point={x-3,y-3,7,7};SDL_SetRenderDrawColor(renderer,255,194,91,255);SDL_RenderFillRect(renderer,&point);
-        if(key->frame!=sample.absolute_frame) continue;
+        SDL_Rect point={x-3,y-3,7,7};
+        if(SceneEditorTimelineKeySelected(track.track_id,key->frame)) SDL_SetRenderDrawColor(renderer,255,194,91,255);
+        else SDL_SetRenderDrawColor(renderer,105,196,239,255);
+        SDL_RenderFillRect(renderer,&point);
+        if(!have_keys || keys.count!=1 || key->frame!=keys.primary.frame) continue;
         for(int side=-1;side<=1;side+=2) if(handle_active(&track,k,side)) {
             double df=side<0?key->incoming_frame_offset:key->outgoing_frame_offset,dv=side<0?key->incoming_value_offset:key->outgoing_value_offset;
             int hx=TimelineViewX(view,graph,key->frame+df),hy=py(graph,low,high,key->value.as.scalar+dv);
