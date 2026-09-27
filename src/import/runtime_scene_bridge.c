@@ -7,6 +7,7 @@
 #include "import/runtime_mesh_asset_loader.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
+#include "import/runtime_scene_timeline.h"
 
 #include "camera/camera_path_3d.h"
 #include "core_scene_overlay_merge_shared.h"
@@ -60,6 +61,7 @@ static void scene_defaults_reset(void) {
     RuntimeMaterialAuthoredTextureResetAll();
     runtime_scene_motion_bridge_reset();
     RuntimeSceneLightTimelineResetLast();
+    RuntimeSceneTimelineReset();
     memset(g_last_runtime_object_ids, 0, sizeof(g_last_runtime_object_ids));
     g_last_runtime_object_id_count = 0;
 }
@@ -959,6 +961,22 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
             json_object_object_get_ex(overlay_extensions, "ray_tracing", &overlay_ray) &&
             json_object_is_type(overlay_ray, json_type_object)) {
             json_object_object_add(overlay_ray, "managed_mesh_assets", json_object_get(managed));
+        }
+    }
+    /* The scene timeline belongs to retained document commands. Legacy editor
+       overlays replace this namespace but cannot reconstruct its tracks/keys. */
+    {
+        json_object *extensions=NULL,*ray=NULL,*authoring=NULL,*timeline=NULL;
+        json_object *overlay_extensions=NULL,*overlay_ray=NULL,*overlay_authoring=NULL;
+        if (json_object_object_get_ex(runtime_root,"extensions",&extensions) &&
+            json_object_object_get_ex(extensions,"ray_tracing",&ray) &&
+            json_object_object_get_ex(ray,"authoring",&authoring) &&
+            json_object_object_get_ex(authoring,"scene_timeline",&timeline) &&
+            json_object_object_get_ex(overlay_root,"extensions",&overlay_extensions) &&
+            json_object_object_get_ex(overlay_extensions,"ray_tracing",&overlay_ray) &&
+            json_object_object_get_ex(overlay_ray,"authoring",&overlay_authoring) &&
+            json_object_is_type(overlay_authoring,json_type_object)) {
+            json_object_object_add(overlay_authoring,"scene_timeline",json_object_get(timeline));
         }
     }
     /* Mapped materials are edited through retained document commands. Exported

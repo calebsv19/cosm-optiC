@@ -1,6 +1,40 @@
 #include "app/preview_camera_sample.h"
 
 #include <string.h>
+#include <math.h>
+
+bool PreviewCameraSampleEvaluateTimeline(const Camera* base_camera,
+    double base_camera_z, const Path* camera_path,
+    const CameraPath3D* camera_path3d, double legacy_normalized_t,
+    int viewport_width, int viewport_height,
+    const TimelineFrameSnapshot* snapshot, const char* camera_target_id,
+    PreviewCameraSample* out_sample) {
+    TimelineCameraChannels channels = {0};
+    PreviewCameraSample sample;
+    if (!out_sample || !isfinite(legacy_normalized_t) ||
+        TimelineCameraChannelsResolve(snapshot, camera_target_id, &channels) !=
+            TIMELINE_STATUS_OK) return false;
+    if (channels.has_progress && (!camera_path || camera_path->numPoints == 0))
+        return false;
+    if (!PreviewCameraSampleEvaluate(base_camera, base_camera_z,
+            channels.has_position ? NULL : camera_path, camera_path3d,
+            channels.has_progress ? channels.progress : legacy_normalized_t,
+            viewport_width, viewport_height, &sample)) return false;
+    if (channels.has_position) {
+        sample.position_x = channels.position.x;
+        sample.position_y = channels.position.y;
+        sample.position_z = channels.position.z;
+    }
+    if (channels.has_yaw) sample.yaw_radians = channels.yaw;
+    if (channels.has_pitch) sample.pitch_radians = channels.pitch;
+    if (channels.has_fov) sample.fov_y_degrees = channels.fov;
+    if (!isfinite(sample.position_x) || !isfinite(sample.position_y) ||
+        !isfinite(sample.position_z) || !isfinite(sample.yaw_radians) ||
+        !isfinite(sample.pitch_radians) || !isfinite(sample.fov_y_degrees))
+        return false;
+    *out_sample = sample;
+    return true;
+}
 
 static double preview_camera_sample_clamp01(double value) {
     if (value < 0.0) return 0.0;

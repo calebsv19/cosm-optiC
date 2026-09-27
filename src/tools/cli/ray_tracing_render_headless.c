@@ -138,6 +138,8 @@ static void ray_tracing_headless_note_evaluated_scene(
         return;
     }
     preflight->evaluated_scene_bound = true;
+    preflight->evaluated_camera = snapshot->camera;
+    preflight->evaluated_light = snapshot->light;
     preflight->evaluated_scene_source = (int)snapshot->source;
     if (first_sample) {
         preflight->evaluated_scene_first_frame =

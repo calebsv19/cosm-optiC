@@ -153,7 +153,8 @@ static void PreviewSessionSyncWindowSize(SDL_Window* preview_window,
     }
 }
 
-static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Renderer* host_renderer) {
+static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Renderer* host_renderer,
+                               TimelineSample* in_out_sample) {
     bool didInit = false;
     bool didFontRuntimeInit = false;
     Uint32 preview_window_id = 0;
@@ -162,6 +163,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     uint64_t prev_ns = 0;
     bool running_preview = true;
     bool close_button_pressed = false;
+    bool sample_initialized = false;
     PreviewWorkspace preview_workspace = {0};
     PreviewTimelineInspection timeline_inspection = {0};
     RuntimeSceneLightTimelineDocument timeline_document = {0};
@@ -292,6 +294,12 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         fprintf(stderr, "Preview transport initialization failed.\n");
         running_preview = false;
     }
+    if(running_preview && in_out_sample &&
+       PreviewWorkspaceInspectSample(&preview_workspace,*in_out_sample)!=TIMELINE_STATUS_OK) {
+        fprintf(stderr,"Preview requested sample is outside the scene timeline.\n");
+        running_preview=false;
+    }
+    sample_initialized=running_preview && in_out_sample;
     if (RuntimeSceneLightTimelineGetLast(&timeline_document) &&
         PreviewTimelineInspectionInit(&timeline_inspection,
                                       &timeline_document) !=
@@ -626,6 +634,10 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                          sceneSettings.windowHeight);
         SDL_PumpEvents();
     }
+    if(sample_initialized && preview_workspace.valid) {
+        PreviewTransportDirection direction;
+        PreviewWorkspaceCurrentSample(&preview_workspace,in_out_sample,&direction);
+    }
     if (didInit) {
         ray_tracing_font_runtime_shutdown();
         SDL_Quit();
@@ -633,9 +645,13 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
 }
 
 void RunPreviewMode(void) {
-    RunPreviewInternal(true, NULL, NULL);
+    RunPreviewInternal(true, NULL, NULL, NULL);
 }
 
 void RunPreviewModeEmbedded(SDL_Window* host_window, SDL_Renderer* host_renderer) {
-    RunPreviewInternal(false, host_window, host_renderer);
+    RunPreviewInternal(false, host_window, host_renderer, NULL);
+}
+void RunPreviewModeEmbeddedAtSample(SDL_Window* host_window, SDL_Renderer* host_renderer,
+                                    TimelineSample* in_out_sample) {
+    RunPreviewInternal(false,host_window,host_renderer,in_out_sample);
 }

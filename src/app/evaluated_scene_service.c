@@ -3,6 +3,7 @@
 #include "animation/timeline_property_registry.h"
 #include "animation/timeline_frame_snapshot.h"
 #include "app/preview_camera_sample.h"
+#include "import/runtime_scene_timeline.h"
 #include "config/config_manager.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_light_timeline_bridge.h"
@@ -118,20 +119,26 @@ static void ray_evaluated_copy_light_base(
     out_light->falloff_mode = (int)animSettings.forwardFalloffMode;
 }
 
-static bool ray_evaluated_capture_camera(double normalized_t,
+static bool ray_evaluated_capture_camera(const TimelineEvaluationContext* context, double normalized_t,
                                          RayEvaluatedCamera* out_camera) {
     PreviewCameraSample sample = {0};
-    if (!out_camera ||
-        !PreviewCameraSampleEvaluate(&sceneSettings.camera,
-                                     sceneSettings.cameraZ,
-                                     &sceneSettings.cameraPath,
-                                     &sceneSettings.cameraPath3D,
-                                     normalized_t,
-                                     sceneSettings.windowWidth,
-                                     sceneSettings.windowHeight,
-                                     &sample)) {
-        return false;
-    }
+    TimelineFrameSnapshot snapshot;
+    TimelineStatus status;
+    if (!out_camera || !context) return false;
+    status = RuntimeSceneTimelineSample(context->sample, &snapshot);
+    if (status == TIMELINE_STATUS_OK) {
+        if (!PreviewCameraSampleEvaluateTimeline(&sceneSettings.camera,
+                sceneSettings.cameraZ, &sceneSettings.cameraPath,
+                &sceneSettings.cameraPath3D, normalized_t,
+                sceneSettings.windowWidth, sceneSettings.windowHeight,
+                &snapshot, "camera/main", &sample)) return false;
+    } else if (status == TIMELINE_STATUS_TARGET_NOT_FOUND) {
+        if (!PreviewCameraSampleEvaluate(&sceneSettings.camera,
+                sceneSettings.cameraZ, &sceneSettings.cameraPath,
+                &sceneSettings.cameraPath3D, normalized_t,
+                sceneSettings.windowWidth, sceneSettings.windowHeight,
+                &sample)) return false;
+    } else return false;
     memset(out_camera, 0, sizeof(*out_camera));
     out_camera->valid = sample.valid;
     out_camera->uses_authored_path = sample.uses_authored_path;
@@ -173,6 +180,12 @@ static TimelineStatus ray_evaluated_runtime_context(
     const RuntimeSceneLightTimelineDocument* document,
     TimelineSample sample,
     TimelineEvaluationContext* out_context) {
+    TimelineRate scene_rate;
+    TimelineRange scene_range;
+    TimelineStatus scene_status = RuntimeSceneTimelineClock(&scene_rate, &scene_range);
+    if (scene_status == TIMELINE_STATUS_OK)
+        return TimelineEvaluationContextBuild(scene_rate, scene_range, sample, out_context);
+    if (scene_status != TIMELINE_STATUS_TARGET_NOT_FOUND) return scene_status;
     TimelineRate rate = {
         (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30), 1u};
     uint64_t runtime_frames =
@@ -354,6 +367,9 @@ static bool ray_evaluated_build_authored(
     for (size_t i = 0u; i < frame_snapshot.property_count; ++i) {
         const TimelinePropertyEvaluationResult* property =
             &frame_snapshot.properties[i];
+        /* A property name identifies a channel, not its entity owner. */
+        if (strcmp(property->track.target_id, progress_track->target_id) != 0)
+            continue;
         if (strcmp(property->track.property_id,
                    "light/path_progress") == 0) {
             progress_property = property;
@@ -411,7 +427,8 @@ static bool ray_evaluated_build_authored(
     inputs.clamped = clamped;
     inputs.frame = animation_context;
     inputs.identity.scene_revision = cache_stats.generation;
-    inputs.identity.timeline_revision = RayEvaluatedTimelineFingerprint(
+    inputs.identity.timeline_revision = RuntimeSceneTimelineRevision();
+    inputs.identity.timeline_revision ^= RayEvaluatedTimelineFingerprint(
         &document->timeline, &document->spatial_path, &document->spatial_path_3d);
     ray_evaluated_copy_light_base(&light_state.lights[target.light_index],
                                   motion.target_id, &inputs.light);
@@ -431,7 +448,7 @@ static bool ray_evaluated_build_authored(
         inputs.light.intensity_provenance = intensity_provenance;
     }
     if (!ray_evaluated_capture_camera(
-            animation_context.normalized_t, &inputs.camera)) {
+            context, animation_context.normalized_t, &inputs.camera)) {
         ray_evaluated_fail(out_result, TIMELINE_STATUS_INVALID_SNAPSHOT,
                            "camera evaluation failed");
         return false;
@@ -496,6 +513,7 @@ static bool ray_evaluated_build_legacy(
     inputs.clamped = clamped;
     inputs.frame = *context;
     inputs.identity.scene_revision = cache_stats.generation;
+    inputs.identity.timeline_revision = RuntimeSceneTimelineRevision();
     if (light_state.valid && light_state.light_count > 0) {
         ray_evaluated_copy_light_base(&light_state.lights[0],
                                       "legacy/first-light", &inputs.light);
@@ -528,7 +546,7 @@ static bool ray_evaluated_build_legacy(
     inputs.light.position.z = light_z;
     inputs.light.progress = context->normalized_t;
     inputs.light.global_path_t = context->normalized_t;
-    if (!ray_evaluated_capture_camera(context->normalized_t, &inputs.camera)) {
+    if (!ray_evaluated_capture_camera(context, context->normalized_t, &inputs.camera)) {
         ray_evaluated_fail(out_result, TIMELINE_STATUS_INVALID_SNAPSHOT,
                            "legacy camera evaluation failed");
         return false;
@@ -575,6 +593,15 @@ bool RayEvaluatedSceneCaptureAuthoredSample(
     TimelineStatus status;
     if (!out_result) return false;
     memset(out_result, 0, sizeof(*out_result));
+    TimelineRate scene_rate;
+    TimelineRange scene_range;
+    status = RuntimeSceneTimelineClock(&scene_rate, &scene_range);
+    if (status == TIMELINE_STATUS_OK)
+        return RayEvaluatedSceneCaptureSample(sample, out_result);
+    if (status != TIMELINE_STATUS_TARGET_NOT_FOUND) {
+        ray_evaluated_fail(out_result, status, "scene timeline clock is invalid");
+        return false;
+    }
     if (!RuntimeSceneLightTimelineGetLast(&document)) {
         ray_evaluated_fail(out_result, TIMELINE_STATUS_TARGET_NOT_FOUND,
                            "no authored light timeline is active");
@@ -607,6 +634,13 @@ TimelineStatus RayEvaluatedSceneResolveTimelineClock(
     if (!out_rate || !out_range) {
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
+    TimelineStatus scene_clock = RuntimeSceneTimelineClock(&rate, &range);
+    if (scene_clock == TIMELINE_STATUS_OK) {
+        *out_rate = rate;
+        *out_range = range;
+        return TIMELINE_STATUS_OK;
+    }
+    if (scene_clock != TIMELINE_STATUS_TARGET_NOT_FOUND) return scene_clock;
     if (RuntimeSceneLightTimelineGetLast(&document)) {
         rate = document.timeline.rate;
         range = document.timeline.range;
@@ -648,9 +682,37 @@ bool RayEvaluatedSceneCaptureSampleWithPlayback(
                                "runtime frame context is invalid");
             return false;
         }
+        bool compatibility_travel = true;
+        TimelineRate scene_rate;
+        TimelineRange scene_range;
+        if (RuntimeSceneTimelineClock(&scene_rate, &scene_range) == TIMELINE_STATUS_OK) {
+            /* The legacy document supplies spatial geometry during migration;
+             * the retained scene timeline owns authored channels and time. */
+            char spatial_target[TIMELINE_ID_CAPACITY];
+            snprintf(spatial_target,sizeof(spatial_target),"%s",
+                document.timeline.tracks[document.progress_track_index].target_id);
+            status = RuntimeSceneTimelineCopy(&document.timeline);
+            if (status == TIMELINE_STATUS_OK) {
+                status=TIMELINE_STATUS_TARGET_NOT_FOUND;
+                for(size_t i=0;i<document.timeline.track_count;++i) {
+                    const TimelineTrack* track=&document.timeline.tracks[i];
+                    if(track->enabled && !strcmp(track->target_id,spatial_target) &&
+                        !strcmp(track->property_id,"light/path_progress")) {
+                        document.progress_track_index=i;
+                        status=TIMELINE_STATUS_OK;
+                        break;
+                    }
+                }
+            }
+            if (status != TIMELINE_STATUS_OK) {
+                ray_evaluated_fail(out_result, status, "scene timeline light migration is incomplete");
+                return false;
+            }
+            compatibility_travel = false;
+        }
         return ray_evaluated_build_authored(
             &document, &context, playback_mode,
-            reverse_direction, clamped, true, out_result);
+            reverse_direction, clamped, compatibility_travel, out_result);
     }
     status = RayEvaluatedSceneResolveTimelineClock(&rate, &range);
     if (status != TIMELINE_STATUS_OK) {
@@ -683,6 +745,21 @@ bool RayEvaluatedSceneCaptureForElapsed(
 
     if (!out_result) return false;
     memset(out_result, 0, sizeof(*out_result));
+    status = RuntimeSceneTimelineClock(&rate, &range);
+    if (status == TIMELINE_STATUS_OK) {
+        status = RayEvaluatedTimelineSampleFromElapsed(rate, range, elapsed_seconds,
+            mode, &sample, &reverse_direction, &clamped);
+        if (status != TIMELINE_STATUS_OK) {
+            ray_evaluated_fail(out_result, status, "scene timeline elapsed time mapping failed");
+            return false;
+        }
+        return RayEvaluatedSceneCaptureSampleWithPlayback(sample, mode,
+            reverse_direction, clamped, out_result);
+    }
+    if (status != TIMELINE_STATUS_TARGET_NOT_FOUND) {
+        ray_evaluated_fail(out_result, status, "scene timeline clock is invalid");
+        return false;
+    }
     if (RuntimeSceneLightTimelineGetLast(&document)) {
         rate.frames_per_second_numerator =
             (uint32_t)(animSettings.fps > 0 ? animSettings.fps : 30);

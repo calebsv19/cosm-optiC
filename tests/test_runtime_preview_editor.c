@@ -347,6 +347,35 @@ static void test_preview_camera_sample_evaluate_contract(void) {
     assert_true("preview_camera_sample_path_pitch_bounds",
                 sample.pitch_radians > 0.0 && sample.pitch_radians < (M_PI / 4.0));
     assert_close("preview_camera_sample_path_aspect", sample.aspect_ratio, 1.5, 1e-6);
+    /* The same exact frame drives path sampling regardless of legacy playback
+     * progress, and a hold remains stationary at subframes. */
+    static TimelineDocument document;
+    TimelinePropertyRegistry registry;
+    TimelineTrack track;
+    TimelineEvaluationContext context;
+    TimelineFrameSnapshot snapshot;
+    assert_true("camera_timeline_init", TimelineDocumentInit(&document,
+        (TimelineRate){24,1}, (TimelineRange){0,21}) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_registry", TimelinePropertyRegistryInitFoundationDefaults(&registry) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_track", TimelineTrackInit(&track, "camera-motion", "camera/main",
+        "camera/path_progress", TIMELINE_VALUE_SCALAR) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_unit", TimelineTrackSetUnit(&track, TIMELINE_UNIT_UNITLESS) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_key0", TimelineTrackAddKey(&track, 0, TimelineValueScalar(0.5), TIMELINE_INTERPOLATION_STEP) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_key20", TimelineTrackAddKey(&track, 20, TimelineValueScalar(1), TIMELINE_INTERPOLATION_STEP) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_add", TimelineDocumentAddTrack(&document, &track) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_context", TimelineEvaluationContextBuild(document.rate, document.range,
+        (TimelineSample){10,1,2}, &context) == TIMELINE_STATUS_OK);
+    assert_true("camera_timeline_snapshot", TimelineFrameSnapshotBuild(&registry, &document, &context, &snapshot) == TIMELINE_STATUS_OK);
+    PreviewCameraSample expected = sample;
+    assert_true("camera_timeline_sample", PreviewCameraSampleEvaluateTimeline(&base_camera, 3.5,
+        &camera_path, &camera_path3d, 0.9, 1200, 800, &snapshot, "camera/main", &sample));
+    assert_close("camera_timeline_hold_x", sample.position_x, expected.position_x, 1e-9);
+    assert_close("camera_timeline_hold_z", sample.position_z, expected.position_z, 1e-9);
+    assert_close("camera_timeline_hold_yaw", sample.yaw_radians, expected.yaw_radians, 1e-9);
+    assert_true("camera_timeline_missing_path_refusal", !PreviewCameraSampleEvaluateTimeline(&base_camera, 3.5,
+        NULL, NULL, 0.9, 1200, 800, &snapshot, "camera/main", &sample));
+    assert_true("camera_timeline_refusal_preserves_output", memcmp(&sample, &expected, sizeof(sample)) == 0);
+
 }
 
 static void test_preview_camera_projector_projection_contract(void) {

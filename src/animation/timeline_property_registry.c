@@ -107,7 +107,7 @@ const char* TimelinePropertyTargetKindLabel(TimelinePropertyTargetKind kind) {
         case TIMELINE_PROPERTY_TARGET_OBJECT: return "object";
         case TIMELINE_PROPERTY_TARGET_LIGHT: return "light";
         case TIMELINE_PROPERTY_TARGET_MATERIAL: return "material";
-        case TIMELINE_PROPERTY_TARGET_CAMERA_RESERVED: return "camera_reserved";
+        case TIMELINE_PROPERTY_TARGET_CAMERA: return "camera";
         case TIMELINE_PROPERTY_TARGET_VOLUME_RESERVED: return "volume_reserved";
         default: return "unknown";
     }
@@ -324,6 +324,38 @@ TimelineStatus TimelinePropertyRegistryInitFoundationDefaults(
             TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER,
         TIMELINE_INVALIDATION_MATERIAL, &zero, &one);
     if (status != TIMELINE_STATUS_OK) return status;
+    /* Camera channels describe authored meaning; runtime application remains
+     * in the evaluated-scene adapter, never in this registry. */
+    const uint32_t scalar_modes = TIMELINE_INTERPOLATION_MASK_STEP |
+        TIMELINE_INTERPOLATION_MASK_LINEAR | TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER;
+    const TimelineValue min_pitch = TimelineValueScalar(-1.5707963267948966);
+    const TimelineValue max_pitch = TimelineValueScalar(1.5707963267948966);
+    const TimelineValue min_fov = TimelineValueScalar(1.0);
+    const TimelineValue max_fov = TimelineValueScalar(179.0);
+    status = timeline_property_add_default(&candidate, "camera/path_progress",
+        TIMELINE_PROPERTY_TARGET_CAMERA, TIMELINE_VALUE_SCALAR,
+        TIMELINE_UNIT_UNITLESS, scalar_modes, TIMELINE_INVALIDATION_CAMERA, &zero, &one);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = timeline_property_add_default(&candidate, "camera/position",
+        TIMELINE_PROPERTY_TARGET_CAMERA, TIMELINE_VALUE_VEC3,
+        TIMELINE_UNIT_WORLD_DISTANCE,
+        TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR,
+        TIMELINE_INVALIDATION_CAMERA, NULL, NULL);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = timeline_property_add_default(&candidate, "camera/yaw",
+        TIMELINE_PROPERTY_TARGET_CAMERA, TIMELINE_VALUE_SCALAR,
+        TIMELINE_UNIT_RADIANS, scalar_modes, TIMELINE_INVALIDATION_CAMERA, NULL, NULL);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = timeline_property_add_default(&candidate, "camera/pitch",
+        TIMELINE_PROPERTY_TARGET_CAMERA, TIMELINE_VALUE_SCALAR,
+        TIMELINE_UNIT_RADIANS, scalar_modes, TIMELINE_INVALIDATION_CAMERA,
+        &min_pitch, &max_pitch);
+    if (status != TIMELINE_STATUS_OK) return status;
+    status = timeline_property_add_default(&candidate, "camera/fov_y",
+        TIMELINE_PROPERTY_TARGET_CAMERA, TIMELINE_VALUE_SCALAR,
+        TIMELINE_UNIT_DEGREES, scalar_modes, TIMELINE_INVALIDATION_CAMERA,
+        &min_fov, &max_fov);
+    if (status != TIMELINE_STATUS_OK) return status;
     *registry = candidate;
     return TIMELINE_STATUS_OK;
 }
@@ -383,6 +415,13 @@ TimelineStatus TimelinePropertyRegistryValidateTrack(
     return TIMELINE_STATUS_OK;
 }
 
+static bool timeline_property_position_driver(const char* property) {
+    return strcmp(property,"camera/position")==0 ||
+        strcmp(property,"camera/path_progress")==0 ||
+        strcmp(property,"light/position")==0 ||
+        strcmp(property,"light/path_progress")==0;
+}
+
 TimelineStatus TimelinePropertyRegistryValidateDocument(
     const TimelinePropertyRegistry* registry,
     const TimelineDocument* document) {
@@ -395,6 +434,11 @@ TimelineStatus TimelinePropertyRegistryValidateDocument(
             registry, &document->tracks[i], &document->range);
         if (status != TIMELINE_STATUS_OK) return status;
         for (size_t j = i + 1u; j < document->track_count; ++j) {
+            if(document->tracks[i].enabled && document->tracks[j].enabled &&
+               strcmp(document->tracks[i].target_id,document->tracks[j].target_id)==0 &&
+               timeline_property_position_driver(document->tracks[i].property_id) &&
+               timeline_property_position_driver(document->tracks[j].property_id))
+                return TIMELINE_STATUS_DUPLICATE_OWNERSHIP;
             if (strcmp(document->tracks[i].target_id,
                        document->tracks[j].target_id) == 0 &&
                 strcmp(document->tracks[i].property_id,

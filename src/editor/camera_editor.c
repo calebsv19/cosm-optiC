@@ -1,4 +1,6 @@
 #include "editor/camera_editor.h"
+#include "editor/scene_editor_camera_authoring.h"
+#include "editor/scene_editor_document.h"
 #include "camera/camera_path_3d.h"
 #include "render/render_helper.h"
 #include "path/path_system.h"
@@ -247,6 +249,19 @@ static void ApplyZoomDelta(double factor) {
 }
 
 static void RotateCamera(double deltaRadians) {
+    if (SceneEditorDocumentIsOpen()) {
+        Path* path = &sceneSettings.cameraPath;
+        if (path->numPoints == 0) {
+            if (!CameraPath3D_InsertPoint(&sceneSettings.cameraPath3D, path,
+                                         sceneSettings.camera.x, sceneSettings.camera.y,
+                                         sceneSettings.cameraZ, 1.0)) return;
+            SetCameraPointRotation(0, sceneSettings.camera.rotation);
+        }
+        int point = selectedCamPoint >= 0 && selectedCamPoint < path->numPoints ? selectedCamPoint : 0;
+        SetCameraPointRotation(point, CameraPointRotation(point) + deltaRadians);
+        selectedCamPoint = point;
+        return;
+    }
     CameraRotate(&sceneSettings.camera, deltaRadians);
 }
 
@@ -438,7 +453,7 @@ int CameraEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_boun
     return cursor_y;
 }
 
-void HandleCameraEditorEvents(SDL_Event* event) {
+static void HandleCameraEditorEventsRaw(SDL_Event* event) {
     const int width = sceneSettings.windowWidth;
     const int height = sceneSettings.windowHeight;
     CameraEditorAction action = ResolveCameraEditorAction(event);
@@ -703,6 +718,60 @@ void HandleCameraEditorEvents(SDL_Event* event) {
         default:
             break;
     }
+}
+
+static bool legacy_gesture;
+bool CameraEditorLegacyGestureActive(void) {return legacy_gesture;}
+static void camera_legacy_drag_reset(void) {
+    legacy_gesture=false;cameraDragging=false;
+    camDraggingPoint=camDraggingVelocity=camDraggingRotation=-1;
+}
+void HandleCameraEditorEvents(SDL_Event* event) {
+    if (!event) return;
+    if(legacy_gesture) {
+        if(!SceneEditorCameraGestureValid()) {
+            camera_legacy_drag_reset();
+            if(event->type==SDL_MOUSEMOTION || event->type==SDL_MOUSEBUTTONUP) return;
+        } else if(event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE) {
+            SceneEditorCameraGestureCancel();camera_legacy_drag_reset();return;
+        } else if(event->type==SDL_MOUSEMOTION) {
+            HandleCameraEditorEventsRaw(event);return;
+        } else if(event->type==SDL_MOUSEBUTTONUP && event->button.button==SDL_BUTTON_LEFT) {
+            HandleCameraEditorEventsRaw(event);SceneEditorCameraGestureCommit();
+            camera_legacy_drag_reset();return;
+        } else return;
+    }
+    bool authored_control = false;
+    if (event->type == SDL_KEYDOWN) {
+        SDL_Keycode key = event->key.keysym.sym;
+        authored_control = key == SDLK_t || key == SDLK_l || key == SDLK_o || key == SDLK_p ||
+            key == SDLK_BACKSPACE || key == SDLK_DELETE || key == SDLK_KP_PERIOD;
+    } else if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
+        int x = event->button.x, y = event->button.y;
+        authored_control = CameraEditorPointInRect(x,y,&cameraModeButton) ||
+            CameraEditorPointInRect(x,y,&cameraLinkButton) ||
+            CameraEditorPointInRect(x,y,&cameraRotateLeftButton) ||
+            CameraEditorPointInRect(x,y,&cameraRotateRightButton);
+        if(!authored_control) {
+            if(!SceneEditorCameraGestureBegin()) return;
+            HandleCameraEditorEventsRaw(event);
+            bool selecting=SceneEditorToolStateGetEffective(SDL_GetModState())==SCENE_EDITOR_TOOL_SELECT;
+            legacy_gesture=selecting && (camDraggingPoint>=0 || camDraggingRotation>=0);
+            if(!legacy_gesture) {
+                SceneEditorCameraGestureCommit();
+                camDraggingPoint=camDraggingVelocity=camDraggingRotation=-1;
+            }
+            return;
+        }
+    }
+    if (!authored_control) {
+        HandleCameraEditorEventsRaw(event);
+        return;
+    }
+    /* Discrete controls may not steal or commit an in-flight spatial gesture. */
+    if (!SceneEditorCameraGestureBegin()) return;
+    HandleCameraEditorEventsRaw(event);
+    SceneEditorCameraGestureCommit();
 }
 
 int CameraEditorGetSelectedPointIndex(void) {

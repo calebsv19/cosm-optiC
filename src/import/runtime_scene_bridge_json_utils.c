@@ -1,5 +1,6 @@
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "render/runtime_surface_mapping.h"
+#include "import/runtime_scene_timeline.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -231,6 +232,7 @@ bool runtime_scene_bridge_validate_root(json_object *root, RuntimeSceneBridgePre
     out_preflight->light_count = runtime_scene_bridge_json_array_len_or_zero(root, "lights");
     out_preflight->camera_count = runtime_scene_bridge_json_array_len_or_zero(root, "cameras");
     if (!RuntimeSurfaceMappingValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
+    if (!RuntimeSceneTimelineValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
     out_preflight->valid_contract = true;
     runtime_scene_bridge_preflight_diag(out_preflight, "ok");
     return true;

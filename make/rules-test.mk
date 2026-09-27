@@ -3462,3 +3462,16 @@ $(BUILD_DIR)/tests/menu_catalog_discovery_test: tests/menu_catalog_discovery_tes
 	$(CC) -std=c11 -Wall -Wextra -Werror -Iinclude -pthread tests/menu_catalog_discovery_test.c src/ui/menu/menu_catalog_discovery.c -o $@
 test-menu-catalog-discovery: $(BUILD_DIR)/tests/menu_catalog_discovery_test
 	@$<
+.PHONY: test-scene-timeline-entity-contract
+test-scene-timeline-entity-contract:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) -std=c11 -Wall -Wextra -Werror -Iinclude $(shell pkg-config --cflags sdl2 json-c) \
+		tests/timeline_entity_binding_contract_test.c src/import/scene_timeline_document_io.c \
+		src/app/scene_timeline_session.c src/app/preview_transport.c \
+		src/animation/evaluated_scene_snapshot.c \
+		src/animation/timeline_entity_binding.c src/animation/timeline_property_registry.c \
+		src/animation/timeline_camera_channels.c src/animation/timeline_frame_snapshot.c \
+		src/animation/timeline_document.c src/animation/timeline_track.c \
+		src/animation/timeline_value.c src/animation/timeline_clock.c \
+		$(shell pkg-config --libs json-c) -lm -o $(BUILD_DIR)/tests/timeline_entity_binding_contract_test
+	$(BUILD_DIR)/tests/timeline_entity_binding_contract_test

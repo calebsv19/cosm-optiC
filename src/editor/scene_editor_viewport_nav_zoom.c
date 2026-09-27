@@ -1,4 +1,6 @@
 #include "editor/scene_editor_viewport_nav.h"
+#include "editor/scene_editor_workspace_profile.h"
+#include "scene_editor_viewport_authoring_bounds.h"
 
 #include <math.h>
 
@@ -139,6 +141,15 @@ static bool scene_editor_viewport_nav_resolve_fit_zoom(SceneEditorDigestOverlayN
         : SceneEditorDigestOverlayBuildProjectorWithView(&digest,viewport_rect,
             unit_view.orbit_yaw_deg,unit_view.orbit_pitch_deg,1.0,&projector);
     if (!built) return false;
+    if (!use_selected_object && !material_focus &&
+        SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {
+        double minimum[3]={min_x,min_y,min_z},maximum[3]={max_x,max_y,max_z};
+        SceneEditorBezier3DInteractionMetrics metrics=
+            SceneEditorDigestOverlayResolveBezierMetrics(&digest,&projector);
+        SceneEditorViewportExpandAuthoringBounds(metrics.gizmo_world_length,minimum,maximum);
+        min_x=minimum[0];min_y=minimum[1];min_z=minimum[2];
+        max_x=maximum[0];max_y=maximum[1];max_z=maximum[2];
+    }
     projector.center_x = (min_x + max_x) * 0.5;
     projector.center_y = (min_y + max_y) * 0.5;
     projector.center_z = (min_z + max_z) * 0.5;

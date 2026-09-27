@@ -88,6 +88,8 @@ typedef struct RayTracingHeadlessPreflight {
     uint64_t evaluated_scene_scene_revision;
     uint64_t evaluated_scene_timeline_revision;
     char evaluated_scene_light_id[TIMELINE_ID_CAPACITY];
+    RayEvaluatedCamera evaluated_camera;
+    RayEvaluatedLight evaluated_light;
     bool rendered_frames;
     bool denoise_enabled;
     int frames_rendered;

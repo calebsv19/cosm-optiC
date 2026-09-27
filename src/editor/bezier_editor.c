@@ -1,5 +1,8 @@
 
 #include "editor/bezier_editor.h"
+#include "editor/scene_editor_workspace_profile.h"
+#include "editor/scene_editor_light_authoring.h"
+#include "editor/scene_editor_timeline.h"
 #include "app/animation.h"
 #include "editor/scene_editor.h"
 #include "path/path_system.h"
@@ -26,6 +29,7 @@ static SDL_Rect bezierModeButton = {0};
 static SDL_Rect bezierLinkButton = {0};
 static SDL_Rect bezierLightRadiusSlider = {0};
 static SDL_Rect bezierLightIntensitySlider = {0};
+static SDL_Rect bezierTimelineIntensityButton = {0};
 
 #define BEZIER_EDITOR_LIGHT_RADIUS_MIN (0.0)
 #define BEZIER_EDITOR_LIGHT_RADIUS_MAX (25.0)
@@ -832,7 +836,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
 }
 
-void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggingVelocity) {
+static void HandleBezierEditorEventsRaw(SDL_Event* event, int* draggingPoint, int* draggingVelocity) {
     BezierEditorAction action = ResolveBezierEditorAction(event);
     if (action == BEZIER_EDITOR_ACTION_NONE) {
         return;
@@ -887,6 +891,22 @@ void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggin
             break;
     }
 }
+void HandleBezierEditorEvents(SDL_Event* event,int* point,int* velocity) {
+    if(!event) return;
+    bool retained=false;
+    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {
+        if(event->type==SDL_MOUSEBUTTONDOWN && event->button.button==SDL_BUTTON_LEFT) {
+            int x=event->button.x,y=event->button.y;
+            if(BezierEditorPointInRect(x,y,&bezierTimelineIntensityButton)) {
+                SceneEditorTimelineAddChannel("light/intensity");return;
+            }
+            retained=BezierEditorPointInRect(x,y,&bezierModeButton) || BezierEditorPointInRect(x,y,&bezierLinkButton);
+        } else if(event->type==SDL_KEYDOWN) retained=event->key.keysym.sym==SDLK_t || event->key.keysym.sym==SDLK_l;
+    }
+    if(retained && !SceneEditorLightGestureBegin()) return;
+    HandleBezierEditorEventsRaw(event,point,velocity);
+    if(retained) SceneEditorLightGestureCommit();
+}
 void RenderBezierEditor(SDL_Renderer* renderer) {
     RayTracingThemePalette palette = {0};
     SDL_Color objectColor = {255, 255, 255, 255};
@@ -935,29 +955,38 @@ int BezierEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_boun
     const int gap = 8;
     const int button_h = 34;
     const int slider_h = 32;
-    char label[128];
+    static char mode_label[128], link_label[128];
     int cursor_y = top_y;
     bezierModeButton = (SDL_Rect){0, 0, 0, 0};
     bezierLinkButton = (SDL_Rect){0, 0, 0, 0};
     bezierLightRadiusSlider = (SDL_Rect){0, 0, 0, 0};
     bezierLightIntensitySlider = (SDL_Rect){0, 0, 0, 0};
+    bezierTimelineIntensityButton = (SDL_Rect){0, 0, 0, 0};
     if (!renderer || content_bounds.w <= 0 || top_y >= bottom_y) return top_y;
     if (cursor_y + button_h > bottom_y) return cursor_y;
     bezierModeButton = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, button_h};
-    snprintf(label,
-             sizeof(label),
+    snprintf(mode_label,
+             sizeof(mode_label),
              "Path Mode: %s",
              (sceneSettings.bezierPath.mode == BEZIER_CUBIC) ? "Cubic" : "Quadratic");
-    BezierEditorDrawPaneButton(renderer, bezierModeButton, label, false);
+    BezierEditorDrawPaneButton(renderer, bezierModeButton, mode_label, false);
     cursor_y += button_h + gap;
     if (selectedPoint >= 0 &&
         selectedPoint < sceneSettings.bezierPath.numPoints &&
         cursor_y + button_h <= bottom_y) {
         bool linked = sceneSettings.bezierPath.handleLink[selectedPoint];
         bezierLinkButton = (SDL_Rect){content_bounds.x, cursor_y, content_bounds.w, button_h};
-        snprintf(label, sizeof(label), "Handles: %s", linked ? "Linked" : "Independent");
-        BezierEditorDrawPaneButton(renderer, bezierLinkButton, label, linked);
+        snprintf(link_label, sizeof(link_label), "Handles: %s", linked ? "Linked" : "Independent");
+        BezierEditorDrawPaneButton(renderer, bezierLinkButton, link_label, linked);
         cursor_y += button_h + gap;
+    }
+    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {
+        if(cursor_y+button_h<=bottom_y) {
+            bezierTimelineIntensityButton=(SDL_Rect){content_bounds.x,cursor_y,content_bounds.w,button_h};
+            BezierEditorDrawPaneButton(renderer,bezierTimelineIntensityButton,"Brightness timeline",false);
+            cursor_y+=button_h+gap;
+        }
+        return cursor_y;
     }
     if (cursor_y + slider_h <= bottom_y) {
         SDL_Rect slider_bounds = {content_bounds.x, cursor_y, content_bounds.w, slider_h};

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_tool_state.h"
@@ -180,6 +181,7 @@ static void SceneEditorBezier3DGizmoReset(void) {
 }
 
 static void SceneEditorCamera3DGizmoReset(void) {
+    SceneEditorCameraGestureCancel();
     memset(&g_camera3d_gizmo_state, 0, sizeof(g_camera3d_gizmo_state));
     g_camera3d_gizmo_state.drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
 }

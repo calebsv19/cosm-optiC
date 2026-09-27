@@ -11,6 +11,7 @@
 #include "import/runtime_scene_bridge_authoring_environment.h"
 #include "import/runtime_scene_bridge_authoring_internal.h"
 #include "import/runtime_scene_light_timeline_io.h"
+#include "import/runtime_scene_timeline.h"
 #include "import/runtime_scene_light_timeline_bridge.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "import/runtime_scene_motion_bridge.h"
@@ -1034,6 +1035,7 @@ void runtime_scene_bridge_apply_ray_authoring_paths(json_object *root,
     runtime_scene_bridge_apply_ray_authoring_light_settings(authoring, world_scale);
     apply_ray_authoring_object_materials(authoring);
     runtime_scene_motion_bridge_apply_authoring(authoring, world_scale);
+    (void)RuntimeSceneTimelineLoad(authoring, world_scale);
     {
         char timeline_diagnostics[96];
         TimelineStatus timeline_status = RuntimeSceneLightTimelineApplyAuthoring(

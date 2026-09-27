@@ -1,3 +1,7 @@
+#include "editor/scene_editor_camera_inspector.h"
+#include "editor/camera_editor.h"
+#include "editor/scene_editor_light_authoring.h"
+#include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_surface_material_panel.h"
 #include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_document.h"
@@ -17,6 +21,7 @@
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_internal.h"
 #include "editor/scene_editor_light_timeline.h"
+#include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_transform_panel.h"
 #include "editor/scene_editor_viewport_render.h"
 #include "engine/Render/render_pipeline.h"
@@ -64,15 +69,42 @@ static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
                            255);
 }
 
+static void scene_timeline_sync_tool_selection(SceneEditor* editor) {
+    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER) return;
+    TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
+    if(!SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample)) return;
+    int mode=!strncmp(track.target_id,"camera/",7)?EDITOR_MODE_CAMERA:
+        !strncmp(track.target_id,"light/",6)?EDITOR_MODE_PATH:editor->currentMode;
+    if(mode!=editor->currentMode) {
+        SceneEditorCameraGestureCancel();SceneEditorLightGestureCancel();
+        SceneEditorCameraInspectorReset();
+        editor->currentMode=mode;animSettings.editorMode=mode;
+    }
+}
 void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event) {
     SceneEditorInputRouterCallbacks callbacks = {0};
     if (!editor || !event) {
         return;
     }
+    scene_timeline_sync_tool_selection(editor);
+    if(CameraEditorLegacyGestureActive() && (event->type==SDL_MOUSEMOTION ||
+       event->type==SDL_MOUSEBUTTONUP || (event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE))) {
+        HandleCameraEditorEvents(event);return;
+    }
+    if(event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE && SceneEditorCameraGestureActive()) {
+        SceneEditorCameraGestureCancel();return;
+    }
+    if(event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE && SceneEditorLightGestureActive()) {
+        SceneEditorLightGestureCancel();return;
+    }
     if(editor->currentMode==EDITOR_MODE_MATERIAL && SceneEditorSurfaceMaterialPanelActive() &&
        SceneEditorSurfaceMaterialPanelEvent(event,MaterialEditorResolveFocusedObjectIndex())) return;
     if (SceneEditorRenameActive() && SceneEditorRenameHandleEvent(event)) return;
     if (SceneEditorTransformPanelImportHandleEvent(event)) return;
+    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER && editor->currentMode==EDITOR_MODE_CAMERA) {
+        SceneEditorPaneLayout camera_layout;
+        if(SceneEditorGetPaneLayout(&camera_layout) && SceneEditorCameraInspectorEvent(event,&camera_layout)) return;
+    }
     if (editor->currentMode==EDITOR_MODE_MATERIAL && MaterialEditorHandlePopupEvent(event)) return;
     if (SceneEditorWorkspaceProfileMenuOpen() && SceneEditorWorkspaceProfileHandleEvent(editor,event)) return;
     if (SceneEditorObjectMoveGizmoHandleEvent(event, editor->window)) return;
@@ -113,10 +145,13 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     {
         SceneEditorPaneLayout layout;
         if (SceneEditorGetPaneLayout(&layout) &&
-            SceneEditorLightTimelineHandleEvent(event,
+            (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER
+                ? SceneEditorTimelineHandleEvent(event,&layout)
+                : SceneEditorLightTimelineHandleEvent(event,
                                                 SceneEditorGetPaneHost(),
                                                 &layout,
-                                                SceneEditorGetViewportNavState())) {
+                                                SceneEditorGetViewportNavState()))) {
+            scene_timeline_sync_tool_selection(editor);
             return;
         }
     }
@@ -142,7 +177,8 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     if (!editor->running || sceneEditorExitFlag) {
         return;
     }
-    (void)SceneEditorLightTimelineAdvancePlayback();
+    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) (void)SceneEditorTimelineAdvance();
+    else (void)SceneEditorLightTimelineAdvancePlayback();
 
     SceneEditorSyncWindowSize(editor);
     scene_editor_session_runtime_update_dirty_objects();
@@ -162,7 +198,8 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     {
         SceneEditorPaneLayout layout;
         if (SceneEditorGetPaneLayout(&layout)) {
-            SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
+            if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {if(editor->currentMode==EDITOR_MODE_CAMERA) SceneEditorCameraInspectorRender(editor->renderer,&layout);SceneEditorTimelineRender(editor->renderer,&layout);}
+            else SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
         }
     }
     if (post_draw) {
@@ -250,7 +287,7 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 }
                 break;
             }
-            if (SceneEditorLightTimelineAdvancePlayback()) {
+            if (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER ? SceneEditorTimelineAdvance() : SceneEditorLightTimelineAdvancePlayback()) {
                 frame_dirty = true;
             }
             if (SceneEditorSurfaceMaterialPanelPoll()) frame_dirty = true;
@@ -295,7 +332,8 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
             {
                 SceneEditorPaneLayout layout;
                 if (SceneEditorGetPaneLayout(&layout)) {
-                    SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
+                    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {if(editor->currentMode==EDITOR_MODE_CAMERA) SceneEditorCameraInspectorRender(editor->renderer,&layout);SceneEditorTimelineRender(editor->renderer,&layout);}
+            else SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
                     SceneEditorTransformPanelRenderImportOverlay(editor->renderer,layout.viewport_rect);
                 }
             }

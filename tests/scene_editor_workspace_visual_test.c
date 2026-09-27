@@ -419,6 +419,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_material_performance_t4.h"
 
 #include "scene_editor_skull_placement_acceptance.h"
+#include "scene_editor_timeline_acceptance.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -440,6 +441,9 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if (argc==4 && !strcmp(argv[3],"--timeline")) {
+        timeline_native_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if (argc==5 && !strcmp(argv[3],"--skull-placement")) {
         skull_placement_acceptance(&editor,argv);
         return 0;

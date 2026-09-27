@@ -1,3 +1,12 @@
+#include "editor/scene_editor_camera_inspector.h"
+#include "editor/scene_editor_camera_authoring.h"
+#include "editor/camera_editor.h"
+#include "editor/scene_editor_timeline.h"
+#include "import/runtime_scene_timeline.h"
+#include "import/runtime_scene_light_timeline_io.h"
+#include "import/scene_timeline_document_io.h"
+#include "app/evaluated_scene_service.h"
+#include "editor/scene_editor_document_timeline.h"
 #include <math.h>
 #include <png.h>
 #include <stdio.h>
@@ -741,6 +750,337 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("u24_restore_fixture",SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)) &&
                     SceneEditorDocumentOpen(runtime_path,diagnostics,sizeof(diagnostics)) &&
                     sceneSettings.objectCount==1);
+    }
+    {
+        static TimelineDocument timeline, loaded;
+        TimelineTrack track;
+        assert_true("scene_timeline_init", TimelineDocumentInit(&timeline,
+            (TimelineRate){24000,1001}, (TimelineRange){100,21}) == TIMELINE_STATUS_OK);
+        assert_true("scene_timeline_track", TimelineTrackInit(&track, "camera-lens", "camera/main",
+            "camera/fov_y", TIMELINE_VALUE_SCALAR) == TIMELINE_STATUS_OK);
+        assert_true("scene_timeline_unit", TimelineTrackSetUnit(&track, TIMELINE_UNIT_DEGREES) == TIMELINE_STATUS_OK);
+        assert_true("scene_timeline_key", TimelineTrackAddKey(&track, 100, TimelineValueScalar(70), TIMELINE_INTERPOLATION_LINEAR) == TIMELINE_STATUS_OK);
+        assert_true("scene_timeline_end_key", TimelineTrackAddKey(&track, 120, TimelineValueScalar(90), TIMELINE_INTERPOLATION_STEP) == TIMELINE_STATUS_OK);
+        assert_true("scene_timeline_add", TimelineDocumentAddTrack(&timeline, &track) == TIMELINE_STATUS_OK);
+        unsigned long long revision = SceneEditorDocumentRevision();
+        assert_true("scene_timeline_command", SceneEditorDocumentSetTimeline(&timeline, revision, diagnostics, sizeof(diagnostics)));
+        assert_true("scene_timeline_read", SceneEditorDocumentGetTimeline(&loaded) == TIMELINE_STATUS_OK &&
+            loaded.track_count == 1 && loaded.tracks[0].keys[0].value.as.scalar == 70);
+        TimelineFrameSnapshot frame;
+        assert_true("scene_timeline_loaded_runtime", RuntimeSceneTimelineSample((TimelineSample){110,1,2}, &frame) == TIMELINE_STATUS_OK &&
+            frame.property_count == 1 && frame.properties[0].track.value.as.scalar == 80.5);
+        RayEvaluatedSceneServiceResult evaluated;
+        assert_true("scene_timeline_camera_applied", RayEvaluatedSceneCaptureSample((TimelineSample){110,1,2}, &evaluated) &&
+            evaluated.snapshot.camera.fov_y_degrees == 80.5);
+        uint64_t timeline_identity = evaluated.snapshot.identity.timeline_revision;
+        assert_true("scene_timeline_identity", timeline_identity != 0);
+        const char* invalid_timeline_scene="{\"schema_family\":\"codework_scene\",\"schema_variant\":\"scene_runtime_v1\","
+            "\"scene_id\":\"invalid-timeline\",\"unit_system\":\"meters\",\"world_scale\":1,"
+            "\"extensions\":{\"ray_tracing\":{\"authoring\":{\"scene_timeline\":{\"version\":999}}}}}";
+        RuntimeSceneBridgePreflight rejected;
+        uint64_t cached_timeline_revision=RuntimeSceneTimelineRevision();
+        assert_true("scene_timeline_preflight_rejects_invalid", !runtime_scene_bridge_preflight_json(invalid_timeline_scene,&rejected) &&
+            strstr(rejected.diagnostics,"scene_timeline")!=NULL);
+        assert_true("scene_timeline_apply_rejects_invalid", !runtime_scene_bridge_apply_json(invalid_timeline_scene,&rejected));
+        assert_true("scene_timeline_failed_preflight_keeps_cache", RuntimeSceneTimelineRevision()==cached_timeline_revision &&
+            RayEvaluatedSceneCaptureSample((TimelineSample){110,1,2},&evaluated) && evaluated.snapshot.camera.fov_y_degrees==80.5);
+        json_object* target_scene=json_tokener_parse(invalid_timeline_scene);
+        json_object *target_ext=NULL,*target_ray=NULL,*target_authoring=NULL;
+        json_object_object_get_ex(target_scene,"extensions",&target_ext);
+        json_object_object_get_ex(target_ext,"ray_tracing",&target_ray);
+        json_object_object_get_ex(target_ray,"authoring",&target_authoring);
+        static TimelineDocument target_document;
+        target_document=timeline;
+        snprintf(target_document.tracks[0].target_id,sizeof(target_document.tracks[0].target_id),"camera/missing");
+        json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
+        assert_true("scene_timeline_camera_target_refused", !RuntimeSceneTimelineValidateScene(target_scene,diagnostics,sizeof(diagnostics)) &&
+            strstr(diagnostics,"camera/missing")!=NULL);
+        target_document.tracks[0].enabled=false;
+        json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
+        assert_true("scene_timeline_disabled_target_retained", RuntimeSceneTimelineValidateScene(target_scene,diagnostics,sizeof(diagnostics)));
+        target_document.tracks[0].enabled=true;
+        snprintf(target_document.tracks[0].target_id,sizeof(target_document.tracks[0].target_id),"light/missing");
+        snprintf(target_document.tracks[0].property_id,sizeof(target_document.tracks[0].property_id),"light/intensity");
+        target_document.tracks[0].unit=TIMELINE_UNIT_RELATIVE_INTENSITY;
+        json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
+        assert_true("scene_timeline_light_target_refused", !RuntimeSceneTimelineValidateScene(target_scene,diagnostics,sizeof(diagnostics)) &&
+            strstr(diagnostics,"light/missing")!=NULL);
+        json_object_object_add(target_scene,"lights",json_tokener_parse("[{\"id\":\"missing\"}]"));
+        assert_true("scene_timeline_unbound_light_refused", !RuntimeSceneTimelineValidateScene(target_scene,diagnostics,sizeof(diagnostics)) &&
+            strstr(diagnostics,"spatial binding")!=NULL);
+        json_object_object_add(target_scene,"lights",json_tokener_parse("[{\"id\":\"missing\"},{\"id\":\"missing\"}]"));
+        assert_true("scene_timeline_ambiguous_target_refused", !RuntimeSceneTimelineValidateScene(target_scene,diagnostics,sizeof(diagnostics)));
+        assert_true("scene_timeline_target_checks_keep_cache", RuntimeSceneTimelineRevision()==cached_timeline_revision);
+        json_object_put(target_scene);
+        json_object* supported_scene=json_object_from_file("config/samples/light_timeline_editor_demo_runtime.json");
+        assert_true("scene_timeline_consumer_fixture",supported_scene!=NULL);
+        json_object_object_get_ex(supported_scene,"extensions",&target_ext);
+        json_object_object_get_ex(target_ext,"ray_tracing",&target_ray);
+        json_object_object_get_ex(target_ray,"authoring",&target_authoring);
+        static RuntimeSceneLightTimelineDocument spatial_binding;
+        assert_true("scene_timeline_consumer_spatial",RuntimeSceneLightTimelineParseAuthoring(target_authoring,1,
+            &spatial_binding,diagnostics,sizeof(diagnostics))==TIMELINE_STATUS_OK);
+        target_document=spatial_binding.timeline;
+        json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
+        assert_true("scene_timeline_supported_consumer",RuntimeSceneTimelineValidateScene(supported_scene,diagnostics,sizeof(diagnostics)));
+        TimelineTrack future_track;
+        assert_true("scene_timeline_future_track",TimelineTrackInit(&future_track,"future-position","object/future",
+            "object/transform/position",TIMELINE_VALUE_VEC3)==TIMELINE_STATUS_OK &&
+            TimelineTrackSetUnit(&future_track,TIMELINE_UNIT_WORLD_DISTANCE)==TIMELINE_STATUS_OK &&
+            TimelineTrackAddKey(&future_track,target_document.range.start_frame,TimelineValueVec3(1,2,3),
+                TIMELINE_INTERPOLATION_STEP)==TIMELINE_STATUS_OK);
+        future_track.enabled=false;
+        assert_true("scene_timeline_future_add",TimelineDocumentAddTrack(&target_document,&future_track)==TIMELINE_STATUS_OK);
+        json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
+        assert_true("scene_timeline_future_disabled_kept",RuntimeSceneTimelineValidateScene(supported_scene,diagnostics,sizeof(diagnostics)));
+        target_document.tracks[target_document.track_count-1].enabled=true;
+        json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
+        assert_true("scene_timeline_future_enabled_refused",!RuntimeSceneTimelineValidateScene(supported_scene,diagnostics,sizeof(diagnostics)) &&
+            strstr(diagnostics,"runtime adapter")!=NULL);
+        target_document.tracks[target_document.track_count-1].enabled=false;
+        target_document.tracks[spatial_binding.progress_track_index].enabled=false;
+        json_object_object_add(target_authoring,"scene_timeline",SceneTimelineDocumentToJson(&target_document));
+        assert_true("scene_timeline_missing_progress_refused",!RuntimeSceneTimelineValidateScene(supported_scene,diagnostics,sizeof(diagnostics)) &&
+            strstr(diagnostics,"enabled path-progress")!=NULL);
+        json_object_put(supported_scene);
+        RayEvaluatedSceneServiceResult elapsed, authored;
+        assert_true("scene_timeline_elapsed", RayEvaluatedSceneCaptureForElapsed(10.5 * 1001.0 / 24000.0, &elapsed));
+        assert_true("scene_timeline_authored_camera_only", RayEvaluatedSceneCaptureAuthoredSample((TimelineSample){110,1,2}, &authored));
+        assert_true("scene_timeline_clock_parity", elapsed.snapshot.frame.sample.absolute_frame == 110 &&
+            fabs(elapsed.snapshot.frame.absolute_frame_position - 110.5) < 1e-8 &&
+            elapsed.snapshot.frame.rate.frames_per_second_denominator == 1001);
+        assert_true("scene_timeline_camera_parity", fabs(elapsed.snapshot.camera.fov_y_degrees - 80.5) < 1e-8 &&
+            authored.snapshot.camera.fov_y_degrees == evaluated.snapshot.camera.fov_y_degrees);
+        assert_true("scene_timeline_stale_refused", !SceneEditorDocumentSetTimeline(&timeline, revision, diagnostics, sizeof(diagnostics)));
+        assert_true("scene_timeline_undo", SceneEditorDocumentUndo(diagnostics, sizeof(diagnostics)) &&
+            SceneEditorDocumentGetTimeline(&loaded) == TIMELINE_STATUS_TARGET_NOT_FOUND);
+        assert_true("scene_timeline_redo", SceneEditorDocumentRedo(diagnostics, sizeof(diagnostics)) &&
+            SceneEditorDocumentGetTimeline(&loaded) == TIMELINE_STATUS_OK);
+        revision = SceneEditorDocumentRevision();
+        timeline.tracks[0].keys[0].value.as.scalar = 90;
+        SceneEditorDocumentFailNextForTests(SCENE_DOCUMENT_FAIL_HISTORY);
+        assert_true("scene_timeline_history_failure", !SceneEditorDocumentSetTimeline(&timeline, revision, diagnostics, sizeof(diagnostics)) &&
+            SceneEditorDocumentRevision() == revision);
+        assert_true("scene_timeline_failure_restores_source", SceneEditorDocumentGetTimeline(&loaded) == TIMELINE_STATUS_OK &&
+            loaded.tracks[0].keys[0].value.as.scalar == 70);
+        assert_true("scene_timeline_failure_restores_runtime", RayEvaluatedSceneCaptureSample((TimelineSample){110,1,2}, &evaluated) &&
+            evaluated.snapshot.camera.fov_y_degrees == 80.5);
+        assert_true("scene_timeline_rollback_identity", evaluated.snapshot.identity.timeline_revision == timeline_identity);
+        assert_true("scene_timeline_save", SceneEditorDocumentSave(diagnostics, sizeof(diagnostics)));
+        SceneEditorDocumentClose();
+        assert_true("scene_timeline_reopen", SceneEditorDocumentOpen(runtime_path, diagnostics, sizeof(diagnostics)) &&
+            SceneEditorDocumentGetTimeline(&loaded) == TIMELINE_STATUS_OK &&
+            loaded.tracks[0].keys[0].value.as.scalar == 70);
+        assert_true("scene_timeline_ui_select", SceneEditorTimelineSelectTrack(0));
+        assert_true("scene_timeline_ui_seek", SceneEditorTimelineSeek(115));
+        unsigned long long channel_revision=SceneEditorDocumentRevision();
+        assert_true("scene_timeline_add_yaw", SceneEditorTimelineAddChannel("camera/yaw") &&
+            SceneEditorDocumentRevision()==channel_revision+1);
+        TimelineTrack channel;TimelineRate channel_rate;TimelineRange channel_range;TimelineSample channel_sample;
+        assert_true("scene_timeline_channel_keeps_frame", SceneEditorTimelineSelectedTrack(&channel,&channel_rate,&channel_range,&channel_sample) &&
+            channel_sample.absolute_frame==115 && !strcmp(channel.property_id,"camera/yaw"));
+        assert_true("scene_timeline_channel_duplicate_selects", SceneEditorTimelineAddChannel("camera/yaw") &&
+            SceneEditorDocumentRevision()==channel_revision+1);
+        assert_true("scene_timeline_channel_wrong_target_refused", !SceneEditorTimelineAddChannel("light/intensity") &&
+            SceneEditorDocumentRevision()==channel_revision+1);
+        assert_true("scene_timeline_channel_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK && loaded.track_count==1);
+        assert_true("scene_timeline_channel_restore_selection", SceneEditorTimelineSelectTrack(0));
+        assert_true("scene_timeline_ui_set_key", SceneEditorTimelineSetKey(75));
+        RayEvaluatedSceneSnapshot ui_frame;
+        assert_true("scene_timeline_ui_evaluated", SceneEditorTimelineCopyEvaluated(&ui_frame) &&
+            ui_frame.camera.fov_y_degrees == 75);
+        assert_true("scene_timeline_ui_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.camera.fov_y_degrees == 85);
+        assert_true("timeline_key_restore", SceneEditorTimelineSetKey(75));
+        assert_true("timeline_hold", SceneEditorTimelineSetInterpolation(TIMELINE_INTERPOLATION_STEP) &&
+            SceneEditorTimelineSeek(117) && SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.camera.fov_y_degrees==75);
+        assert_true("timeline_move", SceneEditorTimelineSeek(115) && SceneEditorTimelineMoveKey(116));
+        unsigned long long key_revision=SceneEditorDocumentRevision();
+        assert_true("timeline_collision_refused", !SceneEditorTimelineMoveKey(120) && SceneEditorDocumentRevision()==key_revision);
+        assert_true("timeline_invalid_handles_refused", !SceneEditorTimelineSetHandles(0,0,-1,0) && SceneEditorDocumentRevision()==key_revision);
+        assert_true("timeline_ease", SceneEditorTimelineSetInterpolation(TIMELINE_INTERPOLATION_CUBIC_BEZIER) &&
+            SceneEditorTimelineSeek(118) && SceneEditorTimelineCopyEvaluated(&ui_frame) && fabs(ui_frame.camera.fov_y_degrees-82.5)<1e-8);
+        SceneEditorPaneLayout timeline_layout={0};
+        timeline_layout.timeline_visible=true;
+        timeline_layout.timeline_rect=(SDL_Rect){10,20,800,240};
+        SDL_Event timeline_event={0};
+        timeline_event.type=SDL_MOUSEBUTTONDOWN;
+        timeline_event.button.button=SDL_BUTTON_LEFT;
+        timeline_event.button.x=690; timeline_event.button.y=86;
+        assert_true("timeline_key_mouse_down", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
+        timeline_event.type=SDL_MOUSEMOTION;timeline_event.motion.x=718;timeline_event.motion.y=86;
+        assert_true("timeline_key_mouse_drag", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
+        assert_true("timeline_drag_not_committed_early", SceneEditorDocumentRevision()==key_revision+1);
+        timeline_event.type=SDL_MOUSEBUTTONUP;timeline_event.button.button=SDL_BUTTON_LEFT;
+        timeline_event.button.x=718;timeline_event.button.y=86;
+        assert_true("timeline_key_mouse_up", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
+        assert_true("timeline_drag_one_command", SceneEditorDocumentRevision()==key_revision+2 &&
+            SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK && loaded.tracks[0].keys[1].frame==117);
+        timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_DELETE;timeline_event.key.keysym.mod=KMOD_NONE;
+        assert_true("timeline_delete_event", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
+            SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK && loaded.tracks[0].key_count==2);
+        assert_true("timeline_delete_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK && loaded.tracks[0].key_count==3);
+        TimelineTrack pitch_track;
+        assert_true("timeline_reorder_pitch", TimelineTrackInit(&pitch_track,"camera-pitch","camera/main","camera/pitch",TIMELINE_VALUE_SCALAR)==TIMELINE_STATUS_OK &&
+            TimelineTrackSetUnit(&pitch_track,TIMELINE_UNIT_RADIANS)==TIMELINE_STATUS_OK &&
+            TimelineTrackAddKey(&pitch_track,100,TimelineValueScalar(0),TIMELINE_INTERPOLATION_STEP)==TIMELINE_STATUS_OK &&
+            TimelineDocumentAddTrack(&loaded,&pitch_track)==TIMELINE_STATUS_OK);
+        TimelineTrack reordered=loaded.tracks[0];loaded.tracks[0]=loaded.tracks[1];loaded.tracks[1]=reordered;
+        assert_true("timeline_reorder_commit", SceneEditorDocumentSetTimeline(&loaded,SceneEditorDocumentRevision(),diagnostics,sizeof(diagnostics)));
+        assert_true("timeline_reorder_selection_stable", SceneEditorTimelineSetKey(76) &&
+            SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK &&
+            loaded.tracks[0].keys[0].value.as.scalar==0 && loaded.tracks[1].keys[1].value.as.scalar==76);
+        timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.x=270;timeline_event.button.y=30;
+        assert_true("timeline_frame_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
+        timeline_event.type=SDL_TEXTINPUT;snprintf(timeline_event.text.text,sizeof(timeline_event.text.text),"118");
+        assert_true("timeline_frame_entry_text", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
+        timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
+        assert_true("timeline_frame_entry_submit", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
+            SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.frame.sample.absolute_frame==118);
+        timeline_event.type=SDL_MOUSEBUTTONDOWN;timeline_event.button.x=420;timeline_event.button.y=30;
+        assert_true("timeline_value_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
+        timeline_event.type=SDL_TEXTINPUT;snprintf(timeline_event.text.text,sizeof(timeline_event.text.text),"77.125");
+        assert_true("timeline_value_entry_text", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
+        timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
+        assert_true("timeline_value_entry_submit", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
+            SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.camera.fov_y_degrees==77.125);
+        assert_true("scene_timeline_workspace_save", SceneEditorRuntimeScenePersistAuthoring(diagnostics,sizeof(diagnostics)));
+        assert_true("scene_timeline_workspace_reopen", SceneEditorDocumentOpen(runtime_path,diagnostics,sizeof(diagnostics)) &&
+            SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK &&
+            loaded.rate.frames_per_second_numerator==24000 && loaded.rate.frames_per_second_denominator==1001 &&
+            loaded.range.start_frame==100 && loaded.range.frame_count==21);
+        assert_true("scene_timeline_workspace_saved_value", RayEvaluatedSceneCaptureSample((TimelineSample){118,0,1},&evaluated) &&
+            evaluated.snapshot.camera.fov_y_degrees==77.125);
+    }
+    {
+        Path authored_camera={0};CameraPath3D authored_depth={0};
+        authored_camera.mode=BEZIER_CUBIC;authored_camera.numPoints=2;
+        authored_camera.points[0]=(Point){1,2};authored_camera.points[1]=(Point){10,12};
+        authored_camera.rotationSet[0]=authored_camera.rotationSet[1]=true;
+        authored_depth.point_z[0]=3;authored_depth.point_z[1]=4;
+        authored_depth.point_pitch[0]=.1;
+        assert_true("camera_path_retained_command", SceneEditorDocumentSetCameraPath(&authored_camera,&authored_depth,
+            SceneEditorDocumentRevision(),diagnostics,sizeof(diagnostics)));
+        unsigned long long camera_revision=SceneEditorDocumentRevision();
+        CameraEditorSetSelectedPointIndex(0);
+        assert_true("camera_gesture_begin", SceneEditorCameraGestureBegin());
+        assert_true("camera_gesture_move", CameraEditorMoveSelectedGizmoTo(6,7,8));
+        assert_true("camera_gesture_preview_no_history", SceneEditorDocumentRevision()==camera_revision);
+        assert_true("camera_gesture_commit", SceneEditorCameraGestureCommit() && SceneEditorDocumentRevision()==camera_revision+1);
+        assert_true("camera_gesture_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            fabs(sceneSettings.cameraPath.points[0].x-1)<1e-9 && fabs(sceneSettings.cameraPath3D.point_z[0]-3)<1e-9);
+        assert_true("camera_gesture_redo", SceneEditorDocumentRedo(diagnostics,sizeof(diagnostics)) &&
+            fabs(sceneSettings.cameraPath.points[0].x-6)<1e-9 && fabs(sceneSettings.cameraPath3D.point_z[0]-8)<1e-9);
+        camera_revision=SceneEditorDocumentRevision();
+        assert_true("camera_gesture_cancel_begin", SceneEditorCameraGestureBegin() && CameraEditorMoveSelectedGizmoTo(50,60,70));
+        SceneEditorCameraGestureCancel();
+        assert_true("camera_gesture_cancel", SceneEditorDocumentRevision()==camera_revision &&
+            fabs(sceneSettings.cameraPath.points[0].x-6)<1e-9 && fabs(sceneSettings.cameraPath3D.point_z[0]-8)<1e-9);
+        assert_true("camera_gesture_failed_begin", SceneEditorCameraGestureBegin() && CameraEditorMoveSelectedGizmoTo(50,60,70));
+        SceneEditorDocumentFailNextForTests(SCENE_DOCUMENT_FAIL_HISTORY);
+        assert_true("camera_gesture_failed_commit", !SceneEditorCameraGestureCommit() &&
+            SceneEditorDocumentRevision()==camera_revision && fabs(sceneSettings.cameraPath.points[0].x-6)<1e-9);
+        assert_true("camera_path_save", SceneEditorDocumentSave(diagnostics,sizeof(diagnostics)));
+        SceneEditorDocumentClose();
+        assert_true("camera_path_reopen", SceneEditorDocumentOpen(runtime_path,diagnostics,sizeof(diagnostics)) &&
+            fabs(sceneSettings.cameraPath.points[0].x-6)<1e-9 && fabs(sceneSettings.cameraPath3D.point_z[0]-8)<1e-9 &&
+            fabs(sceneSettings.cameraPath3D.point_pitch[0]-.1)<1e-9);
+        SceneEditorPaneLayout inspector_layout={0};inspector_layout.right_content_rect=(SDL_Rect){800,40,300,500};
+        SDL_Event inspector_event={0};inspector_event.type=SDL_MOUSEBUTTONDOWN;
+        inspector_event.button.x=830;inspector_event.button.y=40+46+2*32+10;
+        assert_true("camera_inspector_depth_click", SceneEditorCameraInspectorEvent(&inspector_event,&inspector_layout));
+        inspector_event.type=SDL_TEXTINPUT;snprintf(inspector_event.text.text,sizeof(inspector_event.text.text),"14.5");
+        assert_true("camera_inspector_depth_text", SceneEditorCameraInspectorEvent(&inspector_event,&inspector_layout));
+        inspector_event.type=SDL_KEYDOWN;inspector_event.key.keysym.sym=SDLK_RETURN;
+        assert_true("camera_inspector_depth_commit", SceneEditorCameraInspectorEvent(&inspector_event,&inspector_layout) &&
+            fabs(sceneSettings.cameraPath3D.point_z[0]-14.5)<1e-9);
+        assert_true("camera_inspector_depth_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            fabs(sceneSettings.cameraPath3D.point_z[0]-8)<1e-9);
+        CameraEditorSetSelectedPointIndex(0);
+        double prior_yaw=sceneSettings.cameraPath.rotations[0];
+        double other_yaw=sceneSettings.cameraPath.rotations[1];
+        camera_revision=SceneEditorDocumentRevision();
+        SDL_Event camera_control={0};camera_control.type=SDL_KEYDOWN;camera_control.key.keysym.sym=SDLK_p;
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_rotate_selected_retained", SceneEditorDocumentRevision()==camera_revision+1 &&
+            fabs(sceneSettings.cameraPath.rotations[0]-prior_yaw-.05)<1e-9 &&
+            fabs(sceneSettings.cameraPath.rotations[1]-other_yaw)<1e-9);
+        assert_true("camera_rotate_selected_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            fabs(sceneSettings.cameraPath.rotations[0]-prior_yaw)<1e-9);
+        camera_revision=SceneEditorDocumentRevision();
+        SceneEditorDocumentFailNextForTests(SCENE_DOCUMENT_FAIL_HISTORY);
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_rotate_failure_rollback", SceneEditorDocumentRevision()==camera_revision &&
+            fabs(sceneSettings.cameraPath.rotations[0]-prior_yaw)<1e-9);
+        BezierMode prior_mode=sceneSettings.cameraPath.mode;
+        camera_control.key.keysym.sym=SDLK_t;HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_mode_retained", SceneEditorDocumentRevision()==camera_revision+1 &&
+            sceneSettings.cameraPath.mode!=prior_mode);
+        assert_true("camera_mode_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            sceneSettings.cameraPath.mode==prior_mode);
+        bool prior_link=sceneSettings.cameraPath.handleLink[0];
+        camera_control.key.keysym.sym=SDLK_l;HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_link_retained", sceneSettings.cameraPath.handleLink[0]!=prior_link);
+        assert_true("camera_link_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            sceneSettings.cameraPath.handleLink[0]==prior_link);
+        SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
+        int prior_width=sceneSettings.windowWidth,prior_height=sceneSettings.windowHeight;
+        sceneSettings.windowWidth=1280;sceneSettings.windowHeight=800;
+        Camera preview_camera=CameraBuildPreviewCamera(&sceneSettings.camera,GetCurrentMarginPixels(),
+            sceneSettings.windowWidth,sceneSettings.windowHeight);
+        SpaceModeViewContext camera_view=EditorModeRouter_BuildViewContext(&preview_camera,
+            sceneSettings.windowWidth,sceneSettings.windowHeight);
+        CameraPoint screen_point=SpaceModeAdapter_WorldToScreen(&camera_view,
+            sceneSettings.cameraPath.points[0].x,sceneSettings.cameraPath.points[0].y);
+        double original_x=sceneSettings.cameraPath.points[0].x;
+        camera_revision=SceneEditorDocumentRevision();
+        camera_control=(SDL_Event){0};camera_control.type=SDL_MOUSEBUTTONDOWN;
+        camera_control.button.button=SDL_BUTTON_LEFT;
+        camera_control.button.x=(int)lround(screen_point.x);camera_control.button.y=(int)lround(screen_point.y);
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_legacy_drag_begin", CameraEditorLegacyGestureActive());
+        camera_control.type=SDL_MOUSEMOTION;camera_control.motion.state=SDL_BUTTON_LMASK;
+        camera_control.motion.x=(int)lround(screen_point.x)+60;camera_control.motion.y=(int)lround(screen_point.y);
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_legacy_drag_preview", SceneEditorDocumentRevision()==camera_revision &&
+            fabs(sceneSettings.cameraPath.points[0].x-original_x)>1e-6);
+        camera_control.type=SDL_MOUSEBUTTONUP;camera_control.button.button=SDL_BUTTON_LEFT;
+        camera_control.button.x=-20;camera_control.button.y=-20;
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_legacy_drag_commit", !CameraEditorLegacyGestureActive() && SceneEditorDocumentRevision()==camera_revision+1);
+        assert_true("camera_legacy_drag_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
+            fabs(sceneSettings.cameraPath.points[0].x-original_x)<1e-9);
+        camera_control.type=SDL_MOUSEBUTTONDOWN;camera_control.button.button=SDL_BUTTON_LEFT;
+        camera_control.button.x=(int)lround(screen_point.x);camera_control.button.y=(int)lround(screen_point.y);
+        HandleCameraEditorEvents(&camera_control);
+        camera_control.type=SDL_MOUSEMOTION;camera_control.motion.state=SDL_BUTTON_LMASK;
+        camera_control.motion.x=(int)lround(screen_point.x)+80;camera_control.motion.y=(int)lround(screen_point.y);
+        HandleCameraEditorEvents(&camera_control);
+        camera_control.type=SDL_KEYDOWN;camera_control.key.keysym.sym=SDLK_ESCAPE;
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_legacy_drag_cancel", !CameraEditorLegacyGestureActive() &&
+            fabs(sceneSettings.cameraPath.points[0].x-original_x)<1e-9);
+        camera_control.type=SDL_MOUSEBUTTONDOWN;camera_control.button.button=SDL_BUTTON_LEFT;
+        camera_control.button.x=(int)lround(screen_point.x);camera_control.button.y=(int)lround(screen_point.y);
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_legacy_stale_begin", CameraEditorLegacyGestureActive());
+        Path newer_path=sceneSettings.cameraPath;CameraPath3D newer_depth=sceneSettings.cameraPath3D;
+        newer_path.points[0].x=42;
+        assert_true("camera_legacy_concurrent_edit", SceneEditorDocumentSetCameraPath(&newer_path,&newer_depth,
+            SceneEditorDocumentRevision(),diagnostics,sizeof(diagnostics)));
+        camera_revision=SceneEditorDocumentRevision();
+        camera_control.type=SDL_MOUSEMOTION;camera_control.motion.state=SDL_BUTTON_LMASK;
+        camera_control.motion.x=(int)lround(screen_point.x)+90;camera_control.motion.y=(int)lround(screen_point.y);
+        HandleCameraEditorEvents(&camera_control);
+        assert_true("camera_legacy_stale_refused", !CameraEditorLegacyGestureActive() &&
+            SceneEditorDocumentRevision()==camera_revision && sceneSettings.cameraPath.points[0].x==42);
+        assert_true("camera_legacy_concurrent_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)));
+        sceneSettings.windowWidth=prior_width;sceneSettings.windowHeight=prior_height;
+        authored_camera.points[0].x=NAN;
+        assert_true("camera_path_nonfinite_refused", !SceneEditorDocumentSetCameraPath(&authored_camera,&authored_depth,
+            SceneEditorDocumentRevision(),diagnostics,sizeof(diagnostics)));
     }
     memset(&transform, 0, sizeof(transform));
     assert_true("foundation_a_document_fresh_process_transform_readback",

@@ -247,6 +247,10 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/animation/timeline_clock.o \
 	$(BUILD_DIR)/animation/timeline_document.o \
 	$(BUILD_DIR)/animation/timeline_frame_snapshot.o \
+	$(BUILD_DIR)/animation/timeline_camera_channels.o \
+	$(BUILD_DIR)/import/runtime_scene_timeline.o \
+	$(BUILD_DIR)/import/runtime_scene_timeline_consumers.o \
+	$(BUILD_DIR)/import/scene_timeline_document_io.o \
 	$(BUILD_DIR)/animation/timeline_light_motion.o \
 	$(BUILD_DIR)/animation/timeline_property_registry.o \
 	$(BUILD_DIR)/animation/timeline_track.o \
@@ -652,6 +656,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/scene_editor_mesh_preview_surface.o \
 	$(BUILD_DIR)/editor/scene_editor_tool_state.o \
 	$(BUILD_DIR)/editor/scene_editor_viewport_nav_zoom.o \
+	$(BUILD_DIR)/editor/scene_editor_viewport_authoring_bounds.o \
 	$(BUILD_DIR)/editor/scene_editor_runtime_scene_persistence.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \

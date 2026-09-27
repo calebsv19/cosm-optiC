@@ -1,8 +1,12 @@
+#include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_object_list.h"
 #include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_pointer_event.h"
 #include "editor/scene_editor_sidebar.h"
 #include "editor/scene_editor_workspace_profile.h"
+#include "editor/scene_editor_timeline.h"
+#include "editor/scene_editor_light_authoring.h"
+#include "app/preview_session.h"
 #include "editor/scene_editor_chrome_actions.h"
 
 #include <stdio.h>
@@ -167,7 +171,12 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         if (!contract.previewEnabled) {
             return;
         }
-        RunPreviewModeEmbedded(editor->window, editor->renderer);
+        TimelineSample sample;
+        if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER && SceneEditorTimelineCurrentSample(&sample)) {
+            SceneEditorTimelinePause();
+            RunPreviewModeEmbeddedAtSample(editor->window,editor->renderer,&sample);
+            SceneEditorTimelineSeekSample(sample);
+        } else RunPreviewModeEmbedded(editor->window, editor->renderer);
         if (env && env->resume_after_preview) {
             env->resume_after_preview(editor);
         }
@@ -355,7 +364,7 @@ static bool scene_editor_dispatch_controlled_3d_object_canvas_command(
     return ObjectEditorAddPlacementAt(world_x, world_y);
 }
 
-static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
+static bool scene_editor_dispatch_controlled_3d_camera_canvas_raw(
     const SceneEditorChromeActionsEnvironment* env,
     const SceneEditorPaneCommand* command) {
     RuntimeSceneBridge3DDigestState digest = {0};
@@ -374,7 +383,8 @@ static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
     double world_z = 0.0;
     if (!env || !env->pane_layout || !env->viewport_nav_state || !env->camera_gizmo_state) return false;
     if (!command || !command->event) return false;
-    if (!scene_editor_chrome_actions_viewport_rect_contains_event_point(env, command->event)) return false;
+    if (!env->camera_gizmo_state->dragging &&
+        !scene_editor_chrome_actions_viewport_rect_contains_event_point(env, command->event)) return false;
     if (!SceneEditorDigestOverlayResolve(&digest)) return false;
     if (!SceneEditorDigestOverlayBuildProjector(&digest,
                                                 &env->pane_layout->viewport_rect,
@@ -510,7 +520,37 @@ static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
     return false;
 }
 
-static bool scene_editor_dispatch_controlled_3d_bezier_canvas_command(
+static bool scene_editor_dispatch_controlled_3d_camera_canvas_command(
+    const SceneEditorChromeActionsEnvironment* env,const SceneEditorPaneCommand* command) {
+    if(!env || !env->camera_gizmo_state || !command || !command->event) return false;
+    if(command->kind==SCENE_EDITOR_PANE_COMMAND_POINTER_UP &&
+        command->event->type==SDL_MOUSEBUTTONUP && command->event->button.button==SDL_BUTTON_LEFT &&
+        env->camera_gizmo_state->dragging) {
+        env->camera_gizmo_state->dragging=false;
+        env->camera_gizmo_state->drag_axis=SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
+        if(SceneEditorCameraGestureActive()) (void)SceneEditorCameraGestureCommit();
+        return true;
+    }
+    if(command->kind==SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG && env->camera_gizmo_state->dragging &&
+        !SceneEditorCameraGestureValid()) {
+        env->camera_gizmo_state->dragging=false;return true;
+    }
+    bool began=false;
+    if(command->kind==SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN &&
+        command->event->type==SDL_MOUSEBUTTONDOWN && command->event->button.button==SDL_BUTTON_LEFT &&
+        scene_editor_chrome_actions_viewport_rect_contains_event_point(env,command->event)) {
+        began=SceneEditorCameraGestureBegin();
+        if(!began) return true;
+    }
+    bool handled=scene_editor_dispatch_controlled_3d_camera_canvas_raw(env,command);
+    if(began && !env->camera_gizmo_state->dragging) {
+        if(handled) (void)SceneEditorCameraGestureCommit();
+        else SceneEditorCameraGestureCancel();
+    }
+    return handled;
+}
+
+static bool scene_editor_dispatch_controlled_3d_bezier_canvas_raw(
     const SceneEditorChromeActionsEnvironment* env,
     const SceneEditorPaneCommand* command) {
     RuntimeSceneBridge3DDigestState digest = {0};
@@ -646,6 +686,31 @@ static bool scene_editor_dispatch_controlled_3d_bezier_canvas_command(
         return true;
     }
     return false;
+}
+
+static bool scene_editor_dispatch_controlled_3d_bezier_canvas_command(
+    const SceneEditorChromeActionsEnvironment* env,const SceneEditorPaneCommand* command) {
+    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER)
+        return scene_editor_dispatch_controlled_3d_bezier_canvas_raw(env,command);
+    if(!env || !env->bezier_gizmo_state || !command || !command->event) return false;
+    if(command->kind==SCENE_EDITOR_PANE_COMMAND_POINTER_UP && command->event->type==SDL_MOUSEBUTTONUP &&
+       command->event->button.button==SDL_BUTTON_LEFT && env->bezier_gizmo_state->dragging) {
+        memset(env->bezier_gizmo_state,0,sizeof(*env->bezier_gizmo_state));
+        if(SceneEditorLightGestureActive()) SceneEditorLightGestureCommit();
+        return true;
+    }
+    if(command->kind==SCENE_EDITOR_PANE_COMMAND_POINTER_DRAG && env->bezier_gizmo_state->dragging &&
+       !SceneEditorLightGestureValid()) {memset(env->bezier_gizmo_state,0,sizeof(*env->bezier_gizmo_state));return true;}
+    bool began=false;
+    if(command->kind==SCENE_EDITOR_PANE_COMMAND_POINTER_DOWN && command->event->type==SDL_MOUSEBUTTONDOWN &&
+       command->event->button.button==SDL_BUTTON_LEFT && scene_editor_chrome_actions_viewport_rect_contains_event_point(env,command->event)) {
+        began=SceneEditorLightGestureBegin();if(!began) return true;
+    }
+    bool handled=scene_editor_dispatch_controlled_3d_bezier_canvas_raw(env,command);
+    if(began && !env->bezier_gizmo_state->dragging) {
+        if(handled) SceneEditorLightGestureCommit();else SceneEditorLightGestureCancel();
+    }
+    return handled;
 }
 
 static bool scene_editor_dispatch_material_canvas_command(

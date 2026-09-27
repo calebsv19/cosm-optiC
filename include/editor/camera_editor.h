@@ -18,6 +18,7 @@ typedef enum CameraEditorSelectionKind {
 } CameraEditorSelectionKind;
 
 double GetCurrentMarginPixels(void);
+bool CameraEditorLegacyGestureActive(void);
 
 // Camera Editor: Handles viewport adjustments and scene framing
 

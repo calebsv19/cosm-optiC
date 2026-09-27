@@ -1,3 +1,4 @@
+#include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_digest_overlay.h"
 #include "editor/scene_editor_light_timeline.h"
@@ -416,6 +417,8 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                                   mouse_y,
                                                   camera_gizmo_state);
     }
+
+    SceneEditorTimelineRenderEvaluatedMarkers(renderer,&projector);
 
     SceneEditorDigestOverlayDrawLine3(renderer,
                                       &projector,

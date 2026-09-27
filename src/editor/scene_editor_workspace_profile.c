@@ -1,3 +1,4 @@
+#include "editor/scene_editor_camera_inspector.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_internal.h"
@@ -37,9 +38,11 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     bool leaving_material=profile!=SCENE_WORKSPACE_MATERIALS && active==SCENE_WORKSPACE_MATERIALS;
     if (entering_material) { scene_nav=*SceneEditorGetViewportNavState(); scene_nav_saved=true; }
     menu_open=false;
+    SceneEditorCameraInspectorReset();
     active = profile;
     SetSceneMode(editor, profile == SCENE_WORKSPACE_MATERIALS ? EDITOR_MODE_MATERIAL :
         profile == SCENE_WORKSPACE_RENDER ? EDITOR_MODE_CAMERA : EDITOR_MODE_OBJECT);
+    scene_editor_pane_host_set_timeline_visible(SceneEditorGetPaneHost(), profile==SCENE_WORKSPACE_RENDER);
     if(selected_id[0]) ObjectEditorSelectionTrackerSelectId(selected_id);
     else ObjectEditorSetSelectedObjectIndex(selected);
     if (entering_material) {
@@ -243,4 +246,8 @@ void SceneEditorWorkspaceProfileSyncMode(int mode) {
     else if (mode == EDITOR_MODE_CAMERA) active = SCENE_WORKSPACE_RENDER;
     else if (mode == EDITOR_MODE_PATH) active = SCENE_WORKSPACE_SCENE;
     else if (active == SCENE_WORKSPACE_MATERIALS || active == SCENE_WORKSPACE_RENDER) active = SCENE_WORKSPACE_SCENE;
+    SceneEditorPaneHost* host=SceneEditorGetPaneHost();
+    if (host && host->initialized &&
+        scene_editor_pane_host_set_timeline_visible(host,active==SCENE_WORKSPACE_RENDER))
+        SceneEditorRefreshWorkspaceLayout();
 }

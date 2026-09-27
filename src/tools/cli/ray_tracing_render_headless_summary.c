@@ -125,6 +125,15 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  \"evaluated_scene_light_id\": ");
     RayTracingJsonWriteString(file, preflight->evaluated_scene_light_id);
     fprintf(file, ",\n");
+    /* Values belong to evaluated_scene_last_frame and the bound snapshot. */
+    const RayEvaluatedCamera* camera = &preflight->evaluated_camera;
+    const RayEvaluatedLight* light = &preflight->evaluated_light;
+    fprintf(file, "  \"evaluated_camera\": {\"valid\": %s, \"position\": [%.17g, %.17g, %.17g], \"yaw\": %.17g, \"pitch\": %.17g, \"fov_y\": %.17g},\n",
+            camera->valid ? "true" : "false", camera->position.x, camera->position.y,
+            camera->position.z, camera->yaw_radians, camera->pitch_radians, camera->fov_y_degrees);
+    fprintf(file, "  \"evaluated_light\": {\"valid\": %s, \"position\": [%.17g, %.17g, %.17g], \"progress\": %.17g, \"intensity\": %.17g},\n",
+            light->valid ? "true" : "false", light->position.x, light->position.y,
+            light->position.z, light->progress, light->intensity);
     fprintf(file, "  \"rendered_frames\": %s,\n", preflight->rendered_frames ? "true" : "false");
     fprintf(file, "  \"frames_rendered\": %d,\n", preflight->frames_rendered);
     fprintf(file, "  \"checkpoint\": {\n");

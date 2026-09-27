@@ -19,13 +19,15 @@ const char* TimelineUnitLabel(TimelineUnit unit) {
         case TIMELINE_UNIT_UNITLESS: return "unitless";
         case TIMELINE_UNIT_WORLD_DISTANCE: return "world_distance";
         case TIMELINE_UNIT_RELATIVE_INTENSITY: return "relative_intensity";
+        case TIMELINE_UNIT_RADIANS: return "radians";
+        case TIMELINE_UNIT_DEGREES: return "degrees";
         default: return "unknown";
     }
 }
 
 bool TimelineUnitIsValid(TimelineUnit unit) {
     return unit >= TIMELINE_UNIT_UNSPECIFIED &&
-           unit <= TIMELINE_UNIT_RELATIVE_INTENSITY;
+           unit <= TIMELINE_UNIT_DEGREES;
 }
 
 TimelineValue TimelineValueScalar(double value) {

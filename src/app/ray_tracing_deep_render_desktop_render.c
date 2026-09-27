@@ -411,8 +411,8 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     snapshot_desc.hostHeight = unit->hostHeight;
     snapshot_desc.frameIndex =
         (int)evaluated_scene.snapshot.frame.sample.absolute_frame;
-    snapshot_desc.frameCount =
-        (int)evaluated_scene.snapshot.frame.range.frame_count;
+    /* Export length is independent of the scene timeline's evaluation range. */
+    snapshot_desc.frameCount = desc->frameCount;
     snapshot_desc.temporalFrames = unit->temporalFrames;
     snapshot_desc.tileSize = unit->tileSize;
     snapshot_desc.integratorId = unit->integratorId;
@@ -440,8 +440,7 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     request_desc.localFrameIndex = desc->localFrameIndex;
     request_desc.absoluteFrameIndex =
         (int)evaluated_scene.snapshot.frame.sample.absolute_frame;
-    request_desc.frameCount =
-        (int)evaluated_scene.snapshot.frame.range.frame_count;
+    request_desc.frameCount = desc->frameCount;
     request_desc.frameDurationSeconds =
         (double)evaluated_scene.snapshot.frame.rate.frames_per_second_denominator /
         (double)evaluated_scene.snapshot.frame.rate.frames_per_second_numerator;

@@ -1,3 +1,5 @@
+#include "import/runtime_scene_timeline.h"
+#include "import/scene_timeline_document_io.h"
 #include "test_runtime_evaluated_scene_preview.h"
 
 #include <math.h>
@@ -615,6 +617,53 @@ static int test_authored_light_timeline_does_not_retime_camera(void) {
                  held_result.snapshot.light.intensity_provenance
                      .derivative_per_frame,
                  0.0, 1e-12);
+
+    /* After explicit migration, camera and light channels use shared frame time. */
+    static TimelineDocument shared_document;
+    shared_document = light_document.timeline;
+    shared_document.tracks[light_document.progress_track_index].keys[1].value = TimelineValueScalar(.5);
+    TimelineTrack camera_lens;
+    assert_true("shared_clock_camera_track", TimelineTrackInit(&camera_lens,"camera-lens","camera/main","camera/fov_y",TIMELINE_VALUE_SCALAR)==TIMELINE_STATUS_OK);
+    assert_true("shared_clock_camera_unit", TimelineTrackSetUnit(&camera_lens,TIMELINE_UNIT_DEGREES)==TIMELINE_STATUS_OK);
+    assert_true("shared_clock_camera_key", TimelineTrackAddKey(&camera_lens,0,TimelineValueScalar(65),TIMELINE_INTERPOLATION_STEP)==TIMELINE_STATUS_OK);
+    assert_true("shared_clock_camera_add", TimelineDocumentAddTrack(&shared_document,&camera_lens)==TIMELINE_STATUS_OK);
+    json_object* shared_authoring=json_object_new_object();
+    json_object_object_add(shared_authoring,"scene_timeline",SceneTimelineDocumentToJson(&shared_document));
+    assert_true("shared_clock_load", RuntimeSceneTimelineLoad(shared_authoring,1)==TIMELINE_STATUS_OK);
+    json_object_put(shared_authoring);
+    RayEvaluatedSceneServiceResult shared_direct, shared_elapsed;
+    assert_true("shared_clock_direct", RayEvaluatedSceneCaptureSample((TimelineSample){100,0,1},&shared_direct));
+    double seconds=100.0*shared_document.rate.frames_per_second_denominator/shared_document.rate.frames_per_second_numerator;
+    assert_true("shared_clock_elapsed", RayEvaluatedSceneCaptureForElapsed(seconds,&shared_elapsed));
+    assert_close("shared_clock_light_uses_new_track",shared_direct.snapshot.light.progress,50.0/603.0,1e-9);
+    assert_close("shared_clock_light_parity",shared_elapsed.snapshot.light.progress,shared_direct.snapshot.light.progress,1e-9);
+    assert_close("shared_clock_camera_applied",shared_direct.snapshot.camera.fov_y_degrees,65,1e-9);
+    double owned_intensity=shared_direct.snapshot.light.intensity;
+    TimelineTrack other_light;
+    assert_true("shared_other_light_track",TimelineTrackInit(&other_light,"other-intensity","light/other",
+        "light/intensity",TIMELINE_VALUE_SCALAR)==TIMELINE_STATUS_OK);
+    assert_true("shared_other_light_unit",TimelineTrackSetUnit(&other_light,TIMELINE_UNIT_RELATIVE_INTENSITY)==TIMELINE_STATUS_OK);
+    assert_true("shared_other_light_key",TimelineTrackAddKey(&other_light,0,TimelineValueScalar(999),TIMELINE_INTERPOLATION_STEP)==TIMELINE_STATUS_OK);
+    assert_true("shared_other_light_add",TimelineDocumentAddTrack(&shared_document,&other_light)==TIMELINE_STATUS_OK);
+    shared_authoring=json_object_new_object();
+    json_object_object_add(shared_authoring,"scene_timeline",SceneTimelineDocumentToJson(&shared_document));
+    assert_true("shared_other_light_load",RuntimeSceneTimelineLoad(shared_authoring,1)==TIMELINE_STATUS_OK);
+    json_object_put(shared_authoring);
+    assert_true("shared_other_light_capture",RayEvaluatedSceneCaptureSample((TimelineSample){100,0,1},&shared_direct));
+    assert_close("shared_light_channel_owner_isolated",shared_direct.snapshot.light.intensity,owned_intensity,1e-9);
+    assert_true("shared_disabled_progress_track",TimelineTrackInit(&other_light,"other-progress","light/other",
+        "light/path_progress",TIMELINE_VALUE_SCALAR)==TIMELINE_STATUS_OK &&
+        TimelineTrackSetUnit(&other_light,TIMELINE_UNIT_UNITLESS)==TIMELINE_STATUS_OK &&
+        TimelineTrackAddKey(&other_light,0,TimelineValueScalar(.9),TIMELINE_INTERPOLATION_STEP)==TIMELINE_STATUS_OK);
+    other_light.enabled=false;
+    assert_true("shared_disabled_progress_add",TimelineDocumentAddTrack(&shared_document,&other_light)==TIMELINE_STATUS_OK);
+    shared_authoring=json_object_new_object();
+    json_object_object_add(shared_authoring,"scene_timeline",SceneTimelineDocumentToJson(&shared_document));
+    assert_true("shared_disabled_progress_load",RuntimeSceneTimelineLoad(shared_authoring,1)==TIMELINE_STATUS_OK);
+    json_object_put(shared_authoring);
+    assert_true("shared_disabled_progress_capture",RayEvaluatedSceneCaptureSample((TimelineSample){100,0,1},&shared_direct));
+    assert_close("shared_disabled_progress_isolated",shared_direct.snapshot.light.progress,50.0/603.0,1e-9);
+    RuntimeSceneTimelineReset();
 
     sceneSettings = saved_scene;
     animSettings = saved_animation;

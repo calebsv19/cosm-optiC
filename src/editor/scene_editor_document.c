@@ -4,6 +4,7 @@
 #include "app/ray_tracing_sha256.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_document.h"
+#include "scene_editor_document_transaction.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -43,6 +44,8 @@ typedef struct SceneEditorDocumentState {
 } SceneEditorDocumentState;
 
 static SceneEditorDocumentState s_document;
+
+json_object* document_authoring_root(void) { return s_document.root; }
 
 static SceneEditorDocumentFailure document_failure;
 void SceneEditorDocumentFailNextForTests(SceneEditorDocumentFailure failure) {
@@ -280,7 +283,7 @@ static bool document_commit_command_history(void) {
     return true;
 }
 
-static void document_rollback_command(void) {
+void document_rollback_command(void) {
     if (!s_document.pending_root) return;
     json_object_put(s_document.root);
     s_document.root = s_document.pending_root;

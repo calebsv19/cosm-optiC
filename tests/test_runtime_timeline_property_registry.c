@@ -70,7 +70,7 @@ static int test_registry_foundation_defaults(void) {
     assert_true("registry_defaults_init",
                 TimelinePropertyRegistryInitFoundationDefaults(&registry) ==
                     TIMELINE_STATUS_OK);
-    assert_true("registry_defaults_count", registry.descriptor_count == 5u);
+    assert_true("registry_defaults_count", registry.descriptor_count == 10u);
     assert_true("registry_find_position",
                 TimelinePropertyRegistryFind(
                     &registry, "object/transform/position", &descriptor) ==
