@@ -1,4 +1,5 @@
 #include "editor/scene_editor_render_authoring.h"
+#include "editor/scene_editor_object_timeline.h"
 #include "scene_editor_timeline_ui.h"
 #include "scene_editor_timeline_commands.h"
 #include "editor/scene_editor_timeline_selection.h"
@@ -58,6 +59,7 @@ static bool sync_document(void) {
         if (n>0 && (size_t)n<sizeof(target))
             TimelineEntityBindingsAdd(&bindings, lights.lights[i].id, target, TIMELINE_PROPERTY_TARGET_LIGHT, true, false);
     }
+    SceneEditorObjectTimelineBindings(&bindings);
     if (!session.transport.valid || memcmp(&session.transport.rate, &document.rate, sizeof(document.rate)) ||
         memcmp(&session.transport.range, &document.range, sizeof(document.range)))
         SceneTimelineSessionInit(&session, document.rate, document.range, revision, revision);
@@ -212,6 +214,7 @@ bool SceneEditorTimelineAddChannel(const char* property) {
 bool SceneEditorTimelineSetKey(double value) {
     if (!sync_document() || selected>=document.track_count || !isfinite(value)) return false;
     TimelineTrack* track=&document.tracks[selected];
+    if(!SceneEditorObjectTimelineEditable(track->target_id,status_line,sizeof(status_line))) return false;
     if (track->value_type!=TIMELINE_VALUE_SCALAR ||
         SceneTimelineSessionBeginEdit(&session,SceneEditorDocumentRevision(),session.timeline_revision)!=TIMELINE_STATUS_OK) return false;
     TimelineKeyframe key={0};
@@ -319,6 +322,7 @@ const TimelineDocument* SceneEditorTimelineDocumentView(size_t* index) {
 }
 bool SceneEditorTimelineCommitTrack(const TimelineTrack* track,unsigned long long revision) {
     if(!track || !sync_document() || revision!=SceneEditorDocumentRevision()) return false;
+    if(!SceneEditorObjectTimelineEditable(track->target_id,status_line,sizeof(status_line))) return false;
     size_t index=SIZE_MAX;
     for(size_t i=0;i<document.track_count;++i) if(!strcmp(track->track_id,document.tracks[i].track_id)) index=i;
     if(index==SIZE_MAX || strcmp(track->target_id,document.tracks[index].target_id) ||

@@ -53,6 +53,9 @@ static void prepare(const SceneEditorPaneLayout* pane,const TimelineDocument* do
             if(row<ui.row_offset) ui.row_offset=row;
             if(visible && row>=ui.row_offset+visible) ui.row_offset=row-visible+1;
         }
+        /* Reveal all three position axes when entering an object channel. */
+        if(!strncmp(doc->tracks[selected].target_id,"object/",7))
+            for(size_t row=0;row<ui.row_count;++row) if(ui.rows[row].group && !strcmp(ui.rows[row].target,doc->tracks[selected].target_id)) {ui.row_offset=row;break;}
     }
     size_t max=ui.row_count>visible?ui.row_count-visible:0;if(ui.row_offset>max) ui.row_offset=max;
 }
@@ -181,7 +184,7 @@ bool SceneEditorTimelineUIEvent(SDL_Event* e,const SceneEditorPaneLayout* pane,c
             TimelineRow* item=&ui.rows[row];
             if(x<l->ruler.x || !ui.curves) {
                 SceneEditorTimelineSelectTrack(item->track);SceneEditorTimelinePause();
-                SceneEditorRenderAuthoringSetTiming(!item->group);
+                SceneEditorRenderAuthoringSetTiming(!item->group || !strncmp(item->target,"object/",7));
                 if(item->group && x<l->gutter.x+26) {
                     bool found=false;for(size_t i=0;i<ui.collapsed_count;++i) if(!strcmp(item->target,ui.collapsed[i])) {memmove(ui.collapsed[i],ui.collapsed[i+1],(--ui.collapsed_count-i)*sizeof(ui.collapsed[0]));found=true;break;}
                     if(!found && ui.collapsed_count<TIMELINE_DOCUMENT_TRACK_CAPACITY) snprintf(ui.collapsed[ui.collapsed_count++],TIMELINE_ID_CAPACITY,"%s",item->target);

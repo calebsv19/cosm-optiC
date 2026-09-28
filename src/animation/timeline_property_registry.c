@@ -297,6 +297,14 @@ TimelineStatus TimelinePropertyRegistryInitFoundationDefaults(
         TIMELINE_INTERPOLATION_MASK_STEP | TIMELINE_INTERPOLATION_MASK_LINEAR,
         TIMELINE_INVALIDATION_RIGID_TRANSFORM, NULL, NULL);
     if (status != TIMELINE_STATUS_OK) return status;
+    const char* axes[]={"object/transform/position_x","object/transform/position_y","object/transform/position_z"};
+    for(int axis=0;axis<3;++axis) {
+        status=timeline_property_add_default(&candidate,axes[axis],TIMELINE_PROPERTY_TARGET_OBJECT,
+            TIMELINE_VALUE_SCALAR,TIMELINE_UNIT_WORLD_DISTANCE,
+            TIMELINE_INTERPOLATION_MASK_STEP|TIMELINE_INTERPOLATION_MASK_LINEAR|TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER,
+            TIMELINE_INVALIDATION_RIGID_TRANSFORM,NULL,NULL);
+        if(status!=TIMELINE_STATUS_OK) return status;
+    }
     status = timeline_property_add_default(
         &candidate, "light/intensity", TIMELINE_PROPERTY_TARGET_LIGHT,
         TIMELINE_VALUE_SCALAR, TIMELINE_UNIT_RELATIVE_INTENSITY,

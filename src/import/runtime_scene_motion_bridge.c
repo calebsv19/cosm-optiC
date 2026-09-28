@@ -1,4 +1,5 @@
 #include "import/runtime_scene_motion_bridge.h"
+#include "import/runtime_scene_object_timeline.h"
 
 #include "config/config_scene_path_io.h"
 #include "import/runtime_scene_bridge.h"
@@ -381,6 +382,11 @@ bool runtime_scene_motion_bridge_sample_object(const char *object_id,
     if (!object_id || !object_id[0] || !out_sample) {
         return false;
     }
+    TimelineVec3 position;
+    if(RuntimeObjectTimelinePositionAtT(object_id,normalized_t,&position)) {
+        out_sample->valid=true;out_sample->has_position=true;out_sample->position_x=position.x;out_sample->position_y=position.y;out_sample->position_z=position.z;
+        return true;
+    }
     for (int i = 0; i < g_last_object_motion_summary.stored_tracks; ++i) {
         RuntimeMotionTrack3D *track = &g_last_object_motion_summary.tracks[i];
         if (!track->used || strcmp(track->object_id, object_id) != 0) {
@@ -392,5 +398,5 @@ bool runtime_scene_motion_bridge_sample_object(const char *object_id,
 }
 
 bool runtime_scene_motion_bridge_has_executable_motion(void) {
-    return g_last_object_motion_summary.has_executable_motion;
+    return g_last_object_motion_summary.has_executable_motion || RuntimeObjectTimelineHasMotion();
 }

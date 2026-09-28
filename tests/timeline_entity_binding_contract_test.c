@@ -180,6 +180,18 @@ int main(void) {
     assert(TimelinePropertyRegistryValidateTrack(&registry, &fov, &document.range) == TIMELINE_STATUS_VALUE_OUT_OF_RANGE);
     TimelineTrack pitch = scalar("pitch", "camera/main", "camera/pitch", TIMELINE_UNIT_RADIANS, 0, 2);
     assert(TimelinePropertyRegistryValidateTrack(&registry, &pitch, &document.range) == TIMELINE_STATUS_VALUE_OUT_OF_RANGE);
-    puts("timeline entity/camera contracts: PASS");
+    static TimelineDocument xyz;
+    TimelineDocumentInit(&xyz,(TimelineRate){24,1},(TimelineRange){0,21});
+    const char* axes[]={"object/transform/position_x","object/transform/position_y","object/transform/position_z"};
+    for(int axis=0;axis<3;++axis) {
+        TimelineTrack t=scalar(axes[axis],"object/lamp",axes[axis],TIMELINE_UNIT_WORLD_DISTANCE,0,10);
+        assert(TimelineDocumentAddTrack(&xyz,&t)==TIMELINE_STATUS_OK);
+    }
+    assert(TimelineEntityBindingsValidateDocument(&before,&registry,&xyz)==TIMELINE_STATUS_OK);
+    assert(TimelineDocumentAddTrack(&xyz,&light)==TIMELINE_STATUS_OK);
+    assert(TimelineEntityBindingsValidateDocument(&before,&registry,&xyz)==TIMELINE_STATUS_DUPLICATE_OWNERSHIP);
+    TimelineEntityBinding simulated={.editable=true,.simulation_owns_transform=true};
+    assert(!TimelineEntityBindingCanAuthor(&simulated,axes[0]));
+    puts("timeline entity/camera/object contracts: PASS");
     return 0;
 }

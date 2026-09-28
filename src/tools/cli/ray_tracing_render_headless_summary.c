@@ -134,6 +134,13 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  \"evaluated_light\": {\"valid\": %s, \"position\": [%.17g, %.17g, %.17g], \"progress\": %.17g, \"intensity\": %.17g},\n",
             light->valid ? "true" : "false", light->position.x, light->position.y,
             light->position.z, light->progress, light->intensity);
+    fprintf(file,"  \"evaluated_objects\": [");
+    for(size_t i=0;i<preflight->evaluated_object_count;++i) {
+        const RayEvaluatedObjectTransform* object=&preflight->evaluated_objects[i];
+        fprintf(file,"%s{\"object_id\":",i?",":"");RayTracingJsonWriteString(file,object->target_id);
+        fprintf(file,",\"position\":[%.17g,%.17g,%.17g],\"source\":%d}",object->position.x,object->position.y,object->position.z,(int)object->source);
+    }
+    fprintf(file,"],\n");
     fprintf(file, "  \"rendered_frames\": %s,\n", preflight->rendered_frames ? "true" : "false");
     fprintf(file, "  \"frames_rendered\": %d,\n", preflight->frames_rendered);
     fprintf(file, "  \"checkpoint\": {\n");

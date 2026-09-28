@@ -90,6 +90,8 @@ typedef struct RayTracingHeadlessPreflight {
     char evaluated_scene_light_id[TIMELINE_ID_CAPACITY];
     RayEvaluatedCamera evaluated_camera;
     RayEvaluatedLight evaluated_light;
+    size_t evaluated_object_count;
+    RayEvaluatedObjectTransform evaluated_objects[RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY];
     bool rendered_frames;
     bool denoise_enabled;
     int frames_rendered;

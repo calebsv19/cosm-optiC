@@ -1,4 +1,5 @@
 #include "import/runtime_scene_timeline.h"
+#include "import/runtime_scene_object_timeline.h"
 #include "runtime_scene_timeline_consumers.h"
 #include "import/scene_timeline_document_io.h"
 #include "animation/evaluated_scene_snapshot.h"
@@ -100,7 +101,7 @@ bool RuntimeSceneTimelineValidateScene(json_object* scene,char* diagnostics,size
         if(status!=TIMELINE_STATUS_OK) snprintf(invalid_target,sizeof(invalid_target),"%s",track->target_id);
     }
     if(status==TIMELINE_STATUS_OK) {
-        bool supported=RuntimeSceneTimelineValidateConsumers(authoring,
+        bool supported=RuntimeObjectTimelineValidate(scene,candidate,diagnostics,size) && RuntimeSceneTimelineValidateConsumers(authoring,
             scale?json_object_get_double(scale):1.0,candidate,diagnostics,size);
         free(candidate);
         return supported;
@@ -127,3 +128,5 @@ TimelineStatus RuntimeSceneTimelineSample(TimelineSample sample, TimelineFrameSn
     if (status == TIMELINE_STATUS_OK) status = TimelineFrameSnapshotBuild(&registry, &runtime_document, &context, out);
     return status;
 }
+
+const TimelineDocument* RuntimeSceneTimelineRead(void) { return runtime_status==TIMELINE_STATUS_OK?&runtime_document:NULL; }

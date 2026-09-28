@@ -424,6 +424,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_render_authoring_acceptance.h"
 #include "scene_editor_timeline_dock_acceptance.h"
 #include "scene_editor_timeline_selection_acceptance.h"
+#include "scene_editor_object_timeline_acceptance.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -445,6 +446,9 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if (argc==4 && !strcmp(argv[3],"--object-timeline")) {
+        object_timeline_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if (argc==4 && !strcmp(argv[3],"--timeline-selection")) {
         timeline_selection_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

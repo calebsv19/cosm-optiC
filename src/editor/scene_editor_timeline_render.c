@@ -2,6 +2,7 @@
 #include "scene_editor_timeline_curve.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_timeline_selection.h"
+#include "editor/scene_editor_document.h"
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "render/font_runtime.h"
@@ -74,7 +75,10 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
         const TimelineRow* item=&u->rows[row];
         if(item->group) {
             bool closed=false;for(size_t j=0;j<u->collapsed_count;++j) if(!strcmp(item->target,u->collapsed[j])) closed=true;
-            snprintf(groups[row],sizeof(groups[row]),"%s  %s",closed?">":"v",!strncmp(item->target,"camera/",7)?"Camera":item->target+6);
+            SceneEditorDocumentObjectInfo object;
+            const char* name=!strncmp(item->target,"camera/",7)?"Camera":item->target+6;
+            if(!strncmp(item->target,"object/",7)) name=SceneEditorDocumentObjectById(item->target+7,&object)?object.name:item->target+7;
+            snprintf(groups[row],sizeof(groups[row]),"%s  %s",closed?">":"v",name);
             text(r,groups[row],l->gutter.x+8,y+3,ink);
         } else text(r,TimelineChannelLabel(d->tracks[item->track].property_id),l->gutter.x+27,y+3,item->track==selected?accent:ink);
     }

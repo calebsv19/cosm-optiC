@@ -50,6 +50,7 @@
 #include "test_runtime_scene_editor.h"
 #include "test_support.h"
 #include "scene_editor_timeline_selection_tests.h"
+#include "scene_editor_object_timeline_tests.h"
 
 #include <json-c/json.h>
 
@@ -969,6 +970,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("scene_timeline_workspace_saved_value", RayEvaluatedSceneCaptureSample((TimelineSample){118,0,1},&evaluated) &&
             evaluated.snapshot.camera.fov_y_degrees==77.125);
         test_timeline_selection_commands();
+        test_object_timeline_admission();
     }
     {
         Path authored_camera={0};CameraPath3D authored_depth={0};

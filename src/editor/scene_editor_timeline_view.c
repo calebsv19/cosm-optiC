@@ -61,6 +61,9 @@ double TimelineViewTick(const TimelineView* v,int width) {
     double n=wanted/power;return power*(n<=1?1:n<=2?2:n<=5?5:10);
 }
 const char* TimelineChannelLabel(const char* p) {
+    if(strstr(p,"position_x")) return "Position X";
+    if(strstr(p,"position_y")) return "Position Y";
+    if(strstr(p,"position_z")) return "Position Z";
     if(strstr(p,"path_progress")) return "Path progress";
     if(strstr(p,"fov_y")) return "Field of view";
     if(strstr(p,"intensity")) return "Intensity";

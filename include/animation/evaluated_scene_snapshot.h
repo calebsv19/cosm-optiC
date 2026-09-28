@@ -32,7 +32,8 @@ typedef enum RayEvaluatedSimulationSource {
 typedef enum RayEvaluatedObjectTransformSource {
     RAY_EVALUATED_OBJECT_TRANSFORM_NONE = 0,
     RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION,
-    RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT
+    RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT,
+    RAY_EVALUATED_OBJECT_TRANSFORM_SCENE_TIMELINE
 } RayEvaluatedObjectTransformSource;
 
 typedef enum RayEvaluatedSimulationInterpolation {

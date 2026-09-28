@@ -1,4 +1,5 @@
 #include "editor/scene_editor_object_transform_preview.h"
+#include "editor/scene_editor_object_timeline.h"
 #include <math.h>
 #include "editor/scene_editor_mesh_preview_store.h"
 
@@ -21,6 +22,10 @@ bool SceneEditorObjectTransformPreviewMesh(const RayTracingRuntimeMeshAssetInsta
     SceneEditorDocumentTransform original,preview;
     if (!source || !display) return false;
     *display=*source;
+    double position[3];
+    if(SceneEditorObjectTimelinePosition(source->object_id,position)) {
+        display->position_x=position[0];display->position_y=position[1];display->position_z=position[2];return true;
+    }
     if (SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ||
         !SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) return false;
     display->rotation_x=preview.rotation_degrees[0]*0.017453292519943295769;
@@ -36,6 +41,10 @@ bool SceneEditorObjectTransformPreviewPrimitive(const RuntimeSceneBridgePrimitiv
     SceneEditorDocumentTransform original,preview;
     if (!source || !display) return false;
     *display=*source;
+    double position[3];
+    if(SceneEditorObjectTimelinePosition(source->object_id,position)) {
+        display->origin_x=position[0];display->origin_y=position[1];display->origin_z=position[2];return true;
+    }
     if (SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ||
         !SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) return false;
     rotate_basis(&display->axis_u_x,&display->axis_u_y,&display->axis_u_z,&original,&preview);

@@ -4,6 +4,7 @@
 #include "animation/timeline_frame_snapshot.h"
 #include "app/preview_camera_sample.h"
 #include "import/runtime_scene_timeline.h"
+#include "import/runtime_scene_object_timeline.h"
 #include "config/config_manager.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_light_timeline_bridge.h"
@@ -341,6 +342,8 @@ static bool ray_evaluated_build_authored(
                            "animation travel context is invalid");
         return false;
     }
+    /* A retained scene timeline owns geometry time as well as channel time. */
+    if(!use_animation_travel_for_light) animation_context=*context;
     progress_track = &document->timeline.tracks[
         document->progress_track_index];
     light_context = *context;
@@ -462,11 +465,14 @@ static bool ray_evaluated_build_authored(
                            "object compatibility motion capture failed");
         return false;
     }
+    status=RuntimeObjectTimelineCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
+    if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"object timeline evaluation failed");return false;}
+    inputs.invalidation_domains |= object_transform_count?TIMELINE_INVALIDATION_RIGID_TRANSFORM:0;
     inputs.object_transforms = object_transforms;
     inputs.object_transform_count = object_transform_count;
     inputs.simulation.source = RAY_EVALUATED_SIMULATION_NONE;
     inputs.simulation.valid = false;
-    inputs.invalidation_domains = frame_snapshot.invalidation_domains;
+    inputs.invalidation_domains |= frame_snapshot.invalidation_domains;
     inputs.diagnostics = "immutable authored evaluated-scene snapshot";
     status = RayEvaluatedSceneSnapshotBuild(&inputs, &out_result->snapshot);
     if (status != TIMELINE_STATUS_OK) {
@@ -560,11 +566,14 @@ static bool ray_evaluated_build_legacy(
                            "legacy object compatibility motion capture failed");
         return false;
     }
+    status=RuntimeObjectTimelineCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
+    if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"object timeline evaluation failed");return false;}
+    inputs.invalidation_domains |= object_transform_count?TIMELINE_INVALIDATION_RIGID_TRANSFORM:0;
     inputs.object_transforms = object_transforms;
     inputs.object_transform_count = object_transform_count;
     inputs.simulation.source = RAY_EVALUATED_SIMULATION_NONE;
     inputs.simulation.valid = false;
-    inputs.invalidation_domains = TIMELINE_INVALIDATION_LIGHTING |
+    inputs.invalidation_domains |= TIMELINE_INVALIDATION_LIGHTING |
                                   TIMELINE_INVALIDATION_CAMERA;
     inputs.diagnostics =
         "explicit legacy Preview fallback; no authored light timeline present";

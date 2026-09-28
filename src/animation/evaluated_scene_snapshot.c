@@ -183,7 +183,8 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
             (transform->source !=
                  RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION &&
              transform->source !=
-                 RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT) ||
+                 RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT &&
+             transform->source != RAY_EVALUATED_OBJECT_TRANSFORM_SCENE_TIMELINE) ||
             !ray_evaluated_id_valid(transform->target_id,
                                     sizeof(transform->target_id)) ||
             (!transform->has_position && !transform->has_rotation) ||

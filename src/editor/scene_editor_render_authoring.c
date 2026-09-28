@@ -2,6 +2,7 @@
 #include "editor/editor_mode_router.h"
 /* Render's subject and task selection are independent of timeline availability. */
 #include "editor/scene_editor_render_authoring.h"
+#include "editor/scene_editor_object_timeline.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_timeline_selection.h"
 #include "scene_editor_timeline_key_inspector.h"
@@ -88,6 +89,7 @@ static void path_action(SceneEditor* editor,int action) {
 bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER) return false;
     SceneEditorPaneLayout layout;if(!SceneEditorGetPaneLayout(&layout) || layout.viewport_expanded) return false;
+    if(SceneEditorObjectTimelineEvent(editor,e)) return true;
     if(timing && SceneEditorTimelineKeyInspectorEvent(e)) {editing=-1;return true;}
     if(editing>=0 && (e->type==SDL_TEXTINPUT || e->type==SDL_KEYDOWN)) {
         if(e->type==SDL_TEXTINPUT) {if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
@@ -134,24 +136,27 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
 void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLayout* layout) {
     memset(controls,0,sizeof(controls));memset(fields,0,sizeof(fields));
     if(layout->viewport_expanded) return;
+    TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
+    bool ready=SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample);
+    bool object=ready && !strncmp(track.target_id,"object/",7);
+    if(object) timing=true;
     bool camera=editor->currentMode==EDITOR_MODE_CAMERA;
     SDL_Renderer* r=editor->renderer;SDL_Rect pane=layout->left_content_rect,prior;
     SDL_bool clipped=SDL_RenderIsClipEnabled(r);SDL_RenderGetClipRect(r,&prior);SDL_RenderSetClipRect(r,&pane);
     RayTracingThemePalette p=SceneEditorChromeShellResolvePalette();
     SDL_SetRenderDrawColor(r,p.panel_fill.r,p.panel_fill.g,p.panel_fill.b,p.panel_fill.a);SDL_RenderFillRect(r,&pane);
     int x=pane.x+10,y=pane.y+10-left_offset,w=pane.w-20;
-    label(r,"Camera & Light",x,y);y+=30;
-    controls[0]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[0],"Camera",camera,true);y+=40;
+    label(r,"Scene animation",x,y);y+=30;
+    controls[0]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[0],"Camera",camera && !object,true);y+=40;
     static RuntimeSceneLightTimelineDocument light;
     bool has_light=RuntimeSceneLightTimelineGetLast(&light);
     snprintf(light_label,sizeof(light_label),"Light: %s",has_light?light.timeline.tracks[light.progress_track_index].target_id+6:"path not bound");
-    controls[1]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[1],light_label,!camera,true);y+=48;
+    controls[1]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[1],light_label,!camera && !object,true);y+=48;
     controls[2]=(SDL_Rect){x,y,(w-6)/2,34};controls[3]=(SDL_Rect){x+(w-6)/2+6,y,(w-6)/2,34};
-    SceneEditorRenderButton(r,controls[2],"Path",!timing,true);SceneEditorRenderButton(r,controls[3],"Animation",timing,true);y+=46;
-    TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
-    bool ready=SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample);
+    SceneEditorRenderButton(r,controls[2],"Path",!timing,!object);SceneEditorRenderButton(r,controls[3],"Animation",timing,true);y+=46;
     controls[4]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[4],ready?"Scene animation ready":"Set up scene animation",ready,true);y+=40;
-    controls[5]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[5],"Frame camera and light paths",false,true);y+=46;
+    controls[5]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[5],"Frame scene and paths",false,true);y+=46;
+    SceneEditorObjectTimelineDraw(r,pane,&y);
     if(!timing) {
         const Path* path=camera?&sceneSettings.cameraPath:&sceneSettings.bezierPath;
         int point=camera?CameraEditorGetSelectedPointIndex():BezierEditorGetSelectedPointIndex();
@@ -164,7 +169,8 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
         label(r,"Select points or handles in the view.",x,y);
     } else {
         label(r,"Select a channel in the timeline.",x,y);y+=28;
-        if(camera) for(int i=13;i<=14;++i) {controls[i]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[i],i==13?"Add / select Yaw":"Add / select Pitch",false,ready);y+=40;}
+        if(object) {label(r,"Position X / Y / Z in scene units.",x,y);y+=28;}
+        else if(camera) for(int i=13;i<=14;++i) {controls[i]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[i],i==13?"Add / select Yaw":"Add / select Pitch",false,ready);y+=40;}
         else {controls[15]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[15],"Add / select Intensity",false,ready);y+=40;}
         label(r,"Scrub to a frame, then set a key.",x,y);
     }
@@ -178,13 +184,13 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
     pane=layout->right_content_rect;SDL_RenderSetClipRect(r,&pane);
     SDL_SetRenderDrawColor(r,p.panel_fill.r,p.panel_fill.g,p.panel_fill.b,p.panel_fill.a);SDL_RenderFillRect(r,&pane);
     x=pane.x+10;y=pane.y+10;w=pane.w-20;
-    label(r,camera?"Camera animation":"Light animation",x,y);y+=26;
+    label(r,object?"Object animation":camera?"Camera animation":"Light animation",x,y);y+=26;
     if(ready) {
         snprintf(readouts[1],sizeof(readouts[1]),"Channel: %s",TimelineChannelLabel(track.property_id));label(r,readouts[1],x,y);y+=26;
         TimelineEvaluationContext context;TimelineEvaluationResult result;
         double value=0;if(TimelineEvaluationContextBuild(rate,range,sample,&context)==TIMELINE_STATUS_OK && TimelineTrackEvaluate(&track,&context,&result)==TIMELINE_STATUS_OK) value=result.value.as.scalar;
         snprintf(readouts[2],sizeof(readouts[2]),"Playhead: %lld",(long long)sample.absolute_frame);
-        snprintf(readouts[3],sizeof(readouts[3]),"At playhead (%s): %.6g",TimelineUnitLabel(track.unit),value);
+        snprintf(readouts[3],sizeof(readouts[3]),"At playhead (%s): %.6g",track.unit==TIMELINE_UNIT_WORLD_DISTANCE?SceneEditorDocumentUnitLabel():TimelineUnitLabel(track.unit),value);
         for(int i=0;i<2;++i) {fields[i]=(SDL_Rect){x,y,w,28};if(editing==i) snprintf(readouts[i+2],sizeof(readouts[i+2]),"%s: %s_",i?"Value":"Frame",draft);SceneEditorRenderButton(r,fields[i],readouts[i+2],editing==i,true);y+=32;}
         snprintf(readouts[4],sizeof(readouts[4]),"%llu frames | %.3g fps",(unsigned long long)range.frame_count,(double)rate.frames_per_second_numerator/rate.frames_per_second_denominator);
         label(r,editing>=0 && feedback[0]?feedback:readouts[4],x,y);y+=26;
@@ -197,6 +203,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
 bool SceneEditorRenderAuthoringControl(const char* name,SDL_Rect* out) {
     const char* names[]={"camera","light","path","animation","setup","frame_paths","previous","next","select","add","delete","interpolation","handles","yaw","pitch","intensity"};
     if(!name || !out) return false;
+    if(SceneEditorObjectTimelineControl(name,out)) return true;
     if(SceneEditorTimelineKeyInspectorControl(name,out)) return true;
     for(int i=0;i<16;++i) if(!strcmp(name,names[i])) {*out=controls[i];return out->w>0;}
     if(!strcmp(name,"frame") || !strcmp(name,"value")) {*out=fields[!strcmp(name,"value")];return out->w>0;}

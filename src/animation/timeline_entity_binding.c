@@ -78,8 +78,14 @@ static bool position_owner(const char* property) {
         strcmp(property, "camera/path_progress") == 0;
 }
 
+static unsigned position_axes(const char* property) {
+    if(!strcmp(property,"object/transform/position_x")) return 1;
+    if(!strcmp(property,"object/transform/position_y")) return 2;
+    if(!strcmp(property,"object/transform/position_z")) return 4;
+    return position_owner(property)?7:0;
+}
 static bool transform_owner(const char* property) {
-    return position_owner(property) || strcmp(property, "camera/yaw") == 0 ||
+    return !strncmp(property,"object/transform/position_",26) || position_owner(property) || strcmp(property, "camera/yaw") == 0 ||
         strcmp(property, "camera/pitch") == 0;
 }
 
@@ -113,7 +119,7 @@ TimelineStatus TimelineEntityBindingsValidateDocument(
             if (!resolved[j] || strcmp(resolved[i]->entity_id, resolved[j]->entity_id)) continue;
             const char* prior = document->tracks[j].property_id;
             if (strcmp(prior, track->property_id) == 0 ||
-                (position_owner(prior) && position_owner(track->property_id)))
+                (position_axes(prior) & position_axes(track->property_id)))
                 return TIMELINE_STATUS_DUPLICATE_OWNERSHIP;
         }
     }

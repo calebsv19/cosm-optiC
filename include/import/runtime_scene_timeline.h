@@ -10,4 +10,6 @@ TimelineStatus RuntimeSceneTimelineLoad(json_object* authoring, double world_sca
 bool RuntimeSceneTimelineValidateScene(json_object* scene, char* diagnostics, size_t size);
 TimelineStatus RuntimeSceneTimelineClock(TimelineRate* rate, TimelineRange* range);
 TimelineStatus RuntimeSceneTimelineSample(TimelineSample sample, TimelineFrameSnapshot* out);
+/* Borrowed scene-load cache, valid until the next load/reset; read-only. */
+const TimelineDocument* RuntimeSceneTimelineRead(void);
 #endif
