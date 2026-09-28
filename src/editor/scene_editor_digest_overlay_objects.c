@@ -1,3 +1,4 @@
+#include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
@@ -511,7 +512,8 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     if (!renderer || !projector || !digest) return;
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
 
-    if (active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL ||
+    if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_RENDER ||
+        active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL ||
         active_mode == EDITOR_MODE_CAMERA) {
         SceneEditorMeshPreviewFrameStats mesh_stats = {0};
         preview_surface_composed = SceneEditorMeshPreviewRenderGeometry(

@@ -446,6 +446,9 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if (argc==4 && !strcmp(argv[3],"--object-timeline-reopen")) {
+        object_timeline_reopen_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if (argc==4 && !strcmp(argv[3],"--object-timeline")) {
         object_timeline_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

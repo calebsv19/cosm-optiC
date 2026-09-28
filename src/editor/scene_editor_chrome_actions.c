@@ -1,3 +1,4 @@
+#include "scene_editor_object_timeline_panel.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_object_list.h"
 #include "editor/scene_editor_lifecycle.h"
@@ -55,6 +56,10 @@ static bool scene_editor_chrome_actions_viewport_rect_contains_event_point(
 }
 
 bool SceneEditorChromeActionsSaveAuthoring(void) {
+    if(SceneEditorObjectTimelinePanelPending()) {
+        SceneEditorChromeShellSetActionFeedback("Position draft: set key or press Escape before saving",5000);
+        return false;
+    }
     char diagnostics[256];
 
     if (animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE &&

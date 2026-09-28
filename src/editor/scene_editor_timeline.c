@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_commands.h"
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "scene_editor_timeline_ui.h"
@@ -137,6 +138,11 @@ bool SceneEditorTimelineSelectTrack(size_t index) {
     if (!sync_document() || index >= document.track_count) return false;
     TimelineTrack* track=&document.tracks[index];
     if (SceneTimelineSessionSelect(&session,&bindings,&registry,track->target_id,track->property_id)!=TIMELINE_STATUS_OK) return false;
+    if (!strncmp(track->target_id,"object/",7)) {
+        SceneEditorObjectReadback object;
+        if (!SceneEditorObjectExecute(SCENE_OBJECT_SELECT,track->target_id+7,NULL,false,
+            SceneEditorDocumentRevision(),&object,status_line,sizeof(status_line))) return false;
+    }
     selected=index;
     snprintf(selected_track,sizeof(selected_track),"%s",track->track_id);
     return true;

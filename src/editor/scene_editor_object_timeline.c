@@ -1,3 +1,4 @@
+#include "editor/scene_editor_timeline_selection.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -11,7 +12,7 @@
 #include "render/text_draw.h"
 #include <stdio.h>
 #include <string.h>
-static SDL_Rect button;
+static SDL_Rect button,frame_button;
 static char label[180],feedback[256];
 void SceneEditorObjectTimelineBindings(TimelineEntityBindings* bindings) {
     SceneEditorDocumentObjectInfo object;
@@ -33,8 +34,8 @@ bool SceneEditorObjectTimelineAdd(const char* id,char* diagnostics,size_t size) 
        !SceneEditorDocumentGetTransformForSceneIndex(info.runtime_index,&transform,diagnostics,size)) {
         snprintf(diagnostics,size,"Select an unlocked visible object in Scene first.");return false;
     }
-    if(SceneEditorDocumentGetTimeline(&doc)!=TIMELINE_STATUS_OK) {
-        snprintf(diagnostics,size,"Set up scene animation first.");return false;
+    if(!SceneEditorTimelineActivate() || SceneEditorDocumentGetTimeline(&doc)!=TIMELINE_STATUS_OK) {
+        snprintf(diagnostics,size,"%s",SceneEditorTimelineStatus());return false;
     }
     char target[TIMELINE_ID_CAPACITY];int n=snprintf(target,sizeof(target),"object/%s",id);
     if(n<=0 || (size_t)n>=sizeof(target)) {snprintf(diagnostics,size,"Object ID exceeds timeline capacity.");return false;}
@@ -55,7 +56,8 @@ bool SceneEditorObjectTimelineAdd(const char* id,char* diagnostics,size_t size) 
     }
     if(!SceneEditorDocumentSetTimeline(&doc,SceneEditorDocumentRevision(),diagnostics,size)) return false;
     SceneEditorTimelineSelectTrack(first);SceneEditorRenderAuthoringSetTiming(true);SceneEditorTimelinePause();
-    snprintf(diagnostics,size,"Position keys ready. Scrub, then set values.");return true;
+    SceneEditorTimelineSeek(doc.range.start_frame);SceneEditorTimelineSelectKey(doc.range.start_frame,false);
+    snprintf(diagnostics,size,"Position ready. Set XYZ at another frame.");return true;
 }
 bool SceneEditorObjectTimelinePosition(const char* id,double position[3]) {
     TimelineSample sample;TimelineRate rate;TimelineRange range;TimelineEvaluationContext context;TimelineVec3 value;
@@ -71,10 +73,17 @@ void SceneEditorObjectTimelineDraw(SDL_Renderer* renderer,SDL_Rect pane,int* y) 
     button=(SDL_Rect){pane.x+10,*y,pane.w-20,32};
     SceneEditorRenderButton(renderer,button,label,false,selected.has_selection);*y+=38;
     if(button.y<pane.y || button.y+button.h>pane.y+pane.h) button=(SDL_Rect){0};
+    frame_button=(SDL_Rect){pane.x+10,*y,pane.w-20,30};
+    SceneEditorRenderButton(renderer,frame_button,"Frame selected object",false,selected.has_selection);*y+=36;
+    if(frame_button.y<pane.y || frame_button.y+frame_button.h>pane.y+pane.h) frame_button=(SDL_Rect){0};
     if(feedback[0]) {ray_tracing_text_draw_utf8_at(renderer,ray_tracing_font_runtime_get_ui_regular(renderer,11,8),feedback,pane.x+10,*y,(SDL_Color){210,215,225,255});*y+=26;}
 }
 bool SceneEditorObjectTimelineEvent(SceneEditor* editor,SDL_Event* event) {
     (void)editor;
+    if(event->type==SDL_MOUSEBUTTONDOWN && event->button.button==SDL_BUTTON_LEFT &&
+       frame_button.w>0 && SDL_PointInRect(&(SDL_Point){event->button.x,event->button.y},&frame_button)) {
+        SceneEditorFrameViewport(true);return true;
+    }
     if(event->type!=SDL_MOUSEBUTTONDOWN || event->button.button!=SDL_BUTTON_LEFT || button.w<=0 ||
        event->button.x<button.x || event->button.x>=button.x+button.w || event->button.y<button.y || event->button.y>=button.y+button.h) return false;
     SceneEditorObjectReadback selected;SceneEditorObjectInspect(&selected);
@@ -82,5 +91,18 @@ bool SceneEditorObjectTimelineEvent(SceneEditor* editor,SDL_Event* event) {
     return true;
 }
 bool SceneEditorObjectTimelineControl(const char* name,SDL_Rect* out) {
+    if(!strcmp(name,"frame_object")) {*out=frame_button;return frame_button.w>0;}
     if(!strcmp(name,"animate_object")) {*out=button;return button.w>0;}return false;
+}
+
+bool SceneEditorObjectTimelineFrameOffset(int scene_index,double delta[3]) {
+    SceneEditorDocumentObjectInfo info;SceneEditorDocumentTransform base;char diagnostic[128];
+    for(int i=0;i<SceneEditorDocumentObjectCount();++i) if(SceneEditorDocumentObjectAt(i,&info) && info.runtime_index==scene_index) {
+        if(!SceneEditorObjectTimelinePosition(info.id,delta) ||
+           !SceneEditorDocumentGetTransformForSceneIndex(scene_index,&base,diagnostic,sizeof(diagnostic))) return false;
+        double scale=SceneEditorDocumentWorldScale();
+        for(int axis=0;axis<3;++axis) delta[axis]-=base.position[axis]*scale;
+        return true;
+    }
+    return false;
 }

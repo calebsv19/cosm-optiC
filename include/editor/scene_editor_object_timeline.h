@@ -2,6 +2,7 @@
 #define SCENE_EDITOR_OBJECT_TIMELINE_H
 #include "editor/scene_editor.h"
 #include "animation/timeline_entity_binding.h"
+bool SceneEditorObjectTimelineFrameOffset(int scene_index,double delta[3]);
 bool SceneEditorObjectTimelineEditable(const char* target,char* diagnostics,size_t size);
 bool SceneEditorObjectTimelineAdd(const char* id,char* diagnostics,size_t size);
 void SceneEditorObjectTimelineBindings(TimelineEntityBindings* bindings);

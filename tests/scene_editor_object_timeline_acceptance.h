@@ -1,3 +1,4 @@
+#include "editor/scene_editor_material_perf.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "editor/scene_editor_object_commands.h"
 #include "import/runtime_scene_object_timeline.h"
@@ -12,15 +13,19 @@ static void object_timeline_acceptance(SceneEditor* editor,const char* path) {
     assert(found);char diagnostics[256];SceneEditorObjectReadback readback;
     assert(SceneEditorObjectExecute(SCENE_OBJECT_SELECT,object.id,NULL,false,SceneEditorDocumentRevision(),&readback,diagnostics,sizeof(diagnostics)));
     SceneEditorDocumentTransform base;assert(SceneEditorDocumentGetTransformForSceneIndex(object.runtime_index,&base,diagnostics,sizeof(diagnostics)));
-    choose_menu(editor,-1,SCENE_WORKSPACE_RENDER);authoring_control(editor,"setup");authoring_control(editor,"frame_paths");
+    choose_menu(editor,-1,SCENE_WORKSPACE_RENDER);authoring_control(editor,"frame_paths");
+    static TimelineDocument initial;bool had_timeline=SceneEditorDocumentGetTimeline(&initial)==TIMELINE_STATUS_OK;
     unsigned long long revision=SceneEditorDocumentRevision();authoring_control(editor,"animate_object");
-    assert(SceneEditorDocumentRevision()==revision+1);
+    assert(SceneEditorDocumentRevision()==revision+(had_timeline?1:2));
+    SceneEditorTimelineKeySelection selected_key;assert(SceneEditorTimelineSelectionRead(&selected_key) && selected_key.count==1);
     TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
     assert(SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample) && RuntimeObjectTimelineAxis(track.property_id)==0);
     double scale=SceneEditorDocumentWorldScale();double targets[]={base.position[0]+10,base.position[0]+10,base.position[0]+20};
     const char* frames[]={"20","40","60"};
     for(int i=0;i<3;++i) {char value[64];snprintf(value,sizeof(value),"%.17g",targets[i]);
-        authoring_control(editor,"frame");authoring_text(editor,frames[i]);authoring_control(editor,"value");authoring_text(editor,value);}
+        authoring_control(editor,"frame");authoring_text(editor,frames[i]);authoring_control(editor,"position_x");authoring_text(editor,value);
+        unsigned long long before=SceneEditorDocumentRevision();authoring_control(editor,"set_position_key");
+        assert(SceneEditorDocumentRevision()==before+1);}
     const int times[]={0,10,20,30,40,50,60,10};const double offsets[]={0,5,10,10,10,15,20,5};
     for(int i=0;i<8;++i) {
         assert(SceneEditorTimelineSeek(times[i]));RayEvaluatedSceneSnapshot frame;assert(SceneEditorTimelineCopyEvaluated(&frame));
@@ -37,6 +42,22 @@ static void object_timeline_acceptance(SceneEditor* editor,const char* path) {
     assert(SceneEditorTimelineSeekSample((TimelineSample){10,1,2}));
     RayEvaluatedSceneSnapshot subframe;assert(SceneEditorTimelineCopyEvaluated(&subframe));
     assert(fabs(subframe.object_transforms[subframe.object_transform_count-1].position.x-(base.position[0]+5.25)*scale)<1e-8);
+    /* Exercise light -> object selection before any detached full mesh load. */
+    size_t object_track=0;static TimelineDocument authored;
+    assert(SceneEditorDocumentGetTimeline(&authored)==TIMELINE_STATUS_OK);
+    for(size_t i=0;i<authored.track_count;++i) if(!strcmp(authored.tracks[i].track_id,track.track_id)) object_track=i;
+    SceneEditorMaterialPerfEnable(true,false);
+    authoring_control(editor,"light");SceneEditorMaterialPerfBeginSample();SceneEditorSessionRuntimeRender(editor);
+    SceneEditorMaterialPerfSample visible=SceneEditorMaterialPerfRead();assert(visible.instances>0 && visible.rendered_triangles>0);
+    capture(editor,"light_with_meshes.ppm");
+    assert(editor->currentMode==EDITOR_MODE_PATH);
+    assert(SceneEditorTimelineSelectTrack(object_track));SceneEditorSessionRuntimeRender(editor);
+    SceneEditorObjectInspect(&readback);assert(readback.has_selection && !strcmp(readback.selection.id,object.id));
+    SceneEditorMaterialPerfBeginSample();SceneEditorSessionRuntimeRender(editor);
+    visible=SceneEditorMaterialPerfRead();assert(visible.instances>0 && visible.rendered_triangles>0);
+    SceneEditorMaterialPerfEnable(false,false);
+    capture(editor,"object_after_light.ppm");
+    authoring_control(editor,"frame_object");capture(editor,"object_framed.ppm");
     RayTracingRuntimeMeshAssetSet* assets=calloc(1,sizeof(*assets));assert(assets);
     ray_tracing_runtime_mesh_asset_set_init(assets);
     assert(ray_tracing_runtime_mesh_assets_load_scene_file(path,assets,diagnostics,sizeof(diagnostics)));
@@ -58,7 +79,8 @@ static void object_timeline_acceptance(SceneEditor* editor,const char* path) {
     assert(SceneEditorTimelineSeek(60));SceneEditorSessionRuntimeRender(editor);capture(editor,"object_moved.ppm");
     choose_menu(editor,1,0);assert(SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample) && track.key_count==3);
     choose_menu(editor,1,1);assert(SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample) && track.key_count==4);
-    choose_menu(editor,0,0);assert(SceneEditorDocumentOpen(path,diagnostics,sizeof(diagnostics)));
+    authoring_control(editor,"save_animation");assert(!SceneEditorDocumentIsDirty());
+    assert(SceneEditorDocumentOpen(path,diagnostics,sizeof(diagnostics)));
     assert(SceneEditorTimelineSeek(30));RayEvaluatedSceneSnapshot reopened;assert(SceneEditorTimelineCopyEvaluated(&reopened));
     assert(fabs(reopened.object_transforms[reopened.object_transform_count-1].position.x-(base.position[0]+10)*scale)<1e-8);
     static TimelineDocument good,bad;
@@ -76,4 +98,20 @@ static void object_timeline_acceptance(SceneEditor* editor,const char* path) {
     FILE* expected=fopen("object_expected.json","w");assert(expected);
     fprintf(expected,"{\"object_id\":\"%s\",\"base_x\":%.17g,\"scale\":%.17g}\n",object.id,base.position[0],scale);fclose(expected);
     fprintf(stderr,"Object timeline native PASS: select/add XYZ, move-hold-resume, backwards seek/subframe, geometry/viewport agreement, base immutability, undo/redo and save/reopen\n");
+}
+
+static void object_timeline_reopen_acceptance(SceneEditor* editor) {
+    static TimelineDocument doc;assert(SceneEditorDocumentGetTimeline(&doc)==TIMELINE_STATUS_OK);
+    assert(!SceneEditorDocumentIsDirty());
+    choose_menu(editor,-1,SCENE_WORKSPACE_RENDER);
+    size_t object_track=SIZE_MAX;
+    for(size_t i=0;i<doc.track_count;++i) if(RuntimeObjectTimelineAxis(doc.tracks[i].property_id)==0) {object_track=i;break;}
+    assert(object_track!=SIZE_MAX && doc.tracks[object_track].key_count==4);
+    assert(SceneEditorTimelineSelectTrack(object_track));assert(SceneEditorTimelineSeek(30));
+    SceneEditorSessionRuntimeRender(editor);authoring_control(editor,"frame_object");
+    capture(editor,"reopened_object.ppm");
+    double position[3];assert(SceneEditorObjectTimelinePosition(doc.tracks[object_track].target_id+7,position));
+    assert(fabs(position[0]-doc.tracks[object_track].keys[1].value.as.scalar*SceneEditorDocumentWorldScale())<1e-8);
+    assert(!SceneEditorDocumentIsDirty());
+    fprintf(stderr,"Object workflow fresh process PASS: saved tracks, held position and no setup required\n");
 }
