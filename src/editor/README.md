@@ -209,11 +209,26 @@ temporal key. This pass changes presentation only, not evaluation or history.
 
 ## Animate an existing object's position
 
-Select an object in Scene, enter Render, and choose **Set up scene animation** if
-needed. **Animate object: <name>** adds Position X/Y/Z channels together, seeded
-from its saved placement; repeating the action selects the existing channels.
-Choose an axis row, seek using Playhead, and enter an absolute position in
-**At playhead**. Use Key frame/Key value to adjust an existing diamond.
+Select an object in Scene, enter Render, and choose **Animate object: <name>**.
+This creates the timeline if needed and adds Position X/Y/Z channels, seeded
+from the object's base placement. The initial X key is selected. Repeating the
+action selects the existing channels. Selecting an object channel also selects
+and highlights that object in the viewport. **Frame selected object** centers
+its evaluated position at the playhead.
+
+The inspector identifies the object and shows all three position components.
+Seek with Playhead, enter X/Y/Z (Enter accepts each draft), then click **Set
+position key at frame ...** to commit the vector in one undoable command.
+The draft does not move geometry until committed; Escape cancels it. The
+separate Key frame / Key value fields edit a selected diamond, independently
+of the playhead. Camera/light authoring retains its existing channel controls.
+
+Use **Save scene + animation** or File > Save to persist the scene and tracks.
+The Render pane reports saved/unsaved state; a pending position draft must be
+applied or canceled before saving. Reopening that saved scene restores the
+timeline without setup. The playhead is session state and starts at the range
+start in a new process. Geometry remains visible when switching camera, light,
+and object tracks in Render.
 
 For move/pause/resume, put a different position at frame 20, the same position at
 frame 40, then another position at frame 60. Linear interpolation holds the value

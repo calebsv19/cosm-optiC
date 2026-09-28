@@ -1,5 +1,14 @@
 # RayTracing Main Edit Worktree
 
+## September 27 D1 workflow repair
+
+The retained Main Edit lane repairs the operator-reported object visibility and
+setup/save workflow gaps. XYZ editing is grouped and explicit; Render meshes
+remain visible in light-path mode, object tracks synchronize selection, and
+Frame selected uses the evaluated translation. Canonical adoption remains at
+c601453. This local development refresh changes no VERSION, Registry or release.
+Verification details and the packaged-reopen limitation are in current_truth.md.
+
 ## September 27 timeline adoption and D1 continuation
 
 The operator accepted the first camera/light timeline UI after testing playback

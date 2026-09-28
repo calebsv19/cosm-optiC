@@ -1,5 +1,18 @@
 # optiC Current Truth
 
+## September 27 object-authoring workflow repair
+
+The D1 follow-up fixes Render mesh visibility after selecting a light channel,
+synchronizes object track selection with the scene selection, and adds a grouped
+XYZ draft/apply inspector plus an explicit scene/animation save action. Animate
+object initializes a missing timeline; initial keys and evaluated object framing
+are exposed. This repairs the earlier fixture-only usability checkpoint.
+Native move/hold/resume, fresh-process reopen and camera/light selection gates
+pass. The packaged UI has been exercised through Mesh 4 creation, XYZ keys,
+light/object switching and scene save on a copy. The second packaged UI reopen
+could not be completed because computer-use app targeting/relaunch stalled;
+that proof remains separate from the passing native fresh-process reopen.
+
 ## September 27 timeline authoring and initial object position
 
 Camera/light timeline checkpoint `c601453` was adopted into canonical main after
