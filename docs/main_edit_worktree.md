@@ -1,5 +1,14 @@
 # RayTracing Main Edit Worktree
 
+## September 27 timeline adoption and D1 continuation
+
+The operator accepted the first camera/light timeline UI after testing playback
+and scrubbing. Canonical main fast-forwarded from `cc158c1` to verified `c601453`;
+both lanes were clean at adoption, with VERSION 0.17.0 unchanged. The registered
+Main Edit lane now owns D1 object position animation. D1 is a separate development
+checkpoint, not included in that adoption. No release, Registry promotion, remote
+push or production app replacement is implied.
+
 ## September 26 scene-authoring adoption checkpoint
 
 The bounded U2.4 Add/import/placement and Inspector-delete baseline is committed

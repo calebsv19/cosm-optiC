@@ -1,5 +1,16 @@
 # optiC Current Truth
 
+## September 27 timeline authoring and initial object position
+
+Camera/light timeline checkpoint `c601453` was adopted into canonical main after
+operator feedback confirmed usable playback and scrubbing. Main Edit continues
+with D1 position animation for existing objects: retained XYZ channels, independent
+key selection, move/hold/resume and matching evaluated geometry. See the
+[source authoring guide](../src/editor/README.md#animate-an-existing-objects-position)
+and [animation contract](../src/animation/README.md#d1-retained-object-position-authoring)
+for scope, ownership and verification. This is development source; it does not
+change released version identity or implement rotation, scale, emitters or clips.
+
 ## September 26 Scene authoring baseline
 
 The retained Scene document now supports the first practical STL authoring path:

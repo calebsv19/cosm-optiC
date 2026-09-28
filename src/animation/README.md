@@ -164,8 +164,7 @@ outside the snapshot.
 ## Shared scene timeline: current A-C contract
 
 The Render workspace has a shared camera/light timeline backed by the retained
-scene document. This is the first camera/light authoring slice. General object
-animation, independent paths for multiple lights, capability creation, spawn/
+scene document. This is the first camera/light authoring slice. Object rotation/scale, independent paths for multiple lights, capability creation, spawn/
 despawn events and simulation-cache playback remain future adapters.
 
 ### Owners and identity
@@ -310,3 +309,39 @@ are separate from native source-workflow proof. Package refresh does not establi
 human acceptance of the installed GUI. Current private work status records exact
 checkpoints and unresolved acceptance items; release/Registry/canonical adoption
 remain separate from this development slice.
+
+## D1: retained object position authoring
+
+Existing mesh instances, planes and boxes can acquire scalar
+`object/transform/position_x`, `position_y` and `position_z` channels targeting
+`object/<stable-object-id>`. The three channels are created in one retained
+command from the base position; all must be enabled together. Values are absolute
+scene-unit positions, scaled once when the runtime timeline loads. Hold, Linear
+and scalar Bezier interpolation reuse the existing evaluator and key editor.
+Unchanged rotation, scale and mesh pivot semantics stay in the geometry owner.
+
+`runtime_scene_object_timeline.c` validates admission and evaluates positions.
+It rejects missing/duplicate targets, unsupported geometry, incomplete XYZ sets
+and a target already owned by an enabled legacy motion/simulation track.
+Snapshots mark these transforms with `SCENE_TIMELINE` provenance. Exact samples
+feed the snapshot and editor; the existing geometry builder's normalized-time
+adapter evaluates the same authored frame position without integer rounding.
+Retained scene timelines supply canonical normalized time to geometry as well as
+camera/light channels; legacy-only scenes retain their previous travel mapping.
+Dynamic object channels disable static prepared-scene cache reuse across time.
+
+`scene_editor_object_timeline.c` adds channels through retained document commands,
+resolves stable identity, and supplies detached viewport positions. Scrubbing
+never writes base transforms. Locked objects cannot be keyed through the timeline
+editing commands. Undo/redo and save/reopen use the existing document owner.
+Headless summaries expose `evaluated_objects` for the last evaluated frame.
+
+This is position-only authoring: no object path tool, rotation/scale channels,
+emitter conversion, lifetime clips, cross-channel key selection or simulation
+stepping. A referenced object cannot be removed while its enabled tracks remain;
+the retained scene validator refuses the orphaned binding rather than retargeting.
+Native `--object-timeline` acceptance covers mesh move/hold/resume, backwards and
+subframe seeking, actual generated triangle translation, unchanged base transforms,
+invalid edits, undo/redo and save/reopen. The companion
+`tests/integration/check_object_timeline_render_parity.py` checks fresh headless
+renders at six frames against that saved authoring result.

@@ -206,3 +206,22 @@ value at an existing key updates it. The inspector's Playhead field seeks time,
 not a key's frame. Interpolation belongs to the segment after a key. Editing
 spatial path points changes the route rather than automatically inserting a
 temporal key. This pass changes presentation only, not evaluation or history.
+
+## Animate an existing object's position
+
+Select an object in Scene, enter Render, and choose **Set up scene animation** if
+needed. **Animate object: <name>** adds Position X/Y/Z channels together, seeded
+from its saved placement; repeating the action selects the existing channels.
+Choose an axis row, seek using Playhead, and enter an absolute position in
+**At playhead**. Use Key frame/Key value to adjust an existing diamond.
+
+For move/pause/resume, put a different position at frame 20, the same position at
+frame 40, then another position at frame 60. Linear interpolation holds the value
+between identical keys. Hold interpolation instead keeps a value until an abrupt
+change at the next key. Curves can ease each axis independently.
+
+Render displays the evaluated mesh/primitive position while Scene retains base
+placement. This first slice uses numeric position authoring, not a viewport gizmo
+that automatically inserts keys. Scroll the timeline channel list to reach Y/Z.
+Select another object in Scene to add its channels. Rotation, scale, object paths,
+emitters and lifetime clips remain later slices.
