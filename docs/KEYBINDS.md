@@ -63,3 +63,16 @@ Transform controls:
 - Scene Editor shortcuts use mnemonic labels chosen for this editor: `R` means
   Rotate and `E` means Scale. They intentionally differ from applications that
   assign `E` to Rotate and `R` to Scale.
+
+## Scene workspace navigation
+
+- `Tab` / `Shift+Tab`: next / previous visible workspace when no focused control consumes the key.
+- Opening Scene Editor starts in Scene with Select active; it does not restore a legacy Bézier tool mode.
+- View > Light path (Render) and Light animation (Render) open the current Render authoring controls.
+
+### Timeline Keys view
+
+- Right-click empty channel space: insert a key at the pointed frame; playhead stays put.
+- Left-click a diamond: select; Shift-click: extend/toggle selection.
+- Right-click a diamond: select without duplicating it.
+- Drag a diamond: retime; drag the ruler: scrub.

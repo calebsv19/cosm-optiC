@@ -26,6 +26,50 @@ missing/ambiguous targets remain visible errors. The ordinary-scene native
 acceptance entrypoint is `scene_editor_workspace_visual_test <scratch>
 <copied-scene> --render-authoring`. It saves only the supplied copied scene.
 
+## Timeline pointer authoring and animated viewport
+
+In the Keys view, right-click empty channel space to insert and select a key at
+that frame using its evaluated value. The playhead stays put. Right-clicking an
+existing key selects it without duplication; group rows are not editable channels.
+Left-click selects, Shift-click extends/toggles selection, and dragging retimes.
+Hover highlights the nearest diamond and reports its channel, frame and value;
+empty channel space shows the prospective frame. Use Key value to edit the selected
+key, or move the playhead and use XYZ / Apply to author a complete object position.
+
+Solid and Material surface caches include evaluated primitive and mesh transforms.
+Changing animated geometry redraws the viewport, while identical poses reuse the
+cache. The existing reduced-resolution interactive rendering and settled-quality
+pass remain in use. Native `--motion-interaction` acceptance checks actual surface
+pixel hashes forward/backward, unchanged-pose reuse, playback, right-click creation,
+Shift selection, undo/redo and persistence, using copied scene data.
+
+## Scene entry and workspace routing
+
+Opening Scene Editor starts in Scene with the scene framed, object list visible,
+and Select active. Persisted legacy `editorMode` values do not choose the entry
+workspace. Embedded menu entry and standalone initialization share this policy.
+Fluid-manifest sources retain their object-editing restriction and enter Render.
+
+Tab / Shift+Tab cycle the visible Scene, Material, Surface, Environment and Render
+workspaces after focused controls have had the opportunity to consume the key.
+View > Light path (Render) selects the light's Path controls; View > Light animation
+(Render) selects its Animation controls in the full scene timeline. Re-entering
+Render selects Camera consistently; returning from Preview preserves a selected
+light's Render workspace. Workspace changes pause playback and reset destructive
+Add/Delete tools to Select. The old mode enum remains an internal backend adapter,
+not a separate visible navigation ring. The menu no longer exposes or cycles the
+obsolete Editor: Path/Camera/Material selector; workspace choice is inside the editor.
+
+Mesh geometry is submitted regardless of authoring mode. Known bounds are drawn
+when preview geometry is unavailable, including metadata-only recovered instances;
+selected fallback bounds retain the selection highlight. Explicit object visibility
+flags still apply. This does not recover assets with neither geometry nor bounds.
+
+The `--scene-entry` native acceptance option exercises first frame without a
+corrective workspace selection, persisted legacy/invalid settings, embedded session
+re-entry, View shortcuts, Tab in both directions, document revision invariants and
+an unavailable-mesh bounds capture.
+
 Interactive tooling for shaping the scene.
 
 - `bezier_editor.c` – Adds/removes Bézier control points, manipulates velocity handles, and renders the path using the current camera margin so edits match the live viewport.
@@ -53,7 +97,7 @@ Interactive tooling for shaping the scene.
 - `scene_editor_viewport3d_bridge.c` – Thin adapter between RayTracing's durable double target / radian projector state and shared `core_viewport3d >= 0.1.0`. It converts the Ray basis convention to the canonical right/screen-down/forward basis and routes pan, anchor zoom, orbit, frame, and resize transitions while projector construction and zoom-domain policy stay local.
 - `scene_editor_viewport_nav_zoom.c` – Native `3D` digest viewport policy over the shared state-transition layer. Frame operations establish durable zoom limits; bounded reciprocal wheel/trackpad deltas preserve the pointer anchor without re-deriving limits from incidental selection, while focused Material mode retains its wider inspection range.
 - `scene_editor_material_preview.c` – Material-mode focused-object triangle preview. It reuses the native `3D` builder mesh, fills projected triangles with fast solid fill when no texture is active or capped barycentric block sampling for rust/fog procedural texture color, samples generated face groups as cohesive texture islands with the same texture parameter block as the native payload path, supports Solid Faces opaque/depth-buffered preview with visible triangle edges on front-facing faces, exposes click picking for nearest visible focused-object triangles, and draws selected face-group highlights.
-- `scene_editor.c` – Hosts the editor window, routes events to the active editor mode (cycle with Tab/Shift+Tab), saves settings, and draws shared HUD elements.
+- `scene_editor.c` – Hosts the editor window, routes events to the active workspace (cycle with Tab/Shift+Tab), saves settings, and draws shared HUD elements.
 - `scene_editor_document.c` – Retained runtime-scene document owner for complete JSON preservation, stable-ID typed edits, bounded undo/redo, exact-base conflict detection, managed-candidate adoption, preview rehydration, and atomic durable scene publication.
 - `scene_editor_transform_panel.c` – Object-mode right-pane inspector for numeric XYZ position/degree rotation/per-axis scale, rename/duplicate/two-press delete, undo/redo, explicit-unit managed STL intake, and per-instance shading/crease controls.
 - `scene_editor_transform_ergonomics.c` – App-local World/Local presentation state and optional Move/Rotate/Scale quantization used by the Scene transform controls.
@@ -217,9 +261,12 @@ and highlights that object in the viewport. **Frame selected object** centers
 its evaluated position at the playhead.
 
 The inspector identifies the object and shows all three position components.
-Seek with Playhead, enter X/Y/Z (Enter accepts each draft), then click **Set
+Seek with Playhead, enter X/Y/Z (Enter accepts each draft), then click **Apply
 position key at frame ...** to commit the vector in one undoable command.
-The draft does not move geometry until committed; Escape cancels it. The
+The draft does not move geometry until committed; Escape cancels it. Keys may be inserted before or between existing keys, or updated at the same
+frame. XYZ commits remain atomic if a channel is full; the error names that
+channel and its actual key count. Enabled Render/timeline buttons have hover
+and pressed feedback, including selected buttons. Drafts are explicitly labeled. The
 separate Key frame / Key value fields edit a selected diamond, independently
 of the playhead. Camera/light authoring retains its existing channel controls.
 
@@ -240,3 +287,19 @@ placement. This first slice uses numeric position authoring, not a viewport gizm
 that automatically inserts keys. Scroll the timeline channel list to reach Y/Z.
 Select another object in Scene to add its channels. Rotation, scale, object paths,
 emitters and lifetime clips remain later slices.
+
+## Final render verification
+
+Saved object position channels feed the shared evaluated-scene service consumed
+by desktop synchronous/tiled rendering and the headless renderer. Mesh primitives
+retain their sampled transform for acceleration traversal, so cached asset records
+cannot restore the authored base pose. Export start/count selects timeline frames;
+match video FPS to timeline FPS for the intended playback duration.
+
+`tests/integration/check_object_timeline_pixels.py` accepts a saved linear/hold
+object timeline, renderer CLI, task-owned scratch directory, object ID and fixed
+inspection camera/look-at. It isolates that mesh without editing the source,
+compares frames 0/20/60/80 to baked placements, rejects a visually inert frozen
+control at 60, and checks a three-frame job at 20–22. Use a fixture whose keys cover
+those frames and whose assets resolve from absolute paths. The fixed camera must
+keep the mesh visible. Reports and images stay under the supplied scratch root.

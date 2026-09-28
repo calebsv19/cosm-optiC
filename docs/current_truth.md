@@ -1,5 +1,57 @@
 # optiC Current Truth
 
+## Final-render object timeline parity
+
+The mesh acceleration path now retains the sampled position, rotation, scale and
+pivot with each built mesh primitive. BLAS traversal uses that per-frame transform
+instead of the original authored asset placement; prepared scene copies preserve
+it. This fixes incorrect or missing animated meshes despite correct timeline
+readbacks, while retaining acceleration. Image-level acceptance compares timeline
+frames with explicitly positioned references, includes a frozen-object negative
+control, and exercises consecutive frames in one process. The rendered fixture
+passes at frames 0/20/60/80 and consecutive 20–22.
+
+Save the scene and animation before rendering. Render start/count choose the
+authored frame interval; export length does not stretch keys. Video export still
+uses its configured FPS, which should match timeline FPS for matching duration.
+
+## Animated viewport and direct key creation
+
+Render Solid/Material caching now follows evaluated object transforms, fixing a
+stationary viewport despite changing position readouts. Existing interactive
+resolution reduction remains active; identical poses reuse cached surfaces.
+Keys view supports right-click creation at the pointed frame without moving the
+playhead, left-click selection, unchanged Shift-click multiselection, and hover
+outlines/frame-value feedback. Right-click on an existing diamond only selects it.
+Native acceptance checks rendered surface pixels independently of UI overlays.
+
+## Object position key insertion repair
+
+The XYZ inspector now inserts keys in time order instead of using an append-only
+operation. Adding frame 80 before an existing frame 81 no longer produces a false
+capacity error. Existing-frame updates and atomic XYZ commits are retained; real
+capacity errors identify the full channel. Draft/apply/save labels are explicit,
+and enabled Render/timeline buttons respond to hover and press, including selected
+buttons. Native UI regression covers 81 -> 80 -> 40 -> update 80, interpolation,
+undo/redo, save and fresh-process reopen, plus a truly full Z channel with no
+partial XYZ mutation. Camera/light selection and targeted timeline contracts pass.
+
+## Scene entry routing repair
+
+The earlier D1 Render-only visibility repair did not fix normal Scene Editor
+entry. Saved legacy path mode could display a Scene header with light controls
+and suppress all mesh drawing. Entry now establishes Scene/Select and frames the
+scene; mesh drawing no longer depends on the active authoring mode. Known bounds
+remain visible when preview geometry is unavailable. Tab, View light shortcuts,
+reset and Preview return use the current workspace routing. The menu no longer
+exposes the obsolete editor-mode selector. Native entry/re-entry, object
+move/hold/resume and fresh-process reopen, camera/light key-selection, foundation,
+navigation, timeline and menu contracts pass. Normal packaged menu-to-editor entry
+has also been visually checked against the retained user scene without editing it.
+The full renderer stable suite was not rerun for this bounded UI repair. See the
+[entry behavior and regression coverage](../src/editor/README.md#scene-entry-and-workspace-routing).
+
+
 ## September 27 object-authoring workflow repair
 
 The D1 follow-up fixes Render mesh visibility after selecting a light channel,

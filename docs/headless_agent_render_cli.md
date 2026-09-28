@@ -1,5 +1,8 @@
 # RayTracing Headless Agent Render CLI
 
+For a repeatable fixed-camera object animation example, see
+[Agent motion frame sets](agent_motion_frame_sets.md).
+
 Status: Phase 4 volume handoff image export contract landed, with runtime-scene camera fallback for native `3D` renders, additive colored volume inspection tint support, first PhysicsSim water-surface sidecar ingestion, and a first detached RayTracing local job runner.
 
 Environment-light inspection overrides now also support the shipped three-way
