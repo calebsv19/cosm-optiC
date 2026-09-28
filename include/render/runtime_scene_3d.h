@@ -73,6 +73,11 @@ typedef struct {
     union {
         RuntimePlane3D plane;
         RuntimeRectPrism3D rectPrism;
+        /* Retained per-frame mesh transform for local-space BLAS traversal. */
+        struct {
+            Vec3 position, rotation, scale, pivotScaled;
+            bool valid;
+        } meshTransform;
     } shape;
 } RuntimePrimitive3D;
 

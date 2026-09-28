@@ -17,6 +17,15 @@ typedef struct {
     int64_t drag_frame,drag_origin;unsigned long long revision;
     char drag_track[TIMELINE_ID_CAPACITY],shown_track[TIMELINE_ID_CAPACITY];
 } TimelineUI;
+/* Match drawing and interaction; nearest key wins when zoomed out. */
+static inline size_t TimelineUIKeyAt(const TimelineTrack* track,const TimelineView* view,SDL_Rect grid,int x) {
+    size_t best=SIZE_MAX;int distance=10;
+    for(size_t k=0;k<track->key_count;++k) {
+        int delta=x-TimelineViewX(view,grid,track->keys[k].frame);if(delta<0) delta=-delta;
+        if(delta<distance) {distance=delta;best=k;}
+    }
+    return best;
+}
 void SceneEditorTimelineUIReset(void);
 void SceneEditorTimelineUIReleaseFocus(void);
 void SceneEditorTimelineUIFocus(void);

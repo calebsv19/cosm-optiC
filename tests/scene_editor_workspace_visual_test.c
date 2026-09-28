@@ -425,6 +425,9 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_timeline_dock_acceptance.h"
 #include "scene_editor_timeline_selection_acceptance.h"
 #include "scene_editor_object_timeline_acceptance.h"
+#include "scene_editor_entry_acceptance.h"
+#include "scene_editor_key_insert_acceptance.h"
+#include "scene_editor_motion_interaction_acceptance.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -442,10 +445,22 @@ int main(int argc, char** argv) {
     active_editor = &editor;
     SDL_SetWindowTitle(editor.window, "optiC E0/E1 isolated source proof");
     SDL_SetWindowSize(editor.window, 1280, 800);
-    SceneEditorWorkspaceProfileSelect(&editor, SCENE_WORKSPACE_SCENE);
+    /* Test the entry state itself. A corrective Scene selection hid regressions. */
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if (argc==4 && !strcmp(argv[3],"--motion-interaction")) {
+        motion_interaction_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if (argc==4 && !strcmp(argv[3],"--object-key-insert-reopen")) {
+        key_insert_reopen_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if (argc==4 && !strcmp(argv[3],"--object-key-insert")) {
+        key_insert_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if (argc==4 && !strcmp(argv[3],"--scene-entry")) {
+        entry_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if (argc==4 && !strcmp(argv[3],"--object-timeline-reopen")) {
         object_timeline_reopen_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

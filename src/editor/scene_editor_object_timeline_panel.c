@@ -75,8 +75,18 @@ static bool set_position_key(void) {
         if(axis<0 || strcmp(track->target_id,panel.target) || !track->enabled) continue;
         size_t key=0;for(;key<track->key_count;++key) if(track->keys[key].frame==panel.frame) break;
         if(key<track->key_count) track->keys[key].value=TimelineValueScalar(panel.position[axis]);
-        else if(TimelineTrackAddKey(track,panel.frame,TimelineValueScalar(panel.position[axis]),TIMELINE_INTERPOLATION_LINEAR)!=TIMELINE_STATUS_OK) {
-            snprintf(panel.message,sizeof(panel.message),"Cannot add key: channel capacity reached.");return false;
+        else {
+            TimelineKeyframe inserted={.frame=panel.frame,.value=TimelineValueScalar(panel.position[axis]),
+                .interpolation_to_next=TIMELINE_INTERPOLATION_LINEAR};
+            TimelineStatus status=TimelineTrackInsertKey(track,inserted,&key);
+            if(status!=TIMELINE_STATUS_OK) {
+                if(status==TIMELINE_STATUS_CAPACITY_EXCEEDED)
+                    snprintf(panel.message,sizeof(panel.message),"Position %c: %zu/%u keys. Edit/remove a key.",
+                        'X'+axis,track->key_count,TIMELINE_TRACK_KEY_CAPACITY);
+                else snprintf(panel.message,sizeof(panel.message),"Position %c: cannot insert frame %lld (%s).",
+                    'X'+axis,(long long)panel.frame,TimelineStatusLabel(status));
+                return false;
+            }
         }
         /* Inserting inside a curve must keep its temporal handles admissible. */
         for(size_t j=0;j+1<track->key_count;++j) {
@@ -92,7 +102,7 @@ static bool set_position_key(void) {
     int64_t frame=panel.frame;
     if(!SceneEditorDocumentSetTimeline(&doc,panel.revision,panel.message,sizeof(panel.message))) return false;
     panel.valid=false;sync_panel();SceneEditorTimelineSelectKey(frame,false);
-    snprintf(panel.message,sizeof(panel.message),"XYZ keyed. Save scene to keep this edit.");return true;
+    snprintf(panel.message,sizeof(panel.message),"Keyed frame %lld. Scrub to preview; Save to keep.",(long long)frame);return true;
 }
 bool SceneEditorObjectTimelinePanelEvent(SDL_Event* e) {
     if(!sync_panel()) return false;
@@ -123,7 +133,7 @@ bool SceneEditorObjectTimelinePanelEvent(SDL_Event* e) {
 int SceneEditorObjectTimelinePanelDraw(SDL_Renderer* r,SDL_Rect rect) {
     if(!sync_panel()) return rect.y;
     int y=rect.y;
-    snprintf(panel.labels[0],sizeof(panel.labels[0]),"Position (%s) at playhead%s",SceneEditorDocumentUnitLabel(),panel.changed?" *":"");
+    snprintf(panel.labels[0],sizeof(panel.labels[0]),"Position (%s) at playhead%s",SceneEditorDocumentUnitLabel(),panel.changed?" — draft":"");
     ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,11,8),panel.labels[0],rect.x,y,SceneEditorChromeShellResolvePalette().text_primary);y+=22;
     for(int i=0;i<3;++i) {
         if(panel.editing==i) snprintf(panel.labels[i+1],sizeof(panel.labels[i+1]),"%c: %s_",'X'+i,panel.draft);
@@ -131,9 +141,9 @@ int SceneEditorObjectTimelinePanelDraw(SDL_Renderer* r,SDL_Rect rect) {
         panel.axes[i]=(SDL_Rect){rect.x,y,rect.w,26};
         SceneEditorRenderButton(r,panel.axes[i],panel.labels[i+1],panel.editing==i,true);y+=29;
     }
-    snprintf(panel.labels[4],sizeof(panel.labels[4]),"Set position key at frame %lld",(long long)panel.frame);
+    snprintf(panel.labels[4],sizeof(panel.labels[4]),"%s position key at frame %lld",panel.changed?"Apply":"Set",(long long)panel.frame);
     panel.apply=(SDL_Rect){rect.x,y,rect.w,28};SceneEditorRenderButton(r,panel.apply,panel.labels[4],panel.changed,true);y+=32;
-    snprintf(panel.labels[5],sizeof(panel.labels[5]),"%s",panel.message[0]?panel.message:panel.changed?"Draft: Set key to apply; Escape cancels.":"Edit XYZ, then set key. Scrub to preview.");
+    snprintf(panel.labels[5],sizeof(panel.labels[5]),"%s",panel.message[0]?panel.message:panel.changed?"Draft ready — click Apply above. Escape cancels.":"Click XYZ; Enter stages edits; Set key applies.");
     ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,10,8),panel.labels[5],rect.x,y,SceneEditorChromeShellResolvePalette().text_primary);y+=24;
     for(int i=0;i<3;++i) if(panel.axes[i].y+panel.axes[i].h>rect.y+rect.h) panel.axes[i]=(SDL_Rect){0};
     if(panel.apply.y+panel.apply.h>rect.y+rect.h) panel.apply=(SDL_Rect){0};

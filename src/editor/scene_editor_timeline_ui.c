@@ -146,6 +146,29 @@ bool SceneEditorTimelineUIEvent(SDL_Event* e,const SceneEditorPaneLayout* pane,c
         ui.focused=true;ui.feedback[0]=0;
         if(!d) {if(e->button.button==SDL_BUTTON_LEFT && y<l->panel.y+38) SceneEditorTimelineActivate();return true;}
         if(e->button.button==SDL_BUTTON_MIDDLE && x>=l->ruler.x) {ui.panning=true;ui.pan_x=x;return true;}
+        if(e->button.button==SDL_BUTTON_RIGHT && !ui.curves && hit(l->body,x,y) && x>=l->ruler.x) {
+            size_t row=ui.row_offset+(size_t)((y-l->body.y)/l->row_height);
+            if(row>=ui.row_count || ui.rows[row].group) return true;
+            if(ui.numeric) {ui.numeric=0;SDL_StopTextInput();}
+            size_t track=ui.rows[row].track;
+            const TimelineTrack* t=&d->tracks[track];
+            size_t existing=TimelineUIKeyAt(t,&ui.view,l->grid,x);
+            SceneEditorTimelineSelectTrack(track);SceneEditorTimelinePause();
+            SceneEditorRenderAuthoringSetTiming(true);
+            if(existing!=SIZE_MAX) {SceneEditorTimelineSelectKey(t->keys[existing].frame,false);return true;}
+            int64_t frame=clamp_frame(d,TimelineViewFrame(&ui.view,l->grid,x));
+            TimelineEvaluationContext context;TimelineEvaluationResult result;
+            TimelineSample original=s->transport.sample;
+            if(TimelineEvaluationContextBuild(d->rate,d->range,(TimelineSample){frame,0,1},&context)==TIMELINE_STATUS_OK &&
+               TimelineTrackEvaluate(t,&context,&result)==TIMELINE_STATUS_OK) {
+                SceneEditorTimelineSeek(frame);
+                bool ok=SceneEditorTimelineSetKey(result.value.as.scalar);
+                SceneEditorTimelineSeekSample(original);
+                if(ok) {SceneEditorTimelineSelectKey(frame,false);snprintf(ui.feedback,sizeof(ui.feedback),"Created key at %lld; edit Key value. Playhead unchanged.",(long long)frame);}
+                else snprintf(ui.feedback,sizeof(ui.feedback),"%s",SceneEditorTimelineStatus());
+            }
+            return true;
+        }
         if(e->button.button!=SDL_BUTTON_LEFT) return true;
         if(ui.numeric) {ui.numeric=0;SDL_StopTextInput();}
         if(ui.menu) {
@@ -191,12 +214,13 @@ bool SceneEditorTimelineUIEvent(SDL_Event* e,const SceneEditorPaneLayout* pane,c
                 }
                 if(!item->group && x>=l->ruler.x) {
                     const TimelineTrack* t=&d->tracks[item->track];
-                    for(size_t k=0;k<t->key_count;++k) if(abs(x-TimelineViewX(&ui.view,l->grid,t->keys[k].frame))<=7) {
+                    size_t k=TimelineUIKeyAt(t,&ui.view,l->grid,x);
+                    if(k!=SIZE_MAX) {
                         bool toggle=(SDL_GetModState()&KMOD_SHIFT)!=0;
                         if(toggle || !SceneEditorTimelineKeySelected(t->track_id,t->keys[k].frame))
                             SceneEditorTimelineSelectKey(t->keys[k].frame,toggle);
                         ui.dragging=!toggle;ui.drag_frame=ui.drag_origin=t->keys[k].frame;
-                        ui.revision=SceneEditorDocumentRevision();snprintf(ui.drag_track,sizeof(ui.drag_track),"%s",t->track_id);break;
+                        ui.revision=SceneEditorDocumentRevision();snprintf(ui.drag_track,sizeof(ui.drag_track),"%s",t->track_id);
                     }
                 }
             }

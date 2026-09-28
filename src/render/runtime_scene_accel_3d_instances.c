@@ -366,6 +366,15 @@ bool RuntimeSceneAcceleration3D_ApplyMeshAssetRecords(
                                      mesh_instance->scale_z);
         accel_instance->pivotScaled =
             runtime_scene_accel_3d_instances_mesh_pivot(&asset->document, mesh_instance);
+        /* Use the transform that produced this scene's triangles, not the
+         * authored bridge record. This also survives prepared-scene copies. */
+        const RuntimePrimitive3D* primitive = &scene->primitives[primitive_index];
+        if (primitive->shape.meshTransform.valid) {
+            accel_instance->position = primitive->shape.meshTransform.position;
+            accel_instance->rotation = primitive->shape.meshTransform.rotation;
+            accel_instance->scale = primitive->shape.meshTransform.scale;
+            accel_instance->pivotScaled = primitive->shape.meshTransform.pivotScaled;
+        }
         accel_instance->localMesh = blas_view.localMesh;
     }
     return true;

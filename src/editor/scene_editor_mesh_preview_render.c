@@ -585,6 +585,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
         const RayTracingRuntimeMeshAssetInstance* instance =
             SceneEditorMeshPreviewStoreGetInstance(i);
         const CoreMeshAssetRuntimeContract* contract = NULL;
+        CoreMeshAssetRuntimeContract bounds_contract = {0};
         const CoreMeshPreviewLodMesh* lod = NULL;
         SDL_Color highlight = {0};
         if (!instance) {
@@ -599,8 +600,15 @@ bool SceneEditorMeshPreviewRenderGeometry(
         const SceneEditorMeshDisplayMode instance_mode = stats.mode;
         contract = SceneEditorMeshPreviewStoreGetContract(instance->asset_index);
         lod = SceneEditorMeshPreviewStoreGet(instance->asset_index);
-        if (!contract || !lod) continue;
-        if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS) {
+        if (!contract) {
+            const CoreMeshAssetBounds3* bounds = SceneEditorMeshPreviewStoreGetBounds(instance->asset_index);
+            if (bounds) {
+                bounds_contract.local_bounds = *bounds;
+                contract = &bounds_contract;
+            }
+        }
+        if (!contract) continue;
+        if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS || !lod || !lod->triangle_count) {
             scene_editor_mesh_preview_draw_bounds(renderer,
                                                   &object_projector,
                                                   contract,
@@ -632,6 +640,10 @@ bool SceneEditorMeshPreviewRenderGeometry(
                                                       contract,
                                                       lod,
                                                       instance->scene_object_index,context_wire)) {
+                scene_editor_mesh_preview_draw_bounds(renderer, &object_projector,
+                    contract, instance, (SDL_Color){112, 168, 220, 235});
+                stats.rendered_bounds += 1;
+                stats.rendered_instances += 1;
                 continue;
             }
             if (instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE || surface_rendered) {
@@ -663,6 +675,7 @@ bool SceneEditorMeshPreviewRenderGeometry(
         }
         if (highlight.a != 0u &&
             (instance_mode == SCENE_EDITOR_MESH_DISPLAY_BOUNDS ||
+             !lod || !lod->triangle_count ||
              instance_mode == SCENE_EDITOR_MESH_DISPLAY_WIRE ||
              !surface_rendered)) {
             scene_editor_mesh_preview_draw_bounds(renderer,

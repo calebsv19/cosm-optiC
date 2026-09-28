@@ -681,16 +681,6 @@ void menu_render_frame(SDL_Renderer* renderer,
     }
 
     menu_render_draw_button_rect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
-    int currentEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
-                                                             AnimationUseFluidScene());
-    if (currentEditorMode != animSettings.editorMode) {
-        animSettings.editorMode = currentEditorMode;
-    }
-    const char* editorModeText = (currentEditorMode == EDITOR_MODE_PATH) ? "Editor: Path" :
-                                 (currentEditorMode == EDITOR_MODE_OBJECT) ? "Editor: Scene" :
-                                 (currentEditorMode == EDITOR_MODE_CAMERA) ? "Editor: Camera" :
-                                 "Editor: Material";
-    menu_render_draw_button_rect(renderer, font, &buttons.sceneModeRect, editorModeText, false);
     menu_render_draw_button_rect(renderer, font, &buttons.spaceModeRect,
                                  menu_space_mode_button_label(),
                                  animSettings.spaceMode == SPACE_MODE_3D);

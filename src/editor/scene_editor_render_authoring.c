@@ -41,12 +41,28 @@ void SceneEditorRenderButton(SDL_Renderer* r,SDL_Rect rect,const char* text,bool
     RayTracingThemePalette p=SceneEditorChromeShellResolvePalette();
     style.button_fill=(KitRenderColor){p.button_fill.r,p.button_fill.g,p.button_fill.b,p.button_fill.a};
     style.button_active_fill=(KitRenderColor){p.accent_primary.r,p.accent_primary.g,p.accent_primary.b,p.accent_primary.a};
-    int x,y;SDL_GetMouseState(&x,&y);
-    KitUiButtonState state={.selected=selected,.disabled=!enabled,.hovered=hit(rect,x,y)};
-    kit_ui_sdl_draw_button(r,&rect,"",&state,&style,NULL);
-    SDL_Rect prior;SDL_bool clipped=SDL_RenderIsClipEnabled(r);SDL_RenderGetClipRect(r,&prior);SDL_Rect clip=rect;if(clipped) SDL_IntersectRect(&prior,&rect,&clip);SDL_RenderSetClipRect(r,&clip);
+    int x,y;Uint32 mouse=SDL_GetMouseState(&x,&y);
+    bool hovered=enabled && hit(rect,x,y);
+    bool pressed=hovered && (mouse & SDL_BUTTON_LMASK);
     SDL_Color fill=selected?p.accent_primary:p.button_fill;
     SDL_Color ink=enabled?ray_tracing_theme_choose_button_text(fill,p):p.text_muted;
+    if(hovered) {
+        /* The shared SDL HUD fill does not interpret hover. Apply app theme
+         * feedback to both ordinary and selected buttons before drawing it. */
+        SDL_Color toward=ink;
+        int amount=pressed?28:16;
+        fill.r=(Uint8)((fill.r*(100-amount)+toward.r*amount)/100);
+        fill.g=(Uint8)((fill.g*(100-amount)+toward.g*amount)/100);
+        fill.b=(Uint8)((fill.b*(100-amount)+toward.b*amount)/100);
+    }
+    style.button_fill=style.button_active_fill=(KitRenderColor){fill.r,fill.g,fill.b,fill.a};
+    KitUiButtonState state={.selected=selected,.disabled=!enabled,.hovered=hovered,.pressed=pressed};
+    kit_ui_sdl_draw_button(r,&rect,"",&state,&style,NULL);
+    SDL_Rect prior;SDL_bool clipped=SDL_RenderIsClipEnabled(r);SDL_RenderGetClipRect(r,&prior);SDL_Rect clip=rect;if(clipped) SDL_IntersectRect(&prior,&rect,&clip);SDL_RenderSetClipRect(r,&clip);
+    if(hovered) {
+        SDL_SetRenderDrawColor(r,ink.r,ink.g,ink.b,255);
+        SDL_Rect edge={rect.x+1,rect.y+1,rect.w-2,rect.h-2};SDL_RenderDrawRect(r,&edge);
+    }
     ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),text,rect.x+8,rect.y+8,ink);
     SDL_RenderSetClipRect(r,clipped?&prior:NULL);
 }
@@ -169,8 +185,9 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
     SceneEditorRenderButton(r,controls[2],"Path",!timing,!object);SceneEditorRenderButton(r,controls[3],"Animation",timing,true);y+=46;
     TimelineSample retained_sample;bool retained=SceneEditorTimelineCurrentSample(&retained_sample);
     controls[4]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[4],retained?"Save scene + animation":"Set up scene animation",false,true);y+=40;
-    label(r,retained?(SceneEditorDocumentIsDirty()?"Unsaved scene / animation changes":"Scene and animation saved"):"Animate an object to start its timeline.",x,y);y+=24;
-    if(feedback[0]) {label(r,feedback,x,y);y+=24;}
+    bool pending=SceneEditorObjectTimelinePanelPending();
+    label(r,pending?"Position draft — Apply key before saving":retained?(SceneEditorDocumentIsDirty()?"Unsaved scene / animation changes":"Scene and animation saved"):"Animate an object to start its timeline.",x,y);y+=24;
+    if(feedback[0] && !pending) {label(r,feedback,x,y);y+=24;}
     controls[5]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[5],"Frame scene and paths",false,true);y+=46;
     SceneEditorObjectTimelineDraw(r,pane,&y);
     if(!timing) {

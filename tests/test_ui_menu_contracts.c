@@ -583,14 +583,13 @@ static int test_menu_button_layout_respects_owned_screen_zones(void) {
                 test_rect_right(&buttons.startRect) <= test_rect_right(&screen.routeStackRect) &&
                 buttons.previewRect.y == buttons.sceneEditorRect.y &&
                 buttons.startRect.y > buttons.previewRect.y);
-    assert_true("menu_buttons_runtime_route_uses_two_column_rows",
-                buttons.spaceModeRect.y == buttons.sceneModeRect.y &&
-                    buttons.sceneEditorRect.y == buttons.previewRect.y &&
-                    test_rect_right(&buttons.spaceModeRect) < buttons.sceneModeRect.x &&
-                    test_rect_right(&buttons.sceneEditorRect) < buttons.previewRect.x &&
-                    buttons.startRect.x == buttons.spaceModeRect.x &&
-                    test_rect_right(&buttons.startRect) ==
-                        test_rect_right(&buttons.sceneModeRect));
+    assert_true("menu_buttons_runtime_route_has_no_legacy_mode_selector",
+                buttons.sceneModeRect.w == 0 && buttons.sceneModeRect.h == 0 &&
+                buttons.sceneEditorRect.y == buttons.previewRect.y &&
+                test_rect_right(&buttons.sceneEditorRect) < buttons.previewRect.x &&
+                buttons.startRect.x == buttons.spaceModeRect.x &&
+                test_rect_right(&buttons.startRect) == test_rect_right(&buttons.spaceModeRect));
+    assert_true("menu_layout_does_not_rewrite_legacy_saved_mode", animSettings.editorMode == 0);
     assert_true("menu_buttons_runtime_route_is_compact",
                 buttons.spaceModeRect.h <= 40 &&
                 buttons.startRect.h <= 40);

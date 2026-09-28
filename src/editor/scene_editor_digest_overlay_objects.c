@@ -512,9 +512,8 @@ void SceneEditorDigestOverlayRenderObjectLayer(SDL_Renderer* renderer,
     if (!renderer || !projector || !digest) return;
     runtime_scene_bridge_get_last_3d_primitive_seed_state(&seeds);
 
-    if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_RENDER ||
-        active_mode == EDITOR_MODE_OBJECT || active_mode == EDITOR_MODE_MATERIAL ||
-        active_mode == EDITOR_MODE_CAMERA) {
+    /* Scene geometry is context for every authoring tool, including light paths. */
+    {
         SceneEditorMeshPreviewFrameStats mesh_stats = {0};
         preview_surface_composed = SceneEditorMeshPreviewRenderGeometry(
             renderer,

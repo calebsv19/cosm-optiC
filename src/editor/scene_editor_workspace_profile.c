@@ -16,6 +16,8 @@
 #include "editor/scene_editor_transform_ergonomics.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/material_editor.h"
+#include "editor/scene_editor_control_surface.h"
+#include "editor/scene_editor_timeline.h"
 static SceneEditorWorkspaceProfile active;
 static bool menu_open, add_menu;
 static int document_menu=-1;
@@ -31,6 +33,13 @@ const char* SceneEditorWorkspaceProfileLabel(int profile) {
 }
 void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspaceProfile profile) {
     if (!editor || profile < 0 || profile >= SCENE_WORKSPACE_PROFILE_COUNT) return;
+    if (SceneEditorControlSurfaceLocksObjectMode() && profile != SCENE_WORKSPACE_RENDER) {
+        SceneEditorChromeShellSetActionFeedback("Fluid sources support camera/light authoring in Render.", 2500);
+        return;
+    }
+    SceneEditorTimelinePause();
+    SceneEditorTimelineReleaseFocus();
+    SceneEditorToolStateReset();
     SceneEditorObjectMoveGizmoReset();
     SceneEditorChromeShellSetActionFeedback("",0);
     int selected = ObjectEditorGetSelectedObjectIndex();
@@ -44,6 +53,7 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     active = profile;
     SetSceneMode(editor, profile == SCENE_WORKSPACE_MATERIALS ? EDITOR_MODE_MATERIAL :
         profile == SCENE_WORKSPACE_RENDER ? EDITOR_MODE_CAMERA : EDITOR_MODE_OBJECT);
+    if (profile == SCENE_WORKSPACE_RENDER) SceneEditorRenderAuthoringSelect(editor, true);
     scene_editor_pane_host_set_timeline_visible(SceneEditorGetPaneHost(), profile==SCENE_WORKSPACE_RENDER);
     if(selected_id[0]) ObjectEditorSelectionTrackerSelectId(selected_id);
     else ObjectEditorSetSelectedObjectIndex(selected);
@@ -52,7 +62,33 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     }
     if (leaving_material && scene_nav_saved) { SceneEditorRestoreViewportNav(&scene_nav); scene_nav_saved=false; }
     SceneEditorSidebarReset();
-    if (profile==SCENE_WORKSPACE_SCENE) SceneEditorSidebarShowLibrary(false);
+    if (profile==SCENE_WORKSPACE_SCENE) {
+        SceneEditorSidebarShowLibrary(false);
+        SceneEditorObjectSelectTool();
+    }
+}
+void SceneEditorWorkspaceProfileBegin(SceneEditor* editor) {
+    /* Saved legacy tool modes are not workspace/session-entry preferences. */
+    SceneEditorWorkspaceProfileReset();
+    SceneEditorRenderAuthoringReset();
+    SceneEditorWorkspaceProfileSelect(editor, SceneEditorControlSurfaceLocksObjectMode()
+        ? SCENE_WORKSPACE_RENDER : SCENE_WORKSPACE_SCENE);
+    SceneEditorFrameViewport(false);
+}
+void SceneEditorWorkspaceProfileCycle(SceneEditor* editor, bool reverse) {
+    SceneEditorWorkspaceProfileSelect(editor,
+        (active + (reverse ? SCENE_WORKSPACE_PROFILE_COUNT - 1 : 1)) % SCENE_WORKSPACE_PROFILE_COUNT);
+}
+void SceneEditorWorkspaceProfileLight(SceneEditor* editor, bool timing) {
+    if (active != SCENE_WORKSPACE_RENDER)
+        SceneEditorWorkspaceProfileSelect(editor, SCENE_WORKSPACE_RENDER);
+    SceneEditorRenderAuthoringSelect(editor, false);
+    SceneEditorRenderAuthoringSetTiming(timing);
+}
+void SceneEditorWorkspaceProfileSelectMode(SceneEditor* editor, int mode) {
+    if (mode == EDITOR_MODE_PATH) SceneEditorWorkspaceProfileLight(editor, false);
+    else SceneEditorWorkspaceProfileSelect(editor, mode == EDITOR_MODE_CAMERA ? SCENE_WORKSPACE_RENDER :
+        mode == EDITOR_MODE_MATERIAL ? SCENE_WORKSPACE_MATERIALS : SCENE_WORKSPACE_SCENE);
 }
 static int menu_count(void) {
     if (document_menu==3) return SCENE_EDITOR_MESH_DISPLAY_COUNT;
@@ -70,7 +106,7 @@ static const char* menu_label(int i) {
     static const char* file[]={"Save", "Leave editor..."};
     static const char* edit[]={"Undo", "Redo"};
     static const char* view[]={"Frame all", "Frame selected", "Expand / restore viewport", "Reset layout",
-        "World / Local label", "Toggle snapping", "Paths", "Light keyframes"};
+        "World / Local label", "Toggle snapping", "Light path (Render)", "Light animation (Render)"};
     if(document_menu==3) return SceneEditorMeshDisplayModeName(i);
     if(document_menu==0) return file[i];
     if(document_menu==1) return edit[i];
@@ -121,7 +157,7 @@ static void select_menu(SceneEditor* editor,int i) {
     else if(i==3) action.kind=SCENE_EDITOR_CHROME_ACTION_RESTORE_WORKSPACE;
     else if(i==4) { SceneEditorTransformSpaceToggle(); return; }
     else if(i==5) { SceneEditorTransformSnapToggle(); return; }
-    else if(i==6) { if(active==SCENE_WORKSPACE_RENDER) SceneEditorRenderAuthoringSelect(editor,false); else SetSceneMode(editor,EDITOR_MODE_PATH); return; }
+    else if(i==6) { SceneEditorWorkspaceProfileLight(editor,false); return; }
     else action.kind=SCENE_EDITOR_CHROME_ACTION_TOGGLE_LIGHT_TIMELINE;
     SceneEditorInputRouterCallbacks callbacks=SceneEditorBuildInputRouterCallbacks(editor);
     callbacks.apply_chrome_action(callbacks.context,&action);
@@ -246,7 +282,7 @@ void SceneEditorWorkspaceProfileRenderOverlay(SDL_Renderer* renderer) {
 void SceneEditorWorkspaceProfileSyncMode(int mode) {
     if (mode == EDITOR_MODE_MATERIAL) active = SCENE_WORKSPACE_MATERIALS;
     else if (mode == EDITOR_MODE_CAMERA) active = SCENE_WORKSPACE_RENDER;
-    else if (mode == EDITOR_MODE_PATH) active = SCENE_WORKSPACE_SCENE;
+    else if (mode == EDITOR_MODE_PATH) active = SCENE_WORKSPACE_RENDER;
     else if (active == SCENE_WORKSPACE_MATERIALS || active == SCENE_WORKSPACE_RENDER) active = SCENE_WORKSPACE_SCENE;
     SceneEditorPaneHost* host=SceneEditorGetPaneHost();
     if (host && host->initialized &&

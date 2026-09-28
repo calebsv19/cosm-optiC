@@ -100,7 +100,7 @@ static bool commit(TimelineTrack* t,TimelineRange range,const int64_t* frames,si
 /* Batch edits stage one complete channel and commit once, never key-by-key. */
 static bool edit(int operation,int64_t destination,double value,TimelineInterpolation mode,const double* handles) {
     TimelineRange range;const TimelineTrack* source=current(&range);
-    if(!source || !selection.count) return fail("Select a key first. Shift-click adds more keys.");
+    if(!source || !selection.count) return fail("Select a key first. Shift-click extends the selection.");
     TimelineTrack candidate=*source;int64_t frames[TIMELINE_TRACK_KEY_CAPACITY];size_t count=0;
     int64_t delta=0,primary=selection.primary.frame;
     if((operation==1 || operation==4) && !delta_frame(destination,primary,&delta)) return fail("Frame offset is too large.");

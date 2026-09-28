@@ -159,13 +159,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
                            action->mode_index < EDITOR_MODE_COUNT &&
                            contract.modeSelectable[action->mode_index]);
         if (selectable) {
-            int clamped_mode = EditorModeRouter_ClampEditorMode(action->mode_index,
-                                                                SceneEditorControlSurfaceLocksObjectMode());
-            editor->currentMode = clamped_mode;
-            animSettings.editorMode = clamped_mode;
-            if (env && env->initialize_editor_mode) {
-                env->initialize_editor_mode(editor);
-            }
+            SceneEditorWorkspaceProfileSelectMode(editor, action->mode_index);
             printf("Changed Mode to %d via mode router\n", editor->currentMode);
         } else {
             printf("Mode %d currently unavailable in this scene source.\n", action->mode_index);
@@ -191,13 +185,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         if (!contract.cycleModeEnabled) {
             return;
         }
-        editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
-                                                              false,
-                                                              SceneEditorControlSurfaceLocksObjectMode());
-        animSettings.editorMode = editor->currentMode;
-        if (env && env->initialize_editor_mode) {
-            env->initialize_editor_mode(editor);
-        }
+        SceneEditorWorkspaceProfileCycle(editor, false);
         printf("Changed Mode to %d\n", editor->currentMode);
         return;
     }
@@ -226,9 +214,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
         return;
     }
     if (action->kind == SCENE_EDITOR_CHROME_ACTION_TOGGLE_LIGHT_TIMELINE) {
-        if (!SceneEditorToggleSelectedLightTimeline()) {
-            SceneEditorChromeShellSetActionFeedback("Light timeline unavailable", 2200);
-        }
+        SceneEditorWorkspaceProfileLight(editor, true);
         return;
     }
     if (action->kind == SCENE_EDITOR_CHROME_ACTION_BACK_TO_MENU) {

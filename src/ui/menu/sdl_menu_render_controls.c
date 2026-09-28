@@ -989,15 +989,6 @@ void menu_render_build_button_layout(TTF_Font* font,
                                                         centerMaxWidth);
     }
 
-    int clampedEditorMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
-                                                             AnimationUseFluidScene());
-    if (clampedEditorMode != animSettings.editorMode) {
-        animSettings.editorMode = clampedEditorMode;
-    }
-    const char* editorModeLabel = (clampedEditorMode == EDITOR_MODE_PATH) ? "Editor: Path" :
-                                  (clampedEditorMode == EDITOR_MODE_OBJECT) ? "Editor: Scene" :
-                                  (clampedEditorMode == EDITOR_MODE_CAMERA) ? "Editor: Camera" :
-                                  "Editor: Material";
     if (has_route_action_layout) {
         layout.spaceModeRect = route_actions.spaceModeRect;
         layout.sceneModeRect = route_actions.sceneModeRect;
@@ -1029,18 +1020,10 @@ void menu_render_build_button_layout(TTF_Font* font,
             BOTTOM_BUTTON_HEIGHT_START,
             "Scene Editor",
             0);
-        layout.sceneModeRect = build_adaptive_button_rect_right(
-            font,
-            rightEdge,
-            layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
-            BOTTOM_BUTTON_WIDTH_START,
-            BOTTOM_BUTTON_HEIGHT_START,
-            editorModeLabel,
-            0);
         layout.spaceModeRect = build_adaptive_button_rect_right(
             font,
             rightEdge,
-            layout.sceneModeRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
+            layout.sceneEditorRect.y - (BOTTOM_BUTTON_HEIGHT_START + 6),
             BOTTOM_BUTTON_WIDTH_START,
             BOTTOM_BUTTON_HEIGHT_START,
             menu_space_mode_button_label(),

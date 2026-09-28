@@ -65,22 +65,18 @@ bool menu_layout_build_runtime_route_actions(
               (row_height * MENU_ROUTE_STACK_ROW_COUNT +
                MENU_ROUTE_STACK_GAP * (MENU_ROUTE_STACK_ROW_COUNT - 1));
 
+    /* Workspace choice lives inside Scene Editor, not in a legacy mode toggle. */
     out_layout->spaceModeRect =
-        (SDL_Rect){content.x, start_y, column_width, row_height};
-    out_layout->sceneModeRect =
-        (SDL_Rect){content.x + column_width + MENU_ROUTE_STACK_GAP,
-                   start_y,
-                   content.w - column_width - MENU_ROUTE_STACK_GAP,
-                   row_height};
+        (SDL_Rect){content.x, start_y, content.w, row_height};
     out_layout->sceneEditorRect =
         (SDL_Rect){content.x,
                    start_y + row_height + MENU_ROUTE_STACK_GAP,
                    column_width,
                    row_height};
     out_layout->previewRect =
-        (SDL_Rect){out_layout->sceneModeRect.x,
+        (SDL_Rect){content.x + column_width + MENU_ROUTE_STACK_GAP,
                    out_layout->sceneEditorRect.y,
-                   out_layout->sceneModeRect.w,
+                   content.w - column_width - MENU_ROUTE_STACK_GAP,
                    row_height};
     out_layout->startRect =
         (SDL_Rect){content.x,

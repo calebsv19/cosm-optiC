@@ -115,6 +115,9 @@ static uint64_t scene_editor_mesh_surface_signature(
                                           &seeds.primitive_count,
                                           sizeof(seeds.primitive_count));
     for (int i = 0; seeds.valid && i < seeds.primitive_count; ++i) {
+        RuntimeSceneBridgePrimitiveSeed evaluated;
+        SceneEditorObjectTransformPreviewPrimitive(&seeds.primitives[i],&evaluated);
+        hash = scene_editor_mesh_surface_hash(hash,&evaluated,sizeof(evaluated));
         hash = scene_editor_mesh_surface_hash(hash,
                                               &seeds.primitives[i],
                                               sizeof(seeds.primitives[i]));
@@ -139,7 +142,11 @@ static uint64_t scene_editor_mesh_surface_signature(
                                                instance->scene_object_index)) {
             continue;
         }
-        hash = scene_editor_mesh_surface_hash(hash, instance, sizeof(*instance));
+        /* Cache the geometry actually drawn, including timeline evaluation.
+         * Equal poses (holds/paused playback) still reuse the surface. */
+        RayTracingRuntimeMeshAssetInstance evaluated;
+        SceneEditorObjectTransformPreviewMesh(instance,&evaluated);
+        hash = scene_editor_mesh_surface_hash(hash, &evaluated, sizeof(evaluated));
         hash = scene_editor_mesh_surface_hash(hash, &lod->vertex_count,
                                               sizeof(lod->vertex_count));
         hash = scene_editor_mesh_surface_hash(hash, &lod->triangle_count,

@@ -339,12 +339,7 @@ static bool SceneEditorHandleSystemInput(SceneEditor* editor,
         event->key.keysym.sym == SDLK_TAB &&
         contract.sharedKeyTabCycleEnabled &&
         contract.cycleModeEnabled) {
-        editor->currentMode = EditorModeRouter_NextEditorMode(
-            editor->currentMode,
-            (event->key.keysym.mod & KMOD_SHIFT) != 0,
-            SceneEditorControlSurfaceLocksObjectMode());
-        animSettings.editorMode = editor->currentMode;
-        InitializeEditorMode(editor);
+        SceneEditorWorkspaceProfileCycle(editor, (event->key.keysym.mod & KMOD_SHIFT) != 0);
         printf("Changed Mode to %d via TAB\n", editor->currentMode);
         result->target = SCENE_EDITOR_INPUT_TARGET_SYSTEM;
         result->consumed = true;
@@ -678,11 +673,9 @@ static bool SceneEditorLoadSessionState(SceneEditor* editor) {
         fprintf(stderr, "[editor] failed to apply active scene source; selection preserved.\n");
     }
     ApplyAnimationWindowSizeOverride();
-    if (animSettings.editorMode < 0) {
-        animSettings.editorMode = 0;
-    }
-    editor->currentMode = EditorModeRouter_ClampEditorMode(animSettings.editorMode,
-                                                           SceneEditorControlSurfaceLocksObjectMode());
+    editor->currentMode = SceneEditorControlSurfaceLocksObjectMode()
+        ? EDITOR_MODE_CAMERA : EDITOR_MODE_OBJECT;
+    animSettings.editorMode = editor->currentMode;
     return true;
 }
 
@@ -753,7 +746,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
     (void)SceneEditorViewportNavFitDigestOverlay(&g_viewport_nav_state,
                                                  g_scenePaneLayoutValid ? &g_scenePaneLayout.viewport_rect : NULL,
                                                  true);
-    InitializeEditorMode(editor);
+    SceneEditorWorkspaceProfileBegin(editor);
     UpdateObjects();
     sceneEditorExitFlag = false;
     if (g_sceneEditorPreviewOnBegin) {
@@ -905,8 +898,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
     SceneEditorLayoutChrome();
     SceneEditorRefreshPaneSplitterHover(editor);
 
-    InitializeEditorMode(editor);
-
+    SceneEditorWorkspaceProfileBegin(editor);
 
     UpdateObjects();
     editor->running = true;
@@ -1054,11 +1046,7 @@ bool SceneEditorToggleSelectedLightTimeline(void) {
 }
 
 void ToggleSceneMode(SceneEditor* editor) {
-    editor->currentMode = EditorModeRouter_NextEditorMode(editor->currentMode,
-                                                          false,
-                                                          SceneEditorControlSurfaceLocksObjectMode());
-    animSettings.editorMode = editor->currentMode;
-    InitializeEditorMode(editor);
+    SceneEditorWorkspaceProfileCycle(editor, false);
     printf("Switched to mode: %d\n", editor->currentMode);
 }
 
@@ -1075,9 +1063,7 @@ void SetSceneMode(SceneEditor* editor, int mode) {
 void ResetSceneEditor(SceneEditor* editor) {
     LoadSceneConfig();  // Reload all scene settings
     ApplyAnimationWindowSizeOverride();
-    editor->currentMode = 0;  // Default to Bezier Editor Mode
-    animSettings.editorMode = 0;
-    InitializeEditorMode(editor);
+    SceneEditorWorkspaceProfileBegin(editor);
     printf("Scene Editor reset to default settings.\n");
 }
 

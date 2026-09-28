@@ -6,6 +6,10 @@ typedef enum SceneEditorWorkspaceProfile { SCENE_WORKSPACE_SCENE, SCENE_WORKSPAC
     SCENE_WORKSPACE_PROFILE_COUNT } SceneEditorWorkspaceProfile;
 SceneEditorWorkspaceProfile SceneEditorWorkspaceProfileGet(void);
 void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspaceProfile profile);
+void SceneEditorWorkspaceProfileBegin(SceneEditor* editor);
+void SceneEditorWorkspaceProfileCycle(SceneEditor* editor, bool reverse);
+void SceneEditorWorkspaceProfileSelectMode(SceneEditor* editor, int mode);
+void SceneEditorWorkspaceProfileLight(SceneEditor* editor, bool timing);
 const char* SceneEditorWorkspaceProfileLabel(int profile);
 bool SceneEditorWorkspaceProfileHandleEvent(SceneEditor* editor, const SDL_Event* event);
 void SceneEditorWorkspaceProfileRenderOverlay(SDL_Renderer* renderer);

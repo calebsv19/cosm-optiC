@@ -33,6 +33,8 @@ static void grid(SDL_Renderer* r,const TimelineUI* u) {
 }
 void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const TimelineDocument* d,const SceneTimelineSession* s,size_t selected) {
     const TimelineLayout* l=&u->layout;
+    int mx,my;SDL_GetMouseState(&mx,&my);
+    static char key_help[160];key_help[0]=0;
     SDL_Rect prior;SDL_bool clipped=SDL_RenderIsClipEnabled(r);SDL_RenderGetClipRect(r,&prior);SDL_RenderSetClipRect(r,&l->panel);
     RayTracingThemePalette p=SceneEditorChromeShellResolvePalette();
     SDL_Color ink=p.text_primary,muted=p.text_muted,accent={105,196,239,255},gold={245,180,80,255};
@@ -93,8 +95,26 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
         int y=l->body.y+(int)(row-u->row_offset)*l->row_height;if(y>=l->body.y+l->body.h) break;
         const TimelineRow* item=&u->rows[row];if(item->group) continue;
         const TimelineTrack* t=&d->tracks[item->track];
-        for(size_t k=0;k<t->key_count;++k) diamond(r,TimelineViewX(&u->view,l->grid,t->keys[k].frame),y+l->row_height/2,
-            SceneEditorTimelineKeySelected(t->track_id,t->keys[k].frame)?gold:accent);
+        bool over=my>=y && my<y+l->row_height && mx>=l->ruler.x && mx<l->ruler.x+l->ruler.w;
+        size_t hovered=over?TimelineUIKeyAt(t,&u->view,l->grid,mx):SIZE_MAX;
+        for(size_t k=0;k<t->key_count;++k) {
+            int x=TimelineViewX(&u->view,l->grid,t->keys[k].frame),cy=y+l->row_height/2;
+            if(k==hovered) {
+                SDL_SetRenderDrawColor(r,ink.r,ink.g,ink.b,255);
+                SDL_Point outline[]={{x,cy-7},{x+7,cy},{x,cy+7},{x-7,cy},{x,cy-7}};
+                SDL_RenderDrawLines(r,outline,5);
+                snprintf(key_help,sizeof(key_help),"%s | Frame %lld | %.6g | Click selects; Shift-click extends selection",
+                    TimelineChannelLabel(t->property_id),(long long)t->keys[k].frame,t->keys[k].value.as.scalar);
+            }
+            diamond(r,x,cy,SceneEditorTimelineKeySelected(t->track_id,t->keys[k].frame)?gold:accent);
+        }
+        if(over && hovered==SIZE_MAX && !u->dragging && !u->scrubbing) {
+            int64_t end;TimelineRangeEndFrame(d->range,&end);
+            int64_t frame=(int64_t)llround(fmax(d->range.start_frame,fmin(end,TimelineViewFrame(&u->view,l->grid,mx))));
+            int x=TimelineViewX(&u->view,l->grid,frame);
+            SDL_SetRenderDrawColor(r,120,135,155,255);SDL_RenderDrawLine(r,x,y+2,x,y+l->row_height-3);
+            snprintf(key_help,sizeof(key_help),"Right-click: create %s key at frame %lld",TimelineChannelLabel(t->property_id),(long long)frame);
+        }
         if(u->dragging && item->track==selected && have_keys) for(size_t k=0;k<keys.count;++k)
             diamond(r,TimelineViewX(&u->view,l->grid,keys.frames[k]+(u->drag_frame-u->drag_origin)),y+l->row_height/2,(SDL_Color){235,240,255,255});
     }
@@ -124,18 +144,17 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     }
     SceneEditorRenderButton(r,l->controls[TL_INTERPOLATION],mode,u->menu,have_keys);
     SceneEditorRenderButton(r,l->controls[TL_DELETE],"Delete",false,have_keys && keys.count<d->tracks[selected].key_count);
-    if(have_keys) snprintf(context,sizeof(context),"%zu selected | Shift-click: add keys | Arrows: scrub",keys.count);
-    else snprintf(context,sizeof(context),"Click a diamond to edit it. Scrub on the ruler.");
+    if(have_keys) snprintf(context,sizeof(context),"%zu selected | Shift-click: extend selection | Arrows: scrub",keys.count);
+    else snprintf(context,sizeof(context),"Right-click lane: create key. Click diamond: select. Ruler: scrub.");
     const char* error=SceneEditorTimelineSelectionStatus();
     bool rejected=error[0]!=0;
-    text(r,u->feedback[0]?u->feedback:rejected?error:context,l->footer.x+444,l->footer.y+7,muted);
+    text(r,key_help[0]?key_help:u->feedback[0]?u->feedback:rejected?error:context,l->footer.x+444,l->footer.y+7,muted);
     if(u->menu) {
         const char* modes[]={"Hold","Linear","Bezier ease"};
         SDL_Rect box=l->controls[TL_INTERPOLATION];box.y-=72;box.h=24;
         for(int i=0;i<3;++i) {SceneEditorRenderButton(r,box,modes[i],false,true);box.y+=24;}
     }
     /* Hover help keeps the toolbar compact without making symbols ambiguous. */
-    int mx,my;SDL_GetMouseState(&mx,&my);
     const char* help[]={"First frame (Home)","Previous frame (Left)","Play / pause (Space)","Next frame (Right)","Last frame (End)","Type frame, Enter applies","Key evaluated value at playhead","Keyframe view: drag diamonds to retime","Curve view: drag keys or Bezier handles","Fit animation range (F)","Fit selected channel's keys","Zoom out; Ctrl+wheel zooms at pointer","Zoom in; middle-drag or Shift+wheel pans","Edit selected values; the playhead stays put","Interpolation from selected keys to the next key","Delete selected keys; Undo restores the group","Retime selection; other selected keys keep their spacing"};
     for(int i=0;!u->feedback[0] && !rejected && i<TL_CONTROL_COUNT;++i) {SDL_Rect b=l->controls[i];if(mx>=b.x && mx<b.x+b.w && my>=b.y && my<b.y+b.h) {fill(r,(SDL_Rect){l->footer.x+440,l->footer.y,l->footer.w-440,l->footer.h},p.panel_fill);text(r,help[i],l->footer.x+444,l->footer.y+7,ink);break;}}
  done:SDL_RenderSetClipRect(r,clipped?&prior:NULL);

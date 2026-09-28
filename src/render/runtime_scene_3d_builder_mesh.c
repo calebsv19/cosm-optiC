@@ -302,6 +302,11 @@ bool runtime_scene_3d_builder_append_mesh_asset_set_at_t(
         primitive->kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
         primitive->source.kind = RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH;
         primitive->source.sceneObjectIndex = scene_object_index;
+        primitive->shape.meshTransform.position = vec3(instance->position_x,instance->position_y,instance->position_z);
+        primitive->shape.meshTransform.rotation = vec3(instance->rotation_x,instance->rotation_y,instance->rotation_z);
+        primitive->shape.meshTransform.scale = vec3(instance->scale_x,instance->scale_y,instance->scale_z);
+        primitive->shape.meshTransform.pivotScaled = pivot;
+        primitive->shape.meshTransform.valid = true;
         snprintf(primitive->source.objectId,
                  sizeof(primitive->source.objectId),
                  "%s",

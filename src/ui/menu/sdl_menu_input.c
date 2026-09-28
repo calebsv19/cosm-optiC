@@ -795,18 +795,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             return;
         }
 
-        if (point_in_rect(&buttons.sceneModeRect, x, y)) {
-            animSettings.editorMode = EditorModeRouter_NextEditorMode(animSettings.editorMode,
-                                                                       false,
-                                                                       AnimationUseFluidScene());
-            const char* newModeText = (animSettings.editorMode == EDITOR_MODE_PATH) ? "Path" :
-                                      (animSettings.editorMode == EDITOR_MODE_OBJECT) ? "Scene" :
-                                      (animSettings.editorMode == EDITOR_MODE_CAMERA) ? "Camera" :
-                                      "Material";
-            printf("Scene Editor Mode Toggled: %s\n", newModeText);
-            menu_settings_lifecycle_commit(state, "menu_editor_mode", false);
-            return;
-        }
+
     }
 
     if (point_in_rect(&buttons.spaceModeRect, x, y)) {
