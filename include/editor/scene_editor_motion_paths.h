@@ -10,6 +10,8 @@ bool SceneEditorMotionPathsSet(const MotionPaths *paths,
 bool SceneEditorMotionPathBind(const char *object_id, const char *path_id,
                                bool attach, unsigned long long revision,
                                char *message, size_t size);
+bool SceneEditorMotionPathBindCamera(const char *path_id, bool attach,
+    unsigned long long revision, char *message, size_t size);
 bool SceneEditorMotionPathCreate(const char *name, const double origin[3],
                                  double length, unsigned long long revision,
                                  char *id, size_t id_size, char *message,

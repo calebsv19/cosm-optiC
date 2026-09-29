@@ -1,7 +1,8 @@
-# Reusable object paths (D-M2)
+# Reusable movement paths (D-M2 / first D-M3 camera slice)
 
 In **Render**, choose **Paths** beside Camera and Light. This is the independent
-path library; Camera and Light still use their existing authoring in this slice.
+path library. The first D-M3 camera slice adds explicit camera attachment below
+the object controls. Light still uses its existing authoring.
 
 1. Click **+ New Path**, type a name, and press Enter. A scene-sized two-point
    route starts at the selected object's base position, or the viewport center.
@@ -124,3 +125,33 @@ For the viewport-first usability check, prepare a separate fixture root and run
 the native test with `--dm2-usability`. It covers append, Shift-append, Escape,
 plane depth, undo/redo, passive legacy paths, attach-after-shaping, save/reopen
 and compact toolbar layout.
+
+## Main camera attachment (first D-M3 slice)
+
+Shape a route, expand **2. Attach followers...**, then scroll to **Attach camera
+on this route**. This explicitly replaces main-camera translation with reusable
+XYZ-distance sampling. **Edit camera route timing** selects the separate
+`camera/route_progress` channel. Geometry changes do not retime its keys.
+**Detach camera: restore source** restores the prior legacy-progress or direct
+position channel without rewriting it. Bind/rebind/detach use the same retained
+document transaction and undo/redo as object bindings.
+
+Camera bindings use `target_id: camera/main` instead of `object_id`, plus
+`restore_position_tracks` for the prior position owner. The old source remains
+inactive for translation but supplies its original orientation timing through a
+copied evaluation; yaw/pitch and FOV channels remain independent. Route timing
+therefore does not retime the old camera orientation. Existing scenes without a
+camera binding continue through the legacy sampler unchanged. Older versions of
+optiC do not support the new typed camera binding/property.
+
+This is explicit attachment to a newly authored/shared route, not conversion of
+an old route. Light convergence and a tested legacy-shape/timing conversion with
+a declared tolerance are still open M3 work. Focus-target-specific composition,
+multi-camera authoring and broader rendering-mode coverage are not claimed by
+this first slice.
+
+Verification: prepare a fresh fixture using `check_motion_path_render.py`, run
+`--dm3-camera` and `--dm3-camera-reopen` in separate native harness processes,
+then run `tests/integration/check_camera_route_render.py --root <fixture>
+--cli <headless-cli>`. The proof checks independent legacy orientation/FOV, route
+hold, detach restoration, invalid target refusal and exact baked-camera pixels.

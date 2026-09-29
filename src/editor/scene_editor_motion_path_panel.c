@@ -19,6 +19,7 @@
 #include "render/font_runtime.h"
 #include "render/text_draw.h"
 #include "scene_editor_motion_path_viewport.h"
+#include "scene_editor_camera_path_panel.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -76,6 +77,9 @@ void SceneEditorMotionPathPanelReset(void) {
   ui.editing = -1;
 }
 void SceneEditorMotionPathPanelSelect(bool selected) {
+  TimelineTrack prior_track; TimelineRate rate; TimelineRange range; TimelineSample sample;
+  bool camera_timing = selected && SceneEditorTimelineSelectedTrack(&prior_track, &rate, &range, &sample) &&
+      !strcmp(prior_track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY);
   ui.active = selected;
   ui.dragging = false;
   ui.editing = -1;
@@ -97,7 +101,9 @@ void SceneEditorMotionPathPanelSelect(bool selected) {
       snprintf(ui.object_id, sizeof(ui.object_id), "%s", object.selection.id);
     for (size_t i = 0; i < paths.binding_count; ++i)
       if (paths.bindings[i].enabled &&
-          !strcmp(paths.bindings[i].object_id, ui.object_id))
+          (camera_timing ? !strcmp(paths.bindings[i].target_id, "camera/main")
+                         : (!paths.bindings[i].target_id[0] &&
+                            !strcmp(paths.bindings[i].object_id, ui.object_id))))
         snprintf(ui.path_id, sizeof(ui.path_id), "%s",
                  paths.bindings[i].path_id);
     if (!ui.path_id[0] && paths.count)
@@ -220,7 +226,8 @@ void SceneEditorMotionPathOverlayDraw(SceneEditor *e,
   TimelineRange range;
   TimelineSample sample;
   if (!SceneEditorTimelineSelectedTrack(&track, &rate, &range, &sample) ||
-      strcmp(track.property_id, MOTION_PROGRESS_PROPERTY))
+      (strcmp(track.property_id, MOTION_PROGRESS_PROPERTY) &&
+       strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY)))
     return;
   MotionPaths paths;
   if (!SceneEditorMotionPathsRead(&paths))
@@ -228,7 +235,9 @@ void SceneEditorMotionPathOverlayDraw(SceneEditor *e,
   const char *id = NULL;
   for (size_t i = 0; i < paths.binding_count; ++i)
     if (paths.bindings[i].enabled &&
-        !strcmp(paths.bindings[i].object_id, track.target_id + 7))
+        (!strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY)
+             ? !strcmp(paths.bindings[i].target_id, track.target_id)
+             : !strcmp(paths.bindings[i].object_id, track.target_id + 7)))
       id = paths.bindings[i].path_id;
   for (size_t i = 0; id && i < paths.count; ++i)
     if (!strcmp(paths.paths[i].id, id)) {
@@ -249,6 +258,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
   if (!SceneEditorMotionPathsRead(&d))
     return;
   MotionPath *p = selected(&d);
+  SceneEditorCameraPathPanelReset();
   ui.label_count = 0;
   memset(ui.controls, 0, sizeof(ui.controls));
   memset(ui.fields, 0, sizeof(ui.fields));
@@ -312,8 +322,8 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
            "Delete path (detach followers first)", true);
     y += 36;
     button(r, ATTACH_SECTION, (SDL_Rect){x, y, w, 30},
-           ui.show_followers ? "2. Attach object (hide)"
-                             : "2. Attach an object...",
+           ui.show_followers ? "2. Attach followers (hide)"
+                             : "2. Attach followers...",
            true);
     y += 38;
     if (ui.show_followers) {
@@ -344,7 +354,8 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
       for (size_t i = 0; i < d.binding_count; ++i)
         if (d.bindings[i].enabled && !strcmp(d.bindings[i].path_id, p->id)) {
           ++followers;
-          if (!strcmp(d.bindings[i].object_id, ui.object_id)) {
+          if (!d.bindings[i].target_id[0] &&
+              !strcmp(d.bindings[i].object_id, ui.object_id)) {
             bound = true;
             restore_known = d.bindings[i].restore_known;
           }
@@ -372,6 +383,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
       y += 23;
       label(r, "Equal keys pause; later keys resume.", x, y);
       y += 30;
+      y = SceneEditorCameraPathPanelDraw(r, &d, p, pane, x, y, w);
     } else {
       label(r, "No object needed to shape the route.", x, y);
       y += 30;
@@ -695,6 +707,9 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       event->button.button != SDL_BUTTON_LEFT)
     return false;
   int x = event->button.x, y = event->button.y;
+  if (SceneEditorCameraPathPanelEvent(event, p, ui.message, sizeof(ui.message))) {
+    cancel_field_edit(); return true;
+  }
   for (size_t i = 0; i < d.count; ++i)
     if (hit(ui.rows[i], x, y)) {
       cancel_field_edit();
@@ -824,7 +839,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
           if (!strcmp(d.bindings[j].path_id, p->id) && d.bindings[j].enabled) {
             snprintf(ui.message, sizeof(ui.message),
                      "Detach follower %s before deleting.",
-                     d.bindings[j].object_id);
+                     d.bindings[j].target_id[0] ? d.bindings[j].target_id : d.bindings[j].object_id);
             return true;
           }
         /* Remove inactive references too; their disabled keys remain retained.
@@ -937,6 +952,7 @@ bool SceneEditorMotionPathPanelEvent(SceneEditor *editor, SDL_Event *event,
 bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
   if (!ui.active)
     return false;
+  if (SceneEditorCameraPathPanelControl(name, out)) return true;
   if (!strncmp(name, "path_row/", 9)) {
     MotionPaths paths;
     if (SceneEditorMotionPathsRead(&paths))

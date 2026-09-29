@@ -94,14 +94,17 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
     MotionPathBinding *b = &out->bindings[i];
     json_object *o = json_object_array_get_idx(bindings, i),
                 *enabled = member(o, "enabled");
-    if (!string_field(o, "object_id", b->object_id, sizeof(b->object_id)) ||
+    bool camera = member(o, "target_id") != NULL;
+    if ((camera ? (!string_field(o, "target_id", b->target_id, sizeof(b->target_id)) ||
+                    strcmp(b->target_id, "camera/main") || member(o, "object_id"))
+                : !string_field(o, "object_id", b->object_id, sizeof(b->object_id))) ||
         strlen(b->object_id) + 7 >= TIMELINE_ID_CAPACITY ||
         !string_field(o, "path_id", b->path_id, sizeof(b->path_id)) ||
         strcmp(text(o, "placement"), "on_path") ||
         !json_object_is_type(enabled, json_type_boolean))
       return fail(m, n, "invalid binding; placement must be on_path");
     b->enabled = json_object_get_boolean(enabled);
-    json_object *restore = member(o, "restore_xyz_tracks");
+    json_object *restore = member(o, camera ? "restore_position_tracks" : "restore_xyz_tracks");
     if (restore) {
       if (!json_object_is_type(restore, json_type_array) ||
           json_object_array_length(restore) > 3)
@@ -128,7 +131,8 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
     if (!found)
       return fail(m, n, "binding references a missing path");
     for (size_t j = 0; j < i; ++j)
-      if (!strcmp(b->object_id, out->bindings[j].object_id))
+      if (!strcmp(b->target_id, out->bindings[j].target_id) &&
+          !strcmp(b->object_id, out->bindings[j].object_id))
         return fail(m, n, "duplicate object binding");
   }
   return true;
@@ -182,8 +186,10 @@ json_object *MotionPathsToJson(const MotionPaths *d) {
     }
     json_object *o = json_object_new_object();
     json_object_array_add(bindings, o);
-    json_object_object_add(o, "object_id",
-                           json_object_new_string(b->object_id));
+    if (b->target_id[0])
+      json_object_object_add(o, "target_id", json_object_new_string(b->target_id));
+    else
+      json_object_object_add(o, "object_id", json_object_new_string(b->object_id));
     json_object_object_add(o, "path_id", json_object_new_string(b->path_id));
     json_object_object_add(o, "enabled", json_object_new_boolean(b->enabled));
     json_object_object_add(o, "placement", json_object_new_string("on_path"));
@@ -192,7 +198,7 @@ json_object *MotionPathsToJson(const MotionPaths *d) {
       for (size_t j = 0; j < b->restore_count; ++j)
         json_object_array_add(restore,
             json_object_new_string(b->restore_xyz_tracks[j]));
-      json_object_object_add(o, "restore_xyz_tracks", restore);
+      json_object_object_add(o, b->target_id[0] ? "restore_position_tracks" : "restore_xyz_tracks", restore);
     }
   }
   return root;
@@ -230,23 +236,44 @@ bool MotionPathsValidateScene(json_object *scene,
       if (!strcmp(text(json_object_array_get_idx(objects, j), "object_id"),
                   b->object_id))
         ++found;
+    if (b->target_id[0]) found = !strcmp(b->target_id, "camera/main");
     if (found != 1) {
       ok = fail(m, n, "binding object is missing or ambiguous");
       break;
     }
     if (!b->enabled)
       continue;
+    if (b->target_id[0]) {
+      if (!b->restore_known || b->restore_count > 1) {
+        ok = fail(m, n, "camera binding requires saved prior source");
+        break;
+      }
+      for (size_t k = 0; ok && k < b->restore_count; ++k) {
+        bool prior = false;
+        for (size_t j = 0; timeline && j < timeline->track_count; ++j) {
+          const TimelineTrack *t = &timeline->tracks[j];
+          if (!strcmp(t->track_id, b->restore_xyz_tracks[k]) &&
+              !strcmp(t->target_id, b->target_id) && !t->enabled &&
+              (!strcmp(t->property_id, "camera/path_progress") ||
+               !strcmp(t->property_id, "camera/position"))) prior = true;
+        }
+        if (!prior) ok = fail(m, n, "camera prior source is missing or active");
+      }
+    }
     size_t progress = 0;
     for (size_t j = 0; timeline && j < timeline->track_count; ++j) {
       const TimelineTrack *t = &timeline->tracks[j];
-      if (!t->enabled || strncmp(t->target_id, "object/", 7) ||
-          strcmp(t->target_id + 7, b->object_id))
+      bool camera = b->target_id[0] != 0;
+      if (!t->enabled || (camera ? strcmp(t->target_id, b->target_id)
+          : (strncmp(t->target_id, "object/", 7) || strcmp(t->target_id + 7, b->object_id))))
         continue;
-      if (RuntimeObjectTimelineAxis(t->property_id) >= 0) {
+      if (camera ? (!strcmp(t->property_id, "camera/position") ||
+                    !strcmp(t->property_id, "camera/path_progress"))
+                 : RuntimeObjectTimelineAxis(t->property_id) >= 0) {
         ok = fail(m, n, "path and XYZ cannot both own position");
         break;
       }
-      if (!strcmp(t->property_id, MOTION_PROGRESS_PROPERTY))
+      if (!strcmp(t->property_id, camera ? MOTION_CAMERA_PROGRESS_PROPERTY : MOTION_PROGRESS_PROPERTY))
         ++progress;
     }
     if (ok && progress != 1)
@@ -254,12 +281,14 @@ bool MotionPathsValidateScene(json_object *scene,
   }
   for (size_t i = 0; ok && timeline && i < timeline->track_count; ++i) {
     const TimelineTrack *t = &timeline->tracks[i];
-    if (!t->enabled || strcmp(t->property_id, MOTION_PROGRESS_PROPERTY))
+    bool camera = !strcmp(t->property_id, MOTION_CAMERA_PROGRESS_PROPERTY);
+    if (!t->enabled || (!camera && strcmp(t->property_id, MOTION_PROGRESS_PROPERTY)))
       continue;
     bool found = false;
     for (size_t j = 0; j < d->binding_count; ++j)
       if (d->bindings[j].enabled &&
-          !strcmp(t->target_id + 7, d->bindings[j].object_id))
+          (camera ? !strcmp(t->target_id, d->bindings[j].target_id)
+                  : (!d->bindings[j].target_id[0] && !strcmp(t->target_id + 7, d->bindings[j].object_id))))
         found = true;
     if (!found)
       ok = fail(m, n, "progress channel has no active path binding");
@@ -317,15 +346,25 @@ bool MotionPathsRuntimeLoad(json_object *author, double world_scale) {
   }
   return true;
 }
-bool MotionPathsRuntimePosition(const char *id, double progress,
-                                TimelineVec3 *out) {
-  if (!isfinite(progress))
-    return false;
-  const char *path = NULL;
-  for (size_t i = 0; i < runtime.binding_count; ++i)
-    if (runtime.bindings[i].enabled &&
-        !strcmp(runtime.bindings[i].object_id, id))
-      path = runtime.bindings[i].path_id;
+bool MotionPathsRuntimeBinding(const char *target, MotionPathBinding *out) {
+  for (size_t i = 0; i < runtime.binding_count; ++i) {
+    const MotionPathBinding *b = &runtime.bindings[i];
+    bool match = b->target_id[0] ? !strcmp(target, b->target_id)
+        : (!strncmp(target, "object/", 7) && !strcmp(target + 7, b->object_id));
+    if (b->enabled && match) { if (out) *out = *b; return true; }
+  }
+  return false;
+}
+bool MotionPathsRuntimePosition(const char *id, double progress, TimelineVec3 *out) {
+  char target[TIMELINE_ID_CAPACITY];
+  if (!id || snprintf(target, sizeof(target), "object/%s", id) >= (int)sizeof(target)) return false;
+  return MotionPathsRuntimeTargetPosition(target, progress, out);
+}
+bool MotionPathsRuntimeTargetPosition(const char *target, double progress,
+                                     TimelineVec3 *out) {
+  MotionPathBinding binding;
+  if (!isfinite(progress) || !MotionPathsRuntimeBinding(target, &binding)) return false;
+  const char *path = binding.path_id;
   if (!path)
     return false;
   for (size_t i = 0; i < runtime.count; ++i)

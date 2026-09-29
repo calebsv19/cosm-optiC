@@ -16,8 +16,11 @@ D-M1/D-M2 automated acceptance is complete. The M2 restoration repair retains
 prior enabled XYZ track identities across attachment, rebind and persistence;
 detach leaves historical disabled keys off. Older bindings explicitly detach to
 static because their prior source was not recorded. Point/path selection cancels
-unfinished field edits. M3 camera/light convergence is the next implementation
-boundary after human acceptance of the corrected path workflow.
+unfinished field edits. The user authorized continuing into M3 after clean source reconciliation. Its
+first camera attachment slice is implemented: independent route translation,
+retained legacy orientation/FOV, undo/detach and fresh reopening pass. Light
+convergence and explicit legacy conversion remain open. Human acceptance remains
+separate. See [Reusable movement paths](motion_paths.md).
 
 
 ## Final-render object timeline parity

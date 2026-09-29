@@ -338,3 +338,13 @@ orbit and right/middle-drag own pan without path mutation. Controls and hints no
 live in the left Paths pane, not over the viewport. Native regression covers
 navigation starting on an existing point, including Option+Shift, and compact
 pane layout with scroll access to attachment/timing controls.
+
+## D-M3 camera route slice
+
+`scene_editor_camera_path_binding.c` owns explicit camera source switching through
+the shared retained transaction; `scene_editor_camera_path_panel.c` owns the
+attachment controls within Paths. `app/evaluated_camera_route.c` evaluates retained
+legacy orientation/lens separately from shared-route translation. Existing scene
+loading does not convert paths. Tests: `scene_editor_dm3_camera.h` and
+`integration/check_camera_route_render.py`. Light attachment and legacy conversion
+remain later M3 slices.

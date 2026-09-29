@@ -5,6 +5,7 @@
 #define MOTION_PATH_CAPACITY 16
 #define MOTION_POINT_CAPACITY 32
 #define MOTION_BINDING_CAPACITY 64
+#define MOTION_CAMERA_PROGRESS_PROPERTY "camera/route_progress"
 #define MOTION_PROGRESS_PROPERTY "object/path_progress"
 typedef struct MotionPathPoint {
   char id[64];
@@ -18,6 +19,8 @@ typedef struct MotionPath {
 } MotionPath;
 typedef struct MotionPathBinding {
   char object_id[64], path_id[64];
+  /* Empty for legacy object bindings; otherwise a typed camera target. */
+  char target_id[TIMELINE_ID_CAPACITY];
   bool enabled;
   /* Optional in v1: absent on older bindings. Empty means prior static source.
    * Keep track identities, not just axes: disabled alternatives must stay off. */
@@ -42,6 +45,9 @@ bool MotionPathsValidateScene(json_object *scene,
 bool MotionPathsRuntimeLoad(json_object *authoring, double world_scale);
 void MotionPathsRuntimeReset(void);
 uint64_t MotionPathsRuntimeRevision(void);
+bool MotionPathsRuntimeBinding(const char *target_id, MotionPathBinding *out);
+bool MotionPathsRuntimeTargetPosition(const char *target_id, double progress,
+                                      TimelineVec3 *out);
 bool MotionPathsRuntimePosition(const char *object_id, double progress,
                                 TimelineVec3 *out);
 #endif

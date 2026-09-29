@@ -369,6 +369,10 @@ TimelineStatus TimelinePropertyRegistryInitFoundationDefaults(
         TIMELINE_UNIT_DEGREES, scalar_modes, TIMELINE_INVALIDATION_CAMERA,
         &min_fov, &max_fov);
     if (status != TIMELINE_STATUS_OK) return status;
+    status = timeline_property_add_default(&candidate, "camera/route_progress",
+        TIMELINE_PROPERTY_TARGET_CAMERA, TIMELINE_VALUE_SCALAR,
+        TIMELINE_UNIT_UNITLESS, scalar_modes, TIMELINE_INVALIDATION_CAMERA, &zero, &one);
+    if (status != TIMELINE_STATUS_OK) return status;
     *registry = candidate;
     return TIMELINE_STATUS_OK;
 }
@@ -429,7 +433,8 @@ TimelineStatus TimelinePropertyRegistryValidateTrack(
 }
 
 static bool timeline_property_position_driver(const char* property) {
-    return strcmp(property,"camera/position")==0 ||
+    return strcmp(property,"camera/route_progress")==0 ||
+        strcmp(property,"camera/position")==0 ||
         strcmp(property,"camera/path_progress")==0 ||
         strcmp(property,"light/position")==0 ||
         strcmp(property,"light/path_progress")==0;

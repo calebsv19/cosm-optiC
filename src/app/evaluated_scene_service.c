@@ -3,6 +3,7 @@
 #include "animation/timeline_property_registry.h"
 #include "animation/timeline_frame_snapshot.h"
 #include "app/preview_camera_sample.h"
+#include "app/evaluated_camera_route.h"
 #include "import/runtime_scene_timeline.h"
 #include "import/runtime_scene_object_timeline.h"
 #include "config/config_manager.h"
@@ -128,11 +129,11 @@ static bool ray_evaluated_capture_camera(const TimelineEvaluationContext* contex
     if (!out_camera || !context) return false;
     status = RuntimeSceneTimelineSample(context->sample, &snapshot);
     if (status == TIMELINE_STATUS_OK) {
-        if (!PreviewCameraSampleEvaluateTimeline(&sceneSettings.camera,
+        if (!EvaluatedCameraRouteSample(&sceneSettings.camera,
                 sceneSettings.cameraZ, &sceneSettings.cameraPath,
                 &sceneSettings.cameraPath3D, normalized_t,
                 sceneSettings.windowWidth, sceneSettings.windowHeight,
-                &snapshot, "camera/main", &sample)) return false;
+                &snapshot, &sample)) return false;
     } else if (status == TIMELINE_STATUS_TARGET_NOT_FOUND) {
         if (!PreviewCameraSampleEvaluate(&sceneSettings.camera,
                 sceneSettings.cameraZ, &sceneSettings.cameraPath,

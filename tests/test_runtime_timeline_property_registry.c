@@ -70,7 +70,13 @@ static int test_registry_foundation_defaults(void) {
     assert_true("registry_defaults_init",
                 TimelinePropertyRegistryInitFoundationDefaults(&registry) ==
                     TIMELINE_STATUS_OK);
-    assert_true("registry_defaults_count", registry.descriptor_count == 13u);
+    assert_true("registry_defaults_count", registry.descriptor_count == 15u);
+    assert_true("registry_find_camera_route",
+                TimelinePropertyRegistryFind(&registry, "camera/route_progress",
+                                             &descriptor) == TIMELINE_STATUS_OK);
+    assert_true("registry_camera_route_bounds",
+                descriptor->has_minimum && descriptor->has_maximum &&
+                descriptor->invalidation_domains == TIMELINE_INVALIDATION_CAMERA);
     assert_true("registry_find_position",
                 TimelinePropertyRegistryFind(
                     &registry, "object/transform/position", &descriptor) ==

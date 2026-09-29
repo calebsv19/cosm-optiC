@@ -1,4 +1,5 @@
 #include "editor/scene_editor_motion_paths.h"
+#include "scene_editor_motion_paths_internal.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_document_timeline.h"
 #include "editor/scene_editor_timeline.h"
@@ -30,7 +31,7 @@ bool SceneEditorMotionPathsRead(MotionPaths *out) {
   return SceneEditorDocumentIsOpen() &&
          MotionPathsParse(author(false), out, NULL, 0);
 }
-static bool commit(const MotionPaths *paths, const TimelineDocument *timeline,
+bool SceneEditorMotionPathsCommit(const MotionPaths *paths, const TimelineDocument *timeline,
                    unsigned long long rev, char *m, size_t n) {
   if (rev != SceneEditorDocumentRevision())
     return fail(m, n, "Scene changed; retry the edit.");
@@ -69,7 +70,7 @@ static bool commit(const MotionPaths *paths, const TimelineDocument *timeline,
 }
 bool SceneEditorMotionPathsSet(const MotionPaths *p, unsigned long long rev,
                                char *m, size_t n) {
-  return commit(p, NULL, rev, m, n);
+  return SceneEditorMotionPathsCommit(p, NULL, rev, m, n);
 }
 bool SceneEditorMotionPathCreate(const char *name, const double origin[3],
                                  double length, unsigned long long rev,
@@ -100,7 +101,7 @@ bool SceneEditorMotionPathCreate(const char *name, const double origin[3],
     p.points[i].outgoing[0] = length / 3;
   }
   d.paths[d.count++] = p;
-  if (!commit(&d, NULL, rev, m, n))
+  if (!SceneEditorMotionPathsCommit(&d, NULL, rev, m, n))
     return false;
   snprintf(id, id_size, "%s", p.id);
   return true;
@@ -230,7 +231,7 @@ bool SceneEditorMotionPathBind(const char *object_id, const char *path_id,
     if (TimelineDocumentAddTrack(&doc, &t) != TIMELINE_STATUS_OK)
       return fail(m, n, "Timeline channel capacity reached.");
   }
-  if (!commit(&paths, &doc, rev, m, n))
+  if (!SceneEditorMotionPathsCommit(&paths, &doc, rev, m, n))
     return false;
   SceneEditorTimelinePause();
   if (attach)

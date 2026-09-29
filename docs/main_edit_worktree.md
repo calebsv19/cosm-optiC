@@ -1,5 +1,24 @@
 # RayTracing Main Edit Worktree
 
+## September 29 first M3 camera attachment checkpoint
+
+Canonical and Main Edit were clean and aligned at `286f866438bf` before M3
+implementation. This first slice adds explicit main-camera attachment to reusable
+XYZ routes with independent route timing. Saved position drivers are restored on
+detach; their orientation evaluation and authored yaw, pitch and FOV remain
+independent. Legacy scenes retain their prior evaluation path.
+
+Build and foundation/entity/timeline/navigation contracts pass. Native camera
+attach, timing, detach, undo/redo and fresh-process reopen pass. Four headless
+frames exactly match baked camera poses; six legacy camera/light frame hashes
+remain unchanged. Object M2 attachment and restoration regressions pass. Evidence
+is retained in `build/dm3-camera-final`, `build/dm3-legacy-render`, and the
+`build/dm3-*.log` files. The full repository suite was not rerun for this bounded
+slice. Light attachment, explicit legacy conversion, combined followers and
+focus-target acceptance remain later M3 work. Main Edit retains this development
+checkpoint; canonical remains the accepted M1/M2 baseline. A committed-source
+Desktop Main Edit refresh follows, with identity recorded in private status docs.
+
 ## September 29 movement checkpoint and M3 entry
 
 The user authorized reconciliation of the accumulated D1/M1/M2 development work,
