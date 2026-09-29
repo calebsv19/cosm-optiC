@@ -305,6 +305,11 @@ TimelineStatus TimelinePropertyRegistryInitFoundationDefaults(
             TIMELINE_INVALIDATION_RIGID_TRANSFORM,NULL,NULL);
         if(status!=TIMELINE_STATUS_OK) return status;
     }
+    status = timeline_property_add_default(&candidate, "object/path_progress", TIMELINE_PROPERTY_TARGET_OBJECT,
+        TIMELINE_VALUE_SCALAR,TIMELINE_UNIT_UNITLESS,
+        TIMELINE_INTERPOLATION_MASK_STEP|TIMELINE_INTERPOLATION_MASK_LINEAR|TIMELINE_INTERPOLATION_MASK_CUBIC_BEZIER,
+        TIMELINE_INVALIDATION_RIGID_TRANSFORM,&zero,&one);
+    if(status!=TIMELINE_STATUS_OK)return status;
     status = timeline_property_add_default(
         &candidate, "light/intensity", TIMELINE_PROPERTY_TARGET_LIGHT,
         TIMELINE_VALUE_SCALAR, TIMELINE_UNIT_RELATIVE_INTENSITY,

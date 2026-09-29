@@ -1,4 +1,5 @@
 #include "scene_editor_object_timeline_panel.h"
+#include "editor/scene_editor_motion_paths.h"
 #include "editor/scene_editor_chrome_actions.h"
 #include "editor/scene_editor_pointer_event.h"
 #include "editor/editor_mode_router.h"
@@ -31,7 +32,8 @@ static int left_offset,left_max;
 static int editing=-1;
 static char draft[64],feedback[256],light_label[128],readouts[8][160];
 static unsigned long long edit_revision;
-static SDL_Rect controls[16],fields[2];
+static SDL_Rect controls[17],fields[2];
+static bool controls_enabled[17];
 static bool hit(SDL_Rect r,int x,int y) {return r.w>0 && r.h>0 && x>=r.x && y>=r.y && x<r.x+r.w && y<r.y+r.h;}
 static void label(SDL_Renderer* r,const char* text,int x,int y) {
     ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),text,x,y,SceneEditorChromeShellResolvePalette().text_primary);
@@ -67,11 +69,13 @@ void SceneEditorRenderButton(SDL_Renderer* r,SDL_Rect rect,const char* text,bool
     SDL_RenderSetClipRect(r,clipped?&prior:NULL);
 }
 bool SceneEditorRenderAuthoringTiming(void) {return timing;}
-void SceneEditorRenderAuthoringSetTiming(bool enabled) {SceneEditorTimelineKeyInspectorReset();timing=enabled;editing=-1;SDL_StopTextInput();SceneEditorCameraInspectorReset();}
-void SceneEditorRenderAuthoringReset(void) {SceneEditorObjectTimelinePanelReset();SceneEditorTimelineKeyInspectorReset();timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
+void SceneEditorRenderAuthoringSetTiming(bool enabled) {if(enabled) SceneEditorMotionPathPanelSelect(false);SceneEditorTimelineKeyInspectorReset();timing=enabled;editing=-1;SDL_StopTextInput();SceneEditorCameraInspectorReset();}
+void SceneEditorRenderAuthoringReset(void) {SceneEditorMotionPathPanelReset();SceneEditorObjectTimelinePanelReset();SceneEditorTimelineKeyInspectorReset();timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
 void SceneEditorRenderAuthoringSelect(SceneEditor* editor,bool camera) {
+    SceneEditorMotionPathPanelSelect(false);
     SceneEditorCameraGestureCancel();SceneEditorLightGestureCancel();SceneEditorCameraInspectorReset();
     SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();editing=-1;SDL_StopTextInput();
+    left_offset=0;SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);
     editor->currentMode=camera?EDITOR_MODE_CAMERA:EDITOR_MODE_PATH;
     animSettings.editorMode=editor->currentMode;
     SceneEditorTimelineClearSelection();
@@ -107,6 +111,8 @@ static void path_action(SceneEditor* editor,int action) {
 bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER) return false;
     SceneEditorPaneLayout layout;if(!SceneEditorGetPaneLayout(&layout) || layout.viewport_expanded) return false;
+    if(SceneEditorMotionPathPanelEvent(editor,e,&layout)) return true;
+    if(SceneEditorMotionPathPanelActive()) {if(e->type==SDL_MOUSEBUTTONDOWN && hit(controls[0],e->button.x,e->button.y)) {SceneEditorRenderAuthoringSelect(editor,true);return true;}if(e->type==SDL_MOUSEBUTTONDOWN && hit(controls[1],e->button.x,e->button.y)) {SceneEditorRenderAuthoringSelect(editor,false);return true;}return false;}
     if(SceneEditorObjectTimelinePanelEvent(e)) {editing=-1;return true;}
     if(SceneEditorObjectTimelineEvent(editor,e)) return true;
     if(timing && SceneEditorTimelineKeyInspectorEvent(e)) {editing=-1;return true;}
@@ -133,9 +139,11 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     if(e->type!=SDL_MOUSEBUTTONDOWN || e->button.button!=SDL_BUTTON_LEFT) return false;
     int x=e->button.x,y=e->button.y;
     if(editing>=0) {editing=-1;SDL_StopTextInput();}
-    for(int i=0;i<16;++i) if(hit(layout.left_content_rect,x,y) && hit(controls[i],x,y)) {
+    for(int i=0;i<17;++i) if(hit(layout.left_content_rect,x,y) && hit(controls[i],x,y)) {
+        if(!controls_enabled[i]) return true;
+        if(i==16) {left_offset=0;SceneEditorMotionPathPanelSelect(true);return true;}
         if(i<2) SceneEditorRenderAuthoringSelect(editor,i==0);
-        else if(i<4) {SceneEditorTimelineKeyInspectorReset();timing=i==3;left_offset=0;SceneEditorCameraInspectorReset();SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();}
+        else if(i<4) {SceneEditorTimelineKeyInspectorReset();timing=i==3;left_offset=0;SceneEditorToolStateSetActive(SCENE_EDITOR_TOOL_SELECT);SceneEditorCameraInspectorReset();SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();}
         else if(i==4) {
             TimelineSample sample;
             if(SceneEditorTimelineCurrentSample(&sample)) {
@@ -157,56 +165,73 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
         edit_revision=SceneEditorDocumentRevision();SDL_StartTextInput();return true;
     }
     if(timing && hit(layout.viewport_rect,x,y)) {
-        snprintf(feedback,sizeof(feedback),"Use Path to edit geometry; select animation keys below.");return true;
+        snprintf(feedback,sizeof(feedback),"Use Path shape to edit the route; Timing edits keys.");return true;
     }
     /* These panes own their input; legacy controls underneath must not receive it. */
     return hit(layout.left_content_rect,x,y) || (timing && hit(layout.right_content_rect,x,y));
 }
 void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLayout* layout) {
     memset(controls,0,sizeof(controls));memset(fields,0,sizeof(fields));
+    for(int i=0;i<17;++i) controls_enabled[i]=true;
     if(layout->viewport_expanded) return;
+    SceneEditorMotionPathOverlayDraw(editor,layout);
     TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
     bool ready=SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample);
     bool object=ready && !strncmp(track.target_id,"object/",7);
     if(object) timing=true;
+    controls_enabled[2]=!object;
+    controls_enabled[13]=controls_enabled[14]=controls_enabled[15]=ready;
+    bool path_follower=object && !strcmp(track.property_id,MOTION_PROGRESS_PROPERTY);
     bool camera=editor->currentMode==EDITOR_MODE_CAMERA;
     SDL_Renderer* r=editor->renderer;SDL_Rect pane=layout->left_content_rect,prior;
     SDL_bool clipped=SDL_RenderIsClipEnabled(r);SDL_RenderGetClipRect(r,&prior);SDL_RenderSetClipRect(r,&pane);
     RayTracingThemePalette p=SceneEditorChromeShellResolvePalette();
     SDL_SetRenderDrawColor(r,p.panel_fill.r,p.panel_fill.g,p.panel_fill.b,p.panel_fill.a);SDL_RenderFillRect(r,&pane);
     int x=pane.x+10,y=pane.y+10-left_offset,w=pane.w-20;
-    label(r,"Scene animation",x,y);y+=30;
-    controls[0]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[0],"Camera",camera && !object,true);y+=40;
+
+    controls[0]=(SDL_Rect){x,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[0],"Camera",camera && !object && !SceneEditorMotionPathPanelActive(),true);
     static RuntimeSceneLightTimelineDocument light;
     bool has_light=RuntimeSceneLightTimelineGetLast(&light);
     snprintf(light_label,sizeof(light_label),"Light: %s",has_light?light.timeline.tracks[light.progress_track_index].target_id+6:"path not bound");
-    controls[1]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[1],light_label,!camera && !object,true);y+=48;
+    controls[1]=(SDL_Rect){x+(w+6)/3,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[1],"Light",!camera && !object && !SceneEditorMotionPathPanelActive(),true);
+    controls[16]=(SDL_Rect){x+2*(w+6)/3,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[16],"Paths",SceneEditorMotionPathPanelActive(),true);y+=38;
+    if(SceneEditorMotionPathPanelActive()) {SDL_RenderSetClipRect(r,clipped?&prior:NULL);SceneEditorMotionPathPanelDraw(editor,layout);return;}
+    label(r,object?"Subject: selected object":camera?"Subject: Camera":light_label,x,y);y+=26;
     controls[2]=(SDL_Rect){x,y,(w-6)/2,34};controls[3]=(SDL_Rect){x+(w-6)/2+6,y,(w-6)/2,34};
-    SceneEditorRenderButton(r,controls[2],"Path",!timing,!object);SceneEditorRenderButton(r,controls[3],"Animation",timing,true);y+=46;
+    SceneEditorRenderButton(r,controls[2],"Path shape",!timing,!object);SceneEditorRenderButton(r,controls[3],"Timing",timing,true);y+=40;
+    label(r,path_follower?"Object follows a reusable path":object?"Object uses position keys":timing?"When it moves: edit progress keys":"Where it moves: edit points and handles",x,y);y+=26;
     TimelineSample retained_sample;bool retained=SceneEditorTimelineCurrentSample(&retained_sample);
-    controls[4]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[4],retained?"Save scene + animation":"Set up scene animation",false,true);y+=40;
-    bool pending=SceneEditorObjectTimelinePanelPending();
-    label(r,pending?"Position draft — Apply key before saving":retained?(SceneEditorDocumentIsDirty()?"Unsaved scene / animation changes":"Scene and animation saved"):"Animate an object to start its timeline.",x,y);y+=24;
-    if(feedback[0] && !pending) {label(r,feedback,x,y);y+=24;}
-    controls[5]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[5],"Frame scene and paths",false,true);y+=46;
-    SceneEditorObjectTimelineDraw(r,pane,&y);
+    controls[4]=(SDL_Rect){x,y,(w-6)/2,30};
+    SceneEditorRenderButton(r,controls[4],retained?"Save animation":"Set up animation",false,true);
+    controls[5]=(SDL_Rect){x+(w+6)/2,y,(w-6)/2,30};
+    SceneEditorRenderButton(r,controls[5],"Frame paths",false,true);y+=38;
+    if(timing) SceneEditorObjectTimelineDraw(r,pane,&y);
     if(!timing) {
         const Path* path=camera?&sceneSettings.cameraPath:&sceneSettings.bezierPath;
         int point=camera?CameraEditorGetSelectedPointIndex():BezierEditorGetSelectedPointIndex();
         snprintf(readouts[0],sizeof(readouts[0]),"%s path | %d points",camera?"Camera":"Light",path->numPoints);label(r,readouts[0],x,y);y+=27;
+        controls_enabled[6]=controls_enabled[7]=path->numPoints>0;
+        controls_enabled[12]=point>=0 && point<path->numPoints;
         for(int i=6;i<=7;++i) {controls[i]=(SDL_Rect){x+(i-6)*(w+6)/2,y,(w-6)/2,34};SceneEditorRenderButton(r,controls[i],i==6?"Previous point":"Next point",false,path->numPoints>0);}y+=42;
-        const char* tools[]={"Select / Move","Add point","Delete point"};
-        for(int i=8;i<=10;++i) {controls[i]=(SDL_Rect){x,y,w,32};SceneEditorRenderButton(r,controls[i],tools[i-8],SceneEditorToolStateGetActive()==(SceneEditorTool)(i-8),true);y+=38;}
+        const char* tools[]={"Move","Add","Delete"};
+        for(int i=8;i<=10;++i) {controls[i]=(SDL_Rect){x+(i-8)*(w+6)/3,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[i],tools[i-8],SceneEditorToolStateGetActive()==(SceneEditorTool)(i-8),true);}y+=38;
         controls[11]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[11],path->mode==BEZIER_CUBIC?"Path: Cubic Bezier":"Path: Quadratic Bezier",false,true);y+=40;
-        controls[12]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[12],point>=0 && point<path->numPoints && path->handleLink[point]?"Handles: Linked":"Handles: Independent",false,point>=0);y+=43;
-        label(r,"Select points or handles in the view.",x,y);
+        controls[12]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[12],point>=0 && point<path->numPoints && path->handleLink[point]?"Handles: Linked":"Handles: Independent",false,controls_enabled[12]);y+=40;
+        snprintf(readouts[5],sizeof(readouts[5]),point>=0?"Selected point: %d of %d":"No point selected (%d points)",point>=0?point+1:path->numPoints,path->numPoints);
+        label(r,readouts[5],x,y);y+=25;
+        SceneEditorTool tool=SceneEditorToolStateGetActive();
+        label(r,tool==SCENE_EDITOR_TOOL_ADD?"Click in the view to add a point.":tool==SCENE_EDITOR_TOOL_DELETE?"Click a point to delete it. Undo restores it.":"Select a point or handle; edit XYZ at right.",x,y);
     } else {
         label(r,"Select a channel in the timeline.",x,y);y+=28;
-        if(object) {label(r,"Position X / Y / Z in scene units.",x,y);y+=28;}
+        if(object) {label(r,path_follower?"Paths tab edits shape and attachment.":"Position X / Y / Z in scene units.",x,y);y+=28;}
         else if(camera) for(int i=13;i<=14;++i) {controls[i]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[i],i==13?"Add / select Yaw":"Add / select Pitch",false,ready);y+=40;}
         else {controls[15]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[15],"Add / select Intensity",false,ready);y+=40;}
         label(r,"Scrub to a frame, then set a key.",x,y);
     }
+    y+=26;
+    bool pending=SceneEditorObjectTimelinePanelPending();
+    if(pending) {label(r,"Position draft: Apply key before saving",x,y);y+=24;}
+    if(feedback[0] && !pending) {label(r,feedback,x,y);y+=24;}
     left_max=y+30+left_offset-(pane.y+pane.h);if(left_max<0) left_max=0;
     if(left_max>0) {
         KitUiSdlScrollbarLayout scroll;kit_ui_sdl_scrollbar_layout(&pane,pane.h+left_max,left_offset,&scroll);
@@ -227,10 +252,10 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
         double value=0;if(TimelineEvaluationContextBuild(rate,range,sample,&context)==TIMELINE_STATUS_OK && TimelineTrackEvaluate(&track,&context,&result)==TIMELINE_STATUS_OK) value=result.value.as.scalar;
         snprintf(readouts[2],sizeof(readouts[2]),"Playhead: %lld",(long long)sample.absolute_frame);
         snprintf(readouts[3],sizeof(readouts[3]),"At playhead (%s): %.6g",track.unit==TIMELINE_UNIT_WORLD_DISTANCE?SceneEditorDocumentUnitLabel():TimelineUnitLabel(track.unit),value);
-        for(int i=0;i<(object?1:2);++i) {fields[i]=(SDL_Rect){x,y,w,28};if(editing==i) snprintf(readouts[i+2],sizeof(readouts[i+2]),"%s: %s_",i?"Value":"Frame",draft);SceneEditorRenderButton(r,fields[i],readouts[i+2],editing==i,true);y+=32;}
-        if(object) y=SceneEditorObjectTimelinePanelDraw(r,(SDL_Rect){x,y,w,pane.y+pane.h-y});
+        for(int i=0;i<(object && !path_follower?1:2);++i) {fields[i]=(SDL_Rect){x,y,w,28};if(editing==i) snprintf(readouts[i+2],sizeof(readouts[i+2]),"%s: %s_",i?"Value":"Frame",draft);SceneEditorRenderButton(r,fields[i],readouts[i+2],editing==i,true);y+=32;}
+        if(object && !path_follower) y=SceneEditorObjectTimelinePanelDraw(r,(SDL_Rect){x,y,w,pane.y+pane.h-y});
         snprintf(readouts[4],sizeof(readouts[4]),"%llu frames | %.3g fps",(unsigned long long)range.frame_count,(double)rate.frames_per_second_numerator/rate.frames_per_second_denominator);
-        if(!object) {label(r,editing>=0 && feedback[0]?feedback:readouts[4],x,y);y+=26;}
+        if(!object || path_follower) {label(r,editing>=0 && feedback[0]?feedback:readouts[4],x,y);y+=26;}
         SceneEditorTimelineKeyInspectorDraw(r,(SDL_Rect){x,y,w,pane.y+pane.h-y});
         y=pane.y+pane.h;
     } else {label(r,"Set up scene animation to add keys.",x,y);y+=32;}
@@ -238,13 +263,16 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
 }
 
 bool SceneEditorRenderAuthoringControl(const char* name,SDL_Rect* out) {
-    const char* names[]={"camera","light","path","animation","setup","frame_paths","previous","next","select","add","delete","interpolation","handles","yaw","pitch","intensity"};
+    const char* names[]={"camera","light","path","animation","setup","frame_paths","previous","next","select","add","delete","interpolation","handles","yaw","pitch","intensity","paths"};
     if(!name || !out) return false;
+    if(SceneEditorMotionPathPanelControl(name,out)) return true;
     if(SceneEditorObjectTimelinePanelControl(name,out)) return true;
+    if(!strcmp(name,"shape")) name="path";
+    if(!strcmp(name,"timing")) name="animation";
     if(!strcmp(name,"save_animation")) {*out=controls[4];return out->w>0;}
     if(SceneEditorObjectTimelineControl(name,out)) return true;
     if(SceneEditorTimelineKeyInspectorControl(name,out)) return true;
-    for(int i=0;i<16;++i) if(!strcmp(name,names[i])) {*out=controls[i];return out->w>0;}
+    for(int i=0;i<17;++i) if(!strcmp(name,names[i])) {*out=controls[i];return out->w>0;}
     if(!strcmp(name,"frame") || !strcmp(name,"value")) {*out=fields[!strcmp(name,"value")];return out->w>0;}
     return false;
 }

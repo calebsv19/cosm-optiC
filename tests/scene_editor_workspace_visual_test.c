@@ -422,12 +422,16 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_timeline_acceptance.h"
 
 #include "scene_editor_render_authoring_acceptance.h"
+#include "scene_editor_dm1_acceptance.h"
 #include "scene_editor_timeline_dock_acceptance.h"
 #include "scene_editor_timeline_selection_acceptance.h"
 #include "scene_editor_object_timeline_acceptance.h"
 #include "scene_editor_entry_acceptance.h"
 #include "scene_editor_key_insert_acceptance.h"
 #include "scene_editor_motion_interaction_acceptance.h"
+#include "scene_editor_dm2_acceptance.h"
+#include "scene_editor_dm2_usability.h"
+#include "scene_editor_dm2_repairs.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -441,6 +445,7 @@ int main(int argc, char** argv) {
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.spaceMode = SPACE_MODE_3D;
     snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", argv[2]);
+    if(argc==4 && !strcmp(argv[3],"--dm2"))dm2_sampler_contract();
     assert(InitializeSceneEditor(&editor));
     active_editor = &editor;
     SDL_SetWindowTitle(editor.window, "optiC E0/E1 isolated source proof");
@@ -449,6 +454,21 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && (!strcmp(argv[3],"--dm2-repairs") || !strcmp(argv[3],"--dm2-repairs-reopen"))) {
+        dm2_repairs(&editor,argv[2],!strcmp(argv[3],"--dm2-repairs-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--dm2-usability")) {
+        dm2_usability(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--dm2-compact")) {
+        choose_menu(&editor,-1,SCENE_WORKSPACE_RENDER);dm2_compact(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--dm2")||!strcmp(argv[3],"--dm2-reopen"))) {
+        dm2_acceptance(&editor,argv[2],!strcmp(argv[3],"--dm2-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if (argc==4 && (!strcmp(argv[3],"--dm1") || !strcmp(argv[3],"--dm1-reopen"))) {
+        dm1_acceptance(&editor,argv[2],!strcmp(argv[3],"--dm1-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if (argc==4 && !strcmp(argv[3],"--motion-interaction")) {
         motion_interaction_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

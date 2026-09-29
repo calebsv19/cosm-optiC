@@ -1,5 +1,25 @@
 # optiC Current Truth
 
+## Camera/light path authoring usability increment
+
+Render now groups Camera/Light and Path shape/Timing explicitly, presents compact
+Move/Add/Delete path tools, and shows selected-point/tool guidance. Switching the
+subject or task resets stale Add/Delete tools. Disabled controls reject input.
+Shape mode hides unrelated object-animation controls. Existing path data and
+sampling are unchanged. D-M2 reusable object paths are implemented; see
+[Reusable object paths](motion_paths.md).
+Clang build, timeline contracts and isolated native camera/light authoring,
+undo/redo and save/reopen pass. Point add/delete and handle gesture/cancel tests, fresh-process reopen and
+changed-path native/headless parity now pass. Deleting a point preserves surviving
+rotation, depth and segment-handle alignment, including full-capacity paths.
+D-M1/D-M2 automated acceptance is complete. The M2 restoration repair retains
+prior enabled XYZ track identities across attachment, rebind and persistence;
+detach leaves historical disabled keys off. Older bindings explicitly detach to
+static because their prior source was not recorded. Point/path selection cancels
+unfinished field edits. M3 camera/light convergence is the next implementation
+boundary after human acceptance of the corrected path workflow.
+
+
 ## Final-render object timeline parity
 
 The mesh acceleration path now retains the sampled position, rotation, scale and
@@ -2285,3 +2305,31 @@ refresh bounds, and exit without waiting on a stuck filesystem call. See
 `main_edit_worktree.md` for normal packaged-launch evidence and the remaining
 explicit external-scene load limitation. Package self-test alone does not prove
 normal menu startup.
+
+### D-M2 independent object paths
+
+Render now has a **Paths** tab with New Path/name, point and independent handle
+editing, straight/cubic segments, object selection/attachment and a link into
+follower progress timing. Reusable paths persist in `motion_paths` alongside the
+scene timeline. Multiple objects share geometry with independent progress keys.
+Attachment retains inactive XYZ keys; detach restores XYZ or base placement.
+Runtime validation rejects missing references and conflicting position sources.
+The common XYZ distance sampler feeds existing evaluated mesh/primitive transforms
+for viewport and final rendering. Camera/light migration remains D-M3; original
+D remains active. Usage and proof commands: [Reusable object paths](motion_paths.md).
+
+D-M2 usability correction: reusable Paths owns selection and viewport input;
+legacy camera/light curves remain passive without edit handles. A separate
+`scene_editor_motion_path_viewport` module provides framing, XY-plane placement,
+append geometry and cursor guidance. New routes enter Add points mode; the pinned
+Move/Add points/Delete point/Frame path toolbar and numbered points expose shape
+authoring before the collapsed attachment step. Native usability, legacy authoring,
+retained follower regression and headless pixel parity pass. Desktop refresh and installed identity/SHA verification pass; no human acceptance
+is claimed.
+
+D-M2 gesture correction: point addition requires Shift-left-click even with the
+placement preview active. Plain left-click selects/drags; Option-left-drag owns
+orbit and right/middle-drag own pan without path mutation. Controls and hints now
+live in the left Paths pane, not over the viewport. Native regression covers
+navigation starting on an existing point, including Option+Shift, and compact
+pane layout with scroll access to attachment/timing controls.

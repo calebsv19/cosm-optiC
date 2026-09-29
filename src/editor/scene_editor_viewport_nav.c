@@ -212,7 +212,7 @@ bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* co
     if (consumed) {
         return true;
     }
-    if (event->type == SDL_MOUSEBUTTONUP && event->button.button == SDL_BUTTON_MIDDLE &&
+    if (event->type == SDL_MOUSEBUTTONUP && (event->button.button == SDL_BUTTON_MIDDLE || event->button.button == SDL_BUTTON_RIGHT) &&
         nav_state->pan_active) {
         nav_state->pan_active = false;
         return true;
@@ -225,7 +225,7 @@ bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* co
     }
 
     if (event->type == SDL_MOUSEBUTTONDOWN &&
-        event->button.button == SDL_BUTTON_MIDDLE &&
+        (event->button.button == SDL_BUTTON_MIDDLE || event->button.button == SDL_BUTTON_RIGHT) &&
         command->gesture_pan_enabled &&
         scene_editor_viewport_nav_rect_contains_event_point(command->viewport_rect, event) &&
         SceneEditorViewportNavApplyDigestPan(nav_state,
@@ -244,7 +244,7 @@ bool SceneEditorViewportNavHandleCommand(const SceneEditorViewportNavCommand* co
         SDL_Keymod mods = SDL_GetModState();
         bool alt_down = ((mods & KMOD_ALT) != 0);
         bool left_down = ((event->motion.state & SDL_BUTTON_LMASK) != 0);
-        bool middle_down = ((event->motion.state & SDL_BUTTON_MMASK) != 0);
+        bool middle_down = ((event->motion.state & (SDL_BUTTON_MMASK | SDL_BUTTON_RMASK)) != 0);
         if (nav_state->pan_active && middle_down && command->gesture_pan_enabled) {
             if (SceneEditorViewportNavApplyDigestPan(nav_state,
                                                      command->viewport_rect,

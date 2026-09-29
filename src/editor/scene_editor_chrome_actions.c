@@ -1,3 +1,4 @@
+#include "editor/scene_editor_motion_paths.h"
 #include "scene_editor_object_timeline_panel.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_object_list.h"
@@ -638,6 +639,7 @@ static bool scene_editor_dispatch_controlled_3d_bezier_canvas_raw(
         memset(env->bezier_gizmo_state, 0, sizeof(*env->bezier_gizmo_state));
         env->bezier_gizmo_state->drag_axis = SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE;
         if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
+            CameraPath3D_RemovePoint(&sceneSettings.bezierPath3D, pick, sceneSettings.bezierPath.numPoints);
             RemoveBezierPoint(&sceneSettings.bezierPath, pick);
             BezierEditorClearSelection();
             return true;
@@ -760,6 +762,7 @@ void SceneEditorChromeActionsRoutePaneEvent(SceneEditor* editor,
     if (env->handle_viewport_navigation && env->handle_viewport_navigation(editor, command, result)) {
         return;
     }
+    if(SceneEditorMotionPathPanelActive()){result->consumed=true;return;}
     controlled_3d_viewport_command_region =
         (contract.laneViewportObjectPickEnabled ||
          contract.laneViewportBezierPlacementEnabled ||

@@ -1,4 +1,5 @@
 #include "import/runtime_scene_timeline.h"
+#include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_object_timeline.h"
 #include "runtime_scene_timeline_consumers.h"
 #include "import/scene_timeline_document_io.h"
@@ -13,7 +14,7 @@ static TimelineDocument runtime_document;
 static TimelineStatus runtime_status = TIMELINE_STATUS_TARGET_NOT_FOUND;
 uint64_t RuntimeSceneTimelineRevision(void) {
     return runtime_status == TIMELINE_STATUS_OK
-        ? RayEvaluatedTimelineFingerprint(&runtime_document, NULL, NULL) : 0;
+        ? (RayEvaluatedTimelineFingerprint(&runtime_document, NULL, NULL) ^ MotionPathsRuntimeRevision()) : 0;
 }
 TimelineStatus RuntimeSceneTimelineCopy(TimelineDocument* out) {
     if (!out) return TIMELINE_STATUS_INVALID_ARGUMENT;
@@ -23,6 +24,7 @@ TimelineStatus RuntimeSceneTimelineCopy(TimelineDocument* out) {
 }
 void RuntimeSceneTimelineReset(void) {
     runtime_status = TIMELINE_STATUS_TARGET_NOT_FOUND;
+    MotionPathsRuntimeReset();
 }
 static TimelineStatus parse_runtime_document(json_object* authoring, double world_scale, TimelineDocument* out) {
     json_object* root = NULL;
@@ -60,6 +62,7 @@ static TimelineStatus parse_runtime_document(json_object* authoring, double worl
     return status;
 }
 TimelineStatus RuntimeSceneTimelineLoad(json_object* authoring, double world_scale) {
+    if(!MotionPathsRuntimeLoad(authoring,world_scale)) return runtime_status=TIMELINE_STATUS_INVALID_ARGUMENT;
     runtime_status = parse_runtime_document(authoring,world_scale,&runtime_document);
     return runtime_status;
 }
@@ -69,7 +72,7 @@ bool RuntimeSceneTimelineValidateScene(json_object* scene,char* diagnostics,size
     if(extensions) json_object_object_get_ex(extensions,"ray_tracing",&ray);
     if(ray) json_object_object_get_ex(ray,"authoring",&authoring);
     json_object* timeline=NULL;
-    if(!authoring || !json_object_object_get_ex(authoring,"scene_timeline",&timeline)) return true;
+    if(!authoring || !json_object_object_get_ex(authoring,"scene_timeline",&timeline)) return MotionPathsValidateScene(scene,NULL,diagnostics,size);
     json_object_object_get_ex(scene,"world_scale",&scale);
     TimelineDocument* candidate=malloc(sizeof(*candidate));
     if(!candidate) {
@@ -101,7 +104,7 @@ bool RuntimeSceneTimelineValidateScene(json_object* scene,char* diagnostics,size
         if(status!=TIMELINE_STATUS_OK) snprintf(invalid_target,sizeof(invalid_target),"%s",track->target_id);
     }
     if(status==TIMELINE_STATUS_OK) {
-        bool supported=RuntimeObjectTimelineValidate(scene,candidate,diagnostics,size) && RuntimeSceneTimelineValidateConsumers(authoring,
+        bool supported=MotionPathsValidateScene(scene,candidate,diagnostics,size) && RuntimeObjectTimelineValidate(scene,candidate,diagnostics,size) && RuntimeSceneTimelineValidateConsumers(authoring,
             scale?json_object_get_double(scale):1.0,candidate,diagnostics,size);
         free(candidate);
         return supported;

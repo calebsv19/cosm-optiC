@@ -303,3 +303,38 @@ compares frames 0/20/60/80 to baked placements, rejects a visually inert frozen
 control at 60, and checks a three-frame job at 20–22. Use a fixture whose keys cover
 those frames and whose assets resolve from absolute paths. The fixed camera must
 keep the mesh visible. Reports and images stay under the supplied scratch root.
+
+## D-M2 reusable object paths
+
+M2 restoration repair: bindings persist prior enabled XYZ track IDs (an empty
+list means static; missing metadata is an older binding). Rebinding retains that
+predecessor. Detach restores only those tracks and refuses missing identities;
+legacy bindings explicitly offer static detach without enabling old keys.
+The path panel cancels numeric/name drafts on point/path selection changes.
+Native repair coverage lives in `tests/scene_editor_dm2_repairs.h` and runs in
+separate prepare/reopen processes; existing document transactions own undo/redo.
+
+`scene_editor_motion_paths.c` owns revision-checked retained path and binding
+commands. `scene_editor_motion_path_panel.c` owns the Paths tab, copied selection,
+shape drafts, point/handle gestures, object attachment and compact scrolling.
+`src/motion/scene_motion_paths.c` validates the path schema and owns the common
+3D distance sampler/cache. Existing object timeline consumers accept the progress
+channel and publish through the same evaluated-transform route as XYZ keys.
+Inactive XYZ tracks remain retained but are not active timeline rows. See
+`docs/motion_paths.md` for usage, limits and the repeatable native/render proof.
+
+D-M2 usability correction: reusable Paths owns selection and viewport input;
+legacy camera/light curves remain passive without edit handles. A separate
+`scene_editor_motion_path_viewport` module provides framing, XY-plane placement,
+append geometry and cursor guidance. New routes enter Add points mode; the pinned
+Move/Add points/Delete point/Frame path toolbar and numbered points expose shape
+authoring before the collapsed attachment step. Native usability, legacy authoring,
+retained follower regression and headless pixel parity pass. Desktop refresh and installed identity/SHA verification pass; no human acceptance
+is claimed.
+
+D-M2 gesture correction: point addition requires Shift-left-click even with the
+placement preview active. Plain left-click selects/drags; Option-left-drag owns
+orbit and right/middle-drag own pan without path mutation. Controls and hints now
+live in the left Paths pane, not over the viewport. Native regression covers
+navigation starting on an existing point, including Option+Shift, and compact
+pane layout with scroll access to attachment/timing controls.

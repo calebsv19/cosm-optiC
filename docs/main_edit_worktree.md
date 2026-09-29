@@ -1,5 +1,25 @@
 # RayTracing Main Edit Worktree
 
+## September 29 movement checkpoint and M3 entry
+
+The user authorized reconciliation of the accumulated D1/M1/M2 development work,
+a clean source checkpoint and continuation into M3. The M1/M2 checkpoint includes
+reusable object paths, guarded gestures, exact prior-XYZ restoration and field
+edit targeting repairs. Evidence is in docs/motion_paths.md and the retained
+build/dm2-repairs logs. Focused build/contracts, native repair/reopen/gesture and
+headless pixel parity pass; the full repository suite was not rerun. Hands-on
+acceptance is not inferred from authorization to continue development.
+
+Local canonical adopts this verified Main Edit baseline by fast-forward before
+M3 starts. VERSION stays 0.17.0 and WORKER_VERSION stays 0.8.0. The installed
+Main Edit package still records its precommit dirty-source identity until the
+next development refresh. No release, Registry promotion, remote push or
+production app replacement is included. M3 remains in the same registered lane;
+first converge camera position through explicit bindings while preserving legacy
+sampling and orientation/FOV. Light convergence and explicit conversion proof
+follow in bounded slices; M4/M5 remain later work.
+
+
 ## September 27 D1 workflow repair
 
 The retained Main Edit lane repairs the operator-reported object visibility and

@@ -141,35 +141,21 @@ bool CameraPath3D_InsertPoint(CameraPath3D* path3d,
 }
 
 void CameraPath3D_RemovePoint(CameraPath3D* path3d, int index, int num_points_before) {
-    int i = 0;
-    if (!path3d || index < 0 || num_points_before <= 0 || index >= num_points_before) return;
-    for (i = index; i < num_points_before; ++i) {
-        if (i + 1 < MAX_BEZIER_POINTS) {
-            path3d->point_z[i] = path3d->point_z[i + 1];
-            path3d->point_pitch[i] = path3d->point_pitch[i + 1];
-        } else {
-            path3d->point_z[i] = 0.0;
-            path3d->point_pitch[i] = 0.0;
-        }
-    }
-    if (index == 0) {
-        for (i = index; i < num_points_before - 1; ++i) {
-            path3d->handles_vz[i][0] = path3d->handles_vz[i + 1][0];
-            path3d->handles_vz[i][1] = path3d->handles_vz[i + 1][1];
-        }
-    } else if (index < num_points_before - 1) {
+    const int count = num_points_before;
+    if (!path3d || count <= 0 || count > MAX_BEZIER_POINTS || index < 0 || index >= count) return;
+    if (index > 0 && index < count - 1)
         path3d->handles_vz[index - 1][1] = path3d->handles_vz[index][1];
-        for (i = index + 1; i < num_points_before - 1; ++i) {
-            path3d->handles_vz[i][0] = path3d->handles_vz[i + 1][0];
-            path3d->handles_vz[i][1] = path3d->handles_vz[i + 1][1];
-        }
+    for (int i = index; i < count - 2; ++i) {
+        path3d->handles_vz[i][0] = path3d->handles_vz[i + 1][0];
+        path3d->handles_vz[i][1] = path3d->handles_vz[i + 1][1];
     }
-    if (num_points_before - 1 >= 0 && num_points_before - 1 < MAX_BEZIER_POINTS) {
-        path3d->handles_vz[num_points_before - 1][0] = 0.0;
-        path3d->handles_vz[num_points_before - 1][1] = 0.0;
-        path3d->point_z[num_points_before - 1] = 0.0;
-        path3d->point_pitch[num_points_before - 1] = 0.0;
+    for (int i = index; i < count - 1; ++i) {
+        path3d->point_z[i] = path3d->point_z[i + 1];
+        path3d->point_pitch[i] = path3d->point_pitch[i + 1];
     }
+    path3d->point_z[count - 1] = path3d->point_pitch[count - 1] = 0;
+    for (int i = count > 1 ? count - 2 : 0; i < count; ++i)
+        path3d->handles_vz[i][0] = path3d->handles_vz[i][1] = 0;
 }
 
 void CameraPath3D_ScaleWorldUnits(CameraPath3D* path3d, const Path* path, double factor) {

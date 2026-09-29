@@ -1,4 +1,5 @@
 #include "runtime_scene_timeline_consumers.h"
+#include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_object_timeline.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include <stdio.h>
@@ -27,7 +28,7 @@ bool RuntimeSceneTimelineValidateConsumers(json_object* authoring, double world_
     for (size_t i=0;i<document->track_count;++i) {
         const TimelineTrack* track=&document->tracks[i];
         if (!track->enabled) continue;
-        if (!strncmp(track->property_id,"camera/",7) || RuntimeObjectTimelineAxis(track->property_id)>=0) continue;
+        if (!strncmp(track->property_id,"camera/",7) || RuntimeObjectTimelineAxis(track->property_id)>=0 || !strcmp(track->property_id,MOTION_PROGRESS_PROPERTY)) continue;
         if (!strcmp(track->property_id,"light/path_progress") ||
             !strcmp(track->property_id,"light/intensity")) {
             if (!has_spatial || strcmp(light_target,track->target_id))

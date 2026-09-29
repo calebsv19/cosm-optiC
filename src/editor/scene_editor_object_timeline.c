@@ -1,4 +1,5 @@
 #include "editor/scene_editor_timeline_selection.h"
+#include "motion/scene_motion_paths.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -39,6 +40,9 @@ bool SceneEditorObjectTimelineAdd(const char* id,char* diagnostics,size_t size) 
     }
     char target[TIMELINE_ID_CAPACITY];int n=snprintf(target,sizeof(target),"object/%s",id);
     if(n<=0 || (size_t)n>=sizeof(target)) {snprintf(diagnostics,size,"Object ID exceeds timeline capacity.");return false;}
+    for(size_t i=0;i<doc.track_count;++i) if(doc.tracks[i].enabled && !strcmp(doc.tracks[i].target_id,target) && !strcmp(doc.tracks[i].property_id,MOTION_PROGRESS_PROPERTY)) {
+        snprintf(diagnostics,size,"Object follows a path. Detach it in Paths to use XYZ.");return false;
+    }
     for(size_t i=0;i<doc.track_count;++i) if(!strcmp(doc.tracks[i].target_id,target) && RuntimeObjectTimelineAxis(doc.tracks[i].property_id)>=0) {
         SceneEditorTimelineSelectTrack(i);SceneEditorRenderAuthoringSetTiming(true);return true;
     }

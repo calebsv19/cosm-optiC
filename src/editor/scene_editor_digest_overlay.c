@@ -1,3 +1,4 @@
+#include "editor/scene_editor_motion_paths.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_digest_overlay.h"
@@ -292,6 +293,7 @@ static void SceneEditorDigestOverlayDrawPathPassive3D(SDL_Renderer* renderer,
         }
     }
 
+    if(SceneEditorMotionPathPanelActive()) return; /* Context curves have no edit markers. */
     for (i = 0; i < path->numPoints; ++i) {
         int px = 0;
         int py = 0;
@@ -388,13 +390,18 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                                   selected_object_index);
     }
 
-    if (active_mode == EDITOR_MODE_CAMERA) {
+    bool independent_path=SceneEditorMotionPathPanelActive();
+    if(independent_path){
+        SceneEditorDigestOverlayDrawPathPassive3D(renderer,&projector,&sceneSettings.cameraPath,&sceneSettings.cameraPath3D,(SDL_Color){140,140,160,45});
+        SceneEditorDigestOverlayDrawPathPassive3D(renderer,&projector,&sceneSettings.bezierPath,&sceneSettings.bezierPath3D,(SDL_Color){130,150,155,45});
+    }
+    if (!independent_path && active_mode == EDITOR_MODE_CAMERA) {
         SceneEditorDigestOverlayDrawPathPassive3D(renderer,
                                                   &projector,
                                                   &sceneSettings.bezierPath,
                                                   &sceneSettings.bezierPath3D,
                                                   (SDL_Color){128, 214, 255, 72});
-    } else if (active_mode == EDITOR_MODE_PATH) {
+    } else if (!independent_path && active_mode == EDITOR_MODE_PATH) {
         SceneEditorDigestOverlayDrawPathPassive3D(renderer,
                                                   &projector,
                                                   &sceneSettings.cameraPath,
@@ -402,14 +409,14 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                                   (SDL_Color){210, 168, 255, 72});
     }
 
-    if (active_mode == EDITOR_MODE_PATH) {
+    if (!independent_path && active_mode == EDITOR_MODE_PATH) {
         SceneEditorDigestOverlayRenderBezierLayer(renderer,
                                                   &projector,
                                                   &digest,
                                                   mouse_x,
                                                   mouse_y,
                                                   bezier_gizmo_state);
-    } else if (active_mode == EDITOR_MODE_CAMERA) {
+    } else if (!independent_path && active_mode == EDITOR_MODE_CAMERA) {
         SceneEditorDigestOverlayRenderCameraLayer(renderer,
                                                   &projector,
                                                   &digest,

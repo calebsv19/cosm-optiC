@@ -1,8 +1,19 @@
+#include "editor/scene_editor_motion_paths.h"
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_document_timeline.h"
 
 static void authoring_control(SceneEditor* editor,const char* name) {
-    SDL_Rect rect;assert(SceneEditorRenderAuthoringControl(name,&rect));click(editor,rect);
+    SDL_Rect rect;
+    if(!SceneEditorRenderAuthoringControl(name,&rect) && SceneEditorMotionPathPanelActive()) {
+        SceneEditorPaneLayout layout;assert(SceneEditorGetPaneLayout(&layout));
+        SDL_Event e={0};e.type=SDL_MOUSEWHEEL;e.wheel.mouseX=layout.left_content_rect.x+10;e.wheel.mouseY=layout.left_content_rect.y+65;
+        e.wheel.y=100;SceneEditorSessionRuntimeHandleEvent(editor,&e);SceneEditorSessionRuntimeRender(editor);
+        for(int i=0;i<30 && !SceneEditorRenderAuthoringControl(name,&rect);++i) {
+            e.wheel.y=-1;SceneEditorSessionRuntimeHandleEvent(editor,&e);SceneEditorSessionRuntimeRender(editor);
+        }
+    }
+    if(!SceneEditorRenderAuthoringControl(name,&rect)) fprintf(stderr,"Missing authoring control: %s\n",name);
+    assert(SceneEditorRenderAuthoringControl(name,&rect));click(editor,rect);
 }
 static void authoring_text(SceneEditor* editor,const char* text) {
     SDL_Event e={0};e.type=SDL_TEXTINPUT;snprintf(e.text.text,sizeof(e.text.text),"%s",text);
@@ -14,7 +25,9 @@ static void render_authoring_acceptance(SceneEditor* editor,const char* scene_pa
     /* No fabricated camera path, timeline or direct entity-selection helpers. */
     unsigned long long before=SceneEditorDocumentRevision();
     authoring_control(editor,"light");assert(editor->currentMode==EDITOR_MODE_PATH);
+    authoring_control(editor,"add");
     authoring_control(editor,"camera");assert(editor->currentMode==EDITOR_MODE_CAMERA);
+    assert(SceneEditorToolStateGetActive()==SCENE_EDITOR_TOOL_SELECT);
     assert(SceneEditorDocumentRevision()==before);
     authoring_control(editor,"setup");
     static TimelineDocument doc;
@@ -39,17 +52,22 @@ static void render_authoring_acceptance(SceneEditor* editor,const char* scene_pa
     click(editor,(SDL_Rect){layout.right_content_rect.x+20,layout.right_content_rect.y+46+64,80,28});authoring_text(editor,value);
     assert(fabs(sceneSettings.bezierPath3D.point_z[lp]-lz-2)<1e-6);
     capture(editor,"render_light_path.ppm");
-    authoring_control(editor,"add");authoring_control(editor,"animation");
+    authoring_control(editor,"add");authoring_control(editor,"timing");
+    assert(SceneEditorRenderAuthoringTiming());
+    assert(SceneEditorToolStateGetActive()==SCENE_EDITOR_TOOL_SELECT);
     unsigned long long timing_revision=SceneEditorDocumentRevision();
     click(editor,layout.viewport_rect);
     assert(SceneEditorDocumentRevision()==timing_revision);
-    authoring_control(editor,"path");authoring_control(editor,"select");authoring_control(editor,"animation");
+    authoring_control(editor,"shape");assert(!SceneEditorRenderAuthoringTiming());authoring_control(editor,"select");authoring_control(editor,"animation");
     authoring_control(editor,"frame");authoring_text(editor,"40");
     authoring_control(editor,"value");authoring_text(editor,"0.35");
     authoring_control(editor,"frame");authoring_text(editor,"70");
     authoring_control(editor,"value");authoring_text(editor,"0.35");
     assert(SceneEditorDocumentGetTimeline(&doc)==TIMELINE_STATUS_OK);
-    assert(doc.tracks[0].key_count==4);
+    TimelineTrack selected_track;TimelineRate selected_rate;TimelineRange selected_range;TimelineSample selected_sample;
+    assert(SceneEditorTimelineSelectedTrack(&selected_track,&selected_rate,&selected_range,&selected_sample));
+    fprintf(stderr,"Authoring timing proof: keys=%zu range=%llu frame=%lld property=%s\n",selected_track.key_count,(unsigned long long)selected_range.frame_count,(long long)selected_sample.absolute_frame,selected_track.property_id);
+    assert(selected_track.key_count==4);
     authoring_control(editor,"intensity");
     authoring_control(editor,"value");authoring_text(editor,"2");
     RayEvaluatedSceneSnapshot snapshot;assert(SceneEditorTimelineCopyEvaluated(&snapshot));

@@ -1,4 +1,5 @@
 #include "import/runtime_scene_object_timeline.h"
+#include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_timeline.h"
 #include <stdio.h>
 #include <string.h>
@@ -17,7 +18,7 @@ bool RuntimeObjectTimelineValidate(json_object* scene,const TimelineDocument* do
     json_object* authoring=member(member(member(scene,"extensions"),"ray_tracing"),"authoring");
     json_object* motions=member(authoring,"object_motion_tracks");
     for(size_t i=0;i<doc->track_count;++i) {
-        const TimelineTrack* t=&doc->tracks[i];if(!t->enabled || RuntimeObjectTimelineAxis(t->property_id)<0) continue;
+        const TimelineTrack* t=&doc->tracks[i];if(!t->enabled || (RuntimeObjectTimelineAxis(t->property_id)<0 && strcmp(t->property_id,MOTION_PROGRESS_PROPERTY))) continue;
         const char* id=t->target_id+7;size_t matches=0;json_object* object=NULL;
         for(size_t j=0;json_object_is_type(objects,json_type_array) && j<json_object_array_length(objects);++j) {
             json_object* o=json_object_array_get_idx(objects,j);if(!strcmp(string(o,"object_id"),id)) {++matches;object=o;}
@@ -31,7 +32,7 @@ bool RuntimeObjectTimelineValidate(json_object* scene,const TimelineDocument* do
             const TimelineTrack* other=&doc->tracks[j];int axis=RuntimeObjectTimelineAxis(other->property_id);
             if(other->enabled && !strcmp(t->target_id,other->target_id) && axis>=0) axes|=1u<<axis;
         }
-        if(axes!=7) return refuse(message,size,id,"X, Y and Z channels must be enabled together");
+        if(strcmp(t->property_id,MOTION_PROGRESS_PROPERTY) && axes!=7) return refuse(message,size,id,"X, Y and Z channels must be enabled together");
         for(size_t j=0;json_object_is_type(motions,json_type_array) && j<json_object_array_length(motions);++j) {
             json_object* m=json_object_array_get_idx(motions,j),*enabled=member(m,"enabled");
             if(!strcmp(string(m,"object_id"),id) && (!enabled || json_object_get_boolean(enabled)))
@@ -47,7 +48,13 @@ TimelineStatus RuntimeObjectTimelinePosition(const char* id,const TimelineEvalua
     TimelineStatus status=TIMELINE_STATUS_OK;double xyz[3]={0};unsigned axes=0;
     for(size_t i=0;status==TIMELINE_STATUS_OK && i<d->track_count;++i) {
         const TimelineTrack* t=&d->tracks[i];int axis=RuntimeObjectTimelineAxis(t->property_id);
-        if(!t->enabled || axis<0 || strncmp(t->target_id,"object/",7) || strcmp(t->target_id+7,id)) continue;
+        if(!t->enabled || strncmp(t->target_id,"object/",7) || strcmp(t->target_id+7,id)) continue;
+        if(!strcmp(t->property_id,MOTION_PROGRESS_PROPERTY)) {
+            TimelineEvaluationResult result;status=TimelineTrackEvaluate(t,context,&result);
+            if(status!=TIMELINE_STATUS_OK)return status;
+            return MotionPathsRuntimePosition(id,result.value.as.scalar,out)?TIMELINE_STATUS_OK:TIMELINE_STATUS_TARGET_NOT_FOUND;
+        }
+        if(axis<0)continue;
         TimelineEvaluationResult result;status=TimelineTrackEvaluate(t,context,&result);
         if(status==TIMELINE_STATUS_OK) {xyz[axis]=result.value.as.scalar;axes|=1u<<axis;}
     }
@@ -58,7 +65,7 @@ TimelineStatus RuntimeObjectTimelinePosition(const char* id,const TimelineEvalua
 bool RuntimeObjectTimelineHasMotion(void) {
     const TimelineDocument* d=RuntimeSceneTimelineRead();
     bool found=false;if(d)
-        for(size_t i=0;i<d->track_count;++i) if(d->tracks[i].enabled && RuntimeObjectTimelineAxis(d->tracks[i].property_id)>=0) {found=true;break;}
+        for(size_t i=0;i<d->track_count;++i) if(d->tracks[i].enabled && (RuntimeObjectTimelineAxis(d->tracks[i].property_id)>=0 || !strcmp(d->tracks[i].property_id,MOTION_PROGRESS_PROPERTY))) {found=true;break;}
     return found;
 }
 bool RuntimeObjectTimelinePositionAtT(const char* id,double t,TimelineVec3* out) {
@@ -76,7 +83,7 @@ TimelineStatus RuntimeObjectTimelineCapture(const TimelineEvaluationContext* con
     const TimelineDocument* d=RuntimeSceneTimelineRead();if(!d) return TIMELINE_STATUS_OK;
     TimelineStatus status=TIMELINE_STATUS_OK;
     for(size_t i=0;status==TIMELINE_STATUS_OK && i<d->track_count;++i) {
-        const TimelineTrack* t=&d->tracks[i];if(!t->enabled || RuntimeObjectTimelineAxis(t->property_id)!=0) continue;
+        const TimelineTrack* t=&d->tracks[i];if(!t->enabled || (RuntimeObjectTimelineAxis(t->property_id)!=0 && strcmp(t->property_id,MOTION_PROGRESS_PROPERTY))) continue;
         for(size_t j=0;j<*count;++j) if(!strcmp(transforms[j].target_id,t->target_id+7)) status=TIMELINE_STATUS_DUPLICATE_OWNERSHIP;
         if(status!=TIMELINE_STATUS_OK) break;
         if(*count>=capacity) {status=TIMELINE_STATUS_CAPACITY_EXCEEDED;break;}

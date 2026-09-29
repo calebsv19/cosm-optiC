@@ -1,3 +1,4 @@
+#include "editor/scene_editor_motion_paths.h"
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_camera_inspector.h"
 #include "editor/camera_editor.h"
@@ -71,7 +72,7 @@ static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
 }
 
 static void scene_timeline_sync_tool_selection(SceneEditor* editor) {
-    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER) return;
+    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER || SceneEditorMotionPathPanelActive()) return;
     TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
     if(!SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample)) return;
     int mode=!strncmp(track.target_id,"camera/",7)?EDITOR_MODE_CAMERA:

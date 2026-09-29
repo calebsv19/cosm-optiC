@@ -38,11 +38,11 @@ static void prepare(const SceneEditorPaneLayout* pane,const TimelineDocument* do
     /* Group by stable target identity, camera first, preserving property order. */
     for(int camera=1;camera>=0;--camera) for(size_t i=0;i<doc->track_count;++i) {
         const char* target=doc->tracks[i].target_id;
-        if((!strncmp(target,"camera/",7))!=camera) continue;
-        bool seen=false;for(size_t j=0;j<i;++j) if(!strcmp(target,doc->tracks[j].target_id)) seen=true;
+        if(!doc->tracks[i].enabled || (!strncmp(target,"camera/",7))!=camera) continue;
+        bool seen=false;for(size_t j=0;j<i;++j) if(doc->tracks[j].enabled && !strcmp(target,doc->tracks[j].target_id)) seen=true;
         if(seen) continue;
         TimelineRow* row=&ui.rows[ui.row_count++];row->track=i;row->group=true;snprintf(row->target,sizeof(row->target),"%s",target);
-        if(!collapsed(target)) for(size_t j=0;j<doc->track_count;++j) if(!strcmp(target,doc->tracks[j].target_id)) {
+        if(!collapsed(target)) for(size_t j=0;j<doc->track_count;++j) if(doc->tracks[j].enabled && !strcmp(target,doc->tracks[j].target_id)) {
             row=&ui.rows[ui.row_count++];row->track=j;row->group=false;snprintf(row->target,sizeof(row->target),"%s",target);
         }
     }

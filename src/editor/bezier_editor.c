@@ -423,50 +423,27 @@ void MoveVelocityHandle(Path* path, int mx, int my, int segmentIndex, int handle
     
 
 void RemoveBezierPoint(Path* path, int index) {
-    if (!path) return;
-    if (index < 0 || index >= path->numPoints) {
-        printf("ERROR: Invalid point index %d in RemoveBezierPoint.\n", index);
-        return;
+    if (!path || path->numPoints > MAX_BEZIER_POINTS || index < 0 || index >= path->numPoints) return;
+    const int count = path->numPoints;
+    /* Merge the adjacent segments, retaining handles anchored at surviving points. */
+    if (index > 0 && index < count - 1)
+        path->handles[index - 1][1] = path->handles[index][1];
+    for (int i = index; i < count - 2; ++i) {
+        path->handles[i][0] = path->handles[i + 1][0];
+        path->handles[i][1] = path->handles[i + 1][1];
     }
-    
-    printf("Removing point %d at (%.2f, %.2f)\n", index, 
-           path->points[index].x, 
-           path->points[index].y);
-        
-    if (index == 0) {
-        // Shift handles correctly
-        for (int i = index; i < path->numPoints - 1; i++) {
-            path->handles[i][0] = path->handles[i + 1][0];  // Shift outgoing handle
-            path->handles[i][1] = path->handles[i + 1][1];  // Shift incoming handle
-        }
-    } else if (index < path->numPoints - 1) {
-        // Shift handles correctly
-        path->handles[index - 1][1] = path->handles[index][1];  // Shift incom handle
-        
-        for (int i = index + 1; i < path->numPoints - 1; i++) {
-            path->handles[i][0] = path->handles[i + 1][0];  // Shift outgoing handle
-            path->handles[i][1] = path->handles[i + 1][1];  // Shift incoming handle
-        }
-    }
-
-    // Shift remaining points
-    for (int i = index; i < path->numPoints; i++) {
+    for (int i = index; i < count - 1; ++i) {
         path->points[i] = path->points[i + 1];
-    }
-
-    // Shift handle links
-    for (int i = index; i < path->numPoints; i++) {
+        path->rotations[i] = path->rotations[i + 1];
+        path->rotationSet[i] = path->rotationSet[i + 1];
         path->handleLink[i] = path->handleLink[i + 1];
     }
-
-    // Update segment count
-    path->numPoints--;
-
-    // Update end handle value
-    path->handles[path->numPoints][0] = (Velocity){0, 0};
-    path->handleLink[path->numPoints] = false;
-        
-    printf("Updated Bézier path. New total points: %d\n", path->numPoints);
+    path->numPoints = count - 1;
+    path->points[count - 1] = (Point){0};
+    path->rotations[count - 1] = 0;
+    path->rotationSet[count - 1] = path->handleLink[count - 1] = false;
+    for (int i = count > 1 ? count - 2 : 0; i < count; ++i)
+        path->handles[i][0] = path->handles[i][1] = (Velocity){0};
 }
 
 
@@ -798,6 +775,7 @@ void HandleBezierEditorMouseClick(SDL_Event* event) {
 
             //  If in Delete Mode, remove the point
             if (active_tool == SCENE_EDITOR_TOOL_DELETE) {
+                CameraPath3D_RemovePoint(&sceneSettings.bezierPath3D, i, sceneSettings.bezierPath.numPoints);
                 RemoveBezierPoint(&sceneSettings.bezierPath, i);
                 BezierEditorClearSelection();
             }
