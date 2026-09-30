@@ -94,6 +94,9 @@ static void overlay(SDL_Renderer *r, const MotionPath *p) {
                            i == (size_t)ui.point ? 80 : 235, 255);
     SDL_Rect box = {x - 5, y - 5, 10, 10};
     SDL_RenderFillRect(r, &box);
+    if(ui.hover_point==(int)i && !ui.hover_handle && !ui.dragging) {
+      SDL_SetRenderDrawColor(r,255,255,255,255);SDL_Rect halo={x-8,y-8,16,16};SDL_RenderDrawRect(r,&halo);
+    }
     snprintf(ui.point_labels[i], sizeof(ui.point_labels[i]), "%zu", i + 1);
     ray_tracing_text_draw_utf8_at(
         r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
@@ -114,6 +117,9 @@ static void overlay(SDL_Renderer *r, const MotionPath *p) {
             h?"Out":"In",hx+8,hy+5,color);
         SDL_Rect handle = {hx - 4, hy - 4, 8, 8};
         SDL_RenderFillRect(r, &handle);
+        if(ui.hover_point==(int)i && ui.hover_handle==h+1 && !ui.dragging) {
+          SDL_SetRenderDrawColor(r,255,255,255,255);SDL_Rect halo={hx-7,hy-7,14,14};SDL_RenderDrawRect(r,&halo);
+        }
       }
     }
   }
@@ -368,6 +374,24 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
              bound ? "Attached: on this path" : "Attach on path (replaces XYZ)",
              object && !bound);
       y += 36;
+      if(bound) for(size_t j=0;j<d.binding_count;++j) {
+        MotionPathBinding *b=&d.bindings[j];
+        if(b->target_id[0] || strcmp(b->object_id,ui.object_id))continue;
+        button(r,FOLLOW_DIRECTION,(SDL_Rect){x,y,w,28},b->follow_direction?"Follow path direction: On":"Follow path direction: Off",true);y+=34;
+        if(b->follow_direction) {
+          const char *axes[]={"+X","-X","+Y","-Y","+Z","-Z"};
+          snprintf(text,sizeof(text),"Model forward: %s",axes[b->forward_axis]);
+          button(r,FORWARD_AXIS,(SDL_Rect){x,y,w,28},text,true);y+=34;
+          label(r,"Local rotation offset (degrees)",x,y);y+=24;
+          for(int k=0;k<3;++k) {
+            if(ui.editing==11+k)snprintf(text,sizeof(text),"%c: %s_",'X'+k,ui.draft);
+            else snprintf(text,sizeof(text),"%c: %.3g",'X'+k,b->rotation_offset[k]);
+            button(r,ROTATION_X+k,(SDL_Rect){x+k*(w/3),y,w/3-4,28},text,true);
+          }
+          y+=34;button(r,ROTATION_FROM_BASE,(SDL_Rect){x,y,w,28},"Use base rotation as offset",true);y+=34;
+          label(r,"Replaces base rotation; no banking.",x,y);y+=26;
+        }
+      }
       if (bound && !restore_known) {
         label(r, "Prior source unknown; XYZ stays off.", x, y);
         y += 26;

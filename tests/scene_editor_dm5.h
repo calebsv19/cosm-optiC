@@ -167,7 +167,7 @@ static void dm5(SceneEditor *editor, const char *scene, bool reopen) {
     assert(MotionPlansRuntimeActive(targets[0]));
     dm4_inspector_control(editor, "plan_reload");
     capture(editor, "m5_planner.ppm");
-    assert(SceneEditorDocumentSave(message, sizeof(message)));
+    choose_menu(editor,0,0);assert(!SceneEditorDocumentIsDirty());
     json_object *saved = json_object_from_file(scene);
     assert(saved);
     json_object *author = MotionPlansAuthor(saved),

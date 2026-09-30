@@ -70,7 +70,7 @@ save/reopen and undo/redo preserve it too. A missing prior track refuses detach.
 Older bindings without saved restoration metadata explicitly offer **Detach to
 static (legacy)**: the prior source is unknown and XYZ keys remain disabled.
 Active legacy motion
-or simulation ownership rejects attachment. Rotation and scale are unaffected.
+or simulation ownership rejects attachment. Scale is unaffected. Rotation stays authored unless Follow path direction is enabled.
 Delete a path only after detaching its followers. All these edits use the retained
 scene undo/redo system; no sampled pose is written into base geometry.
 
@@ -318,3 +318,41 @@ Compact 1024×640 layout, M2 source restoration, M3 conversion/focus, M4 spatial
 editing, M5 Apply/Restore/reopen and seven native/headless/baked-image poses pass.
 Automated and visual inspection evidence does not substitute for the user's
 hands-on usability acceptance.
+
+## Saving, hover and object heading
+
+File > Save, the path Save action and `SceneEditorChromeActionsSaveAuthoring` use
+the same authoring save operation. Retained paths/bindings, movement plans and
+timeline records survive legacy settings overlays, including unbound paths.
+Failures display the actual diagnostic; `SceneEditorChromeActionsSaveError` gives
+agent callers the same reason. A failed unpublished write preserves the prior
+document and disk, so retry does not leave an advanced overlay clock behind.
+
+Point and tangent hover outlines use the same nearest-hit picker as selection;
+selected points retain their gold fill. Navigation/placement modifiers suppress
+the hover highlight. Hover does not create a document edit.
+
+In Object followers, **Follow path direction** is opt-in. **Model forward** cycles
++X, -X, +Y, -Y, +Z and -Z. The chosen local axis aligns with the increasing route
+tangent. XYZ **Local rotation offset** fields accept degrees and compose after
+axis alignment. **Use base rotation as offset** copies the object's authored
+rotation into those fields; subsequent base edits do not silently change this
+copy. Following replaces evaluated base rotation while enabled; disabling or
+detaching restores normal authored rotation. Position timing is unchanged.
+
+This basic mode uses world +Y up, with +Z fallback near vertical tangents. It is
+stateless across seeking, but the up-reference switch can produce a roll change
+near vertical routes. It does not bank, simulate flight, smooth hard corners or
+turn the airplane around when progress reverses. Holds retain the route heading;
+a wholly stationary path leaves authored orientation in use. For aircraft rolls
+and vertical loops, transported orientation/banking is a later refinement.
+Existing scenes default to orientation off. Typed camera/light orientation is
+unchanged. Saved object bindings add `follow_direction`, `forward_axis` and
+`rotation_offset`; invalid axes/nonfinite offsets are rejected. Headless summaries
+include `has_rotation` and `rotation_radians` for evaluated object transforms.
+
+The `--path-library` native acceptance now clicks File > Save, checks unbound
+paths, injects a write-sync failure and retries, reopens orientation settings,
+and checks all six forward axes and hover. `--dm5` uses File > Save with applied
+plans. `check_path_orientation_render.py` compares three oriented frames against
+explicitly baked transforms; existing M5 render parity remains separate.

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_chrome_actions.h"
 #include "editor/scene_editor_viewport_material.h"
 #include "editor/scene_editor_material_stack.h"
 #include "editor/scene_editor_object_list.h"

@@ -385,6 +385,10 @@ bool runtime_scene_motion_bridge_sample_object(const char *object_id,
     TimelineVec3 position;
     if(RuntimeObjectTimelinePositionAtT(object_id,normalized_t,&position)) {
         out_sample->valid=true;out_sample->has_position=true;out_sample->position_x=position.x;out_sample->position_y=position.y;out_sample->position_z=position.z;
+        TimelineVec3 rotation;
+        if(RuntimeObjectTimelineRotationAtT(object_id,normalized_t,&rotation)) {
+            out_sample->has_rotation=true;out_sample->pitch_radians=rotation.x;out_sample->yaw_radians=rotation.y;out_sample->roll_radians=rotation.z;
+        }
         return true;
     }
     for (int i = 0; i < g_last_object_motion_summary.stored_tracks; ++i) {

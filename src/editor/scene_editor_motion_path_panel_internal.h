@@ -35,10 +35,12 @@ enum {
   SHAPE_PLAN,
   POINT_DETAILS,
   FOLLOWER_TIMING,
+  FOLLOW_DIRECTION, FORWARD_AXIS, ROTATION_X, ROTATION_Y, ROTATION_Z, ROTATION_FROM_BASE,
   CONTROL_COUNT
 };
 typedef struct {
   bool active, dragging, placing, show_followers, show_actions;
+  int hover_point, hover_handle;
   int library_first, follower_type, object_page;
   bool object_picker, point_focus, point_details;
   SDL_Rect object_rows[6], follower_rows[MOTION_BINDING_CAPACITY];

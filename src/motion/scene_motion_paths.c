@@ -113,6 +113,14 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
         !json_object_is_type(enabled, json_type_boolean))
       return fail(m, n, "invalid binding; placement must be on_path");
     b->enabled = json_object_get_boolean(enabled);
+    json_object *orientation=member(o,"follow_direction");
+    if(orientation) {
+      json_object *axis=member(o,"forward_axis");
+      if(camera || !json_object_is_type(orientation,json_type_boolean) ||
+         !json_object_is_type(axis,json_type_int) || json_object_get_int(axis)<0 || json_object_get_int(axis)>5 ||
+         !vector(o,"rotation_offset",b->rotation_offset)) return fail(m,n,"invalid object orientation settings");
+      b->follow_direction=json_object_get_boolean(orientation);b->forward_axis=json_object_get_int(axis);
+    }
     json_object *focus = member(o, "use_focus_target");
     if (focus) {
       if (strcmp(b->target_id, "camera/main") || !json_object_is_type(focus, json_type_boolean))
@@ -216,6 +224,11 @@ json_object *MotionPathsToJson(const MotionPaths *d) {
     json_object_object_add(o, "placement", json_object_new_string("on_path"));
     if (!strcmp(b->target_id, "camera/main"))
       json_object_object_add(o, "use_focus_target", json_object_new_boolean(b->use_focus_target));
+    if (!b->target_id[0]) {
+      json_object_object_add(o,"follow_direction",json_object_new_boolean(b->follow_direction));
+      json_object_object_add(o,"forward_axis",json_object_new_int(b->forward_axis));
+      json_object_object_add(o,"rotation_offset",vec(b->rotation_offset));
+    }
     if (b->restore_known) {
       json_object *restore = json_object_new_array();
       for (size_t j = 0; j < b->restore_count; ++j)

@@ -27,6 +27,9 @@ typedef struct MotionPathBinding {
   /* Empty for legacy object bindings; otherwise a typed camera or light target. */
   char target_id[TIMELINE_ID_CAPACITY];
   bool enabled;
+  bool follow_direction; /* Object-only; default off. */
+  int forward_axis; /* +X,-X,+Y,-Y,+Z,-Z */
+  double rotation_offset[3]; /* Local XYZ Euler degrees after axis alignment. */
   bool use_focus_target; /* Camera-only explicit orientation owner; default off. */
   /* Optional in v1: absent on older bindings. Empty means prior static source.
    * Keep track identities, not just axes: disabled alternatives must stay off. */
@@ -63,4 +66,5 @@ bool MotionPathsRuntimeTargetPosition(const char *target_id, double progress,
                                       TimelineVec3 *out);
 bool MotionPathsRuntimePosition(const char *object_id, double progress,
                                 TimelineVec3 *out);
+bool MotionPathsRuntimeRotation(const char *target, double progress, TimelineVec3 *out);
 #endif

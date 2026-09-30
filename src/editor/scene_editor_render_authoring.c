@@ -154,7 +154,7 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
             TimelineSample sample;
             if(SceneEditorTimelineCurrentSample(&sample)) {
                 bool ok=SceneEditorChromeActionsSaveAuthoring();
-                snprintf(feedback,sizeof(feedback),"%s",ok?"Saved scene and animation.":SceneEditorObjectTimelinePanelPending()?"Set position key or Escape before saving.":"Save failed. Edits remain open; see File / Save.");
+                snprintf(feedback,sizeof(feedback),"%s",ok?"Saved scene and animation.":SceneEditorChromeActionsSaveError());
             } else {
                 bool ok=SceneEditorTimelineActivate();
                 snprintf(feedback,sizeof(feedback),"%s",ok?"Animation created. Save scene to keep it.":SceneEditorTimelineStatus());

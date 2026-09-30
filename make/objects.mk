@@ -253,6 +253,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_scene_timeline.o \
 	$(BUILD_DIR)/import/runtime_scene_object_timeline.o \
 	$(BUILD_DIR)/motion/scene_motion_paths.o \
+	$(BUILD_DIR)/motion/scene_motion_orientation.o \
 	$(BUILD_DIR)/motion/scene_motion_plans.o \
 	$(BUILD_DIR)/motion/motion_route_geometry.o \
 	$(BUILD_DIR)/motion/motion_route_schedule.o \

@@ -56,9 +56,13 @@ static bool scene_editor_chrome_actions_viewport_rect_contains_event_point(
     return scene_editor_chrome_actions_point_in_rect(mx, my, &env->pane_layout->viewport_rect);
 }
 
+static char save_error[256];
+const char *SceneEditorChromeActionsSaveError(void) { return save_error; }
 bool SceneEditorChromeActionsSaveAuthoring(void) {
+    save_error[0]=0;
     if(SceneEditorObjectTimelinePanelPending()) {
-        SceneEditorChromeShellSetActionFeedback("Position draft: set key or press Escape before saving",5000);
+        snprintf(save_error,sizeof(save_error),"Position draft: set key or press Escape before saving");
+        SceneEditorChromeShellSetActionFeedback(save_error,12000);
         return false;
     }
     char diagnostics[256];
@@ -70,6 +74,8 @@ bool SceneEditorChromeActionsSaveAuthoring(void) {
                     "[editor] failed to persist runtime scene authoring '%s': %s\n",
                     animSettings.runtimeScenePath,
                     diagnostics);
+            snprintf(save_error,sizeof(save_error),"%s",diagnostics);
+            SceneEditorChromeShellSetActionFeedback(save_error, 12000);
             return false;
         }
     }
@@ -195,7 +201,6 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
             return;
         }
         if (!SceneEditorChromeActionsSaveAuthoring()) {
-            SceneEditorChromeShellSetActionFeedback("Scene apply failed", 2200);
             return;
         }
         SceneEditorChromeShellSetActionFeedback("Scene changes applied", 1800);
@@ -207,7 +212,6 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
             return;
         }
         if (!SceneEditorChromeActionsSaveAuthoring()) {
-            SceneEditorChromeShellSetActionFeedback("Scene save failed", 2200);
             return;
         }
         SceneEditorChromeShellSetActionFeedback("Scene saved", 1800);

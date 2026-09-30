@@ -963,20 +963,25 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
             json_object_object_add(overlay_ray, "managed_mesh_assets", json_object_get(managed));
         }
     }
-    /* The scene timeline belongs to retained document commands. Legacy editor
-       overlays replace this namespace but cannot reconstruct its tracks/keys. */
+    /* Retained authoring is authoritative. Legacy overlays cannot reconstruct
+       these related records; preserve them together, including unbound routes. */
     {
-        json_object *extensions=NULL,*ray=NULL,*authoring=NULL,*timeline=NULL;
-        json_object *overlay_extensions=NULL,*overlay_ray=NULL,*overlay_authoring=NULL;
+        json_object *extensions=NULL,*ray=NULL,*authoring=NULL;
+        json_object *oe=NULL,*orr=NULL,*oa=NULL;
         if (json_object_object_get_ex(runtime_root,"extensions",&extensions) &&
             json_object_object_get_ex(extensions,"ray_tracing",&ray) &&
             json_object_object_get_ex(ray,"authoring",&authoring) &&
-            json_object_object_get_ex(authoring,"scene_timeline",&timeline) &&
-            json_object_object_get_ex(overlay_root,"extensions",&overlay_extensions) &&
-            json_object_object_get_ex(overlay_extensions,"ray_tracing",&overlay_ray) &&
-            json_object_object_get_ex(overlay_ray,"authoring",&overlay_authoring) &&
-            json_object_is_type(overlay_authoring,json_type_object)) {
-            json_object_object_add(overlay_authoring,"scene_timeline",json_object_get(timeline));
+            json_object_object_get_ex(overlay_root,"extensions",&oe) &&
+            json_object_object_get_ex(oe,"ray_tracing",&orr) &&
+            json_object_object_get_ex(orr,"authoring",&oa) &&
+            json_object_is_type(oa,json_type_object)) {
+            const char *keys[]={"scene_timeline","motion_paths","motion_plans"};
+            for(size_t i=0;i<sizeof(keys)/sizeof(keys[0]);++i) {
+                json_object *value=NULL;
+                json_object_object_del(oa,keys[i]);
+                if(json_object_object_get_ex(authoring,keys[i],&value))
+                    json_object_object_add(oa,keys[i],json_object_get(value));
+            }
         }
     }
     /* Mapped materials are edited through retained document commands. Exported

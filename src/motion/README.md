@@ -27,3 +27,5 @@ cross-app contract warrants extraction; no shared module or vendored copy change
   runtime plan caches; shared planned progress for all existing route followers.
   See `docs/motion_plans.md`. Editor commands and draft UI live in the focused
   `scene_editor_motion_plan` / `scene_editor_motion_plan_panel` modules.
+
+- `scene_motion_orientation.c`: deterministic object route heading, model-axis alignment and local Euler offset composition; consumed by both exact snapshot and normalized-time geometry sampling.

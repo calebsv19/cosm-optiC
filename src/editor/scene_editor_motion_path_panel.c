@@ -79,6 +79,7 @@ void SceneEditorMotionPathPanelReset(void) {
     SDL_StopTextInput();
   memset(&ui, 0, sizeof(ui));
   ui.editing = -1;
+  ui.hover_point=-1;
 }
 void SceneEditorMotionPathPanelSelect(bool selected) {
   TimelineTrack prior_track; TimelineRate rate; TimelineRange range; TimelineSample sample;
@@ -136,6 +137,31 @@ MotionPath *MotionPathPanelSelected(MotionPaths *d) {
     }
   return NULL;
 }
+static void pick_point(const MotionPath *p,int x,int y,int *picked,int *kind) {
+    double best = 144;
+    int point = -1, handle = 0;
+    for (size_t i = 0; i < p->count; ++i) {
+      for (int h = 0; h < 3; ++h) {
+        if (h && i != (size_t)ui.point)
+          continue;
+        double v[3];
+        for (int k = 0; k < 3; ++k)
+          v[k] = p->points[i].position[k] + (h == 1   ? p->points[i].incoming[k]
+                                             : h == 2 ? p->points[i].outgoing[k]
+                                                      : 0);
+        int px, py;
+        if (MotionPathPanelProject(v, &px, &py)) {
+          double dist = (px - x) * (px - x) + (py - y) * (py - y);
+          if (dist < best) {
+            best = dist;
+            point = i;
+            handle = h;
+          }
+        }
+      }
+    }
+    *picked=point;*kind=handle;
+}
 static void add_point(MotionPath *p) {
   int at = ui.point;
   MotionPathPoint next = {0};
@@ -190,6 +216,15 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
   if (!SceneEditorMotionPathsRead(&d))
     return false;
   MotionPath *p = MotionPathPanelSelected(&d);
+  if(event->type==SDL_MOUSEMOTION && !ui.dragging) {
+    ui.hover_point=-1;ui.hover_handle=0;
+    SceneEditorObjectTransformHandle handle;
+    if(p && ui.projected && hit(l->viewport_rect,event->motion.x,event->motion.y) &&
+       !(SDL_GetModState()&(KMOD_ALT|KMOD_CTRL|KMOD_GUI|KMOD_SHIFT)) && !event->motion.state &&
+       !MotionPointGizmoPick(&ui.projector,&p->points[ui.point],event->motion.x,event->motion.y,&handle))
+      pick_point(p,event->motion.x,event->motion.y,&ui.hover_point,&ui.hover_handle);
+  }
+  if(event->type==SDL_WINDOWEVENT && (event->window.event==SDL_WINDOWEVENT_LEAVE || event->window.event==SDL_WINDOWEVENT_FOCUS_LOST))ui.hover_point=-1;
   if(event->type==SDL_MOUSEBUTTONDOWN)
     ui.point_focus=hit(l->viewport_rect,event->button.x,event->button.y) ||
         (!ui.show_followers && !SceneEditorMotionPlanPanelOpen() &&
@@ -237,6 +272,17 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         return true;
       }
 
+      if(ui.editing>=11 && ui.editing<=13) {
+        char *end;double value=strtod(ui.draft,&end);
+        if(end!=ui.draft && !*end && isfinite(value) && fabs(value)<=36000) {
+          for(size_t j=0;j<d.binding_count;++j) if(!d.bindings[j].target_id[0] && !strcmp(d.bindings[j].object_id,ui.object_id)) {
+            d.bindings[j].rotation_offset[ui.editing-11]=value;
+            if(SceneEditorMotionPathsSet(&d,ui.revision,ui.message,sizeof(ui.message)))cancel_field_edit();
+            return true;
+          }
+        }
+        snprintf(ui.message,sizeof(ui.message),"Enter rotation degrees between -36000 and 36000.");return true;
+      }
       bool valid = true;
       if (ui.editing == 9) {
         valid = *ui.draft;
@@ -390,6 +436,25 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
     if (hit(ui.controls[i], x, y)) {
       if (!ui.enabled[i])
         return true;
+      if(i>=FOLLOW_DIRECTION && i<=ROTATION_FROM_BASE) {
+        for(size_t j=0;j<d.binding_count;++j) {
+          MotionPathBinding *b=&d.bindings[j];
+          if(b->target_id[0] || strcmp(b->object_id,ui.object_id))continue;
+          if(i==ROTATION_FROM_BASE) {
+            SceneEditorDocumentObjectInfo object;SceneEditorDocumentTransform transform;
+            if(SceneEditorDocumentObjectById(ui.object_id,&object) && SceneEditorDocumentGetTransformForSceneIndex(object.runtime_index,&transform,ui.message,sizeof(ui.message))) {
+              memcpy(b->rotation_offset,transform.rotation_degrees,sizeof(b->rotation_offset));
+              SceneEditorMotionPathsSet(&d,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));
+            }
+            cancel_field_edit();return true;
+          }
+          if(i>=ROTATION_X) {ui.editing=11+i-ROTATION_X;ui.draft[0]=0;ui.revision=SceneEditorDocumentRevision();SDL_StartTextInput();return true;}
+          cancel_field_edit();
+          if(i==FOLLOW_DIRECTION)b->follow_direction=!b->follow_direction;else b->forward_axis=(b->forward_axis+1)%6;
+          SceneEditorMotionPathsSet(&d,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));return true;
+        }
+        return true;
+      }
       if (i == SELECT_TOOL || i == PLACE_TOOL) {
         ui.editing = -1;
         SDL_StopTextInput();
@@ -632,28 +697,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       ui.revision=SceneEditorDocumentRevision();ui.down_x=x;ui.down_y=y;
       return true;
     }
-    double best = 144;
-    int point = -1, handle = 0;
-    for (size_t i = 0; i < p->count; ++i) {
-      for (int h = 0; h < 3; ++h) {
-        if (h && i != (size_t)ui.point)
-          continue;
-        double v[3];
-        for (int k = 0; k < 3; ++k)
-          v[k] = p->points[i].position[k] + (h == 1   ? p->points[i].incoming[k]
-                                             : h == 2 ? p->points[i].outgoing[k]
-                                                      : 0);
-        int px, py;
-        if (MotionPathPanelProject(v, &px, &py)) {
-          double dist = (px - x) * (px - x) + (py - y) * (py - y);
-          if (dist < best) {
-            best = dist;
-            point = i;
-            handle = h;
-          }
-        }
-      }
-    }
+    int point,handle;pick_point(p,x,y,&point,&handle);
     if (point >= 0) {
       cancel_field_edit();
       SceneEditorMotionPlanPanelReset();ui.show_followers=false;ui.right_offset=0;
@@ -737,7 +781,7 @@ bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
       "path_plane_z",     "path_followers",  "path_delete_selected", "path_handle_mode",
       "path_actions", "path_library_previous", "path_library_next",
       "path_follower_object", "path_follower_camera", "path_follower_light", "path_follower_back",
-      "path_object_picker", "path_object_selected", "path_corner", "path_independent", "path_follower_plan", "path_restore_replan", "path_point_details", "path_follower_timing"};
+      "path_object_picker", "path_object_selected", "path_corner", "path_independent", "path_follower_plan", "path_restore_replan", "path_point_details", "path_follower_timing", "path_follow_direction", "path_forward_axis", "path_rotation_x", "path_rotation_y", "path_rotation_z", "path_rotation_from_base"};
   for (int i = 0; i < CONTROL_COUNT; ++i)
     if (!strcmp(name, names[i])) {
       *out = ui.controls[i];

@@ -24,6 +24,7 @@ typedef struct SceneEditorChromeActionsEnvironment {
 } SceneEditorChromeActionsEnvironment;
 
 bool SceneEditorChromeActionsSaveAuthoring(void);
+const char *SceneEditorChromeActionsSaveError(void);
 
 bool SceneEditorChromeActionsResolve(const SDL_Event* event, SceneEditorChromeAction* out_action);
 void SceneEditorChromeActionsApply(SceneEditor* editor,

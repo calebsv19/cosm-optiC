@@ -377,3 +377,5 @@ adapts the common route arc sampler into light motion, including speed and
 provenance. The existing animated-light runtime slot and intensity evaluation
 are retained. Native acceptance lives in `scene_editor_dm3_light.h`; baked-frame
 parity in `integration/check_light_route_render.py`. No shared-library changes.
+
+File Save preserves retained motion records during legacy overlay replacement. Unpublished save failure rolls back the candidate and revision before retry. Path hover reuses click picking; object orientation controls commit through the existing motion-path command.

@@ -1076,11 +1076,20 @@ bool SceneEditorDocumentMergeOverlayAndSave(const char* overlay_json,
     merged_root = document_parse_valid(merged, s_document.path, diagnostics, diagnostics_size);
     free(merged);
     if (!merged_root) return false;
-    json_object_put(s_document.root);
+    json_object *previous_root=s_document.root;
+    bool previous_dirty=s_document.dirty;
+    unsigned long long previous_revision=s_document.revision;
     s_document.root = merged_root;
     s_document.dirty = true;
     s_document.revision += 1u;
-    if (!SceneEditorDocumentSave(diagnostics, diagnostics_size)) return false;
+    if (!SceneEditorDocumentSave(diagnostics, diagnostics_size)) {
+        if(!s_document.last_save_published) {
+            json_object_put(s_document.root);s_document.root=previous_root;
+            s_document.dirty=previous_dirty;s_document.revision=previous_revision;
+        } else json_object_put(previous_root);
+        return false;
+    }
+    json_object_put(previous_root);
     return document_apply_saved_file(diagnostics, diagnostics_size);
 }
 
