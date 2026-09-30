@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 /* Read-only timing feedback; no evaluated sample is written to authoring. */
 #include "scene_editor_motion_feedback.h"
 #include "motion/scene_motion_paths.h"
@@ -18,6 +19,11 @@ bool SceneEditorMotionFeedback(const TimelineDocument *doc,size_t selected,Timel
   if(t->value_type!=TIMELINE_VALUE_SCALAR || !t->enabled)return false;
   TimelineEvaluationContext context;TimelineEvaluationResult value;
   if(TimelineEvaluationContextBuild(doc->rate,doc->range,sample,&context)!=TIMELINE_STATUS_OK || TimelineTrackEvaluate(t,&context,&value)!=TIMELINE_STATUS_OK)return false;
+  if(MotionPlansRuntimeActive(t->target_id) && (!strcmp(t->property_id,MOTION_PROGRESS_PROPERTY)||!strcmp(t->property_id,MOTION_CAMERA_PROGRESS_PROPERTY)||!strcmp(t->property_id,MOTION_LIGHT_PROGRESS_PROPERTY))) {
+    MotionTimingScheduleSample s;const MotionRouteSchedule *plan;
+    if(!MotionPlansRuntimeReadback(t->target_id,context.local_time_seconds,&s,&plan))return false;
+    snprintf(text,size,"Planned | Speed %.4g world/s | Tangential accel %.4g | %s | End %.4gs",fabs(s.velocity),s.acceleration,s.stationary?"rest / hold":"moving",plan->timeline.end_time);return true;
+  }
   double derivative=value.derivative_per_frame;bool valid=value.derivative_valid,jump=false,cusp=false;
   bool held=value.held;
   for(size_t i=0;i<t->key_count && value.exact_key;++i)if(context.absolute_frame_position==(double)t->keys[i].frame) {

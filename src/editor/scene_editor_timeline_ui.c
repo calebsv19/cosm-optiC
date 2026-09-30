@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 #include "scene_editor_timeline_ui.h"
 #include "scene_editor_timeline_curve.h"
 #include "editor/scene_editor_timeline.h"
@@ -66,7 +67,7 @@ static int64_t clamp_frame(const TimelineDocument* d,double frame) {
 static double value_at(const TimelineDocument* d,const SceneTimelineSession* s,size_t track) {
     TimelineEvaluationContext c;TimelineEvaluationResult r;
     if(track<d->track_count && TimelineEvaluationContextBuild(d->rate,d->range,s->transport.sample,&c)==TIMELINE_STATUS_OK &&
-       TimelineTrackEvaluate(&d->tracks[track],&c,&r)==TIMELINE_STATUS_OK) return r.value.as.scalar;
+       TimelineTrackEvaluate(&d->tracks[track],&c,&r)==TIMELINE_STATUS_OK && MotionPlansRuntimeEvaluate(&c,&r)) return r.value.as.scalar;
     return 0;
 }
 static void seek(const TimelineDocument* d,double frame) {SceneEditorTimelinePause();SceneEditorTimelineSeek(clamp_frame(d,frame));}

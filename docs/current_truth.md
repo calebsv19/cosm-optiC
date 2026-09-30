@@ -1,5 +1,21 @@
 # optiC Current Truth
 
+## M5.4–M5.6 source and behavior acceptance
+
+M5 now has explicit retained planning for object, camera and light route followers.
+Curved/corner limits, waypoint holds/fixed arrivals, Apply/Restore, dependency
+revalidation, persistence, arbitrary seeking and combined rendering are integrated.
+See [planned route timing](motion_plans.md) for use and boundaries.
+
+Clang build, numerical/sanitizer gates, native prepare/reopen and unit/clock/cache
+audit pass. Seven native/headless poses match exact independent baked renders;
+six frozen legacy images remain unchanged. M2 restoration and M4 combined/trail
+checks, timeline contracts and headless preflight/image export are retained gates.
+The final Main Edit refresh/installed identity is recorded in private work status.
+VERSION 0.17.0 and WORKER_VERSION 0.8.0 are unchanged; no canonical adoption or
+publication is implied. Earlier dated checkpoints below are historical.
+
+
 ## M5.4 detached curved-route checkpoint
 
 The curved-route adapter now verifies length/curvature bounds, explicit corner

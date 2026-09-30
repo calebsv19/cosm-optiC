@@ -1,8 +1,8 @@
-# Curved-route planning foundation (M5.4)
+# Curved-route planning (M5.4)
 
-This detached adapter extends the [waypoint scheduler](motion_timing_schedule.md)
-to the existing reusable XYZ paths. It does not yet change live scene evaluation,
-saved scenes or editor controls. M5.5 owns explicit retained integration.
+This numerical adapter extends the [waypoint scheduler](motion_timing_schedule.md)
+to the existing reusable XYZ paths. The [retained planner](motion_plans.md) now integrates it explicitly with scene
+evaluation, saved intent and editor controls.
 
 `MotionRouteGeometryBuild` makes a world-scaled, immutable derived analysis.
 Adaptive de Casteljau subdivision bounds each cubic's arc length between its
@@ -58,5 +58,5 @@ interior-cusp classification, explicit stop refusal, combined acceleration
 budgets, position/velocity finite differences, acceleration finite differences
 away from temporal discontinuities, partial-traversal speed refusal, unequal
 linked handles, asymmetric limits and ASan/UBSan. Native/headless compilation also
-passes. Live consumer, retained UI, persistence and final rendering acceptance
-remain M5.5–M5.6; this detached checkpoint does not complete M5.
+passes. Live consumer, retained UI, persistence and final rendering acceptance are
+covered by the M5.5–M5.6 [retained planner](motion_plans.md) tests.

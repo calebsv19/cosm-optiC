@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 #include "scene_editor_timeline_curve.h"
 #include "animation/timeline_property_registry.h"
 #include "editor/scene_editor_timeline.h"
@@ -21,6 +22,7 @@ static struct {
 void SceneEditorTimelineCurveCancel(void) {drag.active=false;}
 static bool inside(SDL_Rect r,int x,int y) {return x>=r.x && y>=r.y && x<r.x+r.w && y<r.y+r.h;}
 static void limits(const TimelineTrack* track,double* minimum,double* maximum) {
+    if(MotionPlansRuntimeActive(track->target_id) && (!strcmp(track->property_id,MOTION_PROGRESS_PROPERTY)||!strcmp(track->property_id,MOTION_CAMERA_PROGRESS_PROPERTY)||!strcmp(track->property_id,MOTION_LIGHT_PROGRESS_PROPERTY))) {*minimum=-.05;*maximum=1.05;return;}
     *minimum=INFINITY;*maximum=-INFINITY;
     for(size_t i=0;i<track->key_count;++i) {
         const TimelineKeyframe* k=&track->keys[i];
@@ -142,7 +144,7 @@ void SceneEditorTimelineCurveRender(SDL_Renderer* renderer,SDL_Rect graph,const 
         double frame=TimelineViewFrame(view,graph,graph.x+x),whole=floor(frame);
         TimelineSample at={(int64_t)whole,(uint32_t)((frame-whole)*1000000),1000000};
         TimelineEvaluationContext context;TimelineEvaluationResult result;
-        if(TimelineEvaluationContextBuild(rate,range,at,&context)!=TIMELINE_STATUS_OK || TimelineTrackEvaluate(&track,&context,&result)!=TIMELINE_STATUS_OK) {previous=false;continue;}
+        if(TimelineEvaluationContextBuild(rate,range,at,&context)!=TIMELINE_STATUS_OK || TimelineTrackEvaluate(&track,&context,&result)!=TIMELINE_STATUS_OK || !MotionPlansRuntimeEvaluate(&context,&result)) {previous=false;continue;}
         int y=py(graph,low,high,result.value.as.scalar);
         if(previous) SDL_RenderDrawLine(renderer,previous_x,previous_y,graph.x+x,y);
         previous_x=graph.x+x;previous_y=y;previous=true;

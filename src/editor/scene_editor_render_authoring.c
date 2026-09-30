@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 #include "scene_editor_object_timeline_panel.h"
 #include "editor/scene_editor_motion_paths.h"
 #include "editor/scene_editor_motion_trail.h"
@@ -252,7 +253,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
     if(ready) {
         snprintf(readouts[1],sizeof(readouts[1]),"Channel: %s",TimelineChannelLabel(track.property_id));label(r,readouts[1],x,y);y+=26;
         TimelineEvaluationContext context;TimelineEvaluationResult result;
-        double value=0;if(TimelineEvaluationContextBuild(rate,range,sample,&context)==TIMELINE_STATUS_OK && TimelineTrackEvaluate(&track,&context,&result)==TIMELINE_STATUS_OK) value=result.value.as.scalar;
+        double value=0;if(TimelineEvaluationContextBuild(rate,range,sample,&context)==TIMELINE_STATUS_OK && TimelineTrackEvaluate(&track,&context,&result)==TIMELINE_STATUS_OK && MotionPlansRuntimeEvaluate(&context,&result)) value=result.value.as.scalar;
         snprintf(readouts[2],sizeof(readouts[2]),"Playhead: %lld",(long long)sample.absolute_frame);
         snprintf(readouts[3],sizeof(readouts[3]),"At playhead (%s): %.6g",track.unit==TIMELINE_UNIT_WORLD_DISTANCE?SceneEditorDocumentUnitLabel():TimelineUnitLabel(track.unit),value);
         for(int i=0;i<(object && !path_follower?1:2);++i) {fields[i]=(SDL_Rect){x,y,w,28};if(editing==i) snprintf(readouts[i+2],sizeof(readouts[i+2]),"%s: %s_",i?"Value":"Frame",draft);SceneEditorRenderButton(r,fields[i],readouts[i+2],editing==i,true);y+=32;}

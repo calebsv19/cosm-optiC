@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 #include "scene_editor_timeline_ui.h"
 #include "scene_editor_timeline_curve.h"
 #include "scene_editor_motion_feedback.h"
@@ -83,7 +84,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
             if(!strncmp(item->target,"object/",7)) name=SceneEditorDocumentObjectById(item->target+7,&object)?object.name:item->target+7;
             snprintf(groups[row],sizeof(groups[row]),"%s  %s",closed?">":"v",name);
             text(r,groups[row],l->gutter.x+8,y+3,ink);
-        } else text(r,TimelineChannelLabel(d->tracks[item->track].property_id),l->gutter.x+27,y+3,item->track==selected?accent:ink);
+        } else text(r,(MotionPlansRuntimeActive(d->tracks[item->track].target_id) && (strstr(d->tracks[item->track].property_id,"route_progress") || !strcmp(d->tracks[item->track].property_id,MOTION_PROGRESS_PROPERTY))) ? "Planned (saved keys)" : TimelineChannelLabel(d->tracks[item->track].property_id),l->gutter.x+27,y+3,item->track==selected?accent:ink);
     }
     if(u->row_count>(size_t)(l->body.h/l->row_height)) {
         KitUiSdlScrollbarLayout scroll;
@@ -103,7 +104,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
             if(k==hovered) {
                 SDL_SetRenderDrawColor(r,ink.r,ink.g,ink.b,255);
                 SDL_Point outline[]={{x,cy-7},{x+7,cy},{x,cy+7},{x-7,cy},{x,cy-7}};
-                SDL_RenderDrawLines(r,outline,5);
+                for(int edge=0;edge<4;++edge) SDL_RenderDrawLine(r,outline[edge].x,outline[edge].y,outline[edge+1].x,outline[edge+1].y);
                 snprintf(key_help,sizeof(key_help),"%s | Frame %lld | %.6g | Click selects; Shift-click extends selection",
                     TimelineChannelLabel(t->property_id),(long long)t->keys[k].frame,t->keys[k].value.as.scalar);
             }

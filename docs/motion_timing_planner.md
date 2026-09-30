@@ -1,8 +1,7 @@
-# Detached straight-route timing (M5.1–M5.2)
+# Straight-route timing (M5.1–M5.2)
 
-This is an engineering API, not an enabled editor feature. The straight-route
-planner is detached from scene persistence and evaluation. M1–M4 scene behavior,
-timing keys, follower bindings and direct-XYZ trails remain unchanged.
+This numerical API is consumed by the explicit [retained route planner](motion_plans.md).
+Scenes without an applied plan keep their existing timing and behavior.
 
 M5.3 fixed-arrival/hold/departure scheduling now extends this API; see
 [waypoint scheduling](motion_timing_schedule.md). The contract below remains the

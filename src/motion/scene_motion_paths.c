@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 #include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_object_timeline.h"
 #include <math.h>
@@ -399,6 +400,7 @@ bool MotionPathsRuntimeTargetPosition(const char *target, double progress,
 }
 bool MotionPathsRuntimeTargetSample(const char *target, double progress,
     TimelineVec3 *out, double *length, double *parameter) {
+  if(MotionPlansRuntimeActive(target)) return MotionPlansRuntimeGeometry(target,progress,out,length,parameter);
   MotionPathBinding binding;
   if (!isfinite(progress) || !MotionPathsRuntimeBinding(target, &binding)) return false;
   const char *path = binding.path_id;

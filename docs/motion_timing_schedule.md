@@ -1,9 +1,9 @@
-# Detached waypoint scheduling (M5.3)
+# Waypoint scheduling (M5.3)
 
 This API extends the [straight-route timing foundation](motion_timing_planner.md).
-It remains detached from saved scenes, editor commands and runtime evaluation.
-No existing path or XYZ keys are retimed. The M5.4 [curved-route adapter](motion_route_planning.md)
-is now implemented and verified separately. M5.5 UI/persistence integration remains.
+It is consumed by the [curved-route adapter](motion_route_planning.md) and
+[retained planner](motion_plans.md). Existing keys are preserved by explicit
+Apply/Restore; no scene is automatically retimed.
 
 ## Inputs and ownership
 

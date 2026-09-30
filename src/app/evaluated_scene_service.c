@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 #include "app/evaluated_scene_service.h"
 
 #include "animation/timeline_property_registry.h"
@@ -366,6 +367,7 @@ static bool ray_evaluated_build_authored(
             &property_registry, &document->timeline, &light_context,
             &frame_snapshot);
     }
+    if(status == TIMELINE_STATUS_OK && !MotionPlansRuntimeSnapshot(&frame_snapshot)) status=TIMELINE_STATUS_INVALID_SNAPSHOT;
     if (status != TIMELINE_STATUS_OK) {
         ray_evaluated_fail(
             out_result, status, "authored property snapshot evaluation failed");

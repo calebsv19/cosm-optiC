@@ -1,3 +1,4 @@
+#include "motion/scene_motion_plans.h"
 #include "import/runtime_scene_object_timeline.h"
 #include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_timeline.h"
@@ -52,6 +53,7 @@ TimelineStatus RuntimeObjectTimelinePosition(const char* id,const TimelineEvalua
         if(!strcmp(t->property_id,MOTION_PROGRESS_PROPERTY)) {
             TimelineEvaluationResult result;status=TimelineTrackEvaluate(t,context,&result);
             if(status!=TIMELINE_STATUS_OK)return status;
+            if(!MotionPlansRuntimeEvaluate(context,&result))return TIMELINE_STATUS_INVALID_SNAPSHOT;
             return MotionPathsRuntimePosition(id,result.value.as.scalar,out)?TIMELINE_STATUS_OK:TIMELINE_STATUS_TARGET_NOT_FOUND;
         }
         if(axis<0)continue;

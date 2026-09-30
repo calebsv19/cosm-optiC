@@ -20,6 +20,7 @@
 #include "render/text_draw.h"
 #include "scene_editor_motion_path_viewport.h"
 #include "scene_editor_camera_path_panel.h"
+#include "scene_editor_motion_plan_panel.h"
 #include "scene_editor_light_path_panel.h"
 #include <math.h>
 #include <stdio.h>
@@ -73,6 +74,7 @@ static void cancel_field_edit(void) {
   SDL_StopTextInput();
 }
 void SceneEditorMotionPathPanelReset(void) {
+  SceneEditorMotionPlanPanelReset();
   if (ui.editing >= 0)
     SDL_StopTextInput();
   memset(&ui, 0, sizeof(ui));
@@ -82,6 +84,7 @@ void SceneEditorMotionPathPanelSelect(bool selected) {
   TimelineTrack prior_track; TimelineRate rate; TimelineRange range; TimelineSample sample;
   bool camera_timing = selected && SceneEditorTimelineSelectedTrack(&prior_track, &rate, &range, &sample) &&
       (!strcmp(prior_track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(prior_track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY));
+  SceneEditorMotionPlanPanelReset();
   ui.active = selected;
   ui.dragging = false;
   ui.editing = -1;
@@ -426,6 +429,8 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
   x = pane.x + 10;
   y = pane.y + 10 - ui.right_offset;
   w = pane.w - 20;
+  y = SceneEditorMotionPlanPanelDraw(r, &d, p, pane, x, y, w);
+  if (!SceneEditorMotionPlanPanelOpen()) {
   label(r, "Path shape", x, y);
   y += 28;
   if (p) {
@@ -490,6 +495,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     label(r, "Shape edits keep timing keys unchanged.", x, y);
   } else
     label(r, "Choose New Path to begin.", x, y);
+  }
   ui.right_max = y + 32 + ui.right_offset - (pane.y + pane.h);
   if (ui.right_max < 0)
     ui.right_max = 0;
@@ -959,6 +965,9 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
 }
 bool SceneEditorMotionPathPanelEvent(SceneEditor *editor, SDL_Event *event,
                                      const SceneEditorPaneLayout *layout) {
+  if (SceneEditorMotionPathPanelActive() && SceneEditorMotionPlanPanelEvent(event)) {
+    ui.editing = -1; ui.draft[0] = 0; ui.dragging = false; return true;
+  }
   bool handled = motion_path_event(editor, event, layout);
   if (handled)
     ui.message_revision = SceneEditorDocumentRevision();
@@ -967,6 +976,7 @@ bool SceneEditorMotionPathPanelEvent(SceneEditor *editor, SDL_Event *event,
 bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
   if (!ui.active)
     return false;
+  if (SceneEditorMotionPlanPanelControl(name, out)) return true;
   if (SceneEditorCameraPathPanelControl(name, out) || SceneEditorLightPathPanelControl(name, out)) return true;
   if (!strncmp(name, "path_row/", 9)) {
     MotionPaths paths;
