@@ -20,6 +20,7 @@
 #include "render/text_draw.h"
 #include "scene_editor_motion_path_viewport.h"
 #include "scene_editor_camera_path_panel.h"
+#include "scene_editor_light_path_panel.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -79,7 +80,7 @@ void SceneEditorMotionPathPanelReset(void) {
 void SceneEditorMotionPathPanelSelect(bool selected) {
   TimelineTrack prior_track; TimelineRate rate; TimelineRange range; TimelineSample sample;
   bool camera_timing = selected && SceneEditorTimelineSelectedTrack(&prior_track, &rate, &range, &sample) &&
-      !strcmp(prior_track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY);
+      (!strcmp(prior_track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(prior_track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY));
   ui.active = selected;
   ui.dragging = false;
   ui.editing = -1;
@@ -101,7 +102,7 @@ void SceneEditorMotionPathPanelSelect(bool selected) {
       snprintf(ui.object_id, sizeof(ui.object_id), "%s", object.selection.id);
     for (size_t i = 0; i < paths.binding_count; ++i)
       if (paths.bindings[i].enabled &&
-          (camera_timing ? !strcmp(paths.bindings[i].target_id, "camera/main")
+          (camera_timing ? !strcmp(paths.bindings[i].target_id, prior_track.target_id)
                          : (!paths.bindings[i].target_id[0] &&
                             !strcmp(paths.bindings[i].object_id, ui.object_id))))
         snprintf(ui.path_id, sizeof(ui.path_id), "%s",
@@ -227,7 +228,7 @@ void SceneEditorMotionPathOverlayDraw(SceneEditor *e,
   TimelineSample sample;
   if (!SceneEditorTimelineSelectedTrack(&track, &rate, &range, &sample) ||
       (strcmp(track.property_id, MOTION_PROGRESS_PROPERTY) &&
-       strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY)))
+       strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) && strcmp(track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY)))
     return;
   MotionPaths paths;
   if (!SceneEditorMotionPathsRead(&paths))
@@ -235,7 +236,7 @@ void SceneEditorMotionPathOverlayDraw(SceneEditor *e,
   const char *id = NULL;
   for (size_t i = 0; i < paths.binding_count; ++i)
     if (paths.bindings[i].enabled &&
-        (!strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY)
+        ((!strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY))
              ? !strcmp(paths.bindings[i].target_id, track.target_id)
              : !strcmp(paths.bindings[i].object_id, track.target_id + 7)))
       id = paths.bindings[i].path_id;
@@ -259,6 +260,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     return;
   MotionPath *p = selected(&d);
   SceneEditorCameraPathPanelReset();
+  SceneEditorLightPathPanelReset();
   ui.label_count = 0;
   memset(ui.controls, 0, sizeof(ui.controls));
   memset(ui.fields, 0, sizeof(ui.fields));
@@ -384,6 +386,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
       label(r, "Equal keys pause; later keys resume.", x, y);
       y += 30;
       y = SceneEditorCameraPathPanelDraw(r, &d, p, pane, x, y, w);
+      y = SceneEditorLightPathPanelDraw(r, &d, p, pane, x, y, w);
     } else {
       label(r, "No object needed to shape the route.", x, y);
       y += 30;
@@ -707,7 +710,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       event->button.button != SDL_BUTTON_LEFT)
     return false;
   int x = event->button.x, y = event->button.y;
-  if (SceneEditorCameraPathPanelEvent(event, p, ui.message, sizeof(ui.message))) {
+  if (SceneEditorCameraPathPanelEvent(event, p, ui.message, sizeof(ui.message)) || SceneEditorLightPathPanelEvent(event, p, ui.message, sizeof(ui.message))) {
     cancel_field_edit(); return true;
   }
   for (size_t i = 0; i < d.count; ++i)
@@ -952,7 +955,7 @@ bool SceneEditorMotionPathPanelEvent(SceneEditor *editor, SDL_Event *event,
 bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
   if (!ui.active)
     return false;
-  if (SceneEditorCameraPathPanelControl(name, out)) return true;
+  if (SceneEditorCameraPathPanelControl(name, out) || SceneEditorLightPathPanelControl(name, out)) return true;
   if (!strncmp(name, "path_row/", 9)) {
     MotionPaths paths;
     if (SceneEditorMotionPathsRead(&paths))

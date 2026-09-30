@@ -161,10 +161,10 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
     if (snapshot->source == RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE &&
         (!snapshot->light.path_progress_provenance.valid ||
          !snapshot->light.property_provenance.valid ||
-         strcmp(snapshot->light.path_progress_provenance.property_id,
-                "light/path_progress") != 0 ||
+         (strcmp(snapshot->light.path_progress_provenance.property_id, "light/path_progress") != 0 &&
+          strcmp(snapshot->light.path_progress_provenance.property_id, "light/route_progress") != 0) ||
          strcmp(snapshot->light.property_provenance.property_id,
-                "light/path_progress") != 0 ||
+                snapshot->light.path_progress_provenance.property_id) != 0 ||
          (snapshot->light.intensity_authored &&
           (!snapshot->light.intensity_provenance.valid ||
            strcmp(snapshot->light.intensity_provenance.property_id,

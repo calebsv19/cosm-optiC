@@ -96,7 +96,7 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
                 *enabled = member(o, "enabled");
     bool camera = member(o, "target_id") != NULL;
     if ((camera ? (!string_field(o, "target_id", b->target_id, sizeof(b->target_id)) ||
-                    strcmp(b->target_id, "camera/main") || member(o, "object_id"))
+                    (strcmp(b->target_id, "camera/main") && (strncmp(b->target_id, "light/", 6) || !b->target_id[6])) || member(o, "object_id"))
                 : !string_field(o, "object_id", b->object_id, sizeof(b->object_id))) ||
         strlen(b->object_id) + 7 >= TIMELINE_ID_CAPACITY ||
         !string_field(o, "path_id", b->path_id, sizeof(b->path_id)) ||
@@ -237,6 +237,17 @@ bool MotionPathsValidateScene(json_object *scene,
                   b->object_id))
         ++found;
     if (b->target_id[0]) found = !strcmp(b->target_id, "camera/main");
+    if (!strncmp(b->target_id, "light/", 6)) {
+      json_object *lights = member(scene, "lights");
+      for (size_t j = 0; json_object_is_type(lights, json_type_array) && j < json_object_array_length(lights); ++j) {
+        json_object *light = json_object_array_get_idx(lights, j);
+        const char *id = text(light, "id");
+        if (!*id) id = text(light, "light_id");
+        if (!*id) id = text(light, "object_id");
+        if (!strcmp(id, b->target_id + 6)) ++found;
+      }
+    }
+    bool light = !strncmp(b->target_id, "light/", 6);
     if (found != 1) {
       ok = fail(m, n, "binding object is missing or ambiguous");
       break;
@@ -244,8 +255,8 @@ bool MotionPathsValidateScene(json_object *scene,
     if (!b->enabled)
       continue;
     if (b->target_id[0]) {
-      if (!b->restore_known || b->restore_count > 1) {
-        ok = fail(m, n, "camera binding requires saved prior source");
+      if (!b->restore_known || b->restore_count > 1 || (light && b->restore_count != 1)) {
+        ok = fail(m, n, "typed binding requires saved prior source");
         break;
       }
       for (size_t k = 0; ok && k < b->restore_count; ++k) {
@@ -254,10 +265,10 @@ bool MotionPathsValidateScene(json_object *scene,
           const TimelineTrack *t = &timeline->tracks[j];
           if (!strcmp(t->track_id, b->restore_xyz_tracks[k]) &&
               !strcmp(t->target_id, b->target_id) && !t->enabled &&
-              (!strcmp(t->property_id, "camera/path_progress") ||
-               !strcmp(t->property_id, "camera/position"))) prior = true;
+              (light ? !strcmp(t->property_id, "light/path_progress") :
+               (!strcmp(t->property_id, "camera/path_progress") || !strcmp(t->property_id, "camera/position")))) prior = true;
         }
-        if (!prior) ok = fail(m, n, "camera prior source is missing or active");
+        if (!prior) ok = fail(m, n, "prior position source is missing or active");
       }
     }
     size_t progress = 0;
@@ -267,13 +278,13 @@ bool MotionPathsValidateScene(json_object *scene,
       if (!t->enabled || (camera ? strcmp(t->target_id, b->target_id)
           : (strncmp(t->target_id, "object/", 7) || strcmp(t->target_id + 7, b->object_id))))
         continue;
-      if (camera ? (!strcmp(t->property_id, "camera/position") ||
-                    !strcmp(t->property_id, "camera/path_progress"))
+      if (camera ? (light ? (!strcmp(t->property_id, "light/position") || !strcmp(t->property_id, "light/path_progress")) :
+                    (!strcmp(t->property_id, "camera/position") || !strcmp(t->property_id, "camera/path_progress")))
                  : RuntimeObjectTimelineAxis(t->property_id) >= 0) {
         ok = fail(m, n, "path and XYZ cannot both own position");
         break;
       }
-      if (!strcmp(t->property_id, camera ? MOTION_CAMERA_PROGRESS_PROPERTY : MOTION_PROGRESS_PROPERTY))
+      if (!strcmp(t->property_id, camera ? (light ? MOTION_LIGHT_PROGRESS_PROPERTY : MOTION_CAMERA_PROGRESS_PROPERTY) : MOTION_PROGRESS_PROPERTY))
         ++progress;
     }
     if (ok && progress != 1)
@@ -281,7 +292,7 @@ bool MotionPathsValidateScene(json_object *scene,
   }
   for (size_t i = 0; ok && timeline && i < timeline->track_count; ++i) {
     const TimelineTrack *t = &timeline->tracks[i];
-    bool camera = !strcmp(t->property_id, MOTION_CAMERA_PROGRESS_PROPERTY);
+    bool camera = !strcmp(t->property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(t->property_id, MOTION_LIGHT_PROGRESS_PROPERTY);
     if (!t->enabled || (!camera && strcmp(t->property_id, MOTION_PROGRESS_PROPERTY)))
       continue;
     bool found = false;
@@ -362,6 +373,10 @@ bool MotionPathsRuntimePosition(const char *id, double progress, TimelineVec3 *o
 }
 bool MotionPathsRuntimeTargetPosition(const char *target, double progress,
                                      TimelineVec3 *out) {
+  return MotionPathsRuntimeTargetSample(target, progress, out, NULL, NULL);
+}
+bool MotionPathsRuntimeTargetSample(const char *target, double progress,
+    TimelineVec3 *out, double *length, double *parameter) {
   MotionPathBinding binding;
   if (!isfinite(progress) || !MotionPathsRuntimeBinding(target, &binding)) return false;
   const char *path = binding.path_id;
@@ -369,7 +384,9 @@ bool MotionPathsRuntimeTargetPosition(const char *target, double progress,
     return false;
   for (size_t i = 0; i < runtime.count; ++i)
     if (!strcmp(runtime.paths[i].id, path)) {
+      if (length) *length = lengths[i][(runtime.paths[i].count - 1) * PATH_STEPS] * scale;
       if (progress <= 0 || progress >= 1) {
+        if (parameter) *parameter = progress <= 0 ? 0 : runtime.paths[i].count - 1;
         double v[3];
         MotionPathPointAt(&runtime.paths[i],
                           progress <= 0 ? 0 : runtime.paths[i].count - 1, v);
@@ -388,6 +405,7 @@ bool MotionPathsRuntimeTargetPosition(const char *target, double progress,
       double span = lengths[i][hi] - lengths[i][lo],
              t = span > 1e-14 ? lo + (distance - lengths[i][lo]) / span : 0,
              v[3];
+      if (parameter) *parameter = t / PATH_STEPS;
       MotionPathPointAt(&runtime.paths[i], t / PATH_STEPS, v);
       *out = (TimelineVec3){v[0] * scale, v[1] * scale, v[2] * scale};
       return true;

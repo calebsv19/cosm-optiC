@@ -4,6 +4,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/evaluated_scene_service.o \
 	$(BUILD_DIR)/app/preview_camera_sample.o \
 	$(BUILD_DIR)/app/evaluated_camera_route.o \
+	$(BUILD_DIR)/app/evaluated_light_route.o \
 	$(BUILD_DIR)/procedural/procedural_surface_recipe.o \
 	$(BUILD_DIR)/procedural/procedural_surface_derived_asset.o \
 	$(BUILD_DIR)/procedural/procedural_surface_field_3d.o \

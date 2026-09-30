@@ -346,5 +346,13 @@ the shared retained transaction; `scene_editor_camera_path_panel.c` owns the
 attachment controls within Paths. `app/evaluated_camera_route.c` evaluates retained
 legacy orientation/lens separately from shared-route translation. Existing scene
 loading does not convert paths. Tests: `scene_editor_dm3_camera.h` and
-`integration/check_camera_route_render.py`. Light attachment and legacy conversion
-remain later M3 slices.
+`integration/check_camera_route_render.py`. Legacy conversion remains a later M3 slice.
+
+## D-M3 light route slice
+
+`scene_editor_light_path_binding.c` switches the retained animated-light source;
+`scene_editor_light_path_panel.c` owns its controls. `app/evaluated_light_route.c`
+adapts the common route arc sampler into light motion, including speed and
+provenance. The existing animated-light runtime slot and intensity evaluation
+are retained. Native acceptance lives in `scene_editor_dm3_light.h`; baked-frame
+parity in `integration/check_light_route_render.py`. No shared-library changes.

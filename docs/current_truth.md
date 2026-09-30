@@ -18,8 +18,10 @@ detach leaves historical disabled keys off. Older bindings explicitly detach to
 static because their prior source was not recorded. Point/path selection cancels
 unfinished field edits. The user authorized continuing into M3 after clean source reconciliation. Its
 first camera attachment slice is implemented: independent route translation,
-retained legacy orientation/FOV, undo/detach and fresh reopening pass. Light
-convergence and explicit legacy conversion remain open. Human acceptance remains
+retained legacy orientation/FOV, undo/detach and fresh reopening pass. The next
+light attachment slice supports the existing animated light with independent
+route timing and intensity, exact source restoration and native/headless parity.
+Explicit legacy conversion and combined-follower acceptance remain open. Human acceptance remains
 separate. See [Reusable movement paths](motion_paths.md).
 
 

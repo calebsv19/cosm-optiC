@@ -433,6 +433,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_dm2_usability.h"
 #include "scene_editor_dm2_repairs.h"
 #include "scene_editor_dm3_camera.h"
+#include "scene_editor_dm3_light.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -455,6 +456,9 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && (!strcmp(argv[3],"--dm3-light") || !strcmp(argv[3],"--dm3-light-reopen"))) {
+        dm3_light_acceptance(&editor,argv[2],!strcmp(argv[3],"--dm3-light-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if(argc==4 && (!strcmp(argv[3],"--dm3-camera") || !strcmp(argv[3],"--dm3-camera-reopen"))) {
         dm3_camera_acceptance(&editor,argv[2],!strcmp(argv[3],"--dm3-camera-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

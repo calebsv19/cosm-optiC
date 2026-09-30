@@ -4,6 +4,8 @@
 #include "animation/timeline_frame_snapshot.h"
 #include "app/preview_camera_sample.h"
 #include "app/evaluated_camera_route.h"
+#include "app/evaluated_light_route.h"
+#include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_timeline.h"
 #include "import/runtime_scene_object_timeline.h"
 #include "config/config_manager.h"
@@ -375,7 +377,7 @@ static bool ray_evaluated_build_authored(
         if (strcmp(property->track.target_id, progress_track->target_id) != 0)
             continue;
         if (strcmp(property->track.property_id,
-                   "light/path_progress") == 0) {
+                   "light/path_progress") == 0 || !strcmp(property->track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY)) {
             progress_property = property;
         } else if (strcmp(property->track.property_id,
                           "light/intensity") == 0) {
@@ -392,7 +394,9 @@ static bool ray_evaluated_build_authored(
     if (intensity_property) {
         intensity_provenance = intensity_property->track;
     }
-    status = TimelineLightMotionEvaluateResult(
+    status = !strcmp(progress_track->property_id, MOTION_LIGHT_PROGRESS_PROPERTY)
+        ? EvaluatedLightRouteSample(&progress_property->track, &light_context, &motion)
+        : TimelineLightMotionEvaluateResult(
         progress_track, &progress_property->track,
         &document->spatial_path, &document->spatial_path_3d,
         &light_context, &motion);
@@ -707,7 +711,7 @@ bool RayEvaluatedSceneCaptureSampleWithPlayback(
                 for(size_t i=0;i<document.timeline.track_count;++i) {
                     const TimelineTrack* track=&document.timeline.tracks[i];
                     if(track->enabled && !strcmp(track->target_id,spatial_target) &&
-                        !strcmp(track->property_id,"light/path_progress")) {
+                        (!strcmp(track->property_id,"light/path_progress") || !strcmp(track->property_id,MOTION_LIGHT_PROGRESS_PROPERTY))) {
                         document.progress_track_index=i;
                         status=TIMELINE_STATUS_OK;
                         break;

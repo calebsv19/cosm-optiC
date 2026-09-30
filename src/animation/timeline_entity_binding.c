@@ -71,7 +71,7 @@ TimelineStatus TimelineEntityBindingsAdd(TimelineEntityBindings* bindings,
 }
 
 static bool position_owner(const char* property) {
-    return strcmp(property, "camera/route_progress") == 0 ||
+    return strcmp(property, "light/route_progress") == 0 || strcmp(property, "camera/route_progress") == 0 ||
         strcmp(property, "object/transform/position") == 0 ||
         strcmp(property, "light/position") == 0 ||
         strcmp(property, "light/path_progress") == 0 ||

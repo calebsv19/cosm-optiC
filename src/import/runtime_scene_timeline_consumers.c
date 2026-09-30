@@ -29,11 +29,11 @@ bool RuntimeSceneTimelineValidateConsumers(json_object* authoring, double world_
         const TimelineTrack* track=&document->tracks[i];
         if (!track->enabled) continue;
         if (!strncmp(track->property_id,"camera/",7) || RuntimeObjectTimelineAxis(track->property_id)>=0 || !strcmp(track->property_id,MOTION_PROGRESS_PROPERTY)) continue;
-        if (!strcmp(track->property_id,"light/path_progress") ||
+        if (!strcmp(track->property_id,MOTION_LIGHT_PROGRESS_PROPERTY) || !strcmp(track->property_id,"light/path_progress") ||
             !strcmp(track->property_id,"light/intensity")) {
             if (!has_spatial || strcmp(light_target,track->target_id))
                 return refuse(track,"no matching animated light spatial binding",diagnostics,size);
-            if (!strcmp(track->property_id,"light/path_progress")) has_progress=true;
+            if (!strcmp(track->property_id,"light/path_progress") || !strcmp(track->property_id,MOTION_LIGHT_PROGRESS_PROPERTY)) has_progress=true;
         } else {
             return refuse(track,"property has no scene runtime adapter; keep track disabled",diagnostics,size);
         }

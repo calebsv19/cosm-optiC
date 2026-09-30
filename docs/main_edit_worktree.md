@@ -1,5 +1,23 @@
 # RayTracing Main Edit Worktree
 
+## September 29 M3 animated-light attachment checkpoint
+
+The clean camera checkpoint `7877cc8` is extended in the registered Main Edit
+lane with explicit attachment for the existing animated light. Route timing is
+independent of intensity; rebind preserves the predecessor, and detach restores
+it exactly. No legacy path conversion or additional animated-light slots.
+
+Clang/native/headless builds and foundation/entity/view/navigation contracts
+pass. Native attach, animated intensity, hold, rebind, invalid target/source and
+ownership refusal, detach, undo/redo and fresh reopen pass. Four light frames
+match independent baked references exactly. Camera reopen/render parity, M2
+restoration/edit-targeting, and registry/snapshot/evaluated-preview groups pass.
+Evidence: `build/dm3-light-accepted` and `build/dm3-light-*.log`. The full suite was
+not rerun for this bounded slice. Commit and Desktop identity are recorded in
+the private work status after refresh. Canonical stays at the reconciled M1/M2
+baseline; VERSION and WORKER_VERSION are unchanged. Next M3 boundary: explicit
+legacy conversion and combined-follower acceptance; human acceptance is separate.
+
 ## September 29 first M3 camera attachment checkpoint
 
 Canonical and Main Edit were clean and aligned at `286f866438bf` before M3

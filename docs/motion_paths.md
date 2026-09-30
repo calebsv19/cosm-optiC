@@ -1,8 +1,8 @@
-# Reusable movement paths (D-M2 / first D-M3 camera slice)
+# Reusable movement paths (D-M2 / D-M3 camera and light attachment)
 
 In **Render**, choose **Paths** beside Camera and Light. This is the independent
-path library. The first D-M3 camera slice adds explicit camera attachment below
-the object controls. Light still uses its existing authoring.
+path library. D-M3 adds explicit camera and animated-light attachment below
+the object controls.
 
 1. Click **+ New Path**, type a name, and press Enter. A scene-sized two-point
    route starts at the selected object's base position, or the viewport center.
@@ -21,7 +21,7 @@ the object controls. Light still uses its existing authoring.
 4. **Next segment** switches the outgoing segment between straight and cubic
    Bezier. Handle values are offsets from their point in authored scene units.
    Incoming/outgoing handles are independent; smooth/linked policies come later.
-5. Shape the route before attaching anything. Expand **2. Attach an object...**,
+5. Shape the route before attaching anything. Expand **2. Attach followers...**,
    choose a follower with the object arrows, then **Attach on path**. This places
    its origin on the route and creates **Path progress** keys from 0 to 1 across
    the existing timeline range (or a newly established timeline).
@@ -145,8 +145,8 @@ camera binding continue through the legacy sampler unchanged. Older versions of
 optiC do not support the new typed camera binding/property.
 
 This is explicit attachment to a newly authored/shared route, not conversion of
-an old route. Light convergence and a tested legacy-shape/timing conversion with
-a declared tolerance are still open M3 work. Focus-target-specific composition,
+an old route. A tested legacy-shape/timing conversion with
+a declared tolerance remains open M3 work. Focus-target-specific composition,
 multi-camera authoring and broader rendering-mode coverage are not claimed by
 this first slice.
 
@@ -155,3 +155,37 @@ Verification: prepare a fresh fixture using `check_motion_path_render.py`, run
 then run `tests/integration/check_camera_route_render.py --root <fixture>
 --cli <headless-cli>`. The proof checks independent legacy orientation/FOV, route
 hold, detach restoration, invalid target refusal and exact baked-camera pixels.
+
+## Animated-light attachment (D-M3)
+
+With the existing light timeline active, select a route in **Paths**, expand
+**2. Attach followers...**, and scroll to the light controls. **Attach light on
+this route** switches the animated light to reusable XYZ route geometry and
+creates a `light/route_progress` channel. **Edit light route timing** opens its
+keys; equal values create a hold. The existing intensity channel remains active
+with its original key times and values. Light color, radius and other base
+properties are unchanged.
+
+**Detach light: restore source** restores the exact previous light-progress
+track. Rebinding to another route retains that original restoration source;
+disabled alternative position history stays disabled. These operations are
+atomic retained-document edits, with save/reopen and undo/redo. Missing targets,
+missing prior tracks and competing active position owners are rejected.
+
+Light bindings use `target_id: light/<stable-light-id>` and
+`restore_position_tracks`, following the camera binding format. Native evaluation
+and final rendering share route position, world-distance length and speed
+sampling. Legacy scenes without a route binding retain their existing sampler.
+Older versions of optiC do not support this light binding/property.
+
+This slice supports the one animated light owned by the existing light timeline.
+It does not add multiple animated-light slots or convert the old light path.
+Explicit legacy conversion, combined-follower acceptance and focus-target
+composition remain later M3 work.
+
+Verification: prepare a fresh fixture with `check_motion_path_render.py`, run
+`--dm3-light` then `--dm3-light-reopen` in separate native harness processes, and
+run `tests/integration/check_light_route_render.py --root <fixture> --cli
+<headless-cli>`. Tests exercise animated intensity, route hold, rebind, inactive
+position history, invalid-target/source/ownership refusal, detach, undo/redo and
+four exact native/headless/baked-reference frame comparisons.
