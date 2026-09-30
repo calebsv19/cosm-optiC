@@ -138,6 +138,8 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     SceneEditorRenderButton(r,l->controls[TL_VALUE],value,u->numeric==2,have_keys);
     const char* mode="Interpolation";
     if(have_keys) {TimelineInterpolation m=keys.primary.interpolation_to_next;mode=m==TIMELINE_INTERPOLATION_STEP?"Hold v":m==TIMELINE_INTERPOLATION_LINEAR?"Linear v":"Bezier ease v";}
+    if(have_keys && keys.primary.interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER && keys.primary.tangent_mode!=TIMELINE_TANGENT_BROKEN)
+        mode=keys.primary.tangent_mode==TIMELINE_TANGENT_AUTO_SMOOTH?"Auto Smooth v":keys.primary.tangent_mode==TIMELINE_TANGENT_AUTO_CLAMPED?"Auto Clamped v":"Flat / stop v";
     if(have_keys && selected<d->track_count) for(size_t i=0;i<d->tracks[selected].key_count;++i) {
         const TimelineKeyframe* k=&d->tracks[selected].keys[i];
         if(SceneEditorTimelineKeySelected(d->tracks[selected].track_id,k->frame) && k->interpolation_to_next!=keys.primary.interpolation_to_next) mode="Mixed v";
@@ -150,9 +152,9 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     bool rejected=error[0]!=0;
     text(r,key_help[0]?key_help:u->feedback[0]?u->feedback:rejected?error:context,l->footer.x+444,l->footer.y+7,muted);
     if(u->menu) {
-        const char* modes[]={"Hold","Linear","Bezier ease"};
-        SDL_Rect box=l->controls[TL_INTERPOLATION];box.y-=72;box.h=24;
-        for(int i=0;i<3;++i) {SceneEditorRenderButton(r,box,modes[i],false,true);box.y+=24;}
+        const char* modes[]={"Hold then jump","Linear","Bezier ease","Auto Smooth","Auto Clamped","Flat / stop","Broken handles"};
+        SDL_Rect box=l->controls[TL_INTERPOLATION];box.y-=168;box.h=24;
+        for(int i=0;i<7;++i) {SceneEditorRenderButton(r,box,modes[i],false,true);box.y+=24;}
     }
     /* Hover help keeps the toolbar compact without making symbols ambiguous. */
     const char* help[]={"First frame (Home)","Previous frame (Left)","Play / pause (Space)","Next frame (Right)","Last frame (End)","Type frame, Enter applies","Key evaluated value at playhead","Keyframe view: drag diamonds to retime","Curve view: drag keys or Bezier handles","Fit animation range (F)","Fit selected channel's keys","Zoom out; Ctrl+wheel zooms at pointer","Zoom in; middle-drag or Shift+wheel pans","Edit selected values; the playhead stays put","Interpolation from selected keys to the next key","Delete selected keys; Undo restores the group","Retime selection; other selected keys keep their spacing"};

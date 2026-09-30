@@ -20,6 +20,7 @@ bool SceneEditorTimelineMoveSelectedKeys(int64_t primary_frame);
 bool SceneEditorTimelineSetSelectedValue(double value);
 bool SceneEditorTimelineMoveSelectedValue(int64_t frame,double value);
 bool SceneEditorTimelineDeleteSelectedKeys(void);
+bool SceneEditorTimelineSelectedTangentMode(TimelineTangentMode mode);
 bool SceneEditorTimelineSelectedInterpolation(TimelineInterpolation mode);
 bool SceneEditorTimelineSelectedHandles(double fi,double vi,double fo,double vo);
 bool SceneEditorTimelineCopyKeys(void);

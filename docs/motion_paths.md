@@ -234,3 +234,28 @@ Six frozen legacy images and eight previous camera/light attachment images
 remain pixel-identical. Compact-window controls are exercised at 1024×640.
 M3 implementation and automated acceptance are complete; hands-on usability
 acceptance remains separate. D-M4 smoothness is the next implementation boundary.
+
+
+## M4 temporal policies
+
+The timeline interpolation menu adds Auto Smooth, Auto Clamped, Flat / stop,
+and Broken handles. Select multiple keys to apply a policy atomically. Automatic
+slopes use actual frame spacing; retiming, value edits, key insertion/deletion
+recompute affected automatic handles. New keys inside automatic cubic segments
+inherit that policy. Direct handle edits explicitly switch the key to Broken.
+The scalar curve editor remains available.
+
+Auto Smooth permits overshoot and preserves a shared slope through each interior
+key. Auto Clamped uses monotone slopes, including zero slope at reversals; a
+segment with both endpoints clamped stays between its endpoint values. Mixed
+manual/automatic endpoints retain the manual side, so the whole mixed segment
+has no automatic no-overshoot guarantee. Flat sets zero slope at a key; it is
+not an interval hold. Hold then jump retains the previous value until the next
+key. Linear and legacy Bezier ease remain available. Policy selection makes
+adjacent segments cubic so both sides can use the chosen tangent.
+
+Bounded properties reject automatic curves whose analytic extrema leave their
+allowed range; choose Auto Clamped or change keys. Old scenes omit the optional
+`tangent_mode` and keep Broken/manual handles exactly. Loading saved policies
+preserves their handles; recomputation happens on edits. Smooth velocity does
+not promise acceleration continuity or limits. Full M4 acceptance remains open.

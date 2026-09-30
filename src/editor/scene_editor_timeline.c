@@ -166,6 +166,7 @@ bool SceneEditorTimelineCopyEvaluated(RayEvaluatedSceneSnapshot* out) {
 /* A new/moved key shortens adjacent segments. Fit temporal handles into their
  * new interval while retaining each handle slope; never reorder key times. */
 static void fit_temporal_handles(TimelineTrack* track) {
+    TimelineTrackRecomputeTangents(track);
     if(track->value_type!=TIMELINE_VALUE_SCALAR) return;
     for(size_t i=0;i+1<track->key_count;++i) {
         TimelineKeyframe* left=&track->keys[i];
@@ -231,9 +232,19 @@ bool SceneEditorTimelineSetKey(double value) {
     for(size_t i=0;i<track->key_count;++i) if(track->keys[i].frame==key.frame) {
         track->keys[i].value=key.value; replaced=true; break;
     }
+    if(!replaced && track->key_count) {
+        size_t neighbor=0;
+        while(neighbor+1<track->key_count && track->keys[neighbor+1].frame<key.frame) ++neighbor;
+        if(track->keys[neighbor].interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER &&
+           track->keys[neighbor].tangent_mode!=TIMELINE_TANGENT_BROKEN) {
+            key.interpolation_to_next=TIMELINE_INTERPOLATION_CUBIC_BEZIER;
+            key.tangent_mode=track->keys[neighbor].tangent_mode;
+        }
+    }
     size_t inserted_index=0;
     TimelineStatus status=replaced?TIMELINE_STATUS_OK:TimelineTrackInsertKey(track,key,&inserted_index);
     if(status==TIMELINE_STATUS_OK && !replaced) fit_temporal_handles(track);
+    if(status==TIMELINE_STATUS_OK) status=TimelineTrackRecomputeTangents(track);
     bool ok=status==TIMELINE_STATUS_OK && TimelineEntityBindingsValidateDocument(&bindings,&registry,&document)==TIMELINE_STATUS_OK &&
         SceneEditorDocumentSetTimeline(&document,session.scene_revision,status_line,sizeof(status_line));
     SceneTimelineSessionEndEdit(&session);
@@ -265,6 +276,7 @@ static bool edit_existing_key(int operation, int64_t destination,
         status=TimelineTrackMoveScalarKey(track,index,destination,track->keys[index].value.as.scalar);
         if(status==TIMELINE_STATUS_OK) fit_temporal_handles(track);
     } else if(operation==2) {
+        track->keys[index].tangent_mode=TIMELINE_TANGENT_BROKEN;
         track->keys[index].interpolation_to_next=interpolation;
         if(interpolation==TIMELINE_INTERPOLATION_CUBIC_BEZIER && index+1<track->key_count) {
             double span=(double)(track->keys[index+1].frame-track->keys[index].frame)/3.0;
@@ -277,6 +289,7 @@ static bool edit_existing_key(int operation, int64_t destination,
         status=TimelineTrackMoveScalarKey(track,index,destination,handles[0]);
         if(status==TIMELINE_STATUS_OK) fit_temporal_handles(track);
     } else status=TimelineTrackSetScalarTemporalHandles(track,index,handles[0],handles[1],handles[2],handles[3]);
+    if(status==TIMELINE_STATUS_OK) status=TimelineTrackRecomputeTangents(track);
     bool ok=status==TIMELINE_STATUS_OK && TimelineEntityBindingsValidateDocument(&bindings,&registry,&document)==TIMELINE_STATUS_OK &&
         SceneEditorDocumentSetTimeline(&document,session.scene_revision,status_line,sizeof(status_line));
     SceneTimelineSessionEndEdit(&session);

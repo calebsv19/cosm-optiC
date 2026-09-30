@@ -107,6 +107,7 @@ bool SceneEditorTimelineCurveEvent(SDL_Event* event,SDL_Rect graph,const Timelin
                 value=fmax(key->value.as.scalar,fmin(next->value.as.scalar+next->incoming_value_offset,value));
             key->outgoing_frame_offset=frame-key->frame;key->outgoing_value_offset=value-key->value.as.scalar;
         }
+        if(drag.side==0) TimelineTrackRecomputeTangents(&drag.track);
         return true;
     }
     if(event->type==SDL_MOUSEBUTTONUP && event->button.button==SDL_BUTTON_LEFT && drag.active) {

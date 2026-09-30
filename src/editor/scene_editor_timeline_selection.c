@@ -109,6 +109,7 @@ static bool edit(int operation,int64_t destination,double value,TimelineInterpol
         if(operation==1 || operation==4) {if(!add_frame(k->frame,delta,&k->frame)) return fail("Frame offset is too large.");}
         if(operation==2 || operation==4) k->value=TimelineValueScalar(value);
         if(operation==3) {
+            k->tangent_mode=TIMELINE_TANGENT_BROKEN;
             k->interpolation_to_next=mode;
             if(mode==TIMELINE_INTERPOLATION_CUBIC_BEZIER && i+1<candidate.key_count) {
                 double span=(candidate.keys[i+1].frame-k->frame)/3.0;
@@ -116,7 +117,13 @@ static bool edit(int operation,int64_t destination,double value,TimelineInterpol
                 candidate.keys[i+1].incoming_frame_offset=-span;candidate.keys[i+1].incoming_value_offset=0;
             }
         }
+        if(operation==6) {
+            k->tangent_mode=(TimelineTangentMode)mode;
+            k->interpolation_to_next=TIMELINE_INTERPOLATION_CUBIC_BEZIER;
+            if(i) candidate.keys[i-1].interpolation_to_next=TIMELINE_INTERPOLATION_CUBIC_BEZIER;
+        }
         if(operation==5) {
+            k->tangent_mode=TIMELINE_TANGENT_BROKEN;
             if(selection.count!=1) return fail("Select one key to edit its curve handles.");
             k->incoming_frame_offset=handles[0];k->incoming_value_offset=handles[1];
             k->outgoing_frame_offset=handles[2];k->outgoing_value_offset=handles[3];
@@ -137,6 +144,7 @@ bool SceneEditorTimelineMoveSelectedValue(int64_t frame,double value) {
     return isfinite(value) && edit(4,frame,value,0,NULL);
 }
 bool SceneEditorTimelineDeleteSelectedKeys(void) {return edit(0,0,0,0,NULL);}
+bool SceneEditorTimelineSelectedTangentMode(TimelineTangentMode mode) {return mode>=0 && mode<=TIMELINE_TANGENT_FLAT && edit(6,0,0,(TimelineInterpolation)mode,NULL);}
 bool SceneEditorTimelineSelectedInterpolation(TimelineInterpolation mode) {return edit(3,0,0,mode,NULL);}
 bool SceneEditorTimelineSelectedHandles(double fi,double vi,double fo,double vo) {double h[]={fi,vi,fo,vo};return edit(5,0,0,0,h);}
 bool SceneEditorTimelineCopyKeys(void) {

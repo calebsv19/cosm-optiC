@@ -192,6 +192,7 @@ TimelineStatus TimelineTrackSetScalarTemporalHandles(
         return TIMELINE_STATUS_INVALID_TRACK;
     }
     candidate = track->keys[key_index];
+    candidate.tangent_mode = TIMELINE_TANGENT_BROKEN;
     candidate.incoming_frame_offset = incoming_frame_offset;
     candidate.incoming_value_offset = incoming_value_offset;
     candidate.outgoing_frame_offset = outgoing_frame_offset;
@@ -241,6 +242,8 @@ TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
     if (range_status != TIMELINE_STATUS_OK) return range_status;
     for (size_t i = 0u; i < track->key_count; ++i) {
         const TimelineKeyframe* key = &track->keys[i];
+        if(key->tangent_mode<TIMELINE_TANGENT_BROKEN || key->tangent_mode>TIMELINE_TANGENT_FLAT ||
+           (track->value_type!=TIMELINE_VALUE_SCALAR && key->tangent_mode!=TIMELINE_TANGENT_BROKEN)) return TIMELINE_STATUS_INVALID_TRACK;
         if (key->frame < range->start_frame || key->frame > end_frame) {
             return TIMELINE_STATUS_FRAME_OUT_OF_RANGE;
         }

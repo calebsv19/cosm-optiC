@@ -78,6 +78,11 @@ static bool set_position_key(void) {
         else {
             TimelineKeyframe inserted={.frame=panel.frame,.value=TimelineValueScalar(panel.position[axis]),
                 .interpolation_to_next=TIMELINE_INTERPOLATION_LINEAR};
+            size_t neighbor=0;while(neighbor+1<track->key_count && track->keys[neighbor+1].frame<panel.frame)++neighbor;
+            if(track->key_count && track->keys[neighbor].tangent_mode!=TIMELINE_TANGENT_BROKEN && track->keys[neighbor].interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
+                inserted.tangent_mode=track->keys[neighbor].tangent_mode;
+                inserted.interpolation_to_next=TIMELINE_INTERPOLATION_CUBIC_BEZIER;
+            }
             TimelineStatus status=TimelineTrackInsertKey(track,inserted,&key);
             if(status!=TIMELINE_STATUS_OK) {
                 if(status==TIMELINE_STATUS_CAPACITY_EXCEEDED)
@@ -88,6 +93,7 @@ static bool set_position_key(void) {
                 return false;
             }
         }
+        if(TimelineTrackRecomputeTangents(track)!=TIMELINE_STATUS_OK) return false;
         /* Inserting inside a curve must keep its temporal handles admissible. */
         for(size_t j=0;j+1<track->key_count;++j) {
             TimelineKeyframe* a=&track->keys[j];TimelineKeyframe* b=&track->keys[j+1];

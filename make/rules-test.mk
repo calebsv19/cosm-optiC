@@ -3471,7 +3471,7 @@ test-scene-timeline-entity-contract:
 		src/animation/evaluated_scene_snapshot.c \
 		src/animation/timeline_entity_binding.c src/animation/timeline_property_registry.c \
 		src/animation/timeline_camera_channels.c src/animation/timeline_frame_snapshot.c \
-		src/animation/timeline_document.c src/animation/timeline_track.c \
+		src/animation/timeline_document.c src/animation/timeline_track.c src/animation/timeline_tangents.c \
 		src/animation/timeline_value.c src/animation/timeline_clock.c \
 		$(shell pkg-config --libs json-c) -lm -o $(BUILD_DIR)/tests/timeline_entity_binding_contract_test
 	$(BUILD_DIR)/tests/timeline_entity_binding_contract_test

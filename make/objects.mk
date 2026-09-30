@@ -258,6 +258,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/animation/timeline_light_motion.o \
 	$(BUILD_DIR)/animation/timeline_property_registry.o \
 	$(BUILD_DIR)/animation/timeline_track.o \
+	$(BUILD_DIR)/animation/timeline_tangents.o \
 	$(BUILD_DIR)/animation/timeline_value.o \
 	$(BUILD_DIR)/app/animation_fluid_scene.o \
 	$(BUILD_DIR)/app/data_paths.o \

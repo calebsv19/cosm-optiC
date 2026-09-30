@@ -172,9 +172,12 @@ bool SceneEditorTimelineUIEvent(SDL_Event* e,const SceneEditorPaneLayout* pane,c
         if(e->button.button!=SDL_BUTTON_LEFT) return true;
         if(ui.numeric) {ui.numeric=0;SDL_StopTextInput();}
         if(ui.menu) {
-            SDL_Rect menu=l->controls[TL_INTERPOLATION];menu.y-=72;menu.h=72;
+            SDL_Rect menu=l->controls[TL_INTERPOLATION];menu.y-=168;menu.h=168;
             ui.menu=false;
-            if(hit(menu,x,y)) {const TimelineInterpolation modes[]={TIMELINE_INTERPOLATION_STEP,TIMELINE_INTERPOLATION_LINEAR,TIMELINE_INTERPOLATION_CUBIC_BEZIER};SceneEditorTimelineSelectedInterpolation(modes[(y-menu.y)/24]);return true;}
+            if(hit(menu,x,y)) {const TimelineInterpolation modes[]={TIMELINE_INTERPOLATION_STEP,TIMELINE_INTERPOLATION_LINEAR,TIMELINE_INTERPOLATION_CUBIC_BEZIER};int item=(y-menu.y)/24;
+                if(item<3) SceneEditorTimelineSelectedInterpolation(modes[item]);
+                else {const TimelineTangentMode policies[]={TIMELINE_TANGENT_AUTO_SMOOTH,TIMELINE_TANGENT_AUTO_CLAMPED,TIMELINE_TANGENT_FLAT,TIMELINE_TANGENT_BROKEN};SceneEditorTimelineSelectedTangentMode(policies[item-3]);}
+                return true;}
         }
         int64_t end;TimelineRangeEndFrame(d->range,&end);
         for(int c=0;c<TL_CONTROL_COUNT;++c) if(hit(l->controls[c],x,y)) {

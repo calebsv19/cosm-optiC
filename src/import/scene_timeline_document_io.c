@@ -88,6 +88,17 @@ static TimelineStatus parse_track(json_object* root, TimelineTrack* out) {
             return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
         }
     }
+    /* Optional policy is metadata; preserve saved handles exactly on load. */
+    for(size_t i=0;i<track.key_count;++i) {
+        json_object *key=json_object_array_get_idx(keys,i), *policy=NULL;
+        if(json_object_object_get_ex(key,"tangent_mode",&policy)) {
+            if(!json_object_is_type(policy,json_type_string)) return TIMELINE_STATUS_INVALID_TRACK;
+            bool found=false;
+            for(int m=0;m<=TIMELINE_TANGENT_FLAT;++m)
+                if(!strcmp(json_object_get_string(policy),TimelineTangentModeLabel(m))) {track.keys[i].tangent_mode=m;found=true;}
+            if(!found || (value_type!=TIMELINE_VALUE_SCALAR && track.keys[i].tangent_mode!=TIMELINE_TANGENT_BROKEN)) return TIMELINE_STATUS_INVALID_TRACK;
+        }
+    }
     *out = track;
     return TIMELINE_STATUS_OK;
 }
@@ -176,6 +187,7 @@ json_object* SceneTimelineDocumentToJson(const TimelineDocument* document) {
             json_object_object_add(item, "frame", json_object_new_int64(key->frame));
             json_object_object_add(item, "value", value);
             json_object_object_add(item, "interpolation", json_object_new_string(TimelineInterpolationLabel(key->interpolation_to_next)));
+            json_object_object_add(item, "tangent_mode", json_object_new_string(TimelineTangentModeLabel(key->tangent_mode)));
             json_object_object_add(item, "incoming_handle", handle(key->incoming_frame_offset, key->incoming_value_offset));
             json_object_object_add(item, "outgoing_handle", handle(key->outgoing_frame_offset, key->outgoing_value_offset));
             json_object_array_add(keys, item);

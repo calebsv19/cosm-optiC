@@ -24,10 +24,18 @@ typedef enum TimelineChannelSource {
     TIMELINE_CHANNEL_SOURCE_DERIVED_RESERVED
 } TimelineChannelSource;
 
+typedef enum TimelineTangentMode {
+    TIMELINE_TANGENT_BROKEN = 0,
+    TIMELINE_TANGENT_AUTO_SMOOTH,
+    TIMELINE_TANGENT_AUTO_CLAMPED,
+    TIMELINE_TANGENT_FLAT
+} TimelineTangentMode;
+
 typedef struct TimelineKeyframe {
     int64_t frame;
     TimelineValue value;
     TimelineInterpolation interpolation_to_next;
+    TimelineTangentMode tangent_mode;
     double incoming_frame_offset;
     double incoming_value_offset;
     double outgoing_frame_offset;
@@ -66,6 +74,8 @@ typedef struct TimelineEvaluationResult {
     TimelineStatus status;
 } TimelineEvaluationResult;
 
+const char* TimelineTangentModeLabel(TimelineTangentMode mode);
+TimelineStatus TimelineTrackRecomputeTangents(TimelineTrack* track);
 const char* TimelineInterpolationLabel(TimelineInterpolation interpolation);
 const char* TimelineChannelSourceLabel(TimelineChannelSource source);
 TimelineStatus TimelineTrackInit(TimelineTrack* track,

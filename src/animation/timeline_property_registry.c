@@ -429,6 +429,25 @@ TimelineStatus TimelinePropertyRegistryValidateTrack(
             (descriptor->interpolation_mask & interpolation_bit) == 0u) {
             return TIMELINE_STATUS_UNSUPPORTED_INTERPOLATION;
         }
+        /* New automatic policies must not create invalid bounded values between
+         * valid keys. Preserve legacy/manual handle acceptance unchanged. Test
+         * cubic value extrema analytically; time handles are monotonic. */
+        if(i+1<track->key_count && track->value_type==TIMELINE_VALUE_SCALAR &&
+           track->keys[i].interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER &&
+           (track->keys[i].tangent_mode!=TIMELINE_TANGENT_BROKEN || track->keys[i+1].tangent_mode!=TIMELINE_TANGENT_BROKEN)) {
+            const TimelineKeyframe *a=&track->keys[i],*b=&track->keys[i+1];
+            double y0=a->value.as.scalar,y1=y0+a->outgoing_value_offset;
+            double y3=b->value.as.scalar,y2=y3+b->incoming_value_offset;
+            double A=-y0+3*y1-3*y2+y3,B=2*(y0-2*y1+y2),C=y1-y0;
+            double roots[2]={-1,-1};
+            if(fabs(A)<1e-15) {if(fabs(B)>1e-15)roots[0]=-C/B;}
+            else {double d=B*B-4*A*C;if(d>=0){roots[0]=(-B+sqrt(d))/(2*A);roots[1]=(-B-sqrt(d))/(2*A);}}
+            for(int r=0;r<2;++r)if(roots[r]>0 && roots[r]<1) {
+                double u=roots[r],v=1-u,y=v*v*v*y0+3*v*v*u*y1+3*v*u*u*y2+u*u*u*y3;
+                status=TimelinePropertyDescriptorValidateValue(descriptor,TimelineValueScalar(y));
+                if(status!=TIMELINE_STATUS_OK)return status;
+            }
+        }
         status = TimelinePropertyDescriptorValidateValue(descriptor,
                                                          track->keys[i].value);
         if (status != TIMELINE_STATUS_OK) return status;
