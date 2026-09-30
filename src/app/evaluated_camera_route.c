@@ -2,6 +2,8 @@
 #include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_timeline.h"
 #include <string.h>
+#include <math.h>
+#include "import/runtime_scene_bridge.h"
 bool EvaluatedCameraRouteSample(const Camera *camera, double z, const Path *path,
     const CameraPath3D *depth, double normalized_t, int width, int height,
     const TimelineFrameSnapshot *snapshot, PreviewCameraSample *out) {
@@ -48,4 +50,21 @@ bool EvaluatedCameraRouteSample(const Camera *camera, double z, const Path *path
   result.uses_authored_path = true;
   *out = result;
   return true;
+}
+
+/* Preserve the established focus-target precedence after final translation.
+ * Doing this before route placement aims from the wrong camera position. */
+void EvaluatedCameraApplyFocusTarget(PreviewCameraSample *sample) {
+  MotionPathBinding binding;
+  if (!MotionPathsRuntimeBinding("camera/main", &binding) || !binding.use_focus_target) return;
+  RuntimeSceneBridge3DScaffoldState scaffold = {0};
+  runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+  if (!sample || !scaffold.has_camera_focus_target) return;
+  double dx=scaffold.camera_focus_target_x-sample->position_x;
+  double dy=scaffold.camera_focus_target_y-sample->position_y;
+  double dz=scaffold.camera_focus_target_z-sample->position_z;
+  double horizontal=hypot(dx,dy),limit=70.0*acos(-1.0)/180.0;
+  if (!(horizontal>1e-9) && !(fabs(dz)>1e-9)) return;
+  if (horizontal>1e-9) sample->yaw_radians=atan2(dx,-dy);
+  sample->pitch_radians=fmax(-limit,fmin(limit,atan2(dz,horizontal)));
 }

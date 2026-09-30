@@ -9,9 +9,9 @@
 #include "import/runtime_scene_light_timeline_io.h"
 #include <stdio.h>
 #include <string.h>
-static SDL_Rect controls[3];
-static bool enabled[3];
-static char relationship[180];
+static SDL_Rect controls[4];
+static bool enabled[4];
+static char relationship[180], predecessor[180];
 static char target[TIMELINE_ID_CAPACITY];
 void SceneEditorLightPathPanelReset(void) { memset(controls, 0, sizeof(controls)); }
 int SceneEditorLightPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
@@ -23,15 +23,20 @@ int SceneEditorLightPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
   const MotionPathBinding *binding = NULL;
   for (size_t i = 0; i < paths->binding_count; ++i)
     if (target[0] && paths->bindings[i].enabled && !strcmp(paths->bindings[i].target_id, target)) binding = &paths->bindings[i];
-  bool bound = binding && !strcmp(binding->path_id, path->id);
+  bool bound = path && binding && !strcmp(binding->path_id, path->id);
   snprintf(relationship, sizeof(relationship), "%s: %s", target[0] ? target : "Light (activate timeline first)", binding ? binding->path_id : "legacy position source");
   ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
       relationship, x, y, SceneEditorChromeShellResolvePalette().text_primary);
   y += 26;
+  if (binding && binding->restore_known) {
+    snprintf(predecessor,sizeof(predecessor),"Inactive source: %s",binding->restore_count?binding->restore_xyz_tracks[0]:"static placement");
+    ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),predecessor,x,y,SceneEditorChromeShellResolvePalette().text_primary);
+    y += 26;
+  }
   const char *labels[] = {bound ? "Light attached to this route" : "Attach light on this route",
-                         "Detach light: restore source", "Edit light route timing >"};
-  enabled[0] = target[0] && !bound; enabled[1] = enabled[2] = bound;
-  for (int i = 0; i < 3; ++i) {
+                         "Detach light: restore source", "Edit light route timing >", "Convert legacy light route"};
+  enabled[0] = path && target[0] && !bound; enabled[1] = enabled[2] = bound; enabled[3] = !binding;
+  for (int i = 0; i < 4; ++i) {
     controls[i] = (SDL_Rect){x, y, width, 28};
     SceneEditorRenderButton(r, controls[i], labels[i], false, enabled[i]);
     if (y < clip.y || y + 28 > clip.y + clip.h) controls[i] = (SDL_Rect){0};
@@ -43,11 +48,13 @@ int SceneEditorLightPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
 }
 bool SceneEditorLightPathPanelEvent(SDL_Event *e, const MotionPath *path,
     char *message, size_t size) {
-  if (!path || e->type != SDL_MOUSEBUTTONDOWN || e->button.button != SDL_BUTTON_LEFT) return false;
-  for (int i = 0; i < 3; ++i) {
+  if (e->type != SDL_MOUSEBUTTONDOWN || e->button.button != SDL_BUTTON_LEFT) return false;
+  for (int i = 0; i < 4; ++i) {
     if (controls[i].w <= 0 || !SDL_PointInRect(&(SDL_Point){e->button.x, e->button.y}, &controls[i])) continue;
-    if (!enabled[i]) return true;
-    if (i < 2) {
+    if (!enabled[i] || (!path && i != 3)) return true;
+    if (i == 3) {
+      SceneEditorMotionPathConvertLegacy(false, SceneEditorDocumentRevision(), message, size);
+    } else if (i < 2) {
       SceneEditorMotionPathBindLight(path->id, i == 0, SceneEditorDocumentRevision(), message, size);
     } else {
       static TimelineDocument doc;
@@ -64,8 +71,8 @@ bool SceneEditorLightPathPanelEvent(SDL_Event *e, const MotionPath *path,
   return false;
 }
 bool SceneEditorLightPathPanelControl(const char *name, SDL_Rect *out) {
-  const char *names[] = {"path_light_attach", "path_light_detach", "path_light_timing"};
-  for (int i = 0; i < 3; ++i)
+  const char *names[] = {"path_light_attach", "path_light_detach", "path_light_timing", "path_light_convert"};
+  for (int i = 0; i < 4; ++i)
     if (!strcmp(name, names[i])) { *out = controls[i]; return out->w > 0; }
   return false;
 }

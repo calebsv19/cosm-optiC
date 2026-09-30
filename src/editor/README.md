@@ -1,5 +1,11 @@
 # src › editor
 
+`scene_editor_legacy_route_conversion.c` owns bounded, atomic camera/light legacy
+geometry and timing conversion. Camera/light follower panel siblings expose
+conversion, inactive source identity and retained attachment commands. Camera
+focus is an explicit binding option committed by the camera binding adapter;
+the evaluated camera adapter applies it after final route translation.
+
 
 The current shell separates document menus from pane controls.
 `scene_editor_workspace_layout.c` computes document-bar and center-header bounds;

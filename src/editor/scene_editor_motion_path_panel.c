@@ -317,8 +317,10 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     y += 32;
   }
   if (!p) {
-    label(r, "Create a path, then attach an object.", x, y);
+    label(r, "Create a path or convert legacy motion.", x, y);
     y += 30;
+    y = SceneEditorCameraPathPanelDraw(r, &d, NULL, pane, x, y, w);
+    y = SceneEditorLightPathPanelDraw(r, &d, NULL, pane, x, y, w);
   } else {
     button(r, DELETE_PATH, (SDL_Rect){x, y, w, 28},
            "Delete path (detach followers first)", true);
@@ -711,7 +713,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
     return false;
   int x = event->button.x, y = event->button.y;
   if (SceneEditorCameraPathPanelEvent(event, p, ui.message, sizeof(ui.message)) || SceneEditorLightPathPanelEvent(event, p, ui.message, sizeof(ui.message))) {
-    cancel_field_edit(); return true;
+    cancel_field_edit(); ui.message_revision = SceneEditorDocumentRevision(); return true;
   }
   for (size_t i = 0; i < d.count; ++i)
     if (hit(ui.rows[i], x, y)) {

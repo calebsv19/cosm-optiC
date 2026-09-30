@@ -8,40 +8,51 @@
 #include "render/text_draw.h"
 #include <stdio.h>
 #include <string.h>
-static SDL_Rect controls[3];
-static bool enabled[3];
-static char relationship[180];
+static SDL_Rect controls[5];
+static bool enabled[5];
+static char relationship[180], predecessor[180];
+static bool focus;
 void SceneEditorCameraPathPanelReset(void) { memset(controls, 0, sizeof(controls)); }
 int SceneEditorCameraPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     const MotionPath *path, SDL_Rect clip, int x, int y, int width) {
   const MotionPathBinding *binding = NULL;
   for (size_t i = 0; i < paths->binding_count; ++i)
     if (paths->bindings[i].enabled && !strcmp(paths->bindings[i].target_id, "camera/main")) binding = &paths->bindings[i];
-  bool bound = binding && !strcmp(binding->path_id, path->id);
+  focus = binding && binding->use_focus_target;
+  bool bound = path && binding && !strcmp(binding->path_id, path->id);
   snprintf(relationship, sizeof(relationship), "Camera: %s", binding ? binding->path_id : "legacy position source");
   ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
       relationship, x, y, SceneEditorChromeShellResolvePalette().text_primary);
   y += 26;
+  if (binding && binding->restore_known) {
+    snprintf(predecessor,sizeof(predecessor),"Inactive source: %s",binding->restore_count?binding->restore_xyz_tracks[0]:"static placement");
+    ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),predecessor,x,y,SceneEditorChromeShellResolvePalette().text_primary);
+    y += 26;
+  }
   const char *labels[] = {bound ? "Camera attached to this route" : "Attach camera on this route",
-                         "Detach camera: restore source", "Edit camera route timing >"};
-  enabled[0] = !bound; enabled[1] = enabled[2] = bound;
-  for (int i = 0; i < 3; ++i) {
+                         "Detach camera: restore source", "Edit camera route timing >", "Convert legacy camera route", focus ? "Scene focus target: on" : "Use scene focus target"};
+  enabled[0] = path && !bound; enabled[1] = enabled[2] = bound; enabled[3] = !binding; enabled[4] = bound;
+  for (int i = 0; i < 5; ++i) {
     controls[i] = (SDL_Rect){x, y, width, 28};
     SceneEditorRenderButton(r, controls[i], labels[i], false, enabled[i]);
     if (y < clip.y || y + 28 > clip.y + clip.h) controls[i] = (SDL_Rect){0};
     y += 34;
   }
   ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-      "Orientation / FOV stay independent.", x, y, SceneEditorChromeShellResolvePalette().text_primary);
+      focus ? "Focus owns yaw/pitch; FOV independent." : "Orientation / FOV stay independent.", x, y, SceneEditorChromeShellResolvePalette().text_primary);
   return y + 30;
 }
 bool SceneEditorCameraPathPanelEvent(SDL_Event *e, const MotionPath *path,
     char *message, size_t size) {
-  if (!path || e->type != SDL_MOUSEBUTTONDOWN || e->button.button != SDL_BUTTON_LEFT) return false;
-  for (int i = 0; i < 3; ++i) {
+  if (e->type != SDL_MOUSEBUTTONDOWN || e->button.button != SDL_BUTTON_LEFT) return false;
+  for (int i = 0; i < 5; ++i) {
     if (controls[i].w <= 0 || !SDL_PointInRect(&(SDL_Point){e->button.x, e->button.y}, &controls[i])) continue;
-    if (!enabled[i]) return true;
-    if (i < 2) {
+    if (!enabled[i] || (!path && i != 3)) return true;
+    if (i == 4) {
+      SceneEditorMotionPathCameraFocus(!focus, SceneEditorDocumentRevision(), message, size);
+    } else if (i == 3) {
+      SceneEditorMotionPathConvertLegacy(true, SceneEditorDocumentRevision(), message, size);
+    } else if (i < 2) {
       SceneEditorMotionPathBindCamera(path->id, i == 0, SceneEditorDocumentRevision(), message, size);
     } else {
       static TimelineDocument doc;
@@ -58,8 +69,8 @@ bool SceneEditorCameraPathPanelEvent(SDL_Event *e, const MotionPath *path,
   return false;
 }
 bool SceneEditorCameraPathPanelControl(const char *name, SDL_Rect *out) {
-  const char *names[] = {"path_camera_attach", "path_camera_detach", "path_camera_timing"};
-  for (int i = 0; i < 3; ++i)
+  const char *names[] = {"path_camera_attach", "path_camera_detach", "path_camera_timing", "path_camera_convert", "path_camera_focus"};
+  for (int i = 0; i < 5; ++i)
     if (!strcmp(name, names[i])) { *out = controls[i]; return out->w > 0; }
   return false;
 }

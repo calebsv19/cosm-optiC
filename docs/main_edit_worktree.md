@@ -1,5 +1,36 @@
 # RayTracing Main Edit Worktree
 
+## September 29 M3 completion audit
+
+M3 implementation and automated acceptance are complete in Main Edit. Explicit
+camera/light legacy conversion copies cubic or degree-elevated quadratic XYZ
+geometry, fits independent route timing, preserves scene/source identities and
+refuses unsupported fits atomically. Camera focus is an explicit saved binding
+option applied after final translation; default-off preserves old output.
+Combined mesh/camera/light followers retain independent timing, FOV/intensity,
+source restoration, undo/redo and fresh-process persistence.
+
+Build: Clang native/headless plus foundation/entity/view/navigation contracts pass.
+Targeted: cubic scale-2 and quadratic scale-0.5 conversion, capacity/stale-source/
+subframe-easing refusals, combined followers, focus edge cases and compact-window
+controls pass. Render: four converted frames meet pose/pixel tolerance and four
+combined frames match independent baked references exactly for each curve mode.
+Six frozen legacy and eight prior camera/light attachment images are unchanged.
+Registry/snapshot/evaluated-preview/light-motion/light-persistence groups and
+fresh M2 restoration/edit-targeting prepare/reopen pass.
+The unrelated full renderer/material suite was not rerun for this bounded slice.
+Evidence: `build/dm3-accepted`, `build/dm3-completion-quadratic`,
+`build/dm3-legacy-final`, and `build/dm3-*.log` in Main Edit.
+
+Conversion limits: 2–32 points, 4096 frames, 128 integer-frame keys; positional
+bound `1e-4 * max(1, route length)` in authored units, tested at integer/eighth
+frames, not a continuous analytic bound. Existing route timing is never replaced.
+One main camera and the existing animated-light slot are supported. Focus uses
+an existing authored scene target. Human hands-on usability acceptance remains
+separate. M4 smoothness is next; M5 and original E/F remain later. No version,
+canonical adoption, publication, or remote operation is part of this closure.
+A minor release is recommended; VERSION remains 0.17.0.
+
 ## September 29 M3 animated-light attachment checkpoint
 
 The clean camera checkpoint `7877cc8` is extended in the registered Main Edit

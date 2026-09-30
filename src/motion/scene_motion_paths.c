@@ -104,6 +104,12 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
         !json_object_is_type(enabled, json_type_boolean))
       return fail(m, n, "invalid binding; placement must be on_path");
     b->enabled = json_object_get_boolean(enabled);
+    json_object *focus = member(o, "use_focus_target");
+    if (focus) {
+      if (strcmp(b->target_id, "camera/main") || !json_object_is_type(focus, json_type_boolean))
+        return fail(m, n, "focus target is a camera-only boolean");
+      b->use_focus_target = json_object_get_boolean(focus);
+    }
     json_object *restore = member(o, camera ? "restore_position_tracks" : "restore_xyz_tracks");
     if (restore) {
       if (!json_object_is_type(restore, json_type_array) ||
@@ -193,6 +199,8 @@ json_object *MotionPathsToJson(const MotionPaths *d) {
     json_object_object_add(o, "path_id", json_object_new_string(b->path_id));
     json_object_object_add(o, "enabled", json_object_new_boolean(b->enabled));
     json_object_object_add(o, "placement", json_object_new_string("on_path"));
+    if (!strcmp(b->target_id, "camera/main"))
+      json_object_object_add(o, "use_focus_target", json_object_new_boolean(b->use_focus_target));
     if (b->restore_known) {
       json_object *restore = json_object_new_array();
       for (size_t j = 0; j < b->restore_count; ++j)

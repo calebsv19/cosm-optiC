@@ -21,8 +21,12 @@ first camera attachment slice is implemented: independent route translation,
 retained legacy orientation/FOV, undo/detach and fresh reopening pass. The next
 light attachment slice supports the existing animated light with independent
 route timing and intensity, exact source restoration and native/headless parity.
-Explicit legacy conversion and combined-follower acceptance remain open. Human acceptance remains
-separate. See [Reusable movement paths](motion_paths.md).
+Explicit cubic/quadratic legacy conversion and combined mesh/camera/light
+follower verification now pass, including opt-in scene-focus composition,
+independent timing, source restoration and exact baked-reference images.
+Conversion refuses unsupported fits atomically under its documented sampled
+tolerance/capacity limits. M3 implementation and automated acceptance are
+complete; M4 smoothness is next. Human usability acceptance remains separate. See [Reusable movement paths](motion_paths.md).
 
 
 ## Final-render object timeline parity

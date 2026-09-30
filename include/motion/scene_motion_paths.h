@@ -23,6 +23,7 @@ typedef struct MotionPathBinding {
   /* Empty for legacy object bindings; otherwise a typed camera or light target. */
   char target_id[TIMELINE_ID_CAPACITY];
   bool enabled;
+  bool use_focus_target; /* Camera-only explicit orientation owner; default off. */
   /* Optional in v1: absent on older bindings. Empty means prior static source.
    * Keep track identities, not just axes: disabled alternatives must stay off. */
   bool restore_known;

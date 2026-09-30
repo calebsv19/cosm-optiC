@@ -143,6 +143,7 @@ static bool ray_evaluated_capture_camera(const TimelineEvaluationContext* contex
                 sceneSettings.windowWidth, sceneSettings.windowHeight,
                 &sample)) return false;
     } else return false;
+    EvaluatedCameraApplyFocusTarget(&sample);
     memset(out_camera, 0, sizeof(*out_camera));
     out_camera->valid = sample.valid;
     out_camera->uses_authored_path = sample.uses_authored_path;

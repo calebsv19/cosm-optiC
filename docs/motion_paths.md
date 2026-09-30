@@ -112,7 +112,7 @@ root. Proof edits only the copied scene; render outputs remain under that root.
 The render check uses a fixed inspection camera and fixed lighting, verifies
 editor/headless positions, pixel-exact baked references, a visible move/hold/resume,
 and consecutive frames in one process. It does not claim physical simulation,
-orientation following, parenting, looping, or camera/light migration (D-M3).
+orientation following, parenting, or looping. Camera/light migration has its own D-M3 checks below.
 
 The native `--dm2-repairs` and separate `--dm2-repairs-reopen` modes use another
 fresh fixture prepared with the same command. They cover exact prior-source and
@@ -144,11 +144,9 @@ therefore does not retime the old camera orientation. Existing scenes without a
 camera binding continue through the legacy sampler unchanged. Older versions of
 optiC do not support the new typed camera binding/property.
 
-This is explicit attachment to a newly authored/shared route, not conversion of
-an old route. A tested legacy-shape/timing conversion with
-a declared tolerance remains open M3 work. Focus-target-specific composition,
-multi-camera authoring and broader rendering-mode coverage are not claimed by
-this first slice.
+Attachment and explicit legacy conversion are separate commands. Conversion and
+opt-in focus-target composition are described below. Multiple-camera authoring
+is outside this slice.
 
 Verification: prepare a fresh fixture using `check_motion_path_render.py`, run
 `--dm3-camera` and `--dm3-camera-reopen` in separate native harness processes,
@@ -179,9 +177,8 @@ sampling. Legacy scenes without a route binding retain their existing sampler.
 Older versions of optiC do not support this light binding/property.
 
 This slice supports the one animated light owned by the existing light timeline.
-It does not add multiple animated-light slots or convert the old light path.
-Explicit legacy conversion, combined-follower acceptance and focus-target
-composition remain later M3 work.
+It does not add multiple animated-light slots. Explicit legacy conversion and
+combined-follower/focus-target verification are complete as described below.
 
 Verification: prepare a fresh fixture with `check_motion_path_render.py`, run
 `--dm3-light` then `--dm3-light-reopen` in separate native harness processes, and
@@ -189,3 +186,46 @@ run `tests/integration/check_light_route_render.py --root <fixture> --cli
 <headless-cli>`. Tests exercise animated intensity, route hold, rebind, inactive
 position history, invalid-target/source/ownership refusal, detach, undo/redo and
 four exact native/headless/baked-reference frame comparisons.
+
+
+## Explicit legacy conversion and focus composition (D-M3 complete)
+
+In **Paths > Attach followers**, use **Convert legacy camera route** or
+**Convert legacy light route**. Conversion is available with an empty route
+library. It creates reusable XYZ geometry and separate route-progress timing,
+retains stable scene/object/light identities, and disables only the old position
+source. The follower panel shows its bound route and inactive source track.
+Detach restores that source; undo/redo and save/reopen preserve the transaction.
+Camera orientation/FOV and light intensity keep their original channels.
+
+Cubic geometry is copied; quadratic geometry is degree-elevated to cubic.
+Camera legacy XY-distance timing and light legacy XYZ-distance timing are fitted
+to the common route sampler. Conversion checks every integer and eighth-frame
+sample in the timeline range against a positional tolerance of
+`1e-4 * max(1, route_length)` in authored scene units. This is a sampled bound,
+not an analytic guarantee between samples. Limits are 2–32 path points,
+4096 timeline frames and 128 integer-frame timing keys. Unsupported sharp
+subframe easing, exhausted capacity, existing route timing or an active binding
+cause an atomic refusal with the original scene retained. Conversion requires
+an active legacy progress source and an activated 3D scene timeline.
+
+For a bound camera in a scene with an authored `camera_focus_target`, click
+**Use scene focus target**. This explicitly enables `use_focus_target` on the
+camera binding and aims from the final route position. It owns yaw/pitch while
+on; FOV stays independent. Turning it off restores authored orientation.
+Coincident camera/target positions retain the sampled orientation; vertical
+pitch retains the established ±70-degree limit. The default is off, including
+older bindings without the flag, so existing scenes keep their previous output.
+This control uses the existing scene target; it does not create new focus targets.
+
+Verification uses a fresh `check_motion_path_render.py --prepare` fixture,
+then the native harness `--dm3-complete` and `--dm3-complete-reopen` in separate
+processes, followed by `check_m3_completion_render.py --root <fixture> --cli
+<headless-cli>`. Cubic/scale-2 and quadratic/scale-0.5 cases passed conversion
+pose/pixel tolerance, preserved identities, refusal/undo/reopen, combined
+mesh/camera/light followers, independent timing, shape edits and focus composition.
+Four combined frames match independently baked reference images exactly.
+Six frozen legacy images and eight previous camera/light attachment images
+remain pixel-identical. Compact-window controls are exercised at 1024×640.
+M3 implementation and automated acceptance are complete; hands-on usability
+acceptance remains separate. D-M4 smoothness is the next implementation boundary.

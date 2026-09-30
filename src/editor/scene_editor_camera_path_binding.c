@@ -6,6 +6,7 @@
 #include "editor/scene_editor_timeline.h"
 #include "scene_editor_motion_paths_internal.h"
 #include <stdio.h>
+#include "import/runtime_scene_bridge.h"
 #include <string.h>
 static bool driver(const char *p) {
   return !strcmp(p, "camera/path_progress") || !strcmp(p, "camera/position");
@@ -101,4 +102,23 @@ bool SceneEditorMotionPathBindCamera(const char *path_id, bool attach,
   if (attach) SceneEditorTimelineSelectTrack(progress);
   snprintf(message, size, "%s", attach ? "Camera on route; orientation and lens retained." : "Prior camera position source restored.");
   return true;
+}
+
+bool SceneEditorMotionPathCameraFocus(bool enabled, unsigned long long revision,
+    char *message, size_t size) {
+  MotionPaths paths;
+  RuntimeSceneBridge3DScaffoldState scaffold={0};
+  runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
+  if (enabled && !scaffold.has_camera_focus_target)
+    return fail(message,size,"Scene has no authored camera focus target.");
+  if (!SceneEditorMotionPathsRead(&paths)) return false;
+  for (size_t i=0;i<paths.binding_count;++i) {
+    MotionPathBinding *b=&paths.bindings[i];
+    if (!b->enabled || strcmp(b->target_id,"camera/main")) continue;
+    b->use_focus_target=enabled;
+    if (!SceneEditorMotionPathsCommit(&paths,NULL,revision,message,size)) return false;
+    if(message && size)snprintf(message,size,"%s",enabled?"Scene focus target owns orientation; yaw/pitch retained inactive.":"Authored orientation restored.");
+    return true;
+  }
+  return fail(message,size,"Attach the camera before selecting a focus target.");
 }
