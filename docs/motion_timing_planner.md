@@ -4,6 +4,10 @@ This is an engineering API, not an enabled editor feature. The straight-route
 planner is detached from scene persistence and evaluation. M1–M4 scene behavior,
 timing keys, follower bindings and direct-XYZ trails remain unchanged.
 
+M5.3 fixed-arrival/hold/departure scheduling now extends this API; see
+[waypoint scheduling](motion_timing_schedule.md). The contract below remains the
+minimum-duration single-leg foundation.
+
 ## Contract
 
 `motion/motion_timing_plan.h` builds minimum-duration monotone motion along a
@@ -72,8 +76,9 @@ factor preserves duration. Caller-side route projection is future integration.
 - Geometry, world scale, timeline rate or timing edits must invalidate or
   explicitly revalidate planned-limit status. Baked curves need verification of
   their actual evaluated motion, not just the original planner profile.
-- Fixed arrival times, intermediate waypoints/holds, curves/corners, saved plan
-  schema and UI apply/replan behavior remain subsequent M5 slices.
+- Fixed arrival times and intermediate waypoints/holds are implemented in the
+  detached M5.3 scheduler. Curves/corners, saved plan schema and UI apply/replan
+  behavior remain subsequent M5 slices.
 
 ## Verification
 

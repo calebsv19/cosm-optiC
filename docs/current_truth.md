@@ -1,5 +1,16 @@
 # optiC Current Truth
 
+## September 29 M5.3 detached scheduling checkpoint
+
+Arrival/hold/departure scheduling now supports fixed-time anchors, preserved
+waypoint speeds, zero-speed reversals, feasible slack distribution and explicit
+conflict readback. Fixed-time profiles and deterministic seeking pass numerical
+and sanitizer checks. See [scheduling contract](motion_timing_schedule.md).
+This remains detached: existing saved scenes, runtime evaluation and installed
+M4 app are unchanged. M5.4 curved/corner route bounds are the next separate slice;
+M5 is not complete.
+
+
 ## M5 detached timing foundation (M5.1–M5.2)
 
 The UI-free straight-route timing API is implemented with explicit speed,
