@@ -1,5 +1,16 @@
 # optiC Current Truth
 
+## M5 detached timing foundation (M5.1–M5.2)
+
+The UI-free straight-route timing API is implemented with explicit speed,
+acceleration, braking and endpoint-speed limits, signed traversal, deterministic
+sampling and atomic refusal. It is not connected to scene evaluation or editing;
+M1–M4 saved behavior and the installed M4 workflow remain unchanged. See the
+[timing planner contract](motion_timing_planner.md). Arrival/hold/departure
+scheduling, curved-route bounds and UI/persistence integration remain later M5
+slices. This checkpoint does not complete M5.
+
+
 ## Camera/light path authoring usability increment
 
 Render now groups Camera/Light and Path shape/Timing explicitly, presents compact

@@ -1,5 +1,15 @@
 # RayTracing Main Edit Worktree
 
+## September 29 M5.1–M5.2 detached foundation checkpoint
+
+Main Edit extends clean M4 f2491a1 with a detached straight-route timing planner
+and explicit compatibility/limit contract. Numerical, sanitizer, native/headless
+build and existing timeline contract checks pass. No live evaluator or UI consumes
+the planner yet; the installed app remains M4 f2491a1, intentionally unrefreshed.
+See `motion_timing_planner.md` and private work status for the source checkpoint.
+M5.3 arrival/hold/departure scheduling is next under separate authorization.
+
+
 ## September 29 M4 source completion checkpoint
 
 M4 spatial policies, temporal smoothing, movement feedback and derived editable
