@@ -52,7 +52,7 @@ static void dm3_camera_acceptance(SceneEditor *editor, const char *scene, bool r
   assert(SceneEditorMotionPathCreate("Camera route", origin, 2, SceneEditorDocumentRevision(), id, sizeof(id), message, sizeof(message)));
   SceneEditorSessionRuntimeRender(editor);
   authoring_control(editor, "paths");
-  authoring_control(editor, "path_followers");
+  authoring_control(editor, "path_followers");authoring_control(editor,"path_follower_camera");
   unsigned long long rev = SceneEditorDocumentRevision();
   authoring_control(editor, "path_camera_attach");
   assert(SceneEditorDocumentRevision() == rev + 1);

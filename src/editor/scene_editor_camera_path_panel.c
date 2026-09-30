@@ -33,6 +33,7 @@ int SceneEditorCameraPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
                          "Detach camera: restore source", "Edit camera route timing >", "Convert legacy camera route", focus ? "Scene focus target: on" : "Use scene focus target"};
   enabled[0] = path && !bound; enabled[1] = enabled[2] = bound; enabled[3] = !binding; enabled[4] = bound;
   for (int i = 0; i < 5; ++i) {
+    if(i==2) {controls[i]=(SDL_Rect){0};continue;} /* shared follower header owns timing */
     controls[i] = (SDL_Rect){x, y, width, 28};
     SceneEditorRenderButton(r, controls[i], labels[i], false, enabled[i]);
     if (y < clip.y || y + 28 > clip.y + clip.h) controls[i] = (SDL_Rect){0};
@@ -53,6 +54,10 @@ bool SceneEditorCameraPathPanelEvent(SDL_Event *e, const MotionPath *path,
     } else if (i == 3) {
       SceneEditorMotionPathConvertLegacy(true, SceneEditorDocumentRevision(), message, size);
     } else if (i < 2) {
+      if (i == 0 && !SceneEditorTimelineCurrentSample(&(TimelineSample){0}) &&
+          !SceneEditorTimelineActivate()) {
+        snprintf(message,size,"%s",SceneEditorTimelineStatus());return true;
+      }
       SceneEditorMotionPathBindCamera(path->id, i == 0, SceneEditorDocumentRevision(), message, size);
     } else {
       static TimelineDocument doc;

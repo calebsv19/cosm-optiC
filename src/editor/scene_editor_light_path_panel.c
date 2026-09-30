@@ -35,8 +35,9 @@ int SceneEditorLightPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
   }
   const char *labels[] = {bound ? "Light attached to this route" : "Attach light on this route",
                          "Detach light: restore source", "Edit light route timing >", "Convert legacy light route"};
-  enabled[0] = path && target[0] && !bound; enabled[1] = enabled[2] = bound; enabled[3] = !binding;
+  enabled[0] = path && !bound; enabled[1] = enabled[2] = bound; enabled[3] = !binding;
   for (int i = 0; i < 4; ++i) {
+    if(i==2) {controls[i]=(SDL_Rect){0};continue;} /* shared follower header owns timing */
     controls[i] = (SDL_Rect){x, y, width, 28};
     SceneEditorRenderButton(r, controls[i], labels[i], false, enabled[i]);
     if (y < clip.y || y + 28 > clip.y + clip.h) controls[i] = (SDL_Rect){0};
@@ -55,6 +56,7 @@ bool SceneEditorLightPathPanelEvent(SDL_Event *e, const MotionPath *path,
     if (i == 3) {
       SceneEditorMotionPathConvertLegacy(false, SceneEditorDocumentRevision(), message, size);
     } else if (i < 2) {
+      if(i==0 && !target[0] && !SceneEditorMotionPathPrepareLight(message,size)) return true;
       SceneEditorMotionPathBindLight(path->id, i == 0, SceneEditorDocumentRevision(), message, size);
     } else {
       static TimelineDocument doc;

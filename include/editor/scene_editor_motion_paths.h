@@ -12,6 +12,7 @@ bool SceneEditorMotionPathBind(const char *object_id, const char *path_id,
                                char *message, size_t size);
 bool SceneEditorMotionPathCameraFocus(bool enabled, unsigned long long revision, char *message, size_t size);
 bool SceneEditorMotionPathConvertLegacy(bool camera, unsigned long long revision, char *message, size_t size);
+bool SceneEditorMotionPathPrepareLight(char *message, size_t size);
 bool SceneEditorMotionPathBindLight(const char *path_id, bool attach, unsigned long long revision, char *message, size_t size);
 bool SceneEditorMotionPathBindCamera(const char *path_id, bool attach,
     unsigned long long revision, char *message, size_t size);
@@ -22,6 +23,7 @@ bool SceneEditorMotionPathCreate(const char *name, const double origin[3],
 void SceneEditorMotionPathPanelReset(void);
 void SceneEditorMotionPathPanelSelect(bool selected);
 bool SceneEditorMotionPathPanelActive(void);
+const char *SceneEditorMotionPathPanelStatus(void);
 bool SceneEditorMotionPathPanelEvent(SceneEditor *editor, SDL_Event *event,
                                      const SceneEditorPaneLayout *layout);
 void SceneEditorMotionPathOverlayDraw(SceneEditor *editor,

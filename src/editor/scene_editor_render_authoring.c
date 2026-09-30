@@ -67,7 +67,10 @@ void SceneEditorRenderButton(SDL_Renderer* r,SDL_Rect rect,const char* text,bool
         SDL_SetRenderDrawColor(r,ink.r,ink.g,ink.b,255);
         SDL_Rect edge={rect.x+1,rect.y+1,rect.w-2,rect.h-2};SDL_RenderDrawRect(r,&edge);
     }
-    ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),text,rect.x+8,rect.y+8,ink);
+    TTF_Font *font=ray_tracing_font_runtime_get_ui_regular(r,12,9);
+    int text_height=14;
+    ray_tracing_text_measure_utf8(r,font,text,NULL,&text_height);
+    ray_tracing_text_draw_utf8_at(r,font,text,rect.x+8,rect.y+(rect.h-text_height)/2,ink);
     SDL_RenderSetClipRect(r,clipped?&prior:NULL);
 }
 bool SceneEditorRenderAuthoringTiming(void) {return timing;}
@@ -191,14 +194,14 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
     SDL_bool clipped=SDL_RenderIsClipEnabled(r);SDL_RenderGetClipRect(r,&prior);SDL_RenderSetClipRect(r,&pane);
     RayTracingThemePalette p=SceneEditorChromeShellResolvePalette();
     SDL_SetRenderDrawColor(r,p.panel_fill.r,p.panel_fill.g,p.panel_fill.b,p.panel_fill.a);SDL_RenderFillRect(r,&pane);
-    int x=pane.x+10,y=pane.y+10-left_offset,w=pane.w-20;
+    int x=pane.x+10,y=pane.y+4-left_offset,w=pane.w-20;
 
-    controls[0]=(SDL_Rect){x,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[0],"Camera",camera && !object && !SceneEditorMotionPathPanelActive(),true);
+    controls[0]=(SDL_Rect){x,y,(w-12)/3,24};SceneEditorRenderButton(r,controls[0],"Camera",camera && !object && !SceneEditorMotionPathPanelActive(),true);
     static RuntimeSceneLightTimelineDocument light;
     bool has_light=RuntimeSceneLightTimelineGetLast(&light);
     snprintf(light_label,sizeof(light_label),"Light: %s",has_light?light.timeline.tracks[light.progress_track_index].target_id+6:"path not bound");
-    controls[1]=(SDL_Rect){x+(w+6)/3,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[1],"Light",!camera && !object && !SceneEditorMotionPathPanelActive(),true);
-    controls[16]=(SDL_Rect){x+2*(w+6)/3,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[16],"Paths",SceneEditorMotionPathPanelActive(),true);y+=38;
+    controls[1]=(SDL_Rect){x+(w+6)/3,y,(w-12)/3,24};SceneEditorRenderButton(r,controls[1],"Light",!camera && !object && !SceneEditorMotionPathPanelActive(),true);
+    controls[16]=(SDL_Rect){x+2*(w+6)/3,y,(w-12)/3,24};SceneEditorRenderButton(r,controls[16],"Paths",SceneEditorMotionPathPanelActive(),true);y+=30;
     if(SceneEditorMotionPathPanelActive()) {SDL_RenderSetClipRect(r,clipped?&prior:NULL);SceneEditorMotionPathPanelDraw(editor,layout);return;}
     label(r,object?"Subject: selected object":camera?"Subject: Camera":light_label,x,y);y+=26;
     controls[2]=(SDL_Rect){x,y,(w-6)/2,34};controls[3]=(SDL_Rect){x+(w-6)/2+6,y,(w-6)/2,34};
@@ -218,7 +221,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
         controls_enabled[12]=point>=0 && point<path->numPoints;
         for(int i=6;i<=7;++i) {controls[i]=(SDL_Rect){x+(i-6)*(w+6)/2,y,(w-6)/2,34};SceneEditorRenderButton(r,controls[i],i==6?"Previous point":"Next point",false,path->numPoints>0);}y+=42;
         const char* tools[]={"Move","Add","Delete"};
-        for(int i=8;i<=10;++i) {controls[i]=(SDL_Rect){x+(i-8)*(w+6)/3,y,(w-12)/3,30};SceneEditorRenderButton(r,controls[i],tools[i-8],SceneEditorToolStateGetActive()==(SceneEditorTool)(i-8),true);}y+=38;
+        for(int i=8;i<=10;++i) {controls[i]=(SDL_Rect){x+(i-8)*(w+6)/3,y,(w-12)/3,24};SceneEditorRenderButton(r,controls[i],tools[i-8],SceneEditorToolStateGetActive()==(SceneEditorTool)(i-8),true);}y+=38;
         controls[11]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[11],path->mode==BEZIER_CUBIC?"Path: Cubic Bezier":"Path: Quadratic Bezier",false,true);y+=40;
         controls[12]=(SDL_Rect){x,y,w,34};SceneEditorRenderButton(r,controls[12],point>=0 && point<path->numPoints && path->handleLink[point]?"Handles: Linked":"Handles: Independent",false,controls_enabled[12]);y+=40;
         snprintf(readouts[5],sizeof(readouts[5]),point>=0?"Selected point: %d of %d":"No point selected (%d points)",point>=0?point+1:path->numPoints,path->numPoints);

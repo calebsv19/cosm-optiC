@@ -6,10 +6,13 @@ static void authoring_control(SceneEditor* editor,const char* name) {
     SDL_Rect rect;
     if(!SceneEditorRenderAuthoringControl(name,&rect) && SceneEditorMotionPathPanelActive()) {
         SceneEditorPaneLayout layout;assert(SceneEditorGetPaneLayout(&layout));
-        SDL_Event e={0};e.type=SDL_MOUSEWHEEL;e.wheel.mouseX=layout.left_content_rect.x+10;e.wheel.mouseY=layout.left_content_rect.y+65;
-        e.wheel.y=100;SceneEditorSessionRuntimeHandleEvent(editor,&e);SceneEditorSessionRuntimeRender(editor);
-        for(int i=0;i<30 && !SceneEditorRenderAuthoringControl(name,&rect);++i) {
-            e.wheel.y=-1;SceneEditorSessionRuntimeHandleEvent(editor,&e);SceneEditorSessionRuntimeRender(editor);
+        SDL_Rect panes[]={layout.left_content_rect,layout.right_content_rect};
+        for(int pane=0;pane<2 && !SceneEditorRenderAuthoringControl(name,&rect);++pane) {
+            SDL_Event e={0};e.type=SDL_MOUSEWHEEL;e.wheel.mouseX=panes[pane].x+10;e.wheel.mouseY=panes[pane].y+65;
+            e.wheel.y=100;SceneEditorSessionRuntimeHandleEvent(editor,&e);SceneEditorSessionRuntimeRender(editor);
+            for(int i=0;i<30 && !SceneEditorRenderAuthoringControl(name,&rect);++i) {
+                e.wheel.y=-1;SceneEditorSessionRuntimeHandleEvent(editor,&e);SceneEditorSessionRuntimeRender(editor);
+            }
         }
     }
     if(!SceneEditorRenderAuthoringControl(name,&rect)) fprintf(stderr,"Missing authoring control: %s\n",name);

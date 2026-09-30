@@ -137,7 +137,9 @@ static void dm5(SceneEditor *editor, const char *scene, bool reopen) {
     assert(SceneEditorDocumentUndo(message, sizeof(message)));
     SceneEditorMotionPathPanelSelect(true);
     SceneEditorSessionRuntimeRender(editor);
-    dm4_inspector_control(editor, "plan_open");
+    authoring_control(editor,"path_followers");
+    dm4_inspector_control(editor,"path_follower_camera");
+    dm4_inspector_control(editor,"path_follower_plan");
     dm4_inspector_control(editor, "plan_preview");
     assert(MotionPlansRuntimeActive(targets[0]));
     dm4_inspector_control(editor, "plan_restore");

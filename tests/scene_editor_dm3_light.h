@@ -75,7 +75,7 @@ static void dm3_light_acceptance(SceneEditor *editor, const char *scene, bool re
   assert(SceneEditorMotionPathCreate("Light route", origin, 4, SceneEditorDocumentRevision(), id, sizeof(id), message, sizeof(message)));
   SceneEditorSessionRuntimeRender(editor);
   authoring_control(editor, "paths");
-  authoring_control(editor, "path_followers");
+  authoring_control(editor, "path_followers");authoring_control(editor,"path_follower_light");
   unsigned long long rev = SceneEditorDocumentRevision();
   authoring_control(editor, "path_light_attach");
   assert(SceneEditorDocumentRevision() == rev + 1);

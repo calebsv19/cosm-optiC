@@ -40,7 +40,7 @@ static const char *names[] = {
     "plan_start",    "plan_speed",       "plan_accel",  "plan_brake",
     "plan_progress", "plan_point_speed", "plan_hold",   "plan_arrival"};
 static struct {
-  bool open, dirty;
+  bool open, dirty, pinned;
   int editing, point, target_index;
   unsigned long long revision;
   char path[64], target[TIMELINE_ID_CAPACITY],
@@ -73,6 +73,21 @@ static void load(void) {
     ui.request.points[1].position = 1;
   }
 }
+bool SceneEditorMotionPlanPanelOpenTarget(const char *path,const char *target) {
+  MotionPaths paths;
+  if(!path || !target || !SceneEditorMotionPathsRead(&paths)) return false;
+  bool found=false;
+  for(size_t i=0;i<paths.binding_count;++i) {
+    const MotionPathBinding *b=&paths.bindings[i];char id[TIMELINE_ID_CAPACITY];
+    snprintf(id,sizeof(id),b->target_id[0]?"%s":"object/%s",b->target_id[0]?b->target_id:b->object_id);
+    if(b->enabled && !strcmp(b->path_id,path) && !strcmp(id,target)) found=true;
+  }
+  if(!found) return false;
+  SceneEditorMotionPlanPanelReset();
+  snprintf(ui.path,sizeof(ui.path),"%s",path);snprintf(ui.target,sizeof(ui.target),"%s",target);
+  ui.open=true;ui.pinned=true;load();return true;
+}
+const char *SceneEditorMotionPlanPanelTarget(void) { return ui.target; }
 static void label(SDL_Renderer *r, const char *s, int x, int y) {
   ray_tracing_text_draw_utf8_at(
       r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9), s, x, y,
@@ -120,7 +135,7 @@ int SceneEditorMotionPlanPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     SceneEditorMotionPlanPanelReset();
     snprintf(ui.path, sizeof(ui.path), "%s", p ? p->id : "");
   }
-  y = button(r, OPEN, ui.open ? "< Path shape" : "Plan movement limits >", clip,
+  y = button(r, OPEN, ui.open ? "< Path shape" : "Follower timing / limits >", clip,
              x, y, w, p != NULL);
   if (!ui.open || !p)
     return y;
@@ -138,6 +153,12 @@ int SceneEditorMotionPlanPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     label(r, "Attach a follower to plan its timing.", x, y);
     return y + 30;
   }
+  if(ui.pinned) {
+    int found=-1;
+    for(size_t i=0;i<ui.target_count;++i) if(!strcmp(ui.target,ui.targets[i])) found=(int)i;
+    if(found<0) {label(r,"Follower detached. Select an attached follower.",x,y);return y+30;}
+    ui.target_index=found;
+  }
   if (ui.target_index >= (int)ui.target_count)
     ui.target_index = 0;
   if (strcmp(ui.target, ui.targets[ui.target_index])) {
@@ -145,8 +166,8 @@ int SceneEditorMotionPlanPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     load();
   }
   char text[160];
-  snprintf(text, sizeof(text), "Follower: %s >", ui.target);
-  y = button(r, TARGET, text, clip, x, y, w, true);
+  snprintf(text, sizeof(text), ui.pinned?"Follower: %s":"Follower: %s >", ui.target);
+  y = button(r, TARGET, text, clip, x, y, w, !ui.pinned);
   label(r,
         MotionPlansRuntimeActive(ui.target)
             ? (ui.dirty ? "APPLIED + unapplied draft edits"

@@ -1,5 +1,13 @@
 # RayTracing Main Edit Worktree
 
+## September 30 path usability checkpoint
+
+The six path UI slices and bounded native/render regression audit pass. See
+[movement paths](motion_paths.md) for the compact library, contextual follower
+inspectors, XYZ gizmo, smoothing and selected-target planning workflow.
+Source and installed identity are recorded in private work status after delivery.
+Human usability acceptance remains separate; no VERSION or canonical change.
+
 ## M5.4–M5.6 source and behavior acceptance
 
 M5 now has explicit retained planning for object, camera and light route followers.

@@ -84,12 +84,13 @@ static void dm4_spatial(SceneEditor *editor, bool reopen) {
   choose_menu(editor,1,0);assert(SceneEditorMotionPathsRead(&paths) && paths.paths[0].points[0].handle_mode==MOTION_HANDLE_INDEPENDENT);
   choose_menu(editor,1,1);assert(SceneEditorMotionPathsRead(&paths) && paths.paths[0].points[0].handle_mode==MOTION_HANDLE_LINKED);
   dm4_handle_drag(editor,true);dm4_handle_drag(editor,false);
+  dm4_inspector_control(editor,"path_point_details");
   dm4_inspector_control(editor,"path_out_y");authoring_text(editor,"2");
   assert(SceneEditorMotionPathsRead(&paths));
   assert(paths.paths[0].points[0].outgoing[1]==2);
   double *in=paths.paths[0].points[0].incoming,*out=paths.paths[0].points[0].outgoing;
   assert(fabs(in[0]*out[1]-in[1]*out[0])<1e-12 && in[1]<0);
-  dm4_inspector_control(editor,"path_handle_mode");
+  dm4_inspector_control(editor,"path_corner");
   assert(SceneEditorMotionPathsRead(&paths) && paths.paths[0].points[0].handle_mode==MOTION_HANDLE_CORNER);
   assert(MotionPathSetHandleMode(&paths.paths[0].points[1],MOTION_HANDLE_LINKED));
   assert(SceneEditorMotionPathsSet(&paths,SceneEditorDocumentRevision(),message,sizeof(message)));

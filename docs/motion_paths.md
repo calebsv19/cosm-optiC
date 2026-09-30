@@ -1,42 +1,49 @@
 # Reusable movement paths (D-M2 / D-M3 camera and light attachment)
 
 In **Render**, choose **Paths** beside Camera and Light. This is the independent
-path library. D-M3 adds explicit camera and animated-light attachment below
-the object controls.
+path library. Choose Attach / inspect followers to open the Object, Camera, or Light inspector.
+Only the selected follower type is shown.
 
-1. Click **+ New Path**, type a name, and press Enter. A scene-sized two-point
-   route starts at the selected object's base position, or the viewport center.
-   It is framed automatically and the **Add: Shift-click** placement preview becomes active.
-2. **Shift-click** in the viewport to append points. Plain clicks never add points.
-   A cursor preview shows the next segment.
-   Placement uses the XY plane at **Draw plane Z** in the inspector. Press Escape
-   or click **Move** when finished. Shift-click also appends a point in Move mode.
-   Timeline Shift-click keeps its separate multi-selection behavior.
-3. Use the controls in the left Paths pane to **Move**, **Add: Shift-click**, **Delete point**, or
-   **Frame path**. Numbered squares identify route points. Drag points/handles in
-   XY; edit their Z numerically. **Split / extend** in the inspector splits the
-   following segment without changing its shape, or extends from the final point.
-   Deletion reconnects neighbors and may change the shape; at least two points
-   remain. Undo restores edits.
-4. **Next segment** switches the outgoing segment between straight and cubic
-   Bezier. Handle values are offsets from their point in authored scene units.
-   Use **Handles** in the inspector to cycle Independent, Smooth / Linked, and Corner.
-   Linked aligns opposite directions while retaining the opposite handle length;
-   Corner collapses both handles. Pulling a corner handle starts Independent
-   shaping. These policies apply to cubic handles; Straight segments retain
-   their explicitly linear geometry. Old scenes default to Independent without
-   changing geometry. Mode changes, numeric edits and drags use retained undo.
-5. Shape the route before attaching anything. Expand **2. Attach followers...**,
-   choose a follower with the object arrows, then **Attach on path**. This places
-   its origin on the route and creates **Path progress** keys from 0 to 1 across
-   the existing timeline range (or a newly established timeline).
-6. Click **Edit follower timing**. Seek with Playhead and enter **At playhead** to
-   create/update a progress key; or right-click empty channel space and edit the
-   selected key's value. `0` is the path start, `1` the end. Equal progress values
-   at two frames make a pause; a later different value resumes movement. Curves
-   edits easing through distance, while Paths edits the route itself.
-7. Use **Save scene + animation** or File > Save. Reopening retains paths,
-   bindings and keys. The playhead is session state.
+1. Click **+ New Path**. It creates and selects a distinct route with a unique
+   default name; existing paths remain in the library. Rename beside the path
+   list and press Enter to commit. The four-row library has page controls.
+2. Use **Add** and **Shift-click** in the viewport to append points. Plain clicks
+   select without adding. Placement uses the XY plane at **Draw plane Z** under
+   point **Details**. Escape or **Move** finishes placement. Timeline Shift-click
+   retains its separate multi-selection behavior.
+3. Click a numbered point. Drag its **X, Y or Z gizmo axis** to move along that
+   world axis, or enter XYZ in the point inspector. A drag previews without
+   changing retained source, commits one undo step on release, and cancels with
+   Escape. Orbit/pan, focus loss and stale document revisions cancel unfinished
+   edits. Tangent handles still use plane dragging with numeric XYZ under Details.
+4. Choose **Smooth (L)**, **Corner**, or **Independent**. Smooth seeds collapsed
+   handles from neighboring points, preserves existing nonzero lengths, aligns
+   them in opposite directions, and curves adjoining segments. Fully coincident
+   points must first be separated. Corner collapses both handles; pulling one
+   starts Independent shaping. Independent preserves current geometry. **L**
+   applies Smooth only while the path point/viewport owns focus, never during
+   text entry or follower/planning editing. In/Out labels distinguish tangents
+   from the point gizmo.
+5. **Split / extend** splits the following segment without changing its shape,
+   or extends from the last point. Delete point reconnects neighbors and keeps
+   at least two points. **Next segment** chooses straight or cubic. Undo restores
+   geometry. Use **Frame** to fit the current route.
+6. Open **Attach / inspect followers**, then choose **Object**, **Camera**, or
+   **Light**. Object uses a named picker. Only the selected type's controls are
+   shown. Attach explicitly; the existing follower list shows what is attached.
+   Each follower has independent progress timing. Shape editing affects every
+   follower on that route.
+7. Select an attached follower, then **Timing** or **Movement limits** at the top
+   of its inspector. Timing selects that follower's progress channel; returning
+   to Paths restores its route and typed inspector. Movement limits pins the
+   same target. Unapplied drafts are discarded when switching targets. Applied
+   plans show **Restore / replan** guidance before geometry edits; see
+   [planned route timing](motion_plans.md).
+8. In Timing, progress 0 is the start and 1 the end. Equal values at two frames
+   make a pause; a later different value resumes movement. Curves edits temporal
+   easing; Paths edits spatial geometry. Use **File > Save**, or **Save scene +
+   animation** under path actions, to retain paths, bindings and keys. The playhead
+   is session state. Path deletion is also in actions and requires detachment first.
 
 **Option + left-drag** orbits, **right-drag** pans, and middle-drag also pans.
 Navigation takes priority over path point/handle picking, even with Shift held.
@@ -133,9 +140,9 @@ and compact toolbar layout.
 
 ## Main camera attachment (first D-M3 slice)
 
-Shape a route, expand **2. Attach followers...**, then scroll to **Attach camera
-on this route**. This explicitly replaces main-camera translation with reusable
-XYZ-distance sampling. **Edit camera route timing** selects the separate
+Shape a route, open **Attach / inspect followers > Camera**, then choose
+**Attach camera on this route**. This explicitly replaces main-camera translation with reusable
+XYZ-distance sampling. **Timing** selects the separate
 `camera/route_progress` channel. Geometry changes do not retime its keys.
 **Detach camera: restore source** restores the prior legacy-progress or direct
 position channel without rewriting it. Bind/rebind/detach use the same retained
@@ -161,10 +168,12 @@ hold, detach restoration, invalid target refusal and exact baked-camera pixels.
 
 ## Animated-light attachment (D-M3)
 
-With the existing light timeline active, select a route in **Paths**, expand
-**2. Attach followers...**, and scroll to the light controls. **Attach light on
+Select a route in **Paths**, open **Attach / inspect followers > Light**.
+The existing animated-light slot is used. If a camera/object timeline already
+exists, light setup preserves those tracks and adds only the required light
+source. Ambiguous light selection is refused with an explicit message. **Attach light on
 this route** switches the animated light to reusable XYZ route geometry and
-creates a `light/route_progress` channel. **Edit light route timing** opens its
+creates a `light/route_progress` channel. **Timing** opens its
 keys; equal values create a hold. The existing intensity channel remains active
 with its original key times and values. Light color, radius and other base
 properties are unchanged.
@@ -291,4 +300,21 @@ Native drag/cancel, compact layout, key-time union, atomic refusal/undo, fresh
 reverse-seek and seven independent baked-image comparisons pass. Combined M4 acceptance also passes: linked geometry, clamped camera/focus,
 light hold and mesh reversal retain independent FOV/intensity, match seven
 headless/baked frames, and preserve M1–M3 regressions. Installed checkpoint
-identity is recorded in the private work status. M5 is a separate future step.
+identity is recorded in the private work status. M5 retained movement planning is implemented; see [planned route timing](motion_plans.md).
+
+## Path usability acceptance
+
+The native harness modes `--path-library`, `--path-gizmo`, `--path-smoothing`
+and `--path-light-setup` use separately prepared fixtures. They cover the complete
+create/name/shape/attach/time/plan/save workflow, axis preview/commit/cancel at
+multiple scales and view angles, explicit smoothing and shortcut focus, and light
+setup after camera timing. `--path-review` captures an existing saved workflow.
+Semantic controls remain available to native agents: `path_follower/<target>`,
+`path_object/<id>`, `path_follower_timing`, `path_follower_plan`,
+`path_gizmo_x/y/z`, `path_smooth`, `path_corner`, and `path_independent`.
+These controls use the same retained commands as human interaction.
+
+Compact 1024×640 layout, M2 source restoration, M3 conversion/focus, M4 spatial
+editing, M5 Apply/Restore/reopen and seven native/headless/baked-image poses pass.
+Automated and visual inspection evidence does not substitute for the user's
+hands-on usability acceptance.

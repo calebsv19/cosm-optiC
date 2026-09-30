@@ -1,5 +1,16 @@
 # src › editor
 
+Reusable path UI separates events and retained commands in
+`scene_editor_motion_path_panel.c` from presentation in
+`scene_editor_motion_path_panel_draw.c`, with private UI state in the internal
+header. Path names are editable beside the bounded path list; new default
+names are unique within the document. Typed follower inspectors expose Timing and Movement limits for the selected
+target. `scene_editor_motion_point_gizmo.c` adapts the existing transform-axis
+projection/picking to retained point edits with preview, cancellation and one undo.
+Explicit Smooth and focus-scoped L use `MotionPathSmoothPoint`; numeric tangent
+edits retain the legacy policy function. Native path usability tests cover the
+continuous workflow and M2–M5 compatibility.
+
 Spatial handle policies live in `src/motion/scene_motion_handles.c`. The path
 inspector and viewport route numeric/drag edits through the same policy function.
 Saved policies default to Independent for older scenes; load never reshapes them.

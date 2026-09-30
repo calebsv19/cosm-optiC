@@ -39,13 +39,9 @@ static void dm2_samples(bool compare) {
 static void dm2_drag(SceneEditor *editor, bool cancel) {
   MotionPaths paths;
   assert(SceneEditorMotionPathsRead(&paths));
-  SceneEditorDigestOverlayProjector projector = dm1_projector();
   double *point = paths.paths[0].points[0].position;
-  double scale = SceneEditorDocumentWorldScale();
-  int x, y;
-  assert(SceneEditorDigestOverlayProjectPoint(&projector, point[0] * scale,
-                                              point[1] * scale,
-                                              point[2] * scale, &x, &y));
+  SDL_Rect handle;assert(SceneEditorRenderAuthoringControl("path_gizmo_x",&handle));
+  int x=handle.x+handle.w/2,y=handle.y+handle.h/2;
   unsigned long long rev = SceneEditorDocumentRevision();
   SDL_Event e = {0};
   e.type = SDL_MOUSEBUTTONDOWN;
@@ -79,6 +75,7 @@ static void dm2_drag(SceneEditor *editor, bool cancel) {
   }
 }
 static void dm2_compact(SceneEditor *editor) {
+  SceneEditorTimelineClearSelection();SceneEditorMotionPathPanelReset();
   SceneEditorMotionPathPanelSelect(true);
   SceneEditorSessionRuntimeRender(editor);
   SDL_SetWindowSize(editor->window, 1024, 640);
@@ -87,6 +84,7 @@ static void dm2_compact(SceneEditor *editor) {
   SceneEditorSessionRuntimeRender(editor); /* swapchain resize may skip first draw */
   SceneEditorPaneLayout layout;
   assert(SceneEditorGetPaneLayout(&layout));
+  authoring_control(editor,"path_point_details");
   SDL_Event wheel = {0};
   wheel.type = SDL_MOUSEWHEEL;
   wheel.wheel.y = -20;
@@ -104,6 +102,8 @@ static void dm2_compact(SceneEditor *editor) {
   wheel.wheel.mouseX = layout.left_content_rect.x + 20;
   SceneEditorSessionRuntimeHandleEvent(editor, &wheel);
   SceneEditorSessionRuntimeRender(editor);
+  authoring_control(editor,"path_actions");
+  SceneEditorSessionRuntimeHandleEvent(editor,&wheel);SceneEditorSessionRuntimeRender(editor);
   assert(SceneEditorRenderAuthoringControl("path_save", &field));
   capture(editor, "dm2_compact.ppm");
 }
@@ -146,6 +146,7 @@ static void dm2_acceptance(SceneEditor *editor, const char *scene,
   authoring_control(editor, "path_z");
   authoring_text(editor, "2");
   authoring_control(editor, "path_previous");
+  authoring_control(editor,"path_point_details");
   authoring_control(editor, "path_out_y");
   authoring_text(editor, "1");
   authoring_control(editor, "path_frame_selected");
@@ -167,7 +168,9 @@ static void dm2_acceptance(SceneEditor *editor, const char *scene,
          paths.bindings[0].enabled);
   /* Deletion while referenced must refuse without a mutation. */
   rev = SceneEditorDocumentRevision();
+  authoring_control(editor,"path_actions");
   authoring_control(editor, "path_delete");
+  authoring_control(editor,"path_actions");
   assert(SceneEditorDocumentRevision() == rev);
   authoring_control(editor, "path_timing");
   assert(!SceneEditorMotionPathPanelActive());
@@ -197,6 +200,7 @@ static void dm2_acceptance(SceneEditor *editor, const char *scene,
   assert(SceneEditorDocumentGetTimeline(&doc) == TIMELINE_STATUS_OK);
   TimelineTrack original = doc.tracks[progress];
   authoring_control(editor, "paths");
+  authoring_control(editor,"path_follower_back");
   authoring_control(editor, "path_previous");
   authoring_control(editor, "path_out_z");
   authoring_text(editor, "1.2");
@@ -217,6 +221,8 @@ static void dm2_acceptance(SceneEditor *editor, const char *scene,
       bad.tracks[i].enabled = true;
   assert(!SceneEditorDocumentSetTimeline(&bad, rev, message, sizeof(message)) &&
          SceneEditorDocumentRevision() == rev);
+  authoring_control(editor,"path_followers");
+  authoring_control(editor,"path_follower_object");
   authoring_control(editor, "path_detach");
   assert(SceneEditorDocumentGetTimeline(&doc) == TIMELINE_STATUS_OK);
   for (size_t i = 0; i < doc.track_count; ++i)

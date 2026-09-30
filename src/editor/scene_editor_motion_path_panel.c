@@ -21,53 +21,53 @@
 #include "scene_editor_motion_path_viewport.h"
 #include "scene_editor_camera_path_panel.h"
 #include "scene_editor_motion_plan_panel.h"
+#include "motion/scene_motion_plans.h"
 #include "scene_editor_light_path_panel.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-enum {
-  NEW,
-  NAME,
-  PREV,
-  NEXT,
-  ADD,
-  REMOVE,
-  MODE,
-  DELETE_PATH,
-  OBJECT_PREV,
-  OBJECT_NEXT,
-  ATTACH,
-  DETACH,
-  TIMING,
-  SAVE,
-  FRAME,
-  SELECT_TOOL,
-  PLACE_TOOL,
-  FRAME_PATH,
-  DEPTH,
-  ATTACH_SECTION,
-  DELETE_TOOL,
-  HANDLE_MODE,
-  CONTROL_COUNT
-};
-static struct {
-  bool active, dragging, placing, show_followers;
-  double plane_z;
-  char path_id[64], object_id[128], draft[128], message[256];
-  char labels[128][200];
-  char point_labels[MOTION_POINT_CAPACITY][16];
-  int label_count, point, editing, offset, max_offset, right_offset, right_max,
-      handle;
-  unsigned long long revision, message_revision;
-  MotionPath drag;
-  SDL_Rect controls[CONTROL_COUNT], rows[MOTION_PATH_CAPACITY], fields[9],
-      viewport;
-  bool enabled[CONTROL_COUNT];
-  SceneEditorDigestOverlayProjector projector;
-  bool projected;
-  int down_x, down_y;
-} ui = {.editing = -1};
+#include "scene_editor_motion_path_panel_internal.h"
+MotionPathPanelState motion_path_ui = {.editing = -1};
+bool MotionPathPanelAppliedTarget(const MotionPaths *paths,const MotionPath *path,char *out,size_t size) {
+  if(!path) return false;
+  for(size_t i=0;i<paths->binding_count;++i) {
+    const MotionPathBinding *b=&paths->bindings[i];
+    if(!b->enabled || strcmp(b->path_id,path->id)) continue;
+    char target[TIMELINE_ID_CAPACITY];
+    snprintf(target,sizeof(target),b->target_id[0]?"%s":"object/%s",b->target_id[0]?b->target_id:b->object_id);
+    if(MotionPlansRuntimeActive(target)) {snprintf(out,size,"%s",target);return true;}
+  }
+  return false;
+}
+bool MotionPathPanelFollowerTarget(const MotionPaths *paths,const MotionPath *path,char *out,size_t size) {
+  if(!path) return false;
+  for(size_t i=0;i<paths->binding_count;++i) {
+    const MotionPathBinding *b=&paths->bindings[i];
+    if(!b->enabled || strcmp(b->path_id,path->id)) continue;
+    bool matches=ui.follower_type==1?!strcmp(b->target_id,"camera/main"):
+      ui.follower_type==2?!strncmp(b->target_id,"light/",6):
+      (!b->target_id[0] && !strcmp(b->object_id,ui.object_id));
+    if(matches) {snprintf(out,size,b->target_id[0]?"%s":"object/%s",b->target_id[0]?b->target_id:b->object_id);return true;}
+  }
+  return false;
+}
+static void select_follower_track(const MotionPaths *paths,const MotionPath *path) {
+  char target[TIMELINE_ID_CAPACITY];static TimelineDocument doc;
+  if(MotionPathPanelFollowerTarget(paths,path,target,sizeof(target)) &&
+      SceneEditorDocumentGetTimeline(&doc)==TIMELINE_STATUS_OK) {
+    for(size_t i=0;i<doc.track_count;++i) {
+      const TimelineTrack *t=&doc.tracks[i];
+      if(t->enabled && !strcmp(t->target_id,target) &&
+          (!strcmp(t->property_id,MOTION_PROGRESS_PROPERTY) ||
+           !strcmp(t->property_id,MOTION_CAMERA_PROGRESS_PROPERTY) ||
+           !strcmp(t->property_id,MOTION_LIGHT_PROGRESS_PROPERTY))) {
+        SceneEditorTimelineSelectTrack(i);return;
+      }
+    }
+  }
+  SceneEditorTimelineClearSelection();
+}
 static void cancel_field_edit(void) {
   ui.editing = -1;
   ui.draft[0] = 0;
@@ -82,8 +82,8 @@ void SceneEditorMotionPathPanelReset(void) {
 }
 void SceneEditorMotionPathPanelSelect(bool selected) {
   TimelineTrack prior_track; TimelineRate rate; TimelineRange range; TimelineSample sample;
-  bool camera_timing = selected && SceneEditorTimelineSelectedTrack(&prior_track, &rate, &range, &sample) &&
-      (!strcmp(prior_track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(prior_track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY));
+  bool follower_timing = selected && SceneEditorTimelineSelectedTrack(&prior_track, &rate, &range, &sample) &&
+      (!strcmp(prior_track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(prior_track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY) || !strcmp(prior_track.property_id,MOTION_PROGRESS_PROPERTY));
   SceneEditorMotionPlanPanelReset();
   ui.active = selected;
   ui.dragging = false;
@@ -96,7 +96,7 @@ void SceneEditorMotionPathPanelSelect(bool selected) {
     SceneEditorCameraInspectorReset();
     CameraEditorClearSelection();
     BezierEditorSetSelectedPointIndex(-1);
-    SceneEditorTimelineClearSelection();
+    if(!follower_timing) SceneEditorTimelineClearSelection();
     MotionPaths paths;
     if (!SceneEditorMotionPathsRead(&paths))
       return;
@@ -106,15 +106,20 @@ void SceneEditorMotionPathPanelSelect(bool selected) {
       snprintf(ui.object_id, sizeof(ui.object_id), "%s", object.selection.id);
     for (size_t i = 0; i < paths.binding_count; ++i)
       if (paths.bindings[i].enabled &&
-          (camera_timing ? !strcmp(paths.bindings[i].target_id, prior_track.target_id)
-                         : (!paths.bindings[i].target_id[0] &&
-                            !strcmp(paths.bindings[i].object_id, ui.object_id))))
-        snprintf(ui.path_id, sizeof(ui.path_id), "%s",
-                 paths.bindings[i].path_id);
+          (follower_timing ? (paths.bindings[i].target_id[0] ? !strcmp(paths.bindings[i].target_id,prior_track.target_id) :
+                              (!strncmp(prior_track.target_id,"object/",7) && !strcmp(paths.bindings[i].object_id,prior_track.target_id+7)))
+                         : (!paths.bindings[i].target_id[0] && !strcmp(paths.bindings[i].object_id,ui.object_id)))) {
+        snprintf(ui.path_id,sizeof(ui.path_id),"%s",paths.bindings[i].path_id);
+        if(follower_timing) {
+          ui.follower_type=!strncmp(prior_track.target_id,"camera/",7)?1:!strncmp(prior_track.target_id,"light/",6)?2:0;
+          ui.show_followers=true;ui.right_offset=0;
+        }
+      }
     if (!ui.path_id[0] && paths.count)
       snprintf(ui.path_id, sizeof(ui.path_id), "%s", paths.paths[0].id);
   }
 }
+const char *SceneEditorMotionPathPanelStatus(void) { return ui.message; }
 bool SceneEditorMotionPathPanelActive(void) {
   return ui.active &&
          SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_RENDER;
@@ -122,7 +127,7 @@ bool SceneEditorMotionPathPanelActive(void) {
 static bool hit(SDL_Rect r, int x, int y) {
   return r.w > 0 && r.h > 0 && SDL_PointInRect(&(SDL_Point){x, y}, &r);
 }
-static MotionPath *selected(MotionPaths *d) {
+MotionPath *MotionPathPanelSelected(MotionPaths *d) {
   for (size_t i = 0; i < d->count; ++i)
     if (!strcmp(d->paths[i].id, ui.path_id)) {
       if (ui.point < 0 || ui.point >= (int)d->paths[i].count)
@@ -130,405 +135,6 @@ static MotionPath *selected(MotionPaths *d) {
       return &d->paths[i];
     }
   return NULL;
-}
-static void label(SDL_Renderer *r, const char *s, int x, int y) {
-  char *b = ui.labels[ui.label_count++ % 128];
-  snprintf(b, 200, "%s", s);
-  ray_tracing_text_draw_utf8_at(
-      r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9), b, x, y,
-      SceneEditorChromeShellResolvePalette().text_primary);
-}
-static void scrollbar(SDL_Renderer *r, SDL_Rect pane, int maximum, int offset) {
-  if (maximum <= 0)
-    return;
-  KitUiSdlScrollbarLayout scroll;
-  kit_ui_sdl_scrollbar_layout(&pane, pane.h + maximum, offset, &scroll);
-  kit_ui_sdl_draw_scrollbar(r, &scroll, (KitRenderColor){40, 44, 50, 255},
-                            (KitRenderColor){130, 140, 155, 255});
-}
-static void button(SDL_Renderer *r, int index, SDL_Rect rect, const char *s,
-                   bool enabled) {
-  ui.controls[index] = rect;
-  ui.enabled[index] = enabled;
-  char *b = ui.labels[ui.label_count++ % 128];
-  snprintf(b, 200, "%s", s);
-  bool selected = (index == SELECT_TOOL && !ui.placing) ||
-                  (index == PLACE_TOOL && ui.placing);
-  SceneEditorRenderButton(r, rect, b, selected, enabled);
-}
-static bool projector(const SceneEditorPaneLayout *l) {
-  RuntimeSceneBridge3DDigestState d;
-  return SceneEditorDigestOverlayResolve(&d) &&
-         SceneEditorDigestOverlayBuildProjector(
-             &d, &l->viewport_rect, SceneEditorGetViewportNavState(),
-             &ui.projector);
-}
-static bool project(const double v[3], int *x, int *y) {
-  double s = SceneEditorDocumentWorldScale();
-  return SceneEditorDigestOverlayProjectPoint(&ui.projector, v[0] * s, v[1] * s,
-                                              v[2] * s, x, y);
-}
-static void overlay(SDL_Renderer *r, const MotionPath *p) {
-  SDL_Rect prior;
-  SDL_bool clipped = SDL_RenderIsClipEnabled(r);
-  SDL_RenderGetClipRect(r, &prior);
-  SDL_RenderSetClipRect(r, &ui.viewport);
-  SDL_SetRenderDrawColor(r, 72, 210, 235, 255);
-  int px = 0, py = 0;
-  bool previous = false;
-  for (int i = 0; i <= 256; ++i) {
-    double v[3];
-    int x, y;
-    MotionPathPointAt(p, (double)i * (p->count - 1) / 256, v);
-    bool valid = project(v, &x, &y);
-    if (valid && previous) {
-      SDL_RenderDrawLine(r, px, py, x, y);
-      SDL_RenderDrawLine(r, px + 1, py, x + 1, y);
-      SDL_RenderDrawLine(r, px, py + 1, x, y + 1);
-    }
-    px = x;
-    py = y;
-    previous = valid;
-  }
-  for (size_t i = 0; i < p->count; ++i) {
-    const MotionPathPoint *point = &p->points[i];
-    int x, y;
-    if (!project(point->position, &x, &y))
-      continue;
-    SDL_SetRenderDrawColor(r, i == (size_t)ui.point ? 255 : 72,
-                           i == (size_t)ui.point ? 210 : 210,
-                           i == (size_t)ui.point ? 80 : 235, 255);
-    SDL_Rect box = {x - 5, y - 5, 10, 10};
-    SDL_RenderFillRect(r, &box);
-    snprintf(ui.point_labels[i], sizeof(ui.point_labels[i]), "%zu", i + 1);
-    ray_tracing_text_draw_utf8_at(
-        r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-        ui.point_labels[i], x + 9, y - 14, (SDL_Color){230, 250, 255, 255});
-    if (i != (size_t)ui.point)
-      continue;
-    for (int h = 0; h < 2; ++h) {
-      double v[3];
-      for (int k = 0; k < 3; ++k)
-        v[k] =
-            point->position[k] + (h ? point->outgoing[k] : point->incoming[k]);
-      int hx, hy;
-      if (project(v, &hx, &hy)) {
-        SDL_SetRenderDrawColor(r, 235, 155, 90, 255);
-        SDL_RenderDrawLine(r, x, y, hx, hy);
-        SDL_Rect handle = {hx - 4, hy - 4, 8, 8};
-        SDL_RenderFillRect(r, &handle);
-      }
-    }
-  }
-  SDL_RenderSetClipRect(r, clipped ? &prior : NULL);
-}
-void SceneEditorMotionPathOverlayDraw(SceneEditor *e,
-                                      const SceneEditorPaneLayout *l) {
-  if (ui.active)
-    return;
-  TimelineTrack track;
-  TimelineRate rate;
-  TimelineRange range;
-  TimelineSample sample;
-  if (!SceneEditorTimelineSelectedTrack(&track, &rate, &range, &sample) ||
-      (strcmp(track.property_id, MOTION_PROGRESS_PROPERTY) &&
-       strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) && strcmp(track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY)))
-    return;
-  MotionPaths paths;
-  if (!SceneEditorMotionPathsRead(&paths))
-    return;
-  const char *id = NULL;
-  for (size_t i = 0; i < paths.binding_count; ++i)
-    if (paths.bindings[i].enabled &&
-        ((!strcmp(track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY))
-             ? !strcmp(paths.bindings[i].target_id, track.target_id)
-             : !strcmp(paths.bindings[i].object_id, track.target_id + 7)))
-      id = paths.bindings[i].path_id;
-  for (size_t i = 0; id && i < paths.count; ++i)
-    if (!strcmp(paths.paths[i].id, id)) {
-      ui.viewport = l->viewport_rect;
-      ui.projected = projector(l);
-      if (ui.projected)
-        overlay(e->renderer, &paths.paths[i]);
-      return;
-    }
-}
-void SceneEditorMotionPathPanelDraw(SceneEditor *e,
-                                    const SceneEditorPaneLayout *l) {
-  if (ui.message_revision != SceneEditorDocumentRevision())
-    ui.message[0] = 0;
-  if (!ui.active)
-    return;
-  MotionPaths d;
-  if (!SceneEditorMotionPathsRead(&d))
-    return;
-  MotionPath *p = selected(&d);
-  SceneEditorCameraPathPanelReset();
-  SceneEditorLightPathPanelReset();
-  ui.label_count = 0;
-  memset(ui.controls, 0, sizeof(ui.controls));
-  memset(ui.fields, 0, sizeof(ui.fields));
-  memset(ui.rows, 0, sizeof(ui.rows));
-  ui.viewport = l->viewport_rect;
-  ui.projected = projector(l);
-  if (p && ui.projected)
-    overlay(e->renderer, ui.dragging ? &ui.drag : p);
-  if (p && ui.projected && (ui.placing || (SDL_GetModState() & KMOD_SHIFT)) &&
-      !(SDL_GetModState() & (KMOD_ALT | KMOD_CTRL | KMOD_GUI))) {
-    SDL_Rect prior_clip;
-    SDL_bool was_clipped = SDL_RenderIsClipEnabled(e->renderer);
-    SDL_RenderGetClipRect(e->renderer, &prior_clip);
-    SDL_RenderSetClipRect(e->renderer, &l->viewport_rect);
-    MotionPathViewportGuide(e->renderer, &ui.projector, p, ui.plane_z);
-    SDL_RenderSetClipRect(e->renderer, was_clipped ? &prior_clip : NULL);
-  }
-  SDL_Renderer *r = e->renderer;
-  RayTracingThemePalette palette = SceneEditorChromeShellResolvePalette();
-  SDL_Rect pane = l->left_content_rect;
-  pane.y += 48;
-  pane.h -= 48;
-  SDL_Rect prior;
-  SDL_bool clipped = SDL_RenderIsClipEnabled(r);
-  SDL_RenderGetClipRect(r, &prior);
-  SDL_RenderSetClipRect(r, &pane);
-  SDL_SetRenderDrawColor(r, palette.panel_fill.r, palette.panel_fill.g,
-                         palette.panel_fill.b, 255);
-  SDL_RenderFillRect(r, &pane);
-  int x = pane.x + 10, y = pane.y + 8 - ui.offset, w = pane.w - 20;
-  char text[200];
-  label(r, "1. Create and shape a path", x, y);
-  y += 26;
-  button(r, NEW, (SDL_Rect){x, y, w, 30}, "+ New Path",
-         d.count < MOTION_PATH_CAPACITY);
-  y += 38;
-  if (p) {
-    int half = (w - 6) / 2;
-    button(r, SELECT_TOOL, (SDL_Rect){x, y, half, 28}, "Move", true);
-    button(r, PLACE_TOOL, (SDL_Rect){x + half + 6, y, half, 28},
-           "Add: Shift-click", p->count < MOTION_POINT_CAPACITY);
-    y += 34;
-    button(r, DELETE_TOOL, (SDL_Rect){x, y, half, 28}, "Delete point", p->count > 2);
-    button(r, FRAME_PATH, (SDL_Rect){x + half + 6, y, half, 28}, "Frame path", true);
-    y += 36;
-    label(r, "Shift-click: add | Drag: move point", x, y); y += 24;
-    label(r, "Option-drag: orbit | Right-drag: pan", x, y); y += 30;
-  }
-  for (size_t i = 0; i < d.count; ++i) {
-    ui.rows[i] = (SDL_Rect){x, y, w, 28};
-    char *b = ui.labels[ui.label_count++ % 128];
-    snprintf(b, 200, "%s", d.paths[i].name);
-    SceneEditorRenderButton(r, ui.rows[i], b, p == &d.paths[i], true);
-    y += 32;
-  }
-  if (!p) {
-    label(r, "Create a path or convert legacy motion.", x, y);
-    y += 30;
-    y = SceneEditorCameraPathPanelDraw(r, &d, NULL, pane, x, y, w);
-    y = SceneEditorLightPathPanelDraw(r, &d, NULL, pane, x, y, w);
-  } else {
-    button(r, DELETE_PATH, (SDL_Rect){x, y, w, 28},
-           "Delete path (detach followers first)", true);
-    y += 36;
-    button(r, ATTACH_SECTION, (SDL_Rect){x, y, w, 30},
-           ui.show_followers ? "2. Attach followers (hide)"
-                             : "2. Attach followers...",
-           true);
-    y += 38;
-    if (ui.show_followers) {
-      label(r, "Follower object", x, y);
-      y += 26;
-      SceneEditorDocumentObjectInfo info;
-      bool object = SceneEditorDocumentObjectById(ui.object_id, &info);
-      if (!object) {
-        SceneEditorObjectReadback read;
-        SceneEditorObjectInspect(&read);
-        if (read.has_selection) {
-          snprintf(ui.object_id, sizeof(ui.object_id), "%s", read.selection.id);
-          info = read.selection;
-          object = true;
-        }
-      }
-      snprintf(text, sizeof(text), "%s",
-               object ? info.name : "Choose an object with arrows");
-      label(r, text, x, y);
-      y += 26;
-      button(r, OBJECT_PREV, (SDL_Rect){x, y, (w - 6) / 2, 28}, "< Object",
-             true);
-      button(r, OBJECT_NEXT, (SDL_Rect){x + (w + 6) / 2, y, (w - 6) / 2, 28},
-             "Object >", true);
-      y += 36;
-      bool bound = false, restore_known = true;
-      int followers = 0;
-      for (size_t i = 0; i < d.binding_count; ++i)
-        if (d.bindings[i].enabled && !strcmp(d.bindings[i].path_id, p->id)) {
-          ++followers;
-          if (!d.bindings[i].target_id[0] &&
-              !strcmp(d.bindings[i].object_id, ui.object_id)) {
-            bound = true;
-            restore_known = d.bindings[i].restore_known;
-          }
-        }
-      snprintf(text, sizeof(text), "%d follower%s | world-space route",
-               followers, followers == 1 ? "" : "s");
-      label(r, text, x, y);
-      y += 26;
-      button(r, ATTACH, (SDL_Rect){x, y, w, 30},
-             bound ? "Attached: on this path" : "Attach on path (replaces XYZ)",
-             object && !bound);
-      y += 36;
-      if (bound && !restore_known) {
-        label(r, "Prior source unknown; XYZ stays off.", x, y);
-        y += 26;
-      }
-      button(r, DETACH, (SDL_Rect){x, y, w, 28},
-             restore_known ? "Detach: restore prior source" : "Detach to static (legacy)",
-             bound);
-      y += 34;
-      button(r, TIMING, (SDL_Rect){x, y, w, 30}, "Edit follower timing >",
-             bound);
-      y += 38;
-      label(r, "Progress 0 = start; 1 = end.", x, y);
-      y += 23;
-      label(r, "Equal keys pause; later keys resume.", x, y);
-      y += 30;
-      y = SceneEditorCameraPathPanelDraw(r, &d, p, pane, x, y, w);
-      y = SceneEditorLightPathPanelDraw(r, &d, p, pane, x, y, w);
-    } else {
-      label(r, "No object needed to shape the route.", x, y);
-      y += 30;
-    }
-  }
-  button(r, SAVE, (SDL_Rect){x, y, w, 30}, "Save scene + animation", true);
-  y += 38;
-  button(r, FRAME, (SDL_Rect){x, y, w, 28}, "Frame scene", true);
-  y += 36;
-  if (ui.message[0]) {
-    label(r, ui.message, x, y);
-    y += 30;
-  }
-  ui.max_offset = y + ui.offset - (pane.y + pane.h);
-  if (ui.max_offset < 0)
-    ui.max_offset = 0;
-  for (int i = 0; i < CONTROL_COUNT; ++i)
-    if (i != DEPTH && (i < NAME || i > MODE) && (ui.controls[i].y < pane.y ||
-        ui.controls[i].y + ui.controls[i].h > pane.y + pane.h))
-      ui.controls[i] = (SDL_Rect){0};
-  for (size_t i = 0; i < d.count; ++i)
-    if (ui.rows[i].y < pane.y || ui.rows[i].y + ui.rows[i].h > pane.y + pane.h)
-      ui.rows[i] = (SDL_Rect){0};
-  if (ui.controls[ATTACH_SECTION].y < pane.y ||
-      ui.controls[ATTACH_SECTION].y + ui.controls[ATTACH_SECTION].h >
-          pane.y + pane.h)
-    ui.controls[ATTACH_SECTION] = (SDL_Rect){0};
-  scrollbar(r, pane, ui.max_offset, ui.offset);
-  pane = l->right_content_rect;
-  SDL_RenderSetClipRect(r, &pane);
-  SDL_SetRenderDrawColor(r, palette.panel_fill.r, palette.panel_fill.g,
-                         palette.panel_fill.b, 255);
-  SDL_RenderFillRect(r, &pane);
-  x = pane.x + 10;
-  y = pane.y + 10 - ui.right_offset;
-  w = pane.w - 20;
-  y = SceneEditorMotionPlanPanelDraw(r, &d, p, pane, x, y, w);
-  if (!SceneEditorMotionPlanPanelOpen()) {
-  label(r, "Path shape", x, y);
-  y += 28;
-  if (p) {
-    snprintf(text, sizeof(text), "Name: %s",
-             ui.editing == 9 ? ui.draft : p->name);
-    button(r, NAME, (SDL_Rect){x, y, w, 30}, text, true);
-    y += 40;
-    snprintf(text, sizeof(text), "Point %d / %zu", ui.point + 1, p->count);
-    label(r, text, x, y);
-    y += 26;
-    button(r, PREV, (SDL_Rect){x, y, (w - 6) / 2, 28}, "< Point", true);
-    button(r, NEXT, (SDL_Rect){x + (w + 6) / 2, y, (w - 6) / 2, 28}, "Point >",
-           true);
-    y += 36;
-    button(r, ADD, (SDL_Rect){x, y, (w - 6) / 2, 28}, "Split / extend",
-           p->count < MOTION_POINT_CAPACITY);
-    button(r, REMOVE, (SDL_Rect){x + (w + 6) / 2, y, (w - 6) / 2, 28},
-           "Delete point", p->count > 2);
-    y += 36;
-    button(r, MODE, (SDL_Rect){x, y, w, 30},
-           p->points[ui.point].linear ? "Next segment: Straight"
-                                      : "Next segment: Cubic Bezier",
-           ui.point < (int)p->count - 1);
-    y += 40;
-    button(r, HANDLE_MODE, (SDL_Rect){x,y,w,30}, MotionHandleModeLabel(p->points[ui.point].handle_mode), true);
-    y += 40;
-    char plane[100];
-    snprintf(plane, sizeof(plane),
-             ui.editing == 10 ? "Draw plane Z: %s_" : "Draw plane Z: %s",
-             ui.editing == 10 ? ui.draft : "");
-    if (ui.editing != 10)
-      snprintf(plane, sizeof(plane), "Draw plane Z: %.5g", ui.plane_z);
-    button(r, DEPTH, (SDL_Rect){x, y, w, 28}, plane, true);
-    y += 36;
-    const char *groups[] = {"Point position", "Incoming handle offset",
-                            "Outgoing handle offset"};
-    for (int g = 0; g < 3; ++g) {
-      label(r, groups[g], x, y);
-      y += 25;
-      for (int k = 0; k < 3; ++k) {
-        int index = g * 3 + k;
-        double *v = g == 0   ? p->points[ui.point].position
-                    : g == 1 ? p->points[ui.point].incoming
-                             : p->points[ui.point].outgoing;
-        char *b = ui.labels[ui.label_count++ % 128];
-        if (ui.editing == index)
-          snprintf(b, 200, "%c: %s_", 'X' + k, ui.draft);
-        else
-          snprintf(b, 200, "%c: %.5g", 'X' + k, v[k]);
-        ui.fields[index] = (SDL_Rect){x + k * (w + 6) / 3, y, (w - 12) / 3, 30};
-        SceneEditorRenderButton(r, ui.fields[index], b, ui.editing == index,
-                                true);
-      }
-      y += 40;
-    }
-    label(r, "Enter applies. Escape cancels.", x, y);
-    y += 25;
-    label(r, "Add points: Shift-click in viewport.", x, y);
-    y += 25;
-    label(r, "Drag in XY; edit Z numerically.", x, y);
-    y += 25;
-    label(r, "Shape edits keep timing keys unchanged.", x, y);
-  } else
-    label(r, "Choose New Path to begin.", x, y);
-  }
-  ui.right_max = y + 32 + ui.right_offset - (pane.y + pane.h);
-  if (ui.right_max < 0)
-    ui.right_max = 0;
-  scrollbar(r, pane, ui.right_max, ui.right_offset);
-  for (int i = 0; i < 9; ++i)
-    if (ui.fields[i].y < pane.y ||
-        ui.fields[i].y + ui.fields[i].h > pane.y + pane.h)
-      ui.fields[i] = (SDL_Rect){0};
-  if (ui.controls[DEPTH].y < pane.y ||
-      ui.controls[DEPTH].y + ui.controls[DEPTH].h > pane.y + pane.h)
-    ui.controls[DEPTH] = (SDL_Rect){0};
-  for (int i = NAME; i <= MODE; ++i)
-    if (ui.controls[i].y < pane.y ||
-        ui.controls[i].y + ui.controls[i].h > pane.y + pane.h)
-      ui.controls[i] = (SDL_Rect){0};
-  SDL_RenderSetClipRect(r, clipped ? &prior : NULL);
-}
-static void object_step(int step) {
-  int count = SceneEditorDocumentObjectCount(), at = -1;
-  SceneEditorDocumentObjectInfo info;
-  for (int i = 0; i < count; ++i)
-    if (SceneEditorDocumentObjectAt(i, &info) && !strcmp(info.id, ui.object_id))
-      at = i;
-  if (!count)
-    return;
-  at = (at + step + count) % count;
-  if (SceneEditorDocumentObjectAt(at, &info)) {
-    snprintf(ui.object_id, sizeof(ui.object_id), "%s", info.id);
-    SceneEditorObjectReadback result;
-    SceneEditorObjectExecute(SCENE_OBJECT_SELECT, info.id, NULL, false,
-                             SceneEditorDocumentRevision(), &result, ui.message,
-                             sizeof(ui.message));
-  }
 }
 static void add_point(MotionPath *p) {
   int at = ui.point;
@@ -583,7 +189,13 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
   MotionPaths d;
   if (!SceneEditorMotionPathsRead(&d))
     return false;
-  MotionPath *p = selected(&d);
+  MotionPath *p = MotionPathPanelSelected(&d);
+  if(event->type==SDL_MOUSEBUTTONDOWN)
+    ui.point_focus=hit(l->viewport_rect,event->button.x,event->button.y) ||
+        (!ui.show_followers && !SceneEditorMotionPlanPanelOpen() &&
+         hit(l->right_content_rect,event->button.x,event->button.y));
+  if(event->type==SDL_WINDOWEVENT && event->window.event==SDL_WINDOWEVENT_FOCUS_LOST)
+    ui.point_focus=false;
   /* Navigation owns modified clicks, including clicks on existing handles. */
   if ((event->type == SDL_MOUSEBUTTONDOWN || event->type == SDL_MOUSEBUTTONUP ||
        event->type == SDL_MOUSEMOTION) &&
@@ -667,6 +279,11 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       return true;
     }
     if (event->type == SDL_MOUSEMOTION && p) {
+      if(ui.gizmo_axis) {
+        MotionPointGizmoMove(&ui.drag.points[ui.point],ui.gizmo_axis,ui.gizmo_initial,
+            &ui.gizmo_handle,event->motion.x-ui.down_x,event->motion.y-ui.down_y);
+        return true;
+      }
       double x, y, z, s = SceneEditorDocumentWorldScale();
       MotionPathPoint *point = &ui.drag.points[ui.point];
       double plane = point->position[2] + (ui.handle == 1   ? point->incoming[2]
@@ -686,8 +303,9 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
     }
     if (event->type == SDL_MOUSEBUTTONUP) {
       ui.dragging = false;
-      if (p && (abs(event->button.x - ui.down_x) > 2 ||
-                abs(event->button.y - ui.down_y) > 2)) {
+      if (p && memcmp(p,&ui.drag,sizeof(*p)) &&
+          (abs(event->button.x - ui.down_x) > 2 ||
+           abs(event->button.y - ui.down_y) > 2)) {
         *p = ui.drag;
         SceneEditorMotionPathsSet(&d, ui.revision, ui.message,
                                   sizeof(ui.message));
@@ -713,6 +331,14 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       return true;
     }
   }
+  if(event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_l && !event->key.repeat &&
+      !(event->key.keysym.mod & (KMOD_CTRL|KMOD_GUI|KMOD_ALT)) &&
+      ui.point_focus && !SDL_IsTextInputActive() && !ui.show_followers && !SceneEditorMotionPlanPanelOpen() && p) {
+    if(MotionPathSmoothPoint(p,ui.point))
+      SceneEditorMotionPathsSet(&d,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));
+    else snprintf(ui.message,sizeof(ui.message),"Move coincident points apart before smoothing.");
+    return true;
+  }
   if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_ESCAPE) {
     ui.placing = false;
     ui.dragging = false;
@@ -727,11 +353,29 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
   if (SceneEditorCameraPathPanelEvent(event, p, ui.message, sizeof(ui.message)) || SceneEditorLightPathPanelEvent(event, p, ui.message, sizeof(ui.message))) {
     cancel_field_edit(); ui.message_revision = SceneEditorDocumentRevision(); return true;
   }
+  for (int j=0;j<6;++j) if(hit(ui.object_rows[j],x,y)) {
+    cancel_field_edit();
+    snprintf(ui.object_id,sizeof(ui.object_id),"%s",ui.picker_ids[j]);
+    ui.object_picker=false; ui.right_offset=0;select_follower_track(&d,p);
+    return true;
+  }
+  for (size_t j=0;j<d.binding_count;++j) if(hit(ui.follower_rows[j],x,y)) {
+    cancel_field_edit();SceneEditorMotionPlanPanelReset();
+    const MotionPathBinding *binding=&d.bindings[j];
+    ui.follower_type=!strncmp(binding->target_id,"camera/",7)?1:binding->target_id[0]?2:0;
+    if(!ui.follower_type) snprintf(ui.object_id,sizeof(ui.object_id),"%s",binding->object_id);
+    ui.show_followers=true;ui.right_offset=0;ui.object_picker=false;select_follower_track(&d,p);
+    return true;
+  }
   for (size_t i = 0; i < d.count; ++i)
     if (hit(ui.rows[i], x, y)) {
       cancel_field_edit();
+      SceneEditorTimelineClearSelection();SceneEditorMotionPlanPanelReset();
       snprintf(ui.path_id, sizeof(ui.path_id), "%s", d.paths[i].id);
       ui.point = 0;
+      ui.show_actions = false;
+      ui.show_followers = false;
+      ui.right_offset = 0;
       return true;
     }
   for (int i = 0; i < 9; ++i)
@@ -757,9 +401,46 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         MotionPathViewportFrame(p, &l->viewport_rect);
         return true;
       }
-      if (i == ATTACH_SECTION) {
-        ui.show_followers = !ui.show_followers;
+      if (i == PATH_ACTIONS) {
+        cancel_field_edit();
+        ui.show_actions = !ui.show_actions;
         return true;
+      }
+      if (i == LIBRARY_PREV || i == LIBRARY_NEXT) {
+        cancel_field_edit();
+        ui.library_first += i == LIBRARY_PREV ? -4 : 4;
+        return true;
+      }
+      if(i==FOLLOWER_TIMING) {cancel_field_edit();select_follower_track(&d,p);SceneEditorRenderAuthoringSetTiming(true);return true;}
+      if(i==POINT_DETAILS) {cancel_field_edit();ui.point_details=!ui.point_details;return true;}
+      if((i==FOLLOWER_PLAN || i==SHAPE_PLAN) && p) {
+        cancel_field_edit();char target[TIMELINE_ID_CAPACITY];
+        if((i==SHAPE_PLAN?MotionPathPanelAppliedTarget(&d,p,target,sizeof(target)):MotionPathPanelFollowerTarget(&d,p,target,sizeof(target))) && SceneEditorMotionPlanPanelOpenTarget(p->id,target)) {
+          ui.show_followers=false;ui.right_offset=0;ui.dragging=false;
+        }
+        return true;
+      }
+      if (i == ATTACH_SECTION || i == FOLLOWER_BACK ||
+          (i >= FOLLOWER_OBJECT && i <= FOLLOWER_LIGHT)) {
+        cancel_field_edit(); SceneEditorMotionPlanPanelReset();
+        ui.show_followers=i!=FOLLOWER_BACK;
+        if(ui.show_followers) ui.placing=false;
+        if(i>=FOLLOWER_OBJECT && i<=FOLLOWER_LIGHT) ui.follower_type=i-FOLLOWER_OBJECT;
+        ui.right_offset=0;ui.object_picker=false;
+        if(ui.show_followers) select_follower_track(&d,p);
+        return true;
+      }
+      if(i==OBJECT_PICKER) {cancel_field_edit();ui.object_picker=!ui.object_picker;return true;}
+      if(i==OBJECT_SELECTED) {
+        cancel_field_edit();
+        SceneEditorObjectReadback read;SceneEditorObjectInspect(&read);
+        if(read.has_selection && p) {
+          snprintf(ui.object_id,sizeof(ui.object_id),"%s",read.selection.id);
+          if(SceneEditorTimelineCurrentSample(&(TimelineSample){0}) || SceneEditorTimelineActivate())
+            SceneEditorMotionPathBind(ui.object_id,p->id,true,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));
+        }
+        else snprintf(ui.message,sizeof(ui.message),"Select a scene object first, or use Choose object.");
+        ui.object_picker=false;return true;
       }
       if (i == DEPTH) {
         ui.editing = 10;
@@ -786,16 +467,29 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
           origin[1] = ui.projector.center_y / SceneEditorDocumentWorldScale();
           origin[2] = ui.projector.center_z / SceneEditorDocumentWorldScale();
         }
-        if (SceneEditorMotionPathCreate("New Path", origin, length, rev,
+        char name[128];
+        unsigned number = 1;
+        bool used;
+        do {
+          snprintf(name,sizeof(name),"Path %u",number++);
+          used = false;
+          for (size_t j=0;j<d.count;++j)
+            if (!strcmp(d.paths[j].name,name)) used = true;
+        } while (used);
+        if (SceneEditorMotionPathCreate(name, origin, length, rev,
                                         ui.path_id, sizeof(ui.path_id),
                                         ui.message, sizeof(ui.message))) {
           ui.point = 0;
+          ui.library_first = ((int)d.count / 4) * 4;
+          ui.offset = ui.right_offset = 0;
+          ui.show_actions = false;
+          snprintf(ui.message,sizeof(ui.message),"Created %s. Existing paths are retained.",name);
           ui.placing = true;
           ui.show_followers = false;
           ui.plane_z = origin[2];
           MotionPaths fresh;
           if (SceneEditorMotionPathsRead(&fresh)) {
-            MotionPath *created = selected(&fresh);
+            MotionPath *created = MotionPathPanelSelected(&fresh);
             if (created)
               MotionPathViewportFrame(created, &l->viewport_rect);
           }
@@ -807,7 +501,8 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         return true;
       }
       if (i == OBJECT_PREV || i == OBJECT_NEXT) {
-        object_step(i == OBJECT_PREV ? -1 : 1);
+        ui.object_page += i == OBJECT_PREV ? -6 : 6;
+        ui.right_offset=0;
         return true;
       }
       if (i == SAVE) {
@@ -846,9 +541,11 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
           --ui.point;
         changed = true;
       }
-      if (i == HANDLE_MODE) {
+      if (i == HANDLE_MODE || i == HANDLE_CORNER || i == HANDLE_INDEPENDENT) {
         cancel_field_edit();
-        changed=MotionPathSetHandleMode(&p->points[ui.point],(p->points[ui.point].handle_mode+1)%3);
+        changed=i==HANDLE_MODE ? MotionPathSmoothPoint(p,ui.point) :
+            MotionPathSetHandleMode(&p->points[ui.point],i==HANDLE_CORNER?MOTION_HANDLE_CORNER:MOTION_HANDLE_INDEPENDENT);
+        if(!changed) snprintf(ui.message,sizeof(ui.message),"Move coincident points apart before smoothing.");
       }
       if (i == MODE) {
         p->points[ui.point].linear = !p->points[ui.point].linear;
@@ -926,6 +623,15 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       return true;
     }
 
+    int axis=MotionPointGizmoPick(&ui.projector,&p->points[ui.point],x,y,&ui.gizmo_handle);
+    if(axis) {
+      cancel_field_edit();SceneEditorMotionPlanPanelReset();
+      ui.show_followers=false;ui.right_offset=0;
+      ui.gizmo_axis=axis;ui.gizmo_initial=p->points[ui.point].position[axis-1];
+      ui.handle=0;ui.drag=*p;ui.dragging=true;
+      ui.revision=SceneEditorDocumentRevision();ui.down_x=x;ui.down_y=y;
+      return true;
+    }
     double best = 144;
     int point = -1, handle = 0;
     for (size_t i = 0; i < p->count; ++i) {
@@ -938,7 +644,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
                                              : h == 2 ? p->points[i].outgoing[k]
                                                       : 0);
         int px, py;
-        if (project(v, &px, &py)) {
+        if (MotionPathPanelProject(v, &px, &py)) {
           double dist = (px - x) * (px - x) + (py - y) * (py - y);
           if (dist < best) {
             best = dist;
@@ -950,10 +656,12 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
     }
     if (point >= 0) {
       cancel_field_edit();
+      SceneEditorMotionPlanPanelReset();ui.show_followers=false;ui.right_offset=0;
       ui.point = point;
+      ui.gizmo_axis=0;
       ui.handle = handle;
       ui.drag = *p;
-      ui.dragging = true;
+      ui.dragging = handle != 0; /* Anchor clicks select; axis handles own movement. */
       ui.revision = SceneEditorDocumentRevision();
       ui.down_x = x;
       ui.down_y = y;
@@ -961,23 +669,41 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
     return true;
   }
   return hit(l->right_content_rect, x, y) ||
-         (hit(l->left_content_rect, x, y) && y >= l->left_content_rect.y + 48);
+         (hit(l->left_content_rect, x, y) && y >= l->left_content_rect.y + 34);
 }
 bool SceneEditorMotionPathPanelEvent(SceneEditor *editor, SDL_Event *event,
                                      const SceneEditorPaneLayout *layout) {
+  if(SceneEditorMotionPathPanelActive() && !SceneEditorMotionPlanPanelOpen() &&
+      event->type==SDL_MOUSEBUTTONDOWN && event->button.button==SDL_BUTTON_LEFT) {
+    SDL_Rect rect;
+    if(SceneEditorMotionPlanPanelControl("plan_open",&rect) && hit(rect,event->button.x,event->button.y)) {
+      cancel_field_edit();SceneEditorMotionPlanPanelReset();
+      ui.show_followers=true;ui.right_offset=0;return true;
+    }
+  }
   if (SceneEditorMotionPathPanelActive() && SceneEditorMotionPlanPanelEvent(event)) {
     ui.editing = -1; ui.draft[0] = 0; ui.dragging = false; return true;
   }
   bool handled = motion_path_event(editor, event, layout);
-  if (handled)
+  if (handled) {
     ui.message_revision = SceneEditorDocumentRevision();
+    if(ui.message[0]) SceneEditorChromeShellSetActionFeedback(ui.message,5000);
+  }
   return handled;
 }
 bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
   if (!ui.active)
     return false;
+  if ((ui.follower_type==0 && !strcmp(name,"path_timing")) ||
+      (ui.follower_type==1 && !strcmp(name,"path_camera_timing")) ||
+      (ui.follower_type==2 && !strcmp(name,"path_light_timing"))) {
+    *out=ui.controls[FOLLOWER_TIMING];return out->w>0;
+  }
   if (SceneEditorMotionPlanPanelControl(name, out)) return true;
   if (SceneEditorCameraPathPanelControl(name, out) || SceneEditorLightPathPanelControl(name, out)) return true;
+  if(!strcmp(name,"path_smooth")) { *out=ui.controls[HANDLE_MODE];return out->w>0; }
+  const char *axes[]={"path_gizmo_x","path_gizmo_y","path_gizmo_z"};
+  for(int k=0;k<3;++k) if(!strcmp(name,axes[k])) { *out=ui.gizmo_controls[k];return out->w>0; }
   if (!strncmp(name, "path_row/", 9)) {
     MotionPaths paths;
     if (SceneEditorMotionPathsRead(&paths))
@@ -988,6 +714,19 @@ bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
         }
     return false;
   }
+  if (!strncmp(name,"path_object/",12)) {
+    for(int i=0;i<6;++i) if(!strcmp(name+12,ui.picker_ids[i])) { *out=ui.object_rows[i];return out->w>0; }
+    return false;
+  }
+  if (!strncmp(name,"path_follower/",14)) {
+    MotionPaths paths;
+    if(SceneEditorMotionPathsRead(&paths)) for(size_t i=0;i<paths.binding_count;++i) {
+      char target[160];const MotionPathBinding *b=&paths.bindings[i];
+      snprintf(target,sizeof(target),b->target_id[0]?"%s":"object/%s",b->target_id[0]?b->target_id:b->object_id);
+      if(!strcmp(name+14,target)) {*out=ui.follower_rows[i];return out->w>0;}
+    }
+    return false;
+  }
   const char *names[] = {
       "new_path",         "path_name",       "path_previous",
       "path_next",        "path_add",        "path_remove",
@@ -995,7 +734,10 @@ bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
       "follower_next",    "path_attach",     "path_detach",
       "path_timing",      "path_save",       "path_frame",
       "path_select_tool", "path_place_tool", "path_frame_selected",
-      "path_plane_z",     "path_followers",  "path_delete_selected", "path_handle_mode"};
+      "path_plane_z",     "path_followers",  "path_delete_selected", "path_handle_mode",
+      "path_actions", "path_library_previous", "path_library_next",
+      "path_follower_object", "path_follower_camera", "path_follower_light", "path_follower_back",
+      "path_object_picker", "path_object_selected", "path_corner", "path_independent", "path_follower_plan", "path_restore_replan", "path_point_details", "path_follower_timing"};
   for (int i = 0; i < CONTROL_COUNT; ++i)
     if (!strcmp(name, names[i])) {
       *out = ui.controls[i];

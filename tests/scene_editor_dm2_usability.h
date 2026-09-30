@@ -45,7 +45,7 @@ static void dm2_usability(SceneEditor* editor,const char* scene){
     assert(SceneEditorMotionPathsRead(&paths)&&paths.paths[0].count==4&&paths.binding_count==0);
     choose_menu(editor,1,0);assert(SceneEditorMotionPathsRead(&paths)&&paths.paths[0].count==3);
     choose_menu(editor,1,1);assert(SceneEditorMotionPathsRead(&paths)&&paths.paths[0].count==4);
-    authoring_control(editor,"path_plane_z");authoring_text(editor,"3");
+    authoring_control(editor,"path_point_details");authoring_control(editor,"path_plane_z");authoring_text(editor,"3");
     authoring_control(editor,"path_place_tool");SDL_SetModState(KMOD_SHIFT);click(editor,(SDL_Rect){px-120,py+10,1,1});SDL_SetModState(KMOD_NONE);
     assert(SceneEditorMotionPathsRead(&paths)&&paths.paths[0].count==5&&fabs(paths.paths[0].points[4].position[2]-3)<1e-8);
     key(editor,SDLK_ESCAPE);SceneEditorSessionRuntimeRender(editor);authoring_control(editor,"path_frame_selected");
@@ -54,7 +54,7 @@ static void dm2_usability(SceneEditor* editor,const char* scene){
     assert(!memcmp(&camera,&sceneSettings.cameraPath,sizeof(camera))&&!memcmp(&light,&sceneSettings.bezierPath,sizeof(light)));
     assert(!memcmp(&camera_depth,&sceneSettings.cameraPath3D,sizeof(camera_depth))&&!memcmp(&light_depth,&sceneSettings.bezierPath3D,sizeof(light_depth)));
     capture(editor,"dm2_usability_shape.ppm");
-    authoring_control(editor,"path_followers");authoring_control(editor,"follower_next");
+    authoring_control(editor,"path_followers");authoring_control(editor,"path_object_picker");authoring_control(editor,"path_object/obj_sphere_medium");
     authoring_control(editor,"path_attach");assert(SceneEditorMotionPathsRead(&paths)&&paths.binding_count==1);
     authoring_control(editor,"path_timing");assert(!SceneEditorMotionPathPanelActive());
     authoring_control(editor,"paths");assert(SceneEditorMotionPathPanelActive());
@@ -65,7 +65,7 @@ static void dm2_usability(SceneEditor* editor,const char* scene){
     authoring_control(editor,"path_select_tool");
     SDL_Rect add,select,frame;assert(SceneEditorRenderAuthoringControl("path_place_tool",&add));assert(SceneEditorRenderAuthoringControl("path_select_tool",&select));assert(SceneEditorRenderAuthoringControl("path_frame_selected",&frame));
     assert(SceneEditorGetPaneLayout(&layout));
-    assert(select.x+select.w<add.x && frame.y>add.y);
+    assert(select.x+select.w<add.x && frame.x>add.x && frame.y==add.y);
     assert(add.x>=layout.left_content_rect.x && add.x+add.w<=layout.left_content_rect.x+layout.left_content_rect.w);
     assert(!SDL_HasIntersection(&add,&layout.viewport_rect));capture(editor,"dm2_usability_compact.ppm");
     fprintf(stderr,"D-M2 usability PASS: visible framed seed, guarded Shift append, plain click nonmutation, Option orbit and right/middle pan over points, plane height, no follower required, undo/redo, camera/light isolation, attach/timing, persistence and compact toolbar.\n");

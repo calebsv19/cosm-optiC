@@ -41,6 +41,8 @@ typedef struct MotionPaths {
 } MotionPaths;
 /* Policies alter geometry only through explicit edits, never during loading. */
 const char *MotionHandleModeLabel(MotionHandleMode mode);
+/* Explicit authoring action: seed collapsed tangents and curve adjacent segments. */
+bool MotionPathSmoothPoint(MotionPath *path, size_t index);
 bool MotionPathSetHandleMode(MotionPathPoint *point, MotionHandleMode mode);
 bool MotionPathEditHandle(MotionPathPoint *point, bool incoming, const double value[3]);
 bool MotionPathsParse(json_object *authoring, MotionPaths *out, char *message,

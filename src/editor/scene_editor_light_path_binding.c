@@ -6,6 +6,7 @@
 #include "editor/scene_editor_timeline.h"
 #include "scene_editor_motion_paths_internal.h"
 #include "import/runtime_scene_light_timeline_io.h"
+#include "import/runtime_scene_bridge.h"
 #include <stdio.h>
 #include <string.h>
 static bool driver(const char *p) {
@@ -14,6 +15,49 @@ static bool driver(const char *p) {
 static bool fail(char *message, size_t size, const char *why) {
   if (message && size) snprintf(message, size, "%s", why);
   return false;
+}
+/* UI setup for an existing camera/object-only timeline. Preserve all its
+ * tracks; establish the same unambiguous legacy light source as first setup. */
+bool SceneEditorMotionPathPrepareLight(char *message,size_t size) {
+  static RuntimeSceneLightTimelineDocument legacy;
+  if(RuntimeSceneLightTimelineGetLast(&legacy)) return true;
+  static TimelineDocument doc;
+  TimelineStatus status=SceneEditorDocumentGetTimeline(&doc);
+  if(status==TIMELINE_STATUS_TARGET_NOT_FOUND) {
+    if(!SceneEditorTimelineActivate()) return fail(message,size,SceneEditorTimelineStatus());
+    return RuntimeSceneLightTimelineGetLast(&legacy) || fail(message,size,"Set up an animated light route first.");
+  }
+  if(status!=TIMELINE_STATUS_OK) return fail(message,size,"Cannot read the existing timeline.");
+  RuntimeSceneBridge3DLightSeedState lights;runtime_scene_bridge_get_last_3d_light_seed_state(&lights);
+  if(!lights.valid || lights.light_count!=1 || !lights.lights[0].id[0] || sceneSettings.bezierPath.numPoints<2)
+    return fail(message,size,"Choose an unambiguous animated light route before attaching.");
+  char target[TIMELINE_ID_CAPACITY],id[TIMELINE_ID_CAPACITY];
+  snprintf(target,sizeof(target),"light/%s",lights.lights[0].id);
+  unsigned serial=1;bool used;
+  do {
+    snprintf(id,sizeof(id),"light-progress-%u",serial++);used=false;
+    for(size_t i=0;i<doc.track_count;++i) {
+      if(!strcmp(doc.tracks[i].track_id,id)) used=true;
+      if(!strcmp(doc.tracks[i].target_id,target) && !strcmp(doc.tracks[i].property_id,"light/path_progress"))
+        return fail(message,size,"Existing light progress has no spatial source; repair that source first.");
+    }
+  } while(used);
+  TimelineTrack progress;int64_t end;
+  if(TimelineRangeEndFrame(doc.range,&end)!=TIMELINE_STATUS_OK ||
+      TimelineTrackInit(&progress,id,target,"light/path_progress",TIMELINE_VALUE_SCALAR)!=TIMELINE_STATUS_OK ||
+      TimelineTrackSetUnit(&progress,TIMELINE_UNIT_UNITLESS)!=TIMELINE_STATUS_OK ||
+      TimelineTrackAddKey(&progress,doc.range.start_frame,TimelineValueScalar(0),TIMELINE_INTERPOLATION_LINEAR)!=TIMELINE_STATUS_OK ||
+      TimelineTrackAddKey(&progress,end,TimelineValueScalar(1),TIMELINE_INTERPOLATION_STEP)!=TIMELINE_STATUS_OK)
+    return fail(message,size,"Cannot prepare light progress.");
+  memset(&legacy,0,sizeof(legacy));legacy.valid=true;legacy.progress_track_index=0;
+  legacy.spatial_path=sceneSettings.bezierPath;legacy.spatial_path_3d=sceneSettings.bezierPath3D;
+  if(TimelineDocumentAddTrack(&doc,&progress)!=TIMELINE_STATUS_OK) return fail(message,size,"Timeline track capacity reached.");
+  if(TimelineDocumentInit(&legacy.timeline,doc.rate,doc.range)!=TIMELINE_STATUS_OK ||
+      TimelineDocumentAddTrack(&legacy.timeline,&progress)!=TIMELINE_STATUS_OK)
+    return fail(message,size,"Cannot prepare the legacy light source.");
+  if(!SceneEditorDocumentSetTimelineWithLight(&doc,&legacy,SceneEditorDocumentRevision(),message,size))
+    return fail(message,size,"Cannot retain light setup; the scene was left unchanged.");
+  return true;
 }
 bool SceneEditorMotionPathBindLight(const char *path_id, bool attach,
     unsigned long long revision, char *message, size_t size) {

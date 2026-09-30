@@ -83,14 +83,14 @@ static void dm3_completion(SceneEditor *editor,const char *scene,bool reopen) {
   assert(!SceneEditorMotionPathConvertLegacy(true,refused,message,sizeof(message)) && SceneEditorDocumentRevision()==refused);
   assert(strstr(message,"tolerance"));
   choose_menu(editor,1,0);rev=SceneEditorDocumentRevision();
-  authoring_control(editor,"paths");authoring_control(editor,"path_camera_convert");
+  authoring_control(editor,"paths");authoring_control(editor,"path_followers");authoring_control(editor,"path_follower_camera");authoring_control(editor,"path_camera_convert");
   assert(SceneEditorDocumentRevision()==rev+1);
   fprintf(stderr,"M3 camera conversion committed\n");
   assert(SceneEditorMotionPathsRead(&paths) && paths.count==1 && paths.binding_count==1);
   choose_menu(editor,1,0);assert(SceneEditorMotionPathsRead(&paths) && !paths.count);
   choose_menu(editor,1,1);assert(SceneEditorMotionPathsRead(&paths) && paths.count==1);
   authoring_control(editor,"path_followers");
-  rev=SceneEditorDocumentRevision();authoring_control(editor,"path_light_convert");assert(SceneEditorDocumentRevision()==rev+1);
+  authoring_control(editor,"path_follower_light");rev=SceneEditorDocumentRevision();authoring_control(editor,"path_light_convert");assert(SceneEditorDocumentRevision()==rev+1);
   assert(SceneEditorMotionPathsRead(&paths) && paths.count==2 && paths.binding_count==2);
   double maximum=0;
   for(int i=0;i<953;++i) {
@@ -129,7 +129,7 @@ static void dm3_completion(SceneEditor *editor,const char *scene,bool reopen) {
   assert(!memcmp(&doc,&unchanged,sizeof(doc)));
   for(size_t i=0;i<doc.track_count;++i)if(!strcmp(doc.tracks[i].property_id,MOTION_CAMERA_PROGRESS_PROPERTY))SceneEditorTimelineSelectTrack(i);
   SceneEditorMotionPathPanelSelect(true);SceneEditorSessionRuntimeRender(editor);
-  authoring_control(editor,"path_camera_focus");
+  authoring_control(editor,"path_followers");authoring_control(editor,"path_follower_camera");authoring_control(editor,"path_camera_focus");
   MotionPathBinding focus_binding;assert(MotionPathsRuntimeBinding("camera/main",&focus_binding) && focus_binding.use_focus_target);
   authoring_control(editor,"path_camera_focus");assert(MotionPathsRuntimeBinding("camera/main",&focus_binding) && !focus_binding.use_focus_target);
   authoring_control(editor,"path_camera_focus");

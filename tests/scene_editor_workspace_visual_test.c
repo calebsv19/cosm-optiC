@@ -441,6 +441,9 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_dm4_trail.h"
 #include "scene_editor_dm4_combined.h"
 #include "scene_editor_dm5.h"
+#include "scene_editor_path_usability.h"
+#include "scene_editor_path_gizmo.h"
+#include "scene_editor_path_smoothing.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -463,6 +466,11 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && !strcmp(argv[3],"--path-smoothing")) {path_smoothing_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--path-gizmo")) {path_gizmo_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--path-light-setup")) {path_light_setup_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--path-review")) {path_usability_review(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--path-library")) {path_usability_library(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && (!strcmp(argv[3],"--dm4-temporal-ui") || !strcmp(argv[3],"--dm4-temporal-reopen"))) {dm4_temporal_ui(&editor,argv[2],!strcmp(argv[3],"--dm4-temporal-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && (!strcmp(argv[3],"--dm4-trail") || !strcmp(argv[3],"--dm4-trail-reopen"))) {dm4_trail(&editor,argv[2],!strcmp(argv[3],"--dm4-trail-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && (!strcmp(argv[3],"--dm5") || !strcmp(argv[3],"--dm5-reopen"))) {dm5(&editor,argv[2],!strcmp(argv[3],"--dm5-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
