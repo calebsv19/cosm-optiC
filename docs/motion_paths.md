@@ -259,3 +259,10 @@ allowed range; choose Auto Clamped or change keys. Old scenes omit the optional
 `tangent_mode` and keep Broken/manual handles exactly. Loading saved policies
 preserves their handles; recomputation happens on edits. Smooth velocity does
 not promise acceleration continuity or limits. Full M4 acceptance remains open.
+
+The common timeline footer reports route progress and nonnegative derived speed
+in world units/second for camera, light and mesh routes. Other scalar channels
+show a signed rate in their own units/second. A constant interval is labeled
+Hold interval; zero instantaneous rate is distinct. At a hold-then-jump boundary,
+speed is undefined; mismatched one-sided slopes report velocity discontinuity.
+The readout uses document frame rate and runtime world-scaled route length.

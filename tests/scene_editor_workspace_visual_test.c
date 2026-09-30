@@ -437,6 +437,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_dm3_completion.h"
 #include "scene_editor_dm4_spatial.h"
 #include "scene_editor_dm4_temporal.h"
+#include "scene_editor_dm4_feedback.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -460,6 +461,7 @@ int main(int argc, char** argv) {
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
     if(argc==4 && (!strcmp(argv[3],"--dm4-temporal-ui") || !strcmp(argv[3],"--dm4-temporal-reopen"))) {dm4_temporal_ui(&editor,argv[2],!strcmp(argv[3],"--dm4-temporal-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--dm4-feedback")) {dm4_feedback(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--dm4-temporal")) {dm4_temporal(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && (!strcmp(argv[3],"--dm4-spatial") || !strcmp(argv[3],"--dm4-spatial-reopen"))) {
         dm4_spatial(&editor,!strcmp(argv[3],"--dm4-spatial-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;

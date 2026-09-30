@@ -1,5 +1,6 @@
 #include "scene_editor_timeline_ui.h"
 #include "scene_editor_timeline_curve.h"
+#include "scene_editor_motion_feedback.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_timeline_selection.h"
 #include "editor/scene_editor_document.h"
@@ -137,7 +138,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     if(u->numeric==2) snprintf(value,sizeof(value),"Value %s_",u->draft);
     SceneEditorRenderButton(r,l->controls[TL_VALUE],value,u->numeric==2,have_keys);
     const char* mode="Interpolation";
-    if(have_keys) {TimelineInterpolation m=keys.primary.interpolation_to_next;mode=m==TIMELINE_INTERPOLATION_STEP?"Hold v":m==TIMELINE_INTERPOLATION_LINEAR?"Linear v":"Bezier ease v";}
+    if(have_keys) {TimelineInterpolation m=keys.primary.interpolation_to_next;mode=m==TIMELINE_INTERPOLATION_STEP?"Hold / jump v":m==TIMELINE_INTERPOLATION_LINEAR?"Linear v":"Bezier ease v";}
     if(have_keys && keys.primary.interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER && keys.primary.tangent_mode!=TIMELINE_TANGENT_BROKEN)
         mode=keys.primary.tangent_mode==TIMELINE_TANGENT_AUTO_SMOOTH?"Auto Smooth v":keys.primary.tangent_mode==TIMELINE_TANGENT_AUTO_CLAMPED?"Auto Clamped v":"Flat / stop v";
     if(have_keys && selected<d->track_count) for(size_t i=0;i<d->tracks[selected].key_count;++i) {
@@ -148,6 +149,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     SceneEditorRenderButton(r,l->controls[TL_DELETE],"Delete",false,have_keys && keys.count<d->tracks[selected].key_count);
     if(have_keys) snprintf(context,sizeof(context),"%zu selected | Shift-click: extend selection | Arrows: scrub",keys.count);
     else snprintf(context,sizeof(context),"Right-click lane: create key. Click diamond: select. Ruler: scrub.");
+    SceneEditorMotionFeedback(d,selected,s->transport.sample,context,sizeof(context));
     const char* error=SceneEditorTimelineSelectionStatus();
     bool rejected=error[0]!=0;
     text(r,key_help[0]?key_help:u->feedback[0]?u->feedback:rejected?error:context,l->footer.x+444,l->footer.y+7,muted);
