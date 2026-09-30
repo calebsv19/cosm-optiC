@@ -26,7 +26,9 @@ follower verification now pass, including opt-in scene-focus composition,
 independent timing, source restoration and exact baked-reference images.
 Conversion refuses unsupported fits atomically under its documented sampled
 tolerance/capacity limits. M3 implementation and automated acceptance are
-complete; M4 smoothness is next. Human usability acceptance remains separate. See [Reusable movement paths](motion_paths.md).
+complete. M4 adds explicit spatial handle modes, retained automatic temporal
+policies, progress/speed feedback and editable derived XYZ trails. Combined
+native/headless, persistence and compatibility acceptance passes; M5 is later. Human usability acceptance remains separate. See [Reusable movement paths](motion_paths.md).
 
 
 ## Final-render object timeline parity

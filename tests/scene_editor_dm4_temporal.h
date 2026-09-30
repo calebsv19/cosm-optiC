@@ -37,7 +37,15 @@ static void dm4_temporal(SceneEditor *editor) {
   assert(TimelineDocumentAddTrack(&doc,&t)==TIMELINE_STATUS_OK);
   json_object *j=SceneTimelineDocumentToJson(&doc);assert(j);
   assert(SceneTimelineDocumentFromJson(j,&parsed)==TIMELINE_STATUS_OK);
-  assert(!memcmp(&doc.tracks[0],&parsed.tracks[0],sizeof(t)));json_object_put(j);
+  assert(!memcmp(&doc.tracks[0],&parsed.tracks[0],sizeof(t)));
+  json_object *tracks=NULL,*keys=NULL;assert(json_object_object_get_ex(j,"tracks",&tracks));
+  assert(json_object_object_get_ex(json_object_array_get_idx(tracks,0),"keys",&keys));
+  json_object_object_add(json_object_array_get_idx(keys,0),"tangent_mode",json_object_new_string("unknown"));
+  assert(SceneTimelineDocumentFromJson(j,&parsed)!=TIMELINE_STATUS_OK);json_object_put(j);
+  /* A manual neighbor survives recomputation beside an automatic key. */
+  double manual=t.keys[1].outgoing_value_offset;
+  t.keys[0].tangent_mode=TIMELINE_TANGENT_AUTO_CLAMPED;t.keys[0].value.as.scalar=.05;
+  assert(TimelineTrackRecomputeTangents(&t)==TIMELINE_STATUS_OK && t.keys[1].outgoing_value_offset==manual);
   fprintf(stderr,"D-M4 temporal math PASS: nonuniform smooth pass-through, clamped overshoot/reversal, flat stop, broken edits, saved policies\n");
 }
 

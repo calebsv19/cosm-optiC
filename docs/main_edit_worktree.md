@@ -1,5 +1,21 @@
 # RayTracing Main Edit Worktree
 
+## September 29 M4 source completion checkpoint
+
+M4 spatial policies, temporal smoothing, movement feedback and derived editable
+XYZ trails are implemented and pass native/headless, compact UI, persistence,
+combined follower/focus and M1–M3 regression acceptance. See `motion_paths.md`
+for compatibility and limits. The final audit preserves dormant corner handles
+when splitting straight segments and labels raw scalar distance rates accurately.
+
+Source checkpoints: `7962edd`, `47a3260`, `8335e22`, `4752090`, followed by the
+completion audit commit containing this entry. Final commit and Desktop identity
+are recorded in the private work status after refresh. Canonical stays at
+`286f866`; VERSION 0.17.0 and WORKER_VERSION 0.8.0 remain unchanged. No release,
+canonical adoption or remote operation. M5 is the next separately authorized
+implementation boundary; human hands-on acceptance remains separate.
+
+
 ## September 29 M3 completion audit
 
 M3 implementation and automated acceptance are complete in Main Edit. Explicit

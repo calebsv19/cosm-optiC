@@ -233,7 +233,7 @@ Four combined frames match independently baked reference images exactly.
 Six frozen legacy images and eight previous camera/light attachment images
 remain pixel-identical. Compact-window controls are exercised at 1024×640.
 M3 implementation and automated acceptance are complete; hands-on usability
-acceptance remains separate. D-M4 smoothness is the next implementation boundary.
+acceptance remains separate. D-M4 smoothness and direct-key trails are implemented below.
 
 
 ## M4 temporal policies
@@ -258,11 +258,12 @@ Bounded properties reject automatic curves whose analytic extrema leave their
 allowed range; choose Auto Clamped or change keys. Old scenes omit the optional
 `tangent_mode` and keep Broken/manual handles exactly. Loading saved policies
 preserves their handles; recomputation happens on edits. Smooth velocity does
-not promise acceleration continuity or limits. Full M4 acceptance remains open.
+not promise acceleration continuity or limits. M4 implementation and automated acceptance pass; hands-on acceptance remains separate.
 
 The common timeline footer reports route progress and nonnegative derived speed
 in world units/second for camera, light and mesh routes. Other scalar channels
-show a signed rate in their own units/second. A constant interval is labeled
+show a signed rate in their own units/second; raw XYZ distance channels use
+authored units/second, explicitly distinct from world-scaled route speed. A constant interval is labeled
 Hold interval; zero instantaneous rate is distinct. At a hold-then-jump boundary,
 speed is undefined; mismatched one-sided slopes report velocity discontinuity.
 The readout uses document frame rate and runtime world-scaled route length.
@@ -287,5 +288,7 @@ The trail is derived display data; it creates no saved path or extra position
 owner. Step jumps are shown as gaps. Display curves use 24 subdivisions per
 key-time interval; authoritative motion still uses the timeline evaluator.
 Native drag/cancel, compact layout, key-time union, atomic refusal/undo, fresh
-reverse-seek and seven independent baked-image comparisons pass. Full M4
-combined acceptance and the final installed checkpoint remain separate gates.
+reverse-seek and seven independent baked-image comparisons pass. Combined M4 acceptance also passes: linked geometry, clamped camera/focus,
+light hold and mesh reversal retain independent FOV/intensity, match seven
+headless/baked frames, and preserve M1–M3 regressions. Installed checkpoint
+identity is recorded in the private work status. M5 is a separate future step.

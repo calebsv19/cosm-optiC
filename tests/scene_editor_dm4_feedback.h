@@ -27,6 +27,12 @@ static void dm4_feedback(SceneEditor *editor) {
   assert(SceneEditorMotionFeedback(&doc,at,(TimelineSample){30,0,1},text,sizeof(text)) && strstr(text,"hold interval"));
   t->key_count=1;
   assert(SceneEditorMotionFeedback(&doc,at,(TimelineSample){0,0,1},text,sizeof(text)) && strstr(text,"hold interval"));
+  /* Scalar XYZ values are authored distances; only route speed uses the
+   * runtime's world-scaled arc length. Do not mislabel raw channel units. */
+  TimelineTrack saved=*t;
+  strcpy(t->property_id,"position_x");t->unit=TIMELINE_UNIT_WORLD_DISTANCE;
+  assert(SceneEditorMotionFeedback(&doc,at,(TimelineSample){0,0,1},text,sizeof(text)) && strstr(text,"authored/s") && !strstr(text,"world"));
+  *t=saved;
   choose_menu(editor,-1,SCENE_WORKSPACE_RENDER);assert(SceneEditorTimelineSelectTrack(at));
   SceneEditorRenderAuthoringSetTiming(true);SceneEditorSessionRuntimeRender(editor);capture(editor,"dm4_feedback.ppm");
   SDL_SetWindowSize(editor->window,1024,640);SDL_PumpEvents();SceneEditorSessionRuntimeRender(editor);capture(editor,"dm4_feedback_compact.ppm");

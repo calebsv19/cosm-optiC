@@ -47,7 +47,7 @@ bool SceneEditorMotionFeedback(const TimelineDocument *doc,size_t selected,Timel
     if(valid)snprintf(text,size,"Progress %.4g | Speed %.4g world/s | %s",value.value.as.scalar,fabs(rate)*length,state);
     else snprintf(text,size,"Progress %.4g | %s",value.value.as.scalar,state);
   } else {
-    const char *unit=t->unit==TIMELINE_UNIT_WORLD_DISTANCE?"world":t->unit==TIMELINE_UNIT_RADIANS?"rad":t->unit==TIMELINE_UNIT_DEGREES?"deg":t->unit==TIMELINE_UNIT_RELATIVE_INTENSITY?"intensity":"value";
+    const char *unit=t->unit==TIMELINE_UNIT_WORLD_DISTANCE?"authored":t->unit==TIMELINE_UNIT_RADIANS?"rad":t->unit==TIMELINE_UNIT_DEGREES?"deg":t->unit==TIMELINE_UNIT_RELATIVE_INTENSITY?"intensity":"value";
     if(valid)snprintf(text,size,"%.4g %s | Rate %.4g %s/s | %s",value.value.as.scalar,unit,rate,unit,state);
     else snprintf(text,size,"%.4g %s | %s",value.value.as.scalar,unit,state);
   }

@@ -93,6 +93,18 @@ static void dm4_spatial(SceneEditor *editor, bool reopen) {
   assert(SceneEditorMotionPathsRead(&paths) && paths.paths[0].points[0].handle_mode==MOTION_HANDLE_CORNER);
   assert(MotionPathSetHandleMode(&paths.paths[0].points[1],MOTION_HANDLE_LINKED));
   assert(SceneEditorMotionPathsSet(&paths,SceneEditorDocumentRevision(),message,sizeof(message)));
+  /* Splitting a straight segment must preserve its dormant corner handles. */
+  paths.paths[0].points[0].linear=true;
+  assert(SceneEditorMotionPathsSet(&paths,SceneEditorDocumentRevision(),message,sizeof(message)));
+  SceneEditorSessionRuntimeRender(editor);dm4_inspector_control(editor,"path_add");
+  MotionPaths split;assert(SceneEditorMotionPathsRead(&split) && split.paths[0].count==3);
+  for(int k=0;k<3;++k)assert(split.paths[0].points[0].incoming[k]==0 && split.paths[0].points[0].outgoing[k]==0);
+  dm4_inspector_control(editor,"path_remove");assert(SceneEditorMotionPathsRead(&split) && split.paths[0].count==2);
+  choose_menu(editor,1,0);choose_menu(editor,1,0);
+  assert(SceneEditorMotionPathsRead(&split) && split.paths[0].count==2);
+  assert(!memcmp(&split.paths[0],&paths.paths[0],sizeof(MotionPath)));
+  SDL_SetWindowSize(editor->window,1024,640);SDL_PumpEvents();SceneEditorSessionRuntimeRender(editor);
+  dm4_inspector_control(editor,"path_handle_mode");choose_menu(editor,1,0);
   assert(SceneEditorDocumentSave(message,sizeof(message)));
   fprintf(stderr,"D-M4 spatial PASS: policy math, zero/invalid vectors, legacy/invalid JSON, GUI mode, undo/redo and saved modes\n");
 }

@@ -560,8 +560,7 @@ static void add_point(MotionPath *p) {
       next.position[k] = mid;
       next.incoming[k] = left - mid;
       next.outgoing[k] = right - mid;
-      a->outgoing[k] = xy - x;
-      b->incoming[k] = zw - w;
+      if(!a->linear) {a->outgoing[k] = xy - x; b->incoming[k] = zw - w;}
     }
   }
   memmove(&p->points[at + 2], &p->points[at + 1],
