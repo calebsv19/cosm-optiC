@@ -2,8 +2,8 @@
 
 This API extends the [straight-route timing foundation](motion_timing_planner.md).
 It remains detached from saved scenes, editor commands and runtime evaluation.
-No existing path or XYZ keys are retimed. M5.4 curved-route bounds and M5.5
-UI/persistence integration remain separate work.
+No existing path or XYZ keys are retimed. The M5.4 [curved-route adapter](motion_route_planning.md)
+is now implemented and verified separately. M5.5 UI/persistence integration remains.
 
 ## Inputs and ownership
 

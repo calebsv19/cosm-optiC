@@ -1,5 +1,15 @@
 # RayTracing Main Edit Worktree
 
+## M5.4 detached curved-route checkpoint
+
+The curved-route adapter now verifies length/curvature bounds, explicit corner
+stops, singular endpoint rest bounds, and conservative total acceleration limits.
+XYZ sampling and numerical/sanitizer tests pass; see
+[curved-route planning](motion_route_planning.md). M5.5 retained UI/persistence
+integration and M5.6 final live acceptance remain active work. Installed Main
+Edit remains M4 f2491a1 until that integration is verified.
+
+
 ## September 29 M5.3 detached scheduling checkpoint
 
 Arrival/hold/departure scheduling now supports fixed-time anchors, preserved

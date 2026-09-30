@@ -17,3 +17,8 @@ cross-app contract warrants extraction; no shared module or vendored copy change
 - `motion_timing_schedule.c`: bounded waypoint arrival/hold/departure scheduling,
   conflict readback and deterministic sample selection. See
   `docs/motion_timing_schedule.md` and `test-motion-timing-schedule`.
+
+- `motion_route_geometry.c`: bounded arc/curvature analysis and distance sampling
+  for new planned motion, including singular-endpoint rest bounds.
+- `motion_route_schedule.c`: conservative curved-route timing budget, explicit
+  corner stops and XYZ samples. See `docs/motion_route_planning.md`.

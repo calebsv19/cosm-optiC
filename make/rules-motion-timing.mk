@@ -24,3 +24,28 @@ test-motion-timing-schedule-sanitize:
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) -std=c11 -Wall -Wextra -Werror -pedantic -g -fsanitize=address,undefined -fno-omit-frame-pointer -Iinclude $(MOTION_SCHEDULE_SRC) -lm -o $(BUILD_DIR)/tests/motion_timing_schedule_sanitize
 	$(BUILD_DIR)/tests/motion_timing_schedule_sanitize
+
+.PHONY: test-motion-route-geometry test-motion-route-geometry-sanitize
+MOTION_GEOMETRY_SRC := tests/motion_route_geometry_test.c src/motion/motion_route_geometry.c
+MOTION_GEOMETRY_FLAGS := -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude $(shell pkg-config --cflags json-c)
+$(BUILD_DIR)/tests/motion_route_geometry_test: $(MOTION_GEOMETRY_SRC) include/motion/motion_route_geometry.h include/motion/scene_motion_paths.h
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(MOTION_GEOMETRY_FLAGS) $(MOTION_GEOMETRY_SRC) -lm -o $@
+test-motion-route-geometry: $(BUILD_DIR)/tests/motion_route_geometry_test
+	@$<
+test-motion-route-geometry-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(MOTION_GEOMETRY_FLAGS) -g -fsanitize=address,undefined -fno-omit-frame-pointer $(MOTION_GEOMETRY_SRC) -lm -o $(BUILD_DIR)/tests/motion_route_geometry_sanitize
+	$(BUILD_DIR)/tests/motion_route_geometry_sanitize
+
+.PHONY: test-motion-route-schedule test-motion-route-schedule-sanitize
+MOTION_ROUTE_SCHEDULE_SRC := tests/motion_route_schedule_test.c src/motion/motion_route_geometry.c src/motion/motion_route_schedule.c src/motion/motion_timing_plan.c src/motion/motion_timing_duration.c src/motion/motion_timing_schedule.c
+$(BUILD_DIR)/tests/motion_route_schedule_test: $(MOTION_ROUTE_SCHEDULE_SRC) $(MOTION_SCHEDULE_HEADERS) include/motion/motion_route_geometry.h include/motion/motion_route_schedule.h
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(MOTION_GEOMETRY_FLAGS) $(MOTION_ROUTE_SCHEDULE_SRC) -lm -o $@
+test-motion-route-schedule: $(BUILD_DIR)/tests/motion_route_schedule_test
+	@$<
+test-motion-route-schedule-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(MOTION_GEOMETRY_FLAGS) -g -fsanitize=address,undefined -fno-omit-frame-pointer $(MOTION_ROUTE_SCHEDULE_SRC) -lm -o $(BUILD_DIR)/tests/motion_route_schedule_sanitize
+	$(BUILD_DIR)/tests/motion_route_schedule_sanitize

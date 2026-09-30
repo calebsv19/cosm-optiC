@@ -5,6 +5,9 @@
 const char *MotionTimingConflictLabel(MotionTimingConflictKind k) {
     switch(k) {
     case MOTION_CONFLICT_NONE:return "ok";
+    case MOTION_CONFLICT_CORNER_STOP:return "explicit zero-speed waypoint required at corner or singular endpoint";
+    case MOTION_CONFLICT_ROUTE_SINGULAR:return "route has an unresolved interior singularity; split or reshape it explicitly";
+    case MOTION_CONFLICT_CURVE_SPEED:return "waypoint speed exceeds curved-route budget; revise it explicitly";
     case MOTION_CONFLICT_INPUT:return "invalid waypoint or limits";
     case MOTION_CONFLICT_MOVING_HOLD:return "hold requires zero waypoint speed";
     case MOTION_CONFLICT_MOVING_REVERSAL:return "reversal requires zero waypoint speed";
