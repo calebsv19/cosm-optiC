@@ -266,3 +266,26 @@ show a signed rate in their own units/second. A constant interval is labeled
 Hold interval; zero instantaneous rate is distinct. At a hold-then-jump boundary,
 speed is undefined; mismatched one-sided slopes report velocity discontinuity.
 The readout uses document frame rate and runtime world-scaled route length.
+
+## Derived XYZ motion trails
+
+Select an object's Position X, Y or Z channel in Render/Timing to show its
+motion trail. **Frame XYZ trail** fits the derived motion in the viewport.
+Markers show the union of the three channels' key times. Click a marker to seek
+and select its key; drag to edit XY at its authored Z plane. Use the existing
+position inspector for Z or numeric XYZ edits. Escape, focus loss and navigation
+modifiers cancel unfinished drags. The scalar curve editor remains available.
+
+A marker edit evaluates all three coordinates at that time, then updates or
+inserts XYZ keys in one retained command. Unequal axis key times are supported;
+a single-key axis is constant until explicitly edited. Existing complete-XYZ
+ownership rules remain: missing entire channels or an active route owner cannot
+be silently replaced. Disabled source history is not enabled. Revision/capacity
+failures leave all axes unchanged. Undo/redo and save/reopen retain the edit.
+
+The trail is derived display data; it creates no saved path or extra position
+owner. Step jumps are shown as gaps. Display curves use 24 subdivisions per
+key-time interval; authoritative motion still uses the timeline evaluator.
+Native drag/cancel, compact layout, key-time union, atomic refusal/undo, fresh
+reverse-seek and seven independent baked-image comparisons pass. Full M4
+combined acceptance and the final installed checkpoint remain separate gates.

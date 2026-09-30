@@ -1,5 +1,6 @@
 #include "scene_editor_object_timeline_panel.h"
 #include "editor/scene_editor_motion_paths.h"
+#include "editor/scene_editor_motion_trail.h"
 #include "editor/scene_editor_chrome_actions.h"
 #include "editor/scene_editor_pointer_event.h"
 #include "editor/editor_mode_router.h"
@@ -70,7 +71,7 @@ void SceneEditorRenderButton(SDL_Renderer* r,SDL_Rect rect,const char* text,bool
 }
 bool SceneEditorRenderAuthoringTiming(void) {return timing;}
 void SceneEditorRenderAuthoringSetTiming(bool enabled) {if(enabled) SceneEditorMotionPathPanelSelect(false);SceneEditorTimelineKeyInspectorReset();timing=enabled;editing=-1;SDL_StopTextInput();SceneEditorCameraInspectorReset();}
-void SceneEditorRenderAuthoringReset(void) {SceneEditorMotionPathPanelReset();SceneEditorObjectTimelinePanelReset();SceneEditorTimelineKeyInspectorReset();timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
+void SceneEditorRenderAuthoringReset(void) {SceneEditorMotionTrailReset();SceneEditorMotionPathPanelReset();SceneEditorObjectTimelinePanelReset();SceneEditorTimelineKeyInspectorReset();timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
 void SceneEditorRenderAuthoringSelect(SceneEditor* editor,bool camera) {
     SceneEditorMotionPathPanelSelect(false);
     SceneEditorCameraGestureCancel();SceneEditorLightGestureCancel();SceneEditorCameraInspectorReset();
@@ -113,6 +114,7 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     SceneEditorPaneLayout layout;if(!SceneEditorGetPaneLayout(&layout) || layout.viewport_expanded) return false;
     if(SceneEditorMotionPathPanelEvent(editor,e,&layout)) return true;
     if(SceneEditorMotionPathPanelActive()) {if(e->type==SDL_MOUSEBUTTONDOWN && hit(controls[0],e->button.x,e->button.y)) {SceneEditorRenderAuthoringSelect(editor,true);return true;}if(e->type==SDL_MOUSEBUTTONDOWN && hit(controls[1],e->button.x,e->button.y)) {SceneEditorRenderAuthoringSelect(editor,false);return true;}return false;}
+    if(SceneEditorMotionTrailEvent(editor,e,&layout)) return true;
     if(SceneEditorObjectTimelinePanelEvent(e)) {editing=-1;return true;}
     if(SceneEditorObjectTimelineEvent(editor,e)) return true;
     if(timing && SceneEditorTimelineKeyInspectorEvent(e)) {editing=-1;return true;}
@@ -175,6 +177,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
     for(int i=0;i<17;++i) controls_enabled[i]=true;
     if(layout->viewport_expanded) return;
     SceneEditorMotionPathOverlayDraw(editor,layout);
+    SceneEditorMotionTrailDraw(editor,layout);
     TimelineTrack track;TimelineRate rate;TimelineRange range;TimelineSample sample;
     bool ready=SceneEditorTimelineSelectedTrack(&track,&rate,&range,&sample);
     bool object=ready && !strncmp(track.target_id,"object/",7);
@@ -265,6 +268,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
 bool SceneEditorRenderAuthoringControl(const char* name,SDL_Rect* out) {
     const char* names[]={"camera","light","path","animation","setup","frame_paths","previous","next","select","add","delete","interpolation","handles","yaw","pitch","intensity","paths"};
     if(!name || !out) return false;
+    if(SceneEditorMotionTrailControl(name,out)) return true;
     if(SceneEditorMotionPathPanelControl(name,out)) return true;
     if(SceneEditorObjectTimelinePanelControl(name,out)) return true;
     if(!strcmp(name,"shape")) name="path";

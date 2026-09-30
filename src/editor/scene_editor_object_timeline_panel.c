@@ -2,6 +2,7 @@
 #include "editor/scene_editor_document.h"
 #include "scene_editor_object_timeline_panel.h"
 #include "editor/scene_editor_object_timeline.h"
+#include "editor/scene_editor_motion_trail.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_timeline_selection.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -66,47 +67,8 @@ static bool finish_field(void) {
     panel.message[0]=0;SDL_StopTextInput();return true;
 }
 static bool set_position_key(void) {
-    static TimelineDocument doc;
-    if(!SceneEditorObjectTimelineEditable(panel.target,panel.message,sizeof(panel.message)) ||
-       SceneEditorDocumentGetTimeline(&doc)!=TIMELINE_STATUS_OK) return false;
-    unsigned axes=0;
-    for(size_t i=0;i<doc.track_count;++i) {
-        TimelineTrack* track=&doc.tracks[i];int axis=RuntimeObjectTimelineAxis(track->property_id);
-        if(axis<0 || strcmp(track->target_id,panel.target) || !track->enabled) continue;
-        size_t key=0;for(;key<track->key_count;++key) if(track->keys[key].frame==panel.frame) break;
-        if(key<track->key_count) track->keys[key].value=TimelineValueScalar(panel.position[axis]);
-        else {
-            TimelineKeyframe inserted={.frame=panel.frame,.value=TimelineValueScalar(panel.position[axis]),
-                .interpolation_to_next=TIMELINE_INTERPOLATION_LINEAR};
-            size_t neighbor=0;while(neighbor+1<track->key_count && track->keys[neighbor+1].frame<panel.frame)++neighbor;
-            if(track->key_count && track->keys[neighbor].tangent_mode!=TIMELINE_TANGENT_BROKEN && track->keys[neighbor].interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER) {
-                inserted.tangent_mode=track->keys[neighbor].tangent_mode;
-                inserted.interpolation_to_next=TIMELINE_INTERPOLATION_CUBIC_BEZIER;
-            }
-            TimelineStatus status=TimelineTrackInsertKey(track,inserted,&key);
-            if(status!=TIMELINE_STATUS_OK) {
-                if(status==TIMELINE_STATUS_CAPACITY_EXCEEDED)
-                    snprintf(panel.message,sizeof(panel.message),"Position %c: %zu/%u keys. Edit/remove a key.",
-                        'X'+axis,track->key_count,TIMELINE_TRACK_KEY_CAPACITY);
-                else snprintf(panel.message,sizeof(panel.message),"Position %c: cannot insert frame %lld (%s).",
-                    'X'+axis,(long long)panel.frame,TimelineStatusLabel(status));
-                return false;
-            }
-        }
-        if(TimelineTrackRecomputeTangents(track)!=TIMELINE_STATUS_OK) return false;
-        /* Inserting inside a curve must keep its temporal handles admissible. */
-        for(size_t j=0;j+1<track->key_count;++j) {
-            TimelineKeyframe* a=&track->keys[j];TimelineKeyframe* b=&track->keys[j+1];
-            double span=(double)(b->frame-a->frame),extent=a->outgoing_frame_offset-b->incoming_frame_offset;
-            if(extent>span && span>0) {double scale=span/extent;
-                a->outgoing_frame_offset*=scale;a->outgoing_value_offset*=scale;
-                b->incoming_frame_offset*=scale;b->incoming_value_offset*=scale;}
-        }
-        axes|=1u<<axis;
-    }
-    if(axes!=7) {snprintf(panel.message,sizeof(panel.message),"Position channels are incomplete.");return false;}
     int64_t frame=panel.frame;
-    if(!SceneEditorDocumentSetTimeline(&doc,panel.revision,panel.message,sizeof(panel.message))) return false;
+    if(!SceneEditorMotionTrailSetKey(panel.target,frame,panel.position,panel.revision,panel.message,sizeof(panel.message)))return false;
     panel.valid=false;sync_panel();SceneEditorTimelineSelectKey(frame,false);
     snprintf(panel.message,sizeof(panel.message),"Keyed frame %lld. Scrub to preview; Save to keep.",(long long)frame);return true;
 }
