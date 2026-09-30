@@ -8,10 +8,14 @@
 #define MOTION_LIGHT_PROGRESS_PROPERTY "light/route_progress"
 #define MOTION_CAMERA_PROGRESS_PROPERTY "camera/route_progress"
 #define MOTION_PROGRESS_PROPERTY "object/path_progress"
+typedef enum MotionHandleMode {
+  MOTION_HANDLE_INDEPENDENT, MOTION_HANDLE_LINKED, MOTION_HANDLE_CORNER
+} MotionHandleMode;
 typedef struct MotionPathPoint {
   char id[64];
   double position[3], incoming[3], outgoing[3];
   bool linear;
+  MotionHandleMode handle_mode;
 } MotionPathPoint;
 typedef struct MotionPath {
   char id[64], name[128];
@@ -35,6 +39,10 @@ typedef struct MotionPaths {
   MotionPath paths[MOTION_PATH_CAPACITY];
   MotionPathBinding bindings[MOTION_BINDING_CAPACITY];
 } MotionPaths;
+/* Policies alter geometry only through explicit edits, never during loading. */
+const char *MotionHandleModeLabel(MotionHandleMode mode);
+bool MotionPathSetHandleMode(MotionPathPoint *point, MotionHandleMode mode);
+bool MotionPathEditHandle(MotionPathPoint *point, bool incoming, const double value[3]);
 bool MotionPathsParse(json_object *authoring, MotionPaths *out, char *message,
                       size_t size);
 json_object *MotionPathsToJson(const MotionPaths *paths);

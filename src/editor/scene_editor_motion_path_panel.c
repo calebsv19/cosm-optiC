@@ -47,6 +47,7 @@ enum {
   DEPTH,
   ATTACH_SECTION,
   DELETE_TOOL,
+  HANDLE_MODE,
   CONTROL_COUNT
 };
 static struct {
@@ -449,6 +450,8 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
                                       : "Next segment: Cubic Bezier",
            ui.point < (int)p->count - 1);
     y += 40;
+    button(r, HANDLE_MODE, (SDL_Rect){x,y,w,30}, MotionHandleModeLabel(p->points[ui.point].handle_mode), true);
+    y += 40;
     char plane[100];
     snprintf(plane, sizeof(plane),
              ui.editing == 10 ? "Draw plane Z: %s_" : "Draw plane Z: %s",
@@ -629,8 +632,11 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         double *v = ui.editing < 3   ? p->points[ui.point].position
                     : ui.editing < 6 ? p->points[ui.point].incoming
                                      : p->points[ui.point].outgoing;
-        if (valid)
-          v[ui.editing % 3] = value;
+        if (valid) {
+          double next[3]; memcpy(next,v,sizeof(next));next[ui.editing%3]=value;
+          if(ui.editing<3) memcpy(v,next,sizeof(next));
+          else valid=MotionPathEditHandle(&p->points[ui.point],ui.editing<6,next);
+        }
       }
       if (valid && SceneEditorMotionPathsSet(&d, ui.revision, ui.message,
                                              sizeof(ui.message))) {
@@ -667,8 +673,9 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         double *v = ui.handle == 1   ? point->incoming
                     : ui.handle == 2 ? point->outgoing
                                      : point->position;
-        v[0] = x / s - (ui.handle ? point->position[0] : 0);
-        v[1] = y / s - (ui.handle ? point->position[1] : 0);
+        double next[3]={x/s-(ui.handle?point->position[0]:0),y/s-(ui.handle?point->position[1]:0),v[2]};
+        if(ui.handle) MotionPathEditHandle(point,ui.handle==1,next);
+        else memcpy(v,next,sizeof(next));
       }
       return true;
     }
@@ -834,6 +841,10 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
           --ui.point;
         changed = true;
       }
+      if (i == HANDLE_MODE) {
+        cancel_field_edit();
+        changed=MotionPathSetHandleMode(&p->points[ui.point],(p->points[ui.point].handle_mode+1)%3);
+      }
       if (i == MODE) {
         p->points[ui.point].linear = !p->points[ui.point].linear;
         changed = true;
@@ -975,7 +986,7 @@ bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
       "follower_next",    "path_attach",     "path_detach",
       "path_timing",      "path_save",       "path_frame",
       "path_select_tool", "path_place_tool", "path_frame_selected",
-      "path_plane_z",     "path_followers",  "path_delete_selected"};
+      "path_plane_z",     "path_followers",  "path_delete_selected", "path_handle_mode"};
   for (int i = 0; i < CONTROL_COUNT; ++i)
     if (!strcmp(name, names[i])) {
       *out = ui.controls[i];

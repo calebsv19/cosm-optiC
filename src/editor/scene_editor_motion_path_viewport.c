@@ -73,10 +73,12 @@ bool MotionPathViewportAppend(MotionPath *path, const double point[3]) {
       return false;
     next.position[k] = point[k];
     double delta = (point[k] - end->position[k]) / 3;
-    end->outgoing[k] = delta;
+
     next.incoming[k] = -delta;
     next.outgoing[k] = delta;
   }
+  double outgoing[3]; for(int k=0;k<3;++k) outgoing[k]=(point[k]-end->position[k])/3;
+  MotionPathEditHandle(end,false,outgoing);
   next.linear = end->linear;
   path->points[path->count++] = next;
   return true;

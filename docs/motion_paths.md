@@ -20,7 +20,12 @@ the object controls.
    remain. Undo restores edits.
 4. **Next segment** switches the outgoing segment between straight and cubic
    Bezier. Handle values are offsets from their point in authored scene units.
-   Incoming/outgoing handles are independent; smooth/linked policies come later.
+   Use **Handles** in the inspector to cycle Independent, Smooth / Linked, and Corner.
+   Linked aligns opposite directions while retaining the opposite handle length;
+   Corner collapses both handles. Pulling a corner handle starts Independent
+   shaping. These policies apply to cubic handles; Straight segments retain
+   their explicitly linear geometry. Old scenes default to Independent without
+   changing geometry. Mode changes, numeric edits and drags use retained undo.
 5. Shape the route before attaching anything. Expand **2. Attach followers...**,
    choose a follower with the object arrows, then **Attach on path**. This places
    its origin on the route and creates **Path progress** keys from 0 to 1 across

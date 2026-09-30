@@ -1,5 +1,9 @@
 # src › editor
 
+Spatial handle policies live in `src/motion/scene_motion_handles.c`. The path
+inspector and viewport route numeric/drag edits through the same policy function.
+Saved policies default to Independent for older scenes; load never reshapes them.
+
 `scene_editor_legacy_route_conversion.c` owns bounded, atomic camera/light legacy
 geometry and timing conversion. Camera/light follower panel siblings expose
 conversion, inactive source identity and retained attachment commands. Camera

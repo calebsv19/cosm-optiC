@@ -435,6 +435,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_dm3_camera.h"
 #include "scene_editor_dm3_light.h"
 #include "scene_editor_dm3_completion.h"
+#include "scene_editor_dm4_spatial.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -457,6 +458,9 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && (!strcmp(argv[3],"--dm4-spatial") || !strcmp(argv[3],"--dm4-spatial-reopen"))) {
+        dm4_spatial(&editor,!strcmp(argv[3],"--dm4-spatial-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if(argc==4 && (!strcmp(argv[3],"--dm3-complete") || !strcmp(argv[3],"--dm3-complete-reopen"))) {
         dm3_completion(&editor,argv[2],!strcmp(argv[3],"--dm3-complete-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

@@ -85,6 +85,14 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
       if (strcmp(mode, "line") && strcmp(mode, "cubic"))
         return fail(m, n, "segment must be line or cubic");
       v->linear = !strcmp(mode, "line");
+      json_object *handle_mode = member(point, "handle_mode");
+      if (handle_mode) {
+        const char *h = text(point, "handle_mode");
+        if (!strcmp(h,"independent")) v->handle_mode=MOTION_HANDLE_INDEPENDENT;
+        else if (!strcmp(h,"linked")) v->handle_mode=MOTION_HANDLE_LINKED;
+        else if (!strcmp(h,"corner")) v->handle_mode=MOTION_HANDLE_CORNER;
+        else return fail(m,n,"invalid handle mode");
+      }
       for (size_t k = 0; k < j; ++k)
         if (!strcmp(v->id, p->points[k].id))
           return fail(m, n, "duplicate point identity");
@@ -173,12 +181,18 @@ json_object *MotionPathsToJson(const MotionPaths *d) {
     json_object_object_add(o, "points", points);
     for (size_t j = 0; j < p->count; ++j) {
       const MotionPathPoint *v = &p->points[j];
+      if(v->handle_mode<MOTION_HANDLE_INDEPENDENT || v->handle_mode>MOTION_HANDLE_CORNER) {
+        json_object_put(root); return NULL;
+      }
       json_object *point = json_object_new_object();
       json_object_array_add(points, point);
       json_object_object_add(point, "id", json_object_new_string(v->id));
       json_object_object_add(point, "position", vec(v->position));
       json_object_object_add(point, "incoming", vec(v->incoming));
       json_object_object_add(point, "outgoing", vec(v->outgoing));
+      json_object_object_add(point, "handle_mode", json_object_new_string(
+          v->handle_mode==MOTION_HANDLE_LINKED?"linked":
+          v->handle_mode==MOTION_HANDLE_CORNER?"corner":"independent"));
       json_object_object_add(
           point, "segment",
           json_object_new_string(v->linear ? "line" : "cubic"));
