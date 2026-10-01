@@ -121,6 +121,19 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
          !vector(o,"rotation_offset",b->rotation_offset)) return fail(m,n,"invalid object orientation settings");
       b->follow_direction=json_object_get_boolean(orientation);b->forward_axis=json_object_get_int(axis);
     }
+    json_object *roll = member(o,"orientation_frame");
+    if(roll) {
+      json_object *start=member(roll,"start_roll"),*end=member(roll,"end_roll"),*enabled_end=member(roll,"end_enabled"),*mode=member(roll,"camera_mode");
+      if(!json_object_is_type(roll,json_type_object) || !vector(roll,"start_up",b->start_up) ||
+         !(json_object_is_type(start,json_type_double)||json_object_is_type(start,json_type_int)) ||
+         !(json_object_is_type(end,json_type_double)||json_object_is_type(end,json_type_int)) ||
+         !json_object_is_type(enabled_end,json_type_boolean) || !json_object_is_type(mode,json_type_int))return fail(m,n,"invalid orientation frame");
+      b->start_roll=json_object_get_double(start);b->end_roll=json_object_get_double(end);
+      b->end_roll_enabled=json_object_get_boolean(enabled_end);b->camera_orientation=json_object_get_int(mode);
+      if(!isfinite(b->start_roll)||!isfinite(b->end_roll)||fabs(b->start_roll)>36000||fabs(b->end_roll)>36000||
+         b->camera_orientation<0||b->camera_orientation>2||
+         (strcmp(b->target_id,"camera/main") && b->camera_orientation))return fail(m,n,"invalid orientation roll/mode");
+    }
     json_object *focus = member(o, "use_focus_target");
     if (focus) {
       if (strcmp(b->target_id, "camera/main") || !json_object_is_type(focus, json_type_boolean))
@@ -229,6 +242,13 @@ json_object *MotionPathsToJson(const MotionPaths *d) {
       json_object_object_add(o,"forward_axis",json_object_new_int(b->forward_axis));
       json_object_object_add(o,"rotation_offset",vec(b->rotation_offset));
     }
+    json_object *frame=json_object_new_object();
+    json_object_object_add(frame,"start_up",vec(b->start_up));
+    json_object_object_add(frame,"start_roll",json_object_new_double(b->start_roll));
+    json_object_object_add(frame,"end_roll",json_object_new_double(b->end_roll));
+    json_object_object_add(frame,"end_enabled",json_object_new_boolean(b->end_roll_enabled));
+    json_object_object_add(frame,"camera_mode",json_object_new_int(b->camera_orientation));
+    json_object_object_add(o,"orientation_frame",frame);
     if (b->restore_known) {
       json_object *restore = json_object_new_array();
       for (size_t j = 0; j < b->restore_count; ++j)

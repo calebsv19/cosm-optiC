@@ -1,5 +1,21 @@
 # optiC Current Truth
 
+## September 30 — stable orientation and shared playhead acceptance
+
+Five bounded slices now provide deterministic transported route frames, the same
+evaluated object pose across all five editor workspaces, editable start-up/end-roll
+handles with undo and persistence, and explicit camera route/stable-focus modes
+with full forward/up propagation into preview and final rendering. See
+[movement paths](motion_paths.md) for controls, compatibility and limits.
+
+Clang full rebuild, numerical/ASan/UBSan, native handle/undo/File Save/reopen,
+combined three-object/camera/light seeking across five workspaces, camera projector
+parity and headless target/roll image checks pass. Existing targeted timeline,
+preview and picking regressions pass. The unrelated full renderer/material/worker
+suite was not rerun. Human aircraft-scene acceptance remains separate. Automatic
+banking, intermediate roll markers and closed-loop seam correction are deferred.
+VERSION and WORKER_VERSION remain unchanged; no canonical adoption or release.
+
 ## M5.4–M5.6 source and behavior acceptance
 
 M5 now has explicit retained planning for object, camera and light route followers.

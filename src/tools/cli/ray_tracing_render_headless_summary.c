@@ -134,6 +134,10 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  \"evaluated_light\": {\"valid\": %s, \"position\": [%.17g, %.17g, %.17g], \"progress\": %.17g, \"intensity\": %.17g},\n",
             light->valid ? "true" : "false", light->position.x, light->position.y,
             light->position.z, light->progress, light->intensity);
+    fprintf(file,"  \"evaluated_camera_orientation\": {\"enabled\":%s,\"fallback\":%s,\"forward\":[%.17g,%.17g,%.17g],\"up\":[%.17g,%.17g,%.17g]},\n",
+        camera->has_orientation_frame?"true":"false",camera->orientation_fallback?"true":"false",
+        camera->orientation_frame.forward[0],camera->orientation_frame.forward[1],camera->orientation_frame.forward[2],
+        camera->orientation_frame.up[0],camera->orientation_frame.up[1],camera->orientation_frame.up[2]);
     fprintf(file,"  \"evaluated_objects\": [");
     for(size_t i=0;i<preflight->evaluated_object_count;++i) {
         const RayEvaluatedObjectTransform* object=&preflight->evaluated_objects[i];

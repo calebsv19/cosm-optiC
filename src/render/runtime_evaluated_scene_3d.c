@@ -87,6 +87,10 @@ bool RuntimeEvaluatedScene3DApply(
         runtime_evaluated_scene_vec3(snapshot->camera.position);
     copied_scene->camera.rotation = snapshot->camera.yaw_radians;
     copied_scene->camera.lookPitch = snapshot->camera.pitch_radians;
+    copied_scene->camera.hasOrientationFrame=snapshot->camera.has_orientation_frame;
+    const MotionFrame *orientation=&snapshot->camera.orientation_frame;
+    copied_scene->camera.orientationForward=vec3(orientation->forward[0],orientation->forward[1],orientation->forward[2]);
+    copied_scene->camera.orientationUp=vec3(orientation->up[0],orientation->up[1],orientation->up[2]);
     copied_scene->camera.zoom = snapshot->camera.zoom;
     copied_scene->hasCamera = snapshot->camera.valid;
     return copied_scene->hasLight && copied_scene->hasCamera;

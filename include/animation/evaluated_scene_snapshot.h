@@ -2,6 +2,7 @@
 #define RAY_TRACING_EVALUATED_SCENE_SNAPSHOT_H
 
 #include <stdbool.h>
+#include "motion/motion_frame.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -85,6 +86,9 @@ typedef struct RayEvaluatedCamera {
     bool valid;
     bool uses_authored_path;
     TimelineVec3 position;
+    bool has_orientation_frame;
+    bool orientation_fallback;
+    MotionFrame orientation_frame;
     double yaw_radians;
     double pitch_radians;
     double fov_y_degrees;

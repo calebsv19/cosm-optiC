@@ -1,3 +1,4 @@
+#include "scene_editor_motion_orientation_panel.h"
 /* Independent path library and geometry authoring. Document commands own
  * history; this module retains only UI selection, text drafts and an
  * uncommitted drag. */
@@ -74,6 +75,7 @@ static void cancel_field_edit(void) {
   SDL_StopTextInput();
 }
 void SceneEditorMotionPathPanelReset(void) {
+  MotionOrientationPanelReset();
   SceneEditorMotionPlanPanelReset();
   if (ui.editing >= 0)
     SDL_StopTextInput();
@@ -82,6 +84,7 @@ void SceneEditorMotionPathPanelReset(void) {
   ui.hover_point=-1;
 }
 void SceneEditorMotionPathPanelSelect(bool selected) {
+  MotionOrientationPanelReset();
   TimelineTrack prior_track; TimelineRate rate; TimelineRange range; TimelineSample sample;
   bool follower_timing = selected && SceneEditorTimelineSelectedTrack(&prior_track, &rate, &range, &sample) &&
       (!strcmp(prior_track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY) || !strcmp(prior_track.property_id, MOTION_LIGHT_PROGRESS_PROPERTY) || !strcmp(prior_track.property_id,MOTION_PROGRESS_PROPERTY));
@@ -141,7 +144,7 @@ static void pick_point(const MotionPath *p,int x,int y,int *picked,int *kind) {
     double best = 144;
     int point = -1, handle = 0;
     for (size_t i = 0; i < p->count; ++i) {
-      for (int h = 0; h < 3; ++h) {
+      for (int h = 0; h < (ui.show_followers?1:3); ++h) {
         if (h && i != (size_t)ui.point)
           continue;
         double v[3];
@@ -216,12 +219,13 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
   if (!SceneEditorMotionPathsRead(&d))
     return false;
   MotionPath *p = MotionPathPanelSelected(&d);
+  if(MotionOrientationPanelEvent(event,ui.message,sizeof(ui.message)))return true;
   if(event->type==SDL_MOUSEMOTION && !ui.dragging) {
     ui.hover_point=-1;ui.hover_handle=0;
     SceneEditorObjectTransformHandle handle;
     if(p && ui.projected && hit(l->viewport_rect,event->motion.x,event->motion.y) &&
        !(SDL_GetModState()&(KMOD_ALT|KMOD_CTRL|KMOD_GUI|KMOD_SHIFT)) && !event->motion.state &&
-       !MotionPointGizmoPick(&ui.projector,&p->points[ui.point],event->motion.x,event->motion.y,&handle))
+       (ui.show_followers || !MotionPointGizmoPick(&ui.projector,&p->points[ui.point],event->motion.x,event->motion.y,&handle)))
       pick_point(p,event->motion.x,event->motion.y,&ui.hover_point,&ui.hover_handle);
   }
   if(event->type==SDL_WINDOWEVENT && (event->window.event==SDL_WINDOWEVENT_LEAVE || event->window.event==SDL_WINDOWEVENT_FOCUS_LOST))ui.hover_point=-1;
@@ -688,7 +692,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       return true;
     }
 
-    int axis=MotionPointGizmoPick(&ui.projector,&p->points[ui.point],x,y,&ui.gizmo_handle);
+    int axis=ui.show_followers?0:MotionPointGizmoPick(&ui.projector,&p->points[ui.point],x,y,&ui.gizmo_handle);
     if(axis) {
       cancel_field_edit();SceneEditorMotionPlanPanelReset();
       ui.show_followers=false;ui.right_offset=0;
@@ -736,6 +740,7 @@ bool SceneEditorMotionPathPanelEvent(SceneEditor *editor, SDL_Event *event,
   return handled;
 }
 bool SceneEditorMotionPathPanelControl(const char *name, SDL_Rect *out) {
+  if(MotionOrientationPanelControl(name,out))return true;
   if (!ui.active)
     return false;
   if ((ui.follower_type==0 && !strcmp(name,"path_timing")) ||

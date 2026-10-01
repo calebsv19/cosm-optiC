@@ -340,16 +340,53 @@ rotation into those fields; subsequent base edits do not silently change this
 copy. Following replaces evaluated base rotation while enabled; disabling or
 detaching restores normal authored rotation. Position timing is unchanged.
 
-This basic mode uses world +Y up, with +Z fallback near vertical tangents. It is
-stateless across seeking, but the up-reference switch can produce a roll change
-near vertical routes. It does not bank, simulate flight, smooth hard corners or
-turn the airplane around when progress reverses. Holds retain the route heading;
-a wholly stationary path leaves authored orientation in use. For aircraft rolls
-and vertical loops, transported orientation/banking is a later refinement.
-Existing scenes default to orientation off. Typed camera/light orientation is
-unchanged. Saved object bindings add `follow_direction`, `forward_axis` and
-`rotation_offset`; invalid axes/nonfinite offsets are rejected. Headless summaries
-include `has_rotation` and `rotation_radians` for evaluated object transforms.
+Orientation uses a deterministic rotation-minimizing frame seeded from world +Z
+(projected perpendicular to the initial tangent). If that reference is parallel,
+a perpendicular axis is selected once at the start. The up direction is then
+transported along the route, avoiding world-axis switching and playback-history
+dependence. Forward always follows increasing route distance, including while
+progress runs backward. Holds preserve heading. A wholly stationary route keeps
+the authored orientation. Hard corners and exact reversals remain geometric
+discontinuities; reversal uses a deterministic half-turn about the previous up.
+This is not automatic banking, collision avoidance or closed-loop seam correction.
+
+In the follower inspector, **Start up / roll** sets initial roll in degrees.
+**End roll** is optional: when enabled it interpolates the unwrapped start/end
+angles with smoothstep over route distance. For example, 25 to 385 means one full
+turn. The green Start up ring and purple End roll ring are follower-local controls,
+not Bézier tangents. Drag a ring to preview its arrow; release commits one undoable
+edit. Escape or focus loss cancels. Model geometry updates on commit. An edge-on
+ring may not be draggable; orbit the viewport or use the numeric fields. Reset
+restores automatic +Z-reference orientation with no roll. Start/end settings are
+independent for every follower sharing a path. Geometry handles are hidden while
+inspecting followers; clicking a path point returns to shape editing.
+
+Camera followers have explicit **Aim** modes: **Authored / legacy focus** preserves
+existing behavior, **Follow route** uses the transported tangent frame, and
+**Stable focus target** transports an aim frame toward the existing scene focus
+target. These new modes carry full forward/up orientation through evaluated
+snapshots, viewport projection and final render rays. They support roll and
+vertical aiming without the legacy focus pitch clamp. FOV remains independent.
+Missing focus targets use the route frame with visible feedback; at a coincident
+target the deterministic preceding heading is retained. Passing through a target
+can still cause a real reversal in aim. Explicit headless inspection look-at
+requests override the path orientation for that request.
+
+Saved bindings retain `follow_direction`, `forward_axis`, `rotation_offset`, and
+an additive `orientation_frame` object (`start_up`, `start_roll`, `end_roll`,
+`end_enabled`, `camera_mode`). Old scenes require no migration; camera mode defaults
+to legacy. Invalid axes, nonfinite values and invalid mode/roll ranges are rejected.
+Headless summaries expose evaluated object rotation and camera forward/up plus
+fallback status. The scene remains authoritative; derived frames are rebuilt when
+route/planning revisions change and are not persisted.
+
+All workspaces display the current timeline sample. Changing workspace pauses
+playback but retains evaluated object placement, orientation and camera/light
+markers. Preview also opens at that sample. The frame readout distinguishes the
+evaluated scene from base authoring. Scrubbing and workspace switches never bake
+transforms into the saved document. Ordinary move/rotate edits that conflict with
+animated ownership are refused with a path/timing/alignment explanation; scale
+remains editable. Material isolation and shading remain presentation choices.
 
 The `--path-library` native acceptance now clicks File > Save, checks unbound
 paths, injects a write-sync failure and retries, reopens orientation settings,
@@ -363,3 +400,14 @@ object framing use the evaluated pose. Changing Model forward or scrubbing the
 timeline therefore updates the visible heading; disabling Follow restores the
 authored rotation. The `--path-viewport-rotation` native acceptance covers all six
 axes, seek/reseek, render-pose parity, picking, framing, disabling and Save/reopen.
+
+The stable-orientation acceptance adds `test-motion-orientation` and its sanitizer
+gate (saved-plane curve, helix, vertical loop, stationary fallback and random
+seeking), native roll-ring cancel/commit, unwrapped roll and Undo/Redo persistence.
+The `--camera-orientation` native mode verifies full-frame projector parity and
+save/reopen; `--orientation-stress` checks three objects plus camera/light across
+all five workspaces. `prepare_stable_orientation_fixture.py` derives the stress
+scene from the saved camera acceptance fixture. `check_stable_orientation_render.py`
+requires nonempty images, exact focus aim, visible quarter-roll and exact full-turn
+image return. These are bounded engineering checks, not large-scene performance
+or user aircraft acceptance.

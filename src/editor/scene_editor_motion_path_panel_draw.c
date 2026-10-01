@@ -1,3 +1,4 @@
+#include "scene_editor_motion_orientation_panel.h"
 /* Presentation for the reusable path library and contextual inspectors. */
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_camera_inspector.h"
@@ -101,7 +102,7 @@ static void overlay(SDL_Renderer *r, const MotionPath *p) {
     ray_tracing_text_draw_utf8_at(
         r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
         ui.point_labels[i], x + 9, y - 14, (SDL_Color){230, 250, 255, 255});
-    if (i != (size_t)ui.point)
+    if (ui.show_followers || i != (size_t)ui.point)
       continue;
     for (int h = 0; h < 2; ++h) {
       double v[3];
@@ -123,7 +124,7 @@ static void overlay(SDL_Renderer *r, const MotionPath *p) {
       }
     }
   }
-  if(ui.active && ui.point>=0 && ui.point<(int)p->count)
+  if(ui.active && !ui.show_followers && ui.point>=0 && ui.point<(int)p->count)
     MotionPointGizmoDraw(r,&ui.projector,&p->points[ui.point],ui.dragging?ui.gizmo_axis:0,ui.gizmo_controls);
   SDL_RenderSetClipRect(r, clipped ? &prior : NULL);
 }
@@ -189,6 +190,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
   if (!SceneEditorMotionPathsRead(&d))
     return;
   MotionPath *p = MotionPathPanelSelected(&d);
+  MotionOrientationPanelBeginFrame();
   SceneEditorCameraPathPanelReset();
   SceneEditorLightPathPanelReset();
   ui.label_count = 0;
@@ -320,7 +322,10 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     bool attached=MotionPathPanelFollowerTarget(&d,p,target,sizeof(target));
     button(r,FOLLOWER_TIMING,(SDL_Rect){x,y,(w-6)/2,28},"Timing",attached);
     button(r,FOLLOWER_PLAN,(SDL_Rect){x+(w+6)/2,y,(w-6)/2,28},"Movement limits",attached);y+=34;
-    if (ui.follower_type==1) y=SceneEditorCameraPathPanelDraw(r,&d,p,pane,x,y,w);
+    if (ui.follower_type==1) {
+      y=SceneEditorCameraPathPanelDraw(r,&d,p,pane,x,y,w);
+      y=MotionOrientationPanelDraw(r,&d,"camera/main",pane,x,y,w);
+    }
     else if (ui.follower_type==2) y=SceneEditorLightPathPanelDraw(r,&d,p,pane,x,y,w);
     else if (p) {
       label(r, "Follower object", x, y);
@@ -389,7 +394,9 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
             button(r,ROTATION_X+k,(SDL_Rect){x+k*(w/3),y,w/3-4,28},text,true);
           }
           y+=34;button(r,ROTATION_FROM_BASE,(SDL_Rect){x,y,w,28},"Use base rotation as offset",true);y+=34;
-          label(r,"Replaces base rotation; no banking.",x,y);y+=26;
+          char orientation_target[TIMELINE_ID_CAPACITY];snprintf(orientation_target,sizeof(orientation_target),"object/%s",b->object_id);
+          y=MotionOrientationPanelDraw(r,&d,orientation_target,pane,x,y,w);
+          label(r,"Roll rings: drag at route start/end.",x,y);y+=26;
         }
       }
       if (bound && !restore_known) {
@@ -484,4 +491,8 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
         ui.controls[i].y + ui.controls[i].h > pane.y + pane.h)
       ui.controls[i] = (SDL_Rect){0};
   SDL_RenderSetClipRect(r, clipped ? &prior : NULL);
+  SDL_RenderSetClipRect(r,&l->viewport_rect);
+  if(ui.show_followers && ui.projected && ui.follower_type!=2)MotionOrientationHandlesDraw(r,&ui.projector,l->viewport_rect);
+  SDL_RenderSetClipRect(r,clipped ? &prior : NULL);
+
 }

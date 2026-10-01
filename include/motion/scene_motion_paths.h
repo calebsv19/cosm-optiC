@@ -31,6 +31,10 @@ typedef struct MotionPathBinding {
   bool follow_direction; /* Object-only; default off. */
   int forward_axis; /* +X,-X,+Y,-Y,+Z,-Z */
   double rotation_offset[3]; /* Local XYZ Euler degrees after axis alignment. */
+  double start_up[3]; /* Zero means canonical world +Z, projected at route start. */
+  double start_roll, end_roll; /* Unwrapped degrees, smoothstep over route distance. */
+  bool end_roll_enabled;
+  int camera_orientation; /* 0 legacy authored/focus; 1 route; 2 stable target aim. */
   bool use_focus_target; /* Camera-only explicit orientation owner; default off. */
   /* Optional in v1: absent on older bindings. Empty means prior static source.
    * Keep track identities, not just axes: disabled alternatives must stay off. */

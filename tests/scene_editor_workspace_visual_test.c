@@ -444,6 +444,8 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_dm5.h"
 #include "scene_editor_path_usability.h"
 #include "scene_editor_path_viewport_rotation.h"
+#include "scene_editor_camera_orientation.h"
+#include "scene_editor_orientation_stress.h"
 #include "scene_editor_path_gizmo.h"
 #include "scene_editor_path_smoothing.h"
 
@@ -472,6 +474,8 @@ int main(int argc, char** argv) {
     if(argc==4 && !strcmp(argv[3],"--path-gizmo")) {path_gizmo_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-light-setup")) {path_light_setup_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-review")) {path_usability_review(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--orientation-stress")) {orientation_stress(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--camera-orientation")) {stable_camera_orientation(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-viewport-rotation")) {path_viewport_rotation(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-library")) {path_usability_library(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && (!strcmp(argv[3],"--dm4-temporal-ui") || !strcmp(argv[3],"--dm4-temporal-reopen"))) {dm4_temporal_ui(&editor,argv[2],!strcmp(argv[3],"--dm4-temporal-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}

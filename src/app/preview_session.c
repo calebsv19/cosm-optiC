@@ -478,6 +478,9 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
             camera_sample.position_z = snapshot->camera.position.z;
             camera_sample.yaw_radians = snapshot->camera.yaw_radians;
             camera_sample.pitch_radians = snapshot->camera.pitch_radians;
+            camera_sample.has_orientation_frame=snapshot->camera.has_orientation_frame;
+            camera_sample.orientation_frame=snapshot->camera.orientation_frame;
+            camera_sample.orientation_fallback=snapshot->camera.orientation_fallback;
             camera_sample.fov_y_degrees = snapshot->camera.fov_y_degrees;
             camera_sample.aspect_ratio = snapshot->camera.aspect_ratio;
         } else {

@@ -157,6 +157,8 @@ typedef struct {
     Vec3 position;
     double rotation;
     double lookPitch;
+    bool hasOrientationFrame;
+    Vec3 orientationForward, orientationUp;
     double zoom;
     double nearPlane;
 } RuntimeCamera3D;

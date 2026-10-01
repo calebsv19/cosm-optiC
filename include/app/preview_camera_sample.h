@@ -2,6 +2,7 @@
 #define PREVIEW_CAMERA_SAMPLE_H
 
 #include <stdbool.h>
+#include "motion/motion_frame.h"
 
 #include "camera/camera.h"
 #include "camera/camera_path_3d.h"
@@ -20,6 +21,9 @@ typedef struct PreviewCameraSample {
     double pitch_radians;
     double fov_y_degrees;
     double aspect_ratio;
+    bool has_orientation_frame;
+    bool orientation_fallback;
+    MotionFrame orientation_frame;
 } PreviewCameraSample;
 
 bool PreviewCameraSampleEvaluate(const Camera* base_camera,

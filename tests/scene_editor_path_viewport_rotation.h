@@ -3,6 +3,8 @@
 #include "import/runtime_scene_object_timeline.h"
 static void path_viewport_rotation(SceneEditor *editor,const char *scene) {
   char message[256];MotionPaths paths;
+  assert(SceneEditorMotionPathsRead(&paths));for(size_t j=0;j<paths.binding_count;++j){paths.bindings[j].start_roll=paths.bindings[j].end_roll=0;paths.bindings[j].end_roll_enabled=false;}
+  assert(SceneEditorMotionPathsSet(&paths,SceneEditorDocumentRevision(),message,sizeof(message)));
   choose_menu(editor,-1,SCENE_WORKSPACE_RENDER);authoring_control(editor,"paths");
   authoring_control(editor,"path_follower/object/obj_sphere_medium");
   SceneEditorDocumentObjectInfo info;assert(SceneEditorDocumentObjectById("obj_sphere_medium",&info));
@@ -54,8 +56,31 @@ static void path_viewport_rotation(SceneEditor *editor,const char *scene) {
   {const RayTracingRuntimeMeshAssetInstance *source=NULL;for(int j=0;j<SceneEditorMeshPreviewStoreInstanceCount();++j){const RayTracingRuntimeMeshAssetInstance *m=SceneEditorMeshPreviewStoreGetInstance(j);if(m && !strcmp(m->object_id,info.id))source=m;}
    assert(source);RayTracingRuntimeMeshAssetInstance display;assert(SceneEditorObjectTransformPreviewMesh(source,&display));
    assert(display.rotation_x==source->rotation_x && display.rotation_y==source->rotation_y && display.rotation_z==source->rotation_z);}
-  dm4_inspector_control(editor,"path_follow_direction");choose_menu(editor,0,0);assert(!SceneEditorDocumentIsDirty());
+  dm4_inspector_control(editor,"path_follow_direction");
+  authoring_control(editor,"path_frame_selected");SceneEditorSessionRuntimeRender(editor);
+  SDL_Rect roll_handle;assert(SceneEditorRenderAuthoringControl("path_start_up_handle",&roll_handle));
+  unsigned long long before_roll=SceneEditorDocumentRevision();
+  SDL_Event drag={.type=SDL_MOUSEBUTTONDOWN};drag.button.button=SDL_BUTTON_LEFT;drag.button.x=roll_handle.x+4;drag.button.y=roll_handle.y+4;SceneEditorSessionRuntimeHandleEvent(editor,&drag);
+  drag=(SDL_Event){.type=SDL_MOUSEMOTION};drag.motion.x=roll_handle.x+24;drag.motion.y=roll_handle.y+24;drag.motion.state=SDL_BUTTON_LMASK;SceneEditorSessionRuntimeHandleEvent(editor,&drag);
+  key(editor,SDLK_ESCAPE);assert(SceneEditorDocumentRevision()==before_roll);SceneEditorSessionRuntimeRender(editor);
+  assert(SceneEditorRenderAuthoringControl("path_start_up_handle",&roll_handle));
+  drag=(SDL_Event){.type=SDL_MOUSEBUTTONDOWN};drag.button.button=SDL_BUTTON_LEFT;drag.button.x=roll_handle.x+4;drag.button.y=roll_handle.y+4;SceneEditorSessionRuntimeHandleEvent(editor,&drag);
+  drag=(SDL_Event){.type=SDL_MOUSEMOTION};drag.motion.x=roll_handle.x+24;drag.motion.y=roll_handle.y+24;drag.motion.state=SDL_BUTTON_LMASK;SceneEditorSessionRuntimeHandleEvent(editor,&drag);
+  drag=(SDL_Event){.type=SDL_MOUSEBUTTONUP};drag.button.button=SDL_BUTTON_LEFT;drag.button.x=roll_handle.x+24;drag.button.y=roll_handle.y+24;SceneEditorSessionRuntimeHandleEvent(editor,&drag);
+  assert(SceneEditorDocumentRevision()==before_roll+1);assert(SceneEditorDocumentUndo(message,sizeof(message)));assert(SceneEditorDocumentRedo(message,sizeof(message)));
+  dm4_inspector_control(editor,"path_start_roll");authoring_text(editor,"25");
+  dm4_inspector_control(editor,"path_end_roll_enabled");
+  dm4_inspector_control(editor,"path_end_roll");authoring_text(editor,"385");
+  assert(SceneEditorMotionPathsRead(&paths));
+  MotionPathBinding *roll_binding=NULL;for(size_t j=0;j<paths.binding_count;++j)if(!strcmp(paths.bindings[j].object_id,info.id))roll_binding=&paths.bindings[j];
+  assert(roll_binding && roll_binding->start_roll==25 && roll_binding->end_roll==385 && roll_binding->end_roll_enabled);
+  assert(SceneEditorDocumentUndo(message,sizeof(message)));assert(SceneEditorDocumentRedo(message,sizeof(message)));
+  SceneEditorSessionRuntimeRender(editor);
+  capture(editor,"stable_roll_controls.ppm");
+  choose_menu(editor,0,0);assert(!SceneEditorDocumentIsDirty());
   assert(SceneEditorDocumentOpen(scene,message,sizeof(message)));SceneEditorTimelineSeek(53);SceneEditorSessionRuntimeRender(editor);
   double rotation[3];assert(SceneEditorObjectTimelineRotation(info.id,rotation));
+  assert(SceneEditorMotionPathsRead(&paths));
+  for(size_t j=0;j<paths.binding_count;++j)if(!strcmp(paths.bindings[j].object_id,info.id))assert(paths.bindings[j].start_roll==25 && paths.bindings[j].end_roll==385 && paths.bindings[j].end_roll_enabled);
   fprintf(stderr,"Viewport heading PASS: six axes, timeline seek/reseek, evaluated-pose parity, pick, frame, off/base restoration and save/reopen.\n");
 }

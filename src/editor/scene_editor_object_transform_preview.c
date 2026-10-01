@@ -26,10 +26,16 @@ bool SceneEditorObjectTransformPreviewMesh(const RayTracingRuntimeMeshAssetInsta
     if(SceneEditorObjectTimelinePosition(source->object_id,position)) {
         display->position_x=position[0];display->position_y=position[1];display->position_z=position[2];
         double rotation[3];
-        if(SceneEditorObjectTimelineRotation(source->object_id,rotation)) {
+        bool oriented=SceneEditorObjectTimelineRotation(source->object_id,rotation);
+        if(oriented) {
             display->rotation_x=rotation[0];display->rotation_y=rotation[1];display->rotation_z=rotation[2];
         }
         if(SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) {
+            if(!oriented) {
+                display->rotation_x=preview.rotation_degrees[0]*0.017453292519943295769;
+                display->rotation_y=preview.rotation_degrees[1]*0.017453292519943295769;
+                display->rotation_z=preview.rotation_degrees[2]*0.017453292519943295769;
+            }
             display->scale_x*=preview.scale[0]/original.scale[0];
             display->scale_y*=preview.scale[1]/original.scale[1];
             display->scale_z*=preview.scale[2]/original.scale[2];
@@ -55,7 +61,8 @@ bool SceneEditorObjectTransformPreviewPrimitive(const RuntimeSceneBridgePrimitiv
     if(SceneEditorObjectTimelinePosition(source->object_id,position)) {
         display->origin_x=position[0];display->origin_y=position[1];display->origin_z=position[2];
         double rotation[3];
-        if(SceneEditorObjectTimelineRotation(source->object_id,rotation)) {
+        bool oriented=SceneEditorObjectTimelineRotation(source->object_id,rotation);
+        if(oriented) {
             double basis[3][3]={{1,0,0},{0,1,0},{0,0,1}};
             for(int k=0;k<3;++k)for(int axis=0;axis<3;++axis)rotate_axis(basis[k],axis,rotation[axis]);
             display->axis_u_x=basis[0][0];display->axis_u_y=basis[0][1];display->axis_u_z=basis[0][2];
@@ -63,6 +70,11 @@ bool SceneEditorObjectTransformPreviewPrimitive(const RuntimeSceneBridgePrimitiv
             display->normal_x=basis[2][0];display->normal_y=basis[2][1];display->normal_z=basis[2][2];
         }
         if(SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) {
+            if(!oriented) {
+                rotate_basis(&display->axis_u_x,&display->axis_u_y,&display->axis_u_z,&original,&preview);
+                rotate_basis(&display->axis_v_x,&display->axis_v_y,&display->axis_v_z,&original,&preview);
+                rotate_basis(&display->normal_x,&display->normal_y,&display->normal_z,&original,&preview);
+            }
             display->width*=preview.scale[0]/original.scale[0];
             display->height*=preview.scale[1]/original.scale[1];
             display->depth*=preview.scale[2]/original.scale[2];

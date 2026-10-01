@@ -72,6 +72,10 @@ bool PreviewCameraProjectorBuild(const PreviewCameraSample* sample,
     projector.forward_x = sin(yaw) * cos(pitch);
     projector.forward_y = -cos(yaw) * cos(pitch);
     projector.forward_z = sin(pitch);
+    if(sample->has_orientation_frame) {
+        projector.forward_x=sample->orientation_frame.forward[0];projector.forward_y=sample->orientation_frame.forward[1];projector.forward_z=sample->orientation_frame.forward[2];
+        world_up_x=sample->orientation_frame.up[0];world_up_y=sample->orientation_frame.up[1];world_up_z=sample->orientation_frame.up[2];
+    }
     preview_camera_projector_normalize(&projector.forward_x,
                                        &projector.forward_y,
                                        &projector.forward_z);

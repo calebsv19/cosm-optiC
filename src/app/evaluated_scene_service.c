@@ -151,6 +151,9 @@ static bool ray_evaluated_capture_camera(const TimelineEvaluationContext* contex
     out_camera->position.x = sample.position_x;
     out_camera->position.y = sample.position_y;
     out_camera->position.z = sample.position_z;
+    out_camera->has_orientation_frame=sample.has_orientation_frame;
+    out_camera->orientation_fallback=sample.orientation_fallback;
+    out_camera->orientation_frame=sample.orientation_frame;
     out_camera->yaw_radians = sample.yaw_radians;
     out_camera->pitch_radians = sample.pitch_radians;
     out_camera->fov_y_degrees = sample.fov_y_degrees;

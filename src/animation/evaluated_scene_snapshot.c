@@ -146,6 +146,7 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
         !isfinite(snapshot->light.intensity) ||
         snapshot->light.intensity < 0.0 ||
         !ray_evaluated_vec3_finite(snapshot->camera.position) ||
+        (snapshot->camera.has_orientation_frame && !MotionFrameValid(&snapshot->camera.orientation_frame)) ||
         snapshot->object_transform_count >
             RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY) {
         return TIMELINE_STATUS_INVALID_SNAPSHOT;

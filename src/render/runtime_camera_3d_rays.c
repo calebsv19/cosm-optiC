@@ -41,6 +41,7 @@ bool RuntimeCameraProjector3D_Build(const RuntimeCamera3D* camera,
     projector.forward = vec3(sin(yaw) * cos(pitch),
                              -cos(yaw) * cos(pitch),
                              sin(pitch));
+    if(camera->hasOrientationFrame) {projector.forward=camera->orientationForward;world_up=camera->orientationUp;}
     projector.forward = vec3_normalize(projector.forward);
     projector.right = vec3_cross(world_up, projector.forward);
     if (vec3_length(projector.right) <= 1e-9) {

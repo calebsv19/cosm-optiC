@@ -169,6 +169,9 @@ bool ray_tracing_headless_apply_inspection_evaluated_camera(
             if (pitch > max_pitch) pitch = max_pitch;
             if (pitch < -max_pitch) pitch = -max_pitch;
             camera.pitch_radians = pitch;
+            /* An explicit inspection look-at owns orientation for this request. */
+            camera.has_orientation_frame = false;
+            camera.orientation_fallback = false;
         }
     }
 

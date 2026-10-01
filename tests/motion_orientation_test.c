@@ -3,10 +3,11 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+static double start_roll,end_roll;static bool end_enabled;
 static int shape;static uint64_t revision=1;
 uint64_t MotionPathsRuntimeRevision(void){return revision;}
 uint64_t MotionPlansRuntimeRevision(void){return 1;}
-bool MotionPathsRuntimeBinding(const char *id,MotionPathBinding *b){(void)id;memset(b,0,sizeof(*b));b->enabled=true;b->follow_direction=true;return true;}
+bool MotionPathsRuntimeBinding(const char *id,MotionPathBinding *b){(void)id;memset(b,0,sizeof(*b));b->enabled=true;b->follow_direction=true;b->start_roll=start_roll;b->end_roll=end_roll;b->end_roll_enabled=end_enabled;return true;}
 bool MotionPathsRuntimeTargetPosition(const char *id,double t,TimelineVec3 *v){(void)id;
  if(shape==0){double a[3]={58.667247772,-17.158084869,73.846939},b[3]={60.387010504,-38.258197767,73.846939},c[3]={53.897965306,-53.830850795,73.846939},d[3]={41.151258730,-62.585579834,73.846939},s=1-t,r[3];for(int i=0;i<3;++i)r[i]=s*s*s*a[i]+3*s*s*t*b[i]+3*s*t*t*c[i]+t*t*t*d[i];*v=(TimelineVec3){r[0],r[1],r[2]};}
  else if(shape==1)*v=(TimelineVec3){cos(t*6.283185307),sin(t*6.283185307),t*4};
@@ -19,7 +20,9 @@ int main(void){
   for(int j=1000;j>=0;--j){MotionFrame f;assert(MotionPathsRuntimeFrame("object/test",j/1000.,&f));assert(!memcmp(&f,&saved[j],sizeof(f)));}
   for(int j=0;j<=1000;++j){int k=(j*313)%1001;MotionFrame f;assert(MotionPathsRuntimeFrame("object/test",k/1000.,&f));assert(!memcmp(&f,&saved[k],sizeof(f)));}
  }
- ++revision;MotionFrame f;assert(!MotionPathsRuntimeFrame("object/test",.4,&f));
+ shape=0;++revision;MotionFrame base,rolled;assert(MotionPathsRuntimeFrame("object/roll",.5,&base));
+ start_roll=0;end_roll=360;end_enabled=true;++revision;assert(MotionPathsRuntimeFrame("object/roll",.5,&rolled));assert(dot(base.up,rolled.up)<-.999999);
+ shape=3;++revision;MotionFrame f;assert(!MotionPathsRuntimeFrame("object/test",.4,&f));
  double forward[3]={0,0,1},up[3]={0,0,1};assert(MotionFrameSeed(&f,forward,up));MotionFrameRoll(&f,6.283185307);assert(fabs(dot(f.up,f.forward))<1e-12);
  puts("Motion orientation PASS: saved-plane curve, helix, vertical loop, seek-order invariance, orthonormal frames and stationary fallback");return 0;
 }

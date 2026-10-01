@@ -1,3 +1,4 @@
+#include "app/evaluated_camera_orientation.h"
 #include "app/evaluated_camera_route.h"
 #include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_timeline.h"
@@ -48,6 +49,7 @@ bool EvaluatedCameraRouteSample(const Camera *camera, double z, const Path *path
       !MotionPathsRuntimeTargetPosition("camera/main", progress, &position)) return false;
   result.position_x = position.x; result.position_y = position.y; result.position_z = position.z;
   result.uses_authored_path = true;
+  if(!EvaluatedCameraOrientation(&binding,progress,&result))return false;
   *out = result;
   return true;
 }
@@ -56,7 +58,7 @@ bool EvaluatedCameraRouteSample(const Camera *camera, double z, const Path *path
  * Doing this before route placement aims from the wrong camera position. */
 void EvaluatedCameraApplyFocusTarget(PreviewCameraSample *sample) {
   MotionPathBinding binding;
-  if (!MotionPathsRuntimeBinding("camera/main", &binding) || !binding.use_focus_target) return;
+  if (!MotionPathsRuntimeBinding("camera/main", &binding) || !binding.use_focus_target || binding.camera_orientation) return;
   RuntimeSceneBridge3DScaffoldState scaffold = {0};
   runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
   if (!sample || !scaffold.has_camera_focus_target) return;

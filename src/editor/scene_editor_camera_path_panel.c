@@ -33,6 +33,7 @@ int SceneEditorCameraPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
                          "Detach camera: restore source", "Edit camera route timing >", "Convert legacy camera route", focus ? "Scene focus target: on" : "Use scene focus target"};
   enabled[0] = path && !bound; enabled[1] = enabled[2] = bound; enabled[3] = !binding; enabled[4] = bound;
   for (int i = 0; i < 5; ++i) {
+    if(i==4 && binding && binding->camera_orientation){controls[i]=(SDL_Rect){0};continue;}
     if(i==2) {controls[i]=(SDL_Rect){0};continue;} /* shared follower header owns timing */
     controls[i] = (SDL_Rect){x, y, width, 28};
     SceneEditorRenderButton(r, controls[i], labels[i], false, enabled[i]);
@@ -40,7 +41,7 @@ int SceneEditorCameraPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     y += 34;
   }
   ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-      focus ? "Focus owns yaw/pitch; FOV independent." : "Orientation / FOV stay independent.", x, y, SceneEditorChromeShellResolvePalette().text_primary);
+      binding && binding->camera_orientation ? "Stable frame owns aim/roll; FOV independent." : focus ? "Legacy focus owns yaw/pitch; FOV independent." : "Authored yaw/pitch; FOV independent.", x, y, SceneEditorChromeShellResolvePalette().text_primary);
   return y + 30;
 }
 bool SceneEditorCameraPathPanelEvent(SDL_Event *e, const MotionPath *path,
