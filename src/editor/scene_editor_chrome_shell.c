@@ -1,3 +1,4 @@
+#include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_surfaces.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/material_editor.h"
@@ -578,6 +579,13 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
             "Reset layout", true, scene_editor_chrome_shell_button_hovered(&restoreWorkspaceButton),
             false, palette.button_fill, disabledFill, borderColor, palette);
     }
+    static char evaluated_status[96];
+    TimelineSample current_sample;
+    const char *idle_status="Ready";
+    if(SceneEditorTimelineCurrentSample(&current_sample)) {
+        snprintf(evaluated_status,sizeof(evaluated_status),"Frame %lld | Evaluated scene",(long long)current_sample.absolute_frame);
+        idle_status=evaluated_status;
+    }
     showFeedback = (g_sceneActionFeedbackText[0] && g_sceneActionFeedbackUntilMs > SDL_GetTicks64());
     feedbackRect = layout_valid && layout ? layout->workspace_feedback_rect : (SDL_Rect){0};
     if (layout_valid && layout && SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_SCENE &&
@@ -585,7 +593,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
         char operation[256];
         bool live=SceneEditorTransformOperationLabel(ObjectEditorGetSelectedObjectIndex(),operation,sizeof(operation));
         SceneEditorLabelLeft(renderer,feedbackRect,
-            live ? operation : showFeedback ? g_sceneActionFeedbackText : "Ready",
+            live ? operation : showFeedback ? g_sceneActionFeedbackText : idle_status,
             live ? (SDL_Color){255,220,115,255} : palette.text_primary);
     } else if (showFeedback) {
         SceneEditorLabelLeft(renderer, feedbackRect, g_sceneActionFeedbackText, palette.text_primary);
@@ -598,7 +606,7 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
             case SCENE_WORKSPACE_RENDER: status = "Render"; break;
             default: status = "Ready"; break;
         }
-        SceneEditorLabelLeft(renderer, feedbackRect, status, palette.text_muted);
+        SceneEditorLabelLeft(renderer, feedbackRect, idle_status==evaluated_status ? idle_status : status, palette.text_muted);
     }
 
     if (layout_valid && layout) {

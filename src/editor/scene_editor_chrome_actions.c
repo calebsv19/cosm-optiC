@@ -178,7 +178,7 @@ void SceneEditorChromeActionsApply(SceneEditor* editor,
             return;
         }
         TimelineSample sample;
-        if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER && SceneEditorTimelineCurrentSample(&sample)) {
+        if(SceneEditorTimelineCurrentSample(&sample)) {
             SceneEditorTimelinePause();
             RunPreviewModeEmbeddedAtSample(editor->window,editor->renderer,&sample);
             SceneEditorTimelineSeekSample(sample);

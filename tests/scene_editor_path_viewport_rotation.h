@@ -40,6 +40,16 @@ static void path_viewport_rotation(SceneEditor *editor,const char *scene) {
     }
     dm4_inspector_control(editor,"path_forward_axis");
   }
+  {
+    SceneEditorTimelineSeek(53);double reference[3];assert(SceneEditorObjectTimelineRotation(info.id,reference));
+    for(int workspace=0;workspace<SCENE_WORKSPACE_PROFILE_COUNT;++workspace) {
+      SceneEditorWorkspaceProfileSelect(editor,(SceneEditorWorkspaceProfile)workspace);SceneEditorSessionRuntimeRender(editor);
+      TimelineSample current={0};double rotation[3],position[3];assert(SceneEditorTimelineCurrentSample(&current) && current.absolute_frame==53);
+      assert(SceneEditorObjectTimelineRotation(info.id,rotation) && SceneEditorObjectTimelinePosition(info.id,position));
+      for(int k=0;k<3;++k)assert(fabs(rotation[k]-reference[k])<1e-12);
+    }
+    SceneEditorWorkspaceProfileSelect(editor,SCENE_WORKSPACE_RENDER);authoring_control(editor,"paths");authoring_control(editor,"path_follower/object/obj_sphere_medium");
+  }
   dm4_inspector_control(editor,"path_follow_direction");
   {const RayTracingRuntimeMeshAssetInstance *source=NULL;for(int j=0;j<SceneEditorMeshPreviewStoreInstanceCount();++j){const RayTracingRuntimeMeshAssetInstance *m=SceneEditorMeshPreviewStoreGetInstance(j);if(m && !strcmp(m->object_id,info.id))source=m;}
    assert(source);RayTracingRuntimeMeshAssetInstance display;assert(SceneEditorObjectTransformPreviewMesh(source,&display));

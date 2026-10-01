@@ -65,7 +65,7 @@ bool SceneEditorObjectTimelineAdd(const char* id,char* diagnostics,size_t size) 
 }
 bool SceneEditorObjectTimelinePosition(const char* id,double position[3]) {
     TimelineSample sample;TimelineRate rate;TimelineRange range;TimelineEvaluationContext context;TimelineVec3 value;
-    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER || !SceneEditorTimelineCurrentSample(&sample) ||
+    if(!SceneEditorTimelineCurrentSample(&sample) ||
        RuntimeSceneTimelineClock(&rate,&range)!=TIMELINE_STATUS_OK ||
        TimelineEvaluationContextBuild(rate,range,sample,&context)!=TIMELINE_STATUS_OK ||
        RuntimeObjectTimelinePosition(id,&context,&value)!=TIMELINE_STATUS_OK) return false;
@@ -73,7 +73,7 @@ bool SceneEditorObjectTimelinePosition(const char* id,double position[3]) {
 }
 bool SceneEditorObjectTimelineRotation(const char* id,double rotation[3]) {
     TimelineSample sample;TimelineRate rate;TimelineRange range;TimelineEvaluationContext context;TimelineVec3 value;
-    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER || !SceneEditorTimelineCurrentSample(&sample) ||
+    if(!SceneEditorTimelineCurrentSample(&sample) ||
        RuntimeSceneTimelineClock(&rate,&range)!=TIMELINE_STATUS_OK ||
        TimelineEvaluationContextBuild(rate,range,sample,&context)!=TIMELINE_STATUS_OK ||
        !RuntimeObjectTimelineRotation(id,&context,&value)) return false;

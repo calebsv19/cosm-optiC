@@ -29,6 +29,11 @@ bool SceneEditorObjectTransformPreviewMesh(const RayTracingRuntimeMeshAssetInsta
         if(SceneEditorObjectTimelineRotation(source->object_id,rotation)) {
             display->rotation_x=rotation[0];display->rotation_y=rotation[1];display->rotation_z=rotation[2];
         }
+        if(SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) {
+            display->scale_x*=preview.scale[0]/original.scale[0];
+            display->scale_y*=preview.scale[1]/original.scale[1];
+            display->scale_z*=preview.scale[2]/original.scale[2];
+        }
         return true;
     }
     if (SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ||
@@ -57,6 +62,11 @@ bool SceneEditorObjectTransformPreviewPrimitive(const RuntimeSceneBridgePrimitiv
             display->axis_v_x=basis[1][0];display->axis_v_y=basis[1][1];display->axis_v_z=basis[1][2];
             display->normal_x=basis[2][0];display->normal_y=basis[2][1];display->normal_z=basis[2][2];
         }
+        if(SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) {
+            display->width*=preview.scale[0]/original.scale[0];
+            display->height*=preview.scale[1]/original.scale[1];
+            display->depth*=preview.scale[2]/original.scale[2];
+        }
         return true;
     }
     if (SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ||
@@ -73,6 +83,9 @@ bool SceneEditorObjectTransformPreviewPrimitive(const RuntimeSceneBridgePrimitiv
 void SceneEditorObjectTransformHandleOrigin(int object_index,SceneEditorObjectTransformMode mode,
     const double fallback[3],double position[3]) {
     for (int i=0;i<3;++i) position[i]=fallback[i]*SceneEditorDocumentWorldScale();
+    char target[64];
+    if(runtime_scene_bridge_get_last_object_id_for_scene_index(object_index,target,sizeof(target)) &&
+       SceneEditorObjectTimelinePosition(target,position)) return;
     for (int i=0;i<SceneEditorMeshPreviewStoreInstanceCount();++i) {
         const RayTracingRuntimeMeshAssetInstance* mesh=SceneEditorMeshPreviewStoreGetInstance(i);
         if (!mesh || mesh->scene_object_index!=object_index) continue;

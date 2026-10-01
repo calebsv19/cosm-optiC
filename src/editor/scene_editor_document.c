@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_timeline.h"
 #include "render/runtime_surface_graph.h"
 #include "render/runtime_surface_sampling.h"
 #include "render/runtime_surface_mapping.h"
@@ -467,6 +468,17 @@ bool SceneEditorDocumentSetTransformForSceneIndex(int scene_object_index,
             !isfinite(transform_value->scale[i]) || transform_value->scale[i] <= 0.0) {
             document_diag(diagnostics, diagnostics_size, "position and rotation must be finite; scale must be positive");
             return false;
+        }
+    }
+    SceneEditorDocumentTransform prior;
+    char id[64];double evaluated[3];
+    if(runtime_scene_bridge_get_last_object_id_for_scene_index(scene_object_index,id,sizeof(id)) &&
+       SceneEditorDocumentGetTransformForSceneIndex(scene_object_index,&prior,diagnostics,diagnostics_size)) {
+        bool position_changed=false,rotation_changed=false;
+        for(int i=0;i<3;++i){position_changed |= prior.position[i]!=transform_value->position[i];rotation_changed |= prior.rotation_degrees[i]!=transform_value->rotation_degrees[i];}
+        if((position_changed && SceneEditorObjectTimelinePosition(id,evaluated)) ||
+           (rotation_changed && SceneEditorObjectTimelineRotation(id,evaluated))) {
+            document_diag(diagnostics,diagnostics_size,"Animated transform: edit path/timing or follower alignment in Render. Base pose is preserved.");return false;
         }
     }
     object = document_object_for_scene_index(scene_object_index, diagnostics, diagnostics_size);

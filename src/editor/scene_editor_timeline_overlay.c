@@ -11,7 +11,7 @@
 void SceneEditorTimelineRenderEvaluatedMarkers(SDL_Renderer* renderer,
     const SceneEditorDigestOverlayProjector* projector) {
     RayEvaluatedSceneSnapshot frame;
-    if(!renderer || !projector || SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER ||
+    if(!renderer || !projector ||
         !SceneEditorTimelineCopyEvaluated(&frame)) return;
     static char camera_label[64],light_label[64];
     TTF_Font* font=ray_tracing_font_runtime_get_ui_regular(renderer,10,8);

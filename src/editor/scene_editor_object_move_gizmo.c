@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_timeline.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 
 #include "editor/scene_editor_object_transform_handles.h"
@@ -259,6 +260,11 @@ bool SceneEditorObjectMoveGizmoHandleEvent(const SDL_Event* event, SDL_Window* w
     if (!SceneEditorObjectTransformHandlePick(&projector,&digest,origin,s_mode,x,y,&axis,&handle)) return false;
     s_hover=axis;
     if (hover) return false;
+    double evaluated[3];
+    if((s_mode==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE && SceneEditorObjectTimelinePosition(object_id,evaluated)) ||
+       (s_mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE && SceneEditorObjectTimelineRotation(object_id,evaluated))) {
+        SceneEditorChromeShellSetActionFeedback("Animated object: edit path/timing or follower alignment in Render",3000);return true;
+    }
     s_drag.mode=s_mode;
     s_drag.handle=handle;
     s_drag.angular_drag=s_mode==SCENE_EDITOR_OBJECT_TRANSFORM_ROTATE &&
