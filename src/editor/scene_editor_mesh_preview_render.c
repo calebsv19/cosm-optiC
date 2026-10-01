@@ -737,6 +737,9 @@ int SceneEditorMeshPreviewPickObjectHit(
                                                         instance->scene_object_index)) {
             continue;
         }
+        RayTracingRuntimeMeshAssetInstance display_instance;
+        SceneEditorObjectTransformPreviewMesh(instance,&display_instance);
+        instance=&display_instance;
         contract = SceneEditorMeshPreviewStoreGetContract(instance->asset_index);
         lod = SceneEditorMeshPreviewStoreGet(instance->asset_index);
         if (!contract || !lod) continue;

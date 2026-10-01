@@ -71,6 +71,14 @@ bool SceneEditorObjectTimelinePosition(const char* id,double position[3]) {
        RuntimeObjectTimelinePosition(id,&context,&value)!=TIMELINE_STATUS_OK) return false;
     position[0]=value.x;position[1]=value.y;position[2]=value.z;return true;
 }
+bool SceneEditorObjectTimelineRotation(const char* id,double rotation[3]) {
+    TimelineSample sample;TimelineRate rate;TimelineRange range;TimelineEvaluationContext context;TimelineVec3 value;
+    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER || !SceneEditorTimelineCurrentSample(&sample) ||
+       RuntimeSceneTimelineClock(&rate,&range)!=TIMELINE_STATUS_OK ||
+       TimelineEvaluationContextBuild(rate,range,sample,&context)!=TIMELINE_STATUS_OK ||
+       !RuntimeObjectTimelineRotation(id,&context,&value)) return false;
+    rotation[0]=value.x;rotation[1]=value.y;rotation[2]=value.z;return true;
+}
 void SceneEditorObjectTimelineDraw(SDL_Renderer* renderer,SDL_Rect pane,int* y) {
     SceneEditorObjectReadback selected;SceneEditorObjectInspect(&selected);
     snprintf(label,sizeof(label),"Animate object: %s",selected.has_selection?selected.selection.name:"select in Scene");

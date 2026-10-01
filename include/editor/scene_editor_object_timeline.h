@@ -6,6 +6,7 @@ bool SceneEditorObjectTimelineFrameOffset(int scene_index,double delta[3]);
 bool SceneEditorObjectTimelineEditable(const char* target,char* diagnostics,size_t size);
 bool SceneEditorObjectTimelineAdd(const char* id,char* diagnostics,size_t size);
 void SceneEditorObjectTimelineBindings(TimelineEntityBindings* bindings);
+bool SceneEditorObjectTimelineRotation(const char* id,double rotation[3]);
 bool SceneEditorObjectTimelinePosition(const char* id,double position[3]);
 bool SceneEditorObjectTimelineControl(const char* name,SDL_Rect* out);
 void SceneEditorObjectTimelineDraw(SDL_Renderer* renderer,SDL_Rect pane,int* y);

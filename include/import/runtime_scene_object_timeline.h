@@ -9,5 +9,6 @@ bool RuntimeObjectTimelineHasMotion(void);
 TimelineStatus RuntimeObjectTimelinePosition(const char* id,const TimelineEvaluationContext* context,TimelineVec3* out);
 bool RuntimeObjectTimelinePositionAtT(const char* id,double t,TimelineVec3* out);
 TimelineStatus RuntimeObjectTimelineCapture(const TimelineEvaluationContext* context,RayEvaluatedObjectTransform* transforms,size_t capacity,size_t* count);
+bool RuntimeObjectTimelineRotation(const char* id,const TimelineEvaluationContext* context,TimelineVec3* out);
 bool RuntimeObjectTimelineRotationAtT(const char* id,double t,TimelineVec3* out);
 #endif

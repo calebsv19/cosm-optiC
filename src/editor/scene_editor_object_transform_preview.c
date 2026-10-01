@@ -24,7 +24,12 @@ bool SceneEditorObjectTransformPreviewMesh(const RayTracingRuntimeMeshAssetInsta
     *display=*source;
     double position[3];
     if(SceneEditorObjectTimelinePosition(source->object_id,position)) {
-        display->position_x=position[0];display->position_y=position[1];display->position_z=position[2];return true;
+        display->position_x=position[0];display->position_y=position[1];display->position_z=position[2];
+        double rotation[3];
+        if(SceneEditorObjectTimelineRotation(source->object_id,rotation)) {
+            display->rotation_x=rotation[0];display->rotation_y=rotation[1];display->rotation_z=rotation[2];
+        }
+        return true;
     }
     if (SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ||
         !SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) return false;
@@ -43,7 +48,16 @@ bool SceneEditorObjectTransformPreviewPrimitive(const RuntimeSceneBridgePrimitiv
     *display=*source;
     double position[3];
     if(SceneEditorObjectTimelinePosition(source->object_id,position)) {
-        display->origin_x=position[0];display->origin_y=position[1];display->origin_z=position[2];return true;
+        display->origin_x=position[0];display->origin_y=position[1];display->origin_z=position[2];
+        double rotation[3];
+        if(SceneEditorObjectTimelineRotation(source->object_id,rotation)) {
+            double basis[3][3]={{1,0,0},{0,1,0},{0,0,1}};
+            for(int k=0;k<3;++k)for(int axis=0;axis<3;++axis)rotate_axis(basis[k],axis,rotation[axis]);
+            display->axis_u_x=basis[0][0];display->axis_u_y=basis[0][1];display->axis_u_z=basis[0][2];
+            display->axis_v_x=basis[1][0];display->axis_v_y=basis[1][1];display->axis_v_z=basis[1][2];
+            display->normal_x=basis[2][0];display->normal_y=basis[2][1];display->normal_z=basis[2][2];
+        }
+        return true;
     }
     if (SceneEditorObjectTransformModeGet()==SCENE_EDITOR_OBJECT_TRANSFORM_MOVE ||
         !SceneEditorObjectTransformPreview(source->scene_object_index,&original,&preview)) return false;

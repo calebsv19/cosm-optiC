@@ -356,3 +356,10 @@ paths, injects a write-sync failure and retries, reopens orientation settings,
 and checks all six forward axes and hover. `--dm5` uses File > Save with applied
 plans. `check_path_orientation_render.py` compares three oriented frames against
 explicitly baked transforms; existing M5 render parity remains separate.
+
+The editor viewport applies the same evaluated rotation as the renderer at the
+current timeline sample. Mesh and primitive previews, mesh picking and selected
+object framing use the evaluated pose. Changing Model forward or scrubbing the
+timeline therefore updates the visible heading; disabling Follow restores the
+authored rotation. The `--path-viewport-rotation` native acceptance covers all six
+axes, seek/reseek, render-pose parity, picking, framing, disabling and Save/reopen.

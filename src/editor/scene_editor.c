@@ -192,12 +192,6 @@ bool SceneEditorFrameViewport(bool selected_only) {
     if (!g_scenePaneLayoutValid || (selected_only && selected < 0)) return false;
     bool ok = SceneEditorViewportNavFitDigestOverlayForTarget(&g_viewport_nav_state,
         &g_scenePaneLayout.viewport_rect, true, animSettings.editorMode, selected);
-    if (ok && selected_only && g_viewport_nav_state.target_valid) {
-        double delta[3];
-        if (SceneEditorObjectTimelineFrameOffset(selected,delta)) {
-            g_viewport_nav_state.target_x+=delta[0];g_viewport_nav_state.target_y+=delta[1];g_viewport_nav_state.target_z+=delta[2];
-        }
-    }
     SceneEditorChromeShellSetActionFeedback(ok ? (selected_only ? "Framed selection" : "Framed scene") :
         "No frameable geometry", 1800);
     return ok;

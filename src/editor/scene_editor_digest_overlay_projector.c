@@ -1,3 +1,4 @@
+#include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_digest_overlay.h"
 
 #include <math.h>
@@ -239,6 +240,8 @@ static void scene_editor_digest_overlay_accumulate_mesh_asset_extents(
     for (int i = 0; i < mesh_assets->instance_count; ++i) {
         const RayTracingRuntimeMeshAssetInstance* instance = &mesh_assets->instances[i];
         if (selected_object_index>=0 && instance->scene_object_index!=selected_object_index) continue;
+        RayTracingRuntimeMeshAssetInstance display;
+        SceneEditorObjectTransformPreviewMesh(instance,&display);instance=&display;
         const CoreMeshAssetRuntimeDocument* document = NULL;
         if (instance->asset_index < 0 || instance->asset_index >= mesh_assets->asset_count) {
             continue;
@@ -279,6 +282,8 @@ static void scene_editor_digest_overlay_accumulate_preview_mesh_extents(
     for (int i=0;i<SceneEditorMeshPreviewStoreInstanceCount();++i) {
         const RayTracingRuntimeMeshAssetInstance* instance=SceneEditorMeshPreviewStoreGetInstance(i);
         if (!instance || instance->scene_object_index!=selected_object_index) continue;
+        RayTracingRuntimeMeshAssetInstance display;
+        SceneEditorObjectTransformPreviewMesh(instance,&display);instance=&display;
         const CoreMeshAssetBounds3* bounds=SceneEditorMeshPreviewStoreGetBounds(instance->asset_index);
         if (!bounds) continue;
         double pivot[3]={0};
@@ -419,6 +424,8 @@ static bool scene_editor_digest_overlay_resolve_object_seed_extents(
     for (i = 0; i < seeds.primitive_count; ++i) {
         const RuntimeSceneBridgePrimitiveSeed* primitive = &seeds.primitives[i];
         if (!scene_editor_digest_overlay_seed_matches_object(primitive, scene_object_index)) continue;
+        RuntimeSceneBridgePrimitiveSeed display;
+        SceneEditorObjectTransformPreviewPrimitive(primitive,&display);primitive=&display;
         scene_editor_digest_overlay_accumulate_seed_for_object(primitive,
                                                                &seeded,
                                                                out_min_x,

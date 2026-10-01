@@ -81,7 +81,7 @@ bool RuntimeObjectTimelinePositionAtT(const char* id,double t,TimelineVec3* out)
     context.local_time_seconds=context.local_frame_position*rate.frames_per_second_denominator/rate.frames_per_second_numerator;
     return RuntimeObjectTimelinePosition(id,&context,out)==TIMELINE_STATUS_OK;
 }
-static bool route_rotation(const char* id,const TimelineEvaluationContext* context,TimelineVec3* out) {
+bool RuntimeObjectTimelineRotation(const char* id,const TimelineEvaluationContext* context,TimelineVec3* out) {
     const TimelineDocument* d=RuntimeSceneTimelineRead();if(!d)return false;
     for(size_t i=0;i<d->track_count;++i) {
         const TimelineTrack* t=&d->tracks[i];
@@ -99,7 +99,7 @@ bool RuntimeObjectTimelineRotationAtT(const char* id,double t,TimelineVec3* out)
     context.normalized_t=fmax(0,fmin(1,t));context.local_frame_position=context.normalized_t*(range.frame_count-1);
     context.absolute_frame_position=range.start_frame+context.local_frame_position;
     context.local_time_seconds=context.local_frame_position*rate.frames_per_second_denominator/rate.frames_per_second_numerator;
-    return route_rotation(id,&context,out);
+    return RuntimeObjectTimelineRotation(id,&context,out);
 }
 TimelineStatus RuntimeObjectTimelineCapture(const TimelineEvaluationContext* context,RayEvaluatedObjectTransform* transforms,size_t capacity,size_t* count) {
     const TimelineDocument* d=RuntimeSceneTimelineRead();if(!d) return TIMELINE_STATUS_OK;
@@ -112,7 +112,7 @@ TimelineStatus RuntimeObjectTimelineCapture(const TimelineEvaluationContext* con
         RayEvaluatedObjectTransform value={.valid=true,.source=RAY_EVALUATED_OBJECT_TRANSFORM_SCENE_TIMELINE,.has_position=true,.frame=*context};
         snprintf(value.target_id,sizeof(value.target_id),"%s",t->target_id+7);
         status=RuntimeObjectTimelinePosition(value.target_id,context,&value.position);
-        if(status==TIMELINE_STATUS_OK) {value.has_rotation=route_rotation(value.target_id,context,&value.rotation_radians);transforms[(*count)++]=value;}
+        if(status==TIMELINE_STATUS_OK) {value.has_rotation=RuntimeObjectTimelineRotation(value.target_id,context,&value.rotation_radians);transforms[(*count)++]=value;}
     }
     return status;
 }
