@@ -49,3 +49,15 @@ test-motion-route-schedule-sanitize:
 	@mkdir -p $(BUILD_DIR)/tests
 	$(CLANG_CC) $(MOTION_GEOMETRY_FLAGS) -g -fsanitize=address,undefined -fno-omit-frame-pointer $(MOTION_ROUTE_SCHEDULE_SRC) -lm -o $(BUILD_DIR)/tests/motion_route_schedule_sanitize
 	$(BUILD_DIR)/tests/motion_route_schedule_sanitize
+
+MOTION_ORIENTATION_SRC := tests/motion_orientation_test.c src/motion/motion_frame.c src/motion/scene_motion_orientation.c
+$(BUILD_DIR)/tests/motion_orientation_test: $(MOTION_ORIENTATION_SRC) include/motion/motion_frame.h include/motion/scene_motion_paths.h
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) $(MOTION_GEOMETRY_FLAGS) $(MOTION_ORIENTATION_SRC) -lm -o $@
+.PHONY: test-motion-orientation test-motion-orientation-sanitize
+test-motion-orientation: $(BUILD_DIR)/tests/motion_orientation_test
+	@$<
+test-motion-orientation-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CLANG_CC) $(MOTION_GEOMETRY_FLAGS) -g -fsanitize=address,undefined -fno-omit-frame-pointer $(MOTION_ORIENTATION_SRC) -lm -o $(BUILD_DIR)/tests/motion_orientation_sanitize
+	$(BUILD_DIR)/tests/motion_orientation_sanitize

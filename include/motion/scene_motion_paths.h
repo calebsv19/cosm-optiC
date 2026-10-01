@@ -1,6 +1,7 @@
 #ifndef SCENE_MOTION_PATHS_H
 #define SCENE_MOTION_PATHS_H
 #include "animation/timeline_document.h"
+#include "motion/motion_frame.h"
 #include <json-c/json.h>
 #define MOTION_PATH_CAPACITY 16
 #define MOTION_POINT_CAPACITY 32
@@ -66,5 +67,6 @@ bool MotionPathsRuntimeTargetPosition(const char *target_id, double progress,
                                       TimelineVec3 *out);
 bool MotionPathsRuntimePosition(const char *object_id, double progress,
                                 TimelineVec3 *out);
+bool MotionPathsRuntimeFrame(const char *target, double progress, MotionFrame *out);
 bool MotionPathsRuntimeRotation(const char *target, double progress, TimelineVec3 *out);
 #endif
