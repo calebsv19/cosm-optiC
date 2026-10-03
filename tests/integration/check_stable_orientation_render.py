@@ -12,6 +12,12 @@ def render(s,frame,name):
         subprocess.run([str(cli),'--request',str(request),'--render','--summary',str(summary),'--summary-file-only'],cwd=root,env=dict(os.environ,RAY_TRACING_PROGRAM_ROOT=str(root)),stdout=log,stderr=subprocess.STDOUT,check=True,timeout=180)
     return json.loads(summary.read_text()),(root/name/'frames'/f'frame_{frame:04d}.bmp').read_bytes()
 def dot(a,b):return sum(x*y for x,y in zip(a,b))
+for seed_up in [[0,0,0],[0,0,1],[1,0,0]]:
+    s=copy.deepcopy(scene);binding=next(b for b in s['extensions']['ray_tracing']['authoring']['motion_paths']['bindings'] if b.get('target_id')=='camera/main');binding['orientation_frame'].update(start_up=seed_up,start_roll=0,end_enabled=False)
+    report,_=render(s,0,'stable_focus_seed_'+str(seed_up.index(1) if 1 in seed_up else 'default'))
+    orientation=report['evaluated_camera_orientation'];forward=orientation['forward'];up=seed_up if any(seed_up) else [0,0,1]
+    expected=[u-dot(up,forward)*f for u,f in zip(up,forward)];length=math.sqrt(dot(expected,expected));expected=[v/length for v in expected]
+    assert dot(expected,orientation['up'])>1-1e-10,'focus seed acquired dolly-induced roll'
 for frame in [10,40,119]:
     report,pixels=render(scene,frame,f'stable_combined_{frame}')
     assert len(report['evaluated_objects'])==3 and all(o['has_rotation'] for o in report['evaluated_objects'])

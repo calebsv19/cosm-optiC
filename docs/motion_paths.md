@@ -367,6 +367,9 @@ existing behavior, **Follow route** uses the transported tangent frame, and
 target. These new modes carry full forward/up orientation through evaluated
 snapshots, viewport projection and final render rays. They support roll and
 vertical aiming without the legacy focus pitch clamp. FOV remains independent.
+Stable focus projects the selected starting up direction against the initial
+view toward the target, then transports that frame. Sideways camera travel
+therefore does not introduce an unrequested initial roll.
 Missing focus targets use the route frame with visible feedback; at a coincident
 target the deterministic preceding heading is retained. Passing through a target
 can still cause a real reversal in aim. Explicit headless inspection look-at

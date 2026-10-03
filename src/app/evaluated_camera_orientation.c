@@ -50,9 +50,15 @@ bool EvaluatedCameraOrientation(const MotionPathBinding *b, double progress,
         if (!MotionPathsRuntimeFrame("camera/main", 0, &initial))
           return false;
         MotionFrameRoll(&initial, -b->start_roll * 0.017453292519943295);
-        if (direction(0, target, f))
-          MotionFrameTransport(&initial, f, &aim.frames[0]);
-        else
+        if (direction(0, target, f)) {
+          double up[3] = {b->start_up[0], b->start_up[1], b->start_up[2]};
+          if (up[0] * up[0] + up[1] * up[1] + up[2] * up[2] < 1e-18)
+            up[2] = 1;
+          /* Focus owns forward: seed its up against the view, rather than
+           * rotating a sideways dolly frame into the view and adding roll. */
+          if (!MotionFrameSeed(&aim.frames[0], f, up))
+            return false;
+        } else
           aim.frames[0] = initial;
         for (int i = 1; i <= AIM_STEPS; ++i) {
           if (direction((double)i / AIM_STEPS, target, f))
