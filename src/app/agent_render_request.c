@@ -298,7 +298,8 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     }
 
     if (RayTracingJsonGetObject(root, "checkpoint", &checkpoint)) {
-        RayTracingJsonGetBool(checkpoint, "enabled", &request.checkpoint_enabled);
+        request.has_checkpoint_enabled_override =
+            RayTracingJsonGetBool(checkpoint, "enabled", &request.checkpoint_enabled);
         RayTracingJsonGetBool(checkpoint, "resume", &request.checkpoint_resume);
         if (RayTracingJsonGetInt(checkpoint, "tile_batch_size", &int_value)) {
             request.checkpoint_tile_batch_size = int_value;
@@ -324,7 +325,8 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                 request_path);
             return false;
         }
-        if (request.checkpoint_root[0] != '\0') {
+        if (request.checkpoint_root[0] != '\0' &&
+            !request.has_checkpoint_enabled_override) {
             request.checkpoint_enabled = true;
         }
     }

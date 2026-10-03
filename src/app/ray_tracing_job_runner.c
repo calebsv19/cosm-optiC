@@ -276,7 +276,19 @@ static bool write_canonical_request_file(const char *path,
     json_write_string(file,
                       ray_tracing_agent_render_request_integrator_label(
                           request->integrator_3d));
+    if (request->has_denoise_enabled_override) {
+        fprintf(file, ",\n    \"denoise_enabled\": %s",
+                request->denoise_enabled_override ? "true" : "false");
+    }
     fprintf(file, "\n  },\n");
+    if (request->has_resource_budget) {
+        fprintf(file, "  \"resources\": {\n"
+                      "    \"cpu_percent\": %d,\n"
+                      "    \"max_workers\": %d,\n"
+                      "    \"reserve_cpu_count\": %d\n  },\n",
+                request->resource_cpu_percent, request->resource_max_workers,
+                request->resource_reserve_cpu_count);
+    }
     if (request->has_sampling_window) {
         fprintf(file, "  \"sampling\": {\n");
         fprintf(file, "    \"frame_offset\": %d,\n", request->sampling_frame_offset);
@@ -287,7 +299,13 @@ static bool write_canonical_request_file(const char *path,
     fprintf(file, "    \"root\": ");
     json_write_string(file, request->output_root);
     fprintf(file, ",\n");
-    fprintf(file, "    \"overwrite\": %s\n", request->overwrite ? "true" : "false");
+    fprintf(file, "    \"overwrite\": %s", request->overwrite ? "true" : "false");
+    if (request->video_enabled) {
+        fprintf(file, ",\n    \"video\": { \"enabled\": true, \"path\": ");
+        json_write_string(file, request->video_path);
+        fprintf(file, ", \"fps\": %d }", request->video_fps);
+    }
+    fprintf(file, "\n");
     fprintf(file, "  },\n");
     if (request->checkpoint_enabled) {
         fprintf(file, "  \"checkpoint\": {\n");
@@ -307,6 +325,9 @@ static bool write_canonical_request_file(const char *path,
         fprintf(file, "    \"root\": ");
         json_write_string(file, request->checkpoint_root);
         fprintf(file, "\n  },\n");
+    }
+    if (request->has_checkpoint_enabled_override && !request->checkpoint_enabled) {
+        fprintf(file, "  \"checkpoint\": { \"enabled\": false },\n");
     }
     fprintf(file, "  \"progress\": {\n");
     fprintf(file, "    \"summary_path\": ");
@@ -641,7 +662,8 @@ bool ray_tracing_job_runner_submit(const char *argv0,
             request.overwrite = false;
         }
     }
-    if (request.temporal_frames > 1) {
+    if (request.temporal_frames > 1 &&
+        (!request.has_checkpoint_enabled_override || request.checkpoint_enabled)) {
         request.checkpoint_enabled = true;
         request.checkpoint_resume = resume;
         if (snprintf(request.checkpoint_root,

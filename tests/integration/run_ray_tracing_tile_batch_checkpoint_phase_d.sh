@@ -6,7 +6,8 @@ source "$SCRIPT_DIR/lib/common.sh"
 
 ROOT_DIR="$(ray_tracing_root_dir)"
 RUNNER="$(ray_tracing_tool_path ray_tracing_job_runner "$ROOT_DIR")"
-RUN_ROOT="$ROOT_DIR/build/agent_runs/ray_tracing/tile_batch_checkpoint_phase_d"
+INTEGRATOR="${RAY_TRACING_CHECKPOINT_TEST_INTEGRATOR:-diffuse_bounce}"
+RUN_ROOT="$ROOT_DIR/build/agent_runs/ray_tracing/tile_batch_checkpoint_phase_d_$INTEGRATOR"
 JOBS_ROOT="$RUN_ROOT/jobs"
 SCENE="$ROOT_DIR/config/samples/ps4d_runtime_scene_visual_test.json"
 REFERENCE_OUTPUT="$RUN_ROOT/reference_output"
@@ -17,10 +18,10 @@ mkdir -p "$JOBS_ROOT"
 write_request() {
   local path="$1"
   local output_root="$2"
-  python3 - "$path" "$output_root" "$SCENE" <<'PY'
+  python3 - "$path" "$output_root" "$SCENE" "$INTEGRATOR" <<'PY'
 import json
 import sys
-path, output_root, scene = sys.argv[1:]
+path, output_root, scene, integrator = sys.argv[1:]
 payload = {
     "schema_version": "ray_tracing_agent_render_request_v1",
     "run_id": "tile_batch_checkpoint_phase_d",
@@ -32,11 +33,11 @@ payload = {
         "width": 160,
         "height": 96,
         "normalized_t": 0.0,
-        "temporal_frames": 3,
+        "temporal_frames": 8 if integrator == "disney_v2" else 3,
         "use_tiled_renderer": True,
         "tile_size": 32,
         "adaptive_sampling_enabled": True,
-        "integrator_3d": "diffuse_bounce",
+        "integrator_3d": integrator,
     },
     "checkpoint": {
         "enabled": True,
@@ -123,14 +124,14 @@ do
   test "$(find "$stage_root/checkpoints/frame_0000" \
     -name 'generation_*.rtck' -type f | wc -l | tr -d ' ')" -eq 2
   test -s "$stage_root/checkpoints/frame_0000/current.json"
-  grep -q '"checkpoint_schema_version": 2' \
+  grep -q '"checkpoint_schema_version": 3' \
     "$stage_root/checkpoints/frame_0000/current.json"
   python3 - "$JOBS_ROOT/$resumed_job/result_summary.json" <<'PY'
 import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     checkpoint = json.load(handle)["checkpoint"]
-assert checkpoint["schema_version"] == 2
+assert checkpoint["schema_version"] == 3
 assert checkpoint["resumed"] is True
 assert checkpoint["resumed_subpasses"] == 0
 assert checkpoint["resumed_tiles_in_subpass"] > 0

@@ -314,6 +314,12 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
         return false;
     }
     RuntimeNative3DTemporalAccumulation_Clear(&unit->accumulation);
+    /* Tile-batch checkpoints include untouched tiles before their first sample. */
+    if (unit->useAdaptiveSampling &&
+        !RuntimeNative3DAdaptivePixelStateBuffer_Ensure(&unit->adaptivePixelState,
+                                                       unit->width, unit->height)) {
+        return false;
+    }
     RuntimeNative3DAdaptiveSamplingMask_Clear(&unit->adaptiveMask);
     RuntimeNative3DAdaptivePixelStateBuffer_Clear(&unit->adaptivePixelState);
 

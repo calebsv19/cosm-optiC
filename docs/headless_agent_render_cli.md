@@ -1133,6 +1133,14 @@ effectively unbounded opacity clamp.
 
 ## Detached Runner
 
+Detached requests preserve their CPU budget, denoising override, and video
+output settings. Temporal jobs enable durable tile checkpoints by default.
+An explicit `"checkpoint": {"enabled": false}` disables those checkpoints
+when a long render favors output throughput; completed frames remain durable,
+but an interrupted active frame must be rendered again. Disney adaptive tiles
+initialize their retained state before the first tile checkpoint, including
+those that have not yet received a sample.
+
 The detached runner is the first Phase 1 execution adapter for long-running
 headless work:
 
