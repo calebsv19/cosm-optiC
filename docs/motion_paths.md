@@ -414,3 +414,5 @@ scene from the saved camera acceptance fixture. `check_stable_orientation_render
 requires nonempty images, exact focus aim, visible quarter-roll and exact full-turn
 image return. These are bounded engineering checks, not large-scene performance
 or user aircraft acceptance.
+
+File Save preserves the retained camera focus target alongside motion paths and timeline tracks, so reopening a stable-focus scene retains its intended aim.

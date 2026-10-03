@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <json-c/json.h>
 
 #include "app/animation.h"
 #include "config/config_manager.h"
@@ -25,7 +26,8 @@ static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(v
         "\"constraints\":[],"
         "\"extensions\":{"
           "\"physics_sim\":{\"gravity\":9.81},"
-          "\"ray_tracing\":{\"managed_mesh_assets\":{\"schema\":\"optic_managed_mesh_assets_v1\"}},"
+          "\"ray_tracing\":{\"managed_mesh_assets\":{\"schema\":\"optic_managed_mesh_assets_v1\"},"
+          "\"authoring\":{\"camera_focus_target\":{\"x\":1.25,\"y\":2.5,\"z\":3.75}}},"
           "\"custom_tool\":{\"foo\":1}"
         "},"
         "\"compile_meta\":{\"compiler\":\"core_scene_compile\"}"
@@ -37,7 +39,7 @@ static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(v
         "\"extensions\":{"
           "\"ray_tracing\":{"
             "\"exposure\":1.25,"
-            "\"integrator\":\"hybrid\""
+            "\"integrator\":\"hybrid\",\"authoring\":{}"
           "}"
         "}"
         "}";
@@ -68,6 +70,26 @@ static int test_runtime_scene_bridge_writeback_overlay_preserves_non_ray_state(v
                 strstr(merged, "\"space_mode_default\":\"3d\"") != NULL);
     assert_true("runtime_scene_writeback_preserve_compile_meta",
                 strstr(merged, "\"compile_meta\"") != NULL);
+    {
+        json_object *root = json_tokener_parse(merged), *extensions = NULL;
+        json_object *ray = NULL, *authoring = NULL, *target = NULL, *coordinate = NULL;
+        bool retained = root && json_object_object_get_ex(root, "extensions", &extensions) &&
+            json_object_object_get_ex(extensions, "ray_tracing", &ray) &&
+            json_object_object_get_ex(ray, "authoring", &authoring) &&
+            json_object_object_get_ex(authoring, "camera_focus_target", &target);
+        assert_true("runtime_scene_writeback_preserve_camera_focus_target", retained);
+        if (retained) {
+            const char *keys[] = {"x", "y", "z"};
+            const double values[] = {1.25, 2.5, 3.75};
+            for (int i = 0; i < 3; ++i) {
+                bool present = json_object_object_get_ex(target, keys[i], &coordinate);
+                assert_true("runtime_scene_writeback_focus_coordinate_present", present);
+                if (present) assert_close("runtime_scene_writeback_focus_coordinate",
+                                           json_object_get_double(coordinate), values[i], 1e-9);
+            }
+        }
+        if (root) json_object_put(root);
+    }
     free(merged);
     return 0;
 }

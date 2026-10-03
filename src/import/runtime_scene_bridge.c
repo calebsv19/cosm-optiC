@@ -975,7 +975,8 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
             json_object_object_get_ex(oe,"ray_tracing",&orr) &&
             json_object_object_get_ex(orr,"authoring",&oa) &&
             json_object_is_type(oa,json_type_object)) {
-            const char *keys[]={"scene_timeline","motion_paths","motion_plans"};
+            const char *keys[]={"scene_timeline","motion_paths","motion_plans",
+                                "camera_focus_target"};
             for(size_t i=0;i<sizeof(keys)/sizeof(keys[0]);++i) {
                 json_object *value=NULL;
                 json_object_object_del(oa,keys[i]);
