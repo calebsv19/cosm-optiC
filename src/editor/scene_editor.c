@@ -1,4 +1,6 @@
 #include "editor/scene_editor_atmosphere_preview.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
+#include "editor/scene_editor_atmosphere_inspector.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_surface_material_panel.h"
@@ -189,6 +191,8 @@ static void SceneEditorCamera3DGizmoReset(void) {
 }
 
 bool SceneEditorFrameViewport(bool selected_only) {
+    if(selected_only && SceneEditorAtmosphereSelected() && SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT)
+        return SceneEditorAtmosphereFrame();
     int selected = selected_only ? ObjectEditorGetSelectedObjectIndex() : -1;
     if (!g_scenePaneLayoutValid || (selected_only && selected < 0)) return false;
     bool ok = SceneEditorViewportNavFitDigestOverlayForTarget(&g_viewport_nav_state,
@@ -1064,6 +1068,8 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 
 void DestroySceneEditor(SceneEditor* editor) {
+    SceneEditorAtmosphereViewportReset();
+    SceneEditorAtmosphereInspectorReset();
     SceneEditorAtmospherePreviewReset();
     SceneEditorSurfaceMaterialPanelShutdown();
     SceneEditorRenameCancel();

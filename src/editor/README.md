@@ -379,3 +379,13 @@ are retained. Native acceptance lives in `scene_editor_dm3_light.h`; baked-frame
 parity in `integration/check_light_route_render.py`. No shared-library changes.
 
 File Save preserves retained motion records during legacy overlay replacement. Unpublished save failure rolls back the candidate and revision before retry. Path hover reuses click picking; object orientation controls commit through the existing motion-path command.
+
+## Retained atmosphere editing
+
+`scene_editor_atmosphere_geometry.c` resolves the selected cache geometry through
+common actual-frame selection and converts centre edits to compatible origin-pivot
+placement. `scene_editor_atmosphere_viewport.c` owns bounded guides, edge/centre
+picking and preview/cancel/commit gestures over existing object transform handles.
+`scene_editor_atmosphere_inspector.c` owns numeric centre/rotation/scale/size fields.
+Commands remain in the retained attachment adapter and are shared with live MCP.
+Native preview is manual; normal Environment editing uses the geometric viewport.

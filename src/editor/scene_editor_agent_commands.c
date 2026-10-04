@@ -1,6 +1,7 @@
 #include "editor/scene_editor_agent_control.h"
 #include "editor/scene_editor_atmosphere.h"
 #include "editor/scene_editor_atmosphere_panel.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -24,7 +25,7 @@ json_object* SceneEditorAgentControlDispatch(json_object* request) {
     const char* name=json_object_get_string(method);
     unsigned long long revision=SceneEditorDocumentRevision();
     if(!strcmp(name,"scene.read")) {ok=true;goto done;}
-    if(SceneEditorTransformPanelInteractionActive() || SceneEditorAtmospherePanelInteractionActive() || SceneEditorLifecycleClosePending()) {
+    if(SceneEditorTransformPanelInteractionActive() || SceneEditorAtmospherePanelInteractionActive() || SceneEditorAtmosphereGestureActive() || SceneEditorLifecycleClosePending()) {
         snprintf(message,sizeof(message),"Finish or cancel the active editor operation before agent edits.");goto done;
     }
     json_object* expected=get(params,"expected_revision");

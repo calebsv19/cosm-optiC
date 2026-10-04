@@ -39,8 +39,11 @@ a draft pending requested visual refinement.
 
 The reconciled 0.18.0/worker 0.9.0 Main Edit adds static preset/import controls,
 live agent MCP commands sharing UI history/File Save, deterministic playhead-bound
-existing volume/water caches, and contained portable export. Environment shows a
-progressive native scene-camera preview and the shared timeline. Native UI/MCP,
+existing volume/water caches, and contained portable export. Environment defaults to the
+normal geometric viewport with selectable atmosphere bounds, a density guide,
+centre-based move/rotate/scale handles, physical size fields and the shared
+timeline. First attachments fit visible geometry; replacements preserve placement
+and appearance. Native scene-camera preview remains an optional manual diagnostic. Native UI/MCP,
 Undo/Redo, File Save/fresh reopen, actual cache IDs/digests, placement, and exact
 relocated render output pass. Ordinary bootstrap/lens-transport volume caches
 support placement; photon-volume caches explicitly require identity placement.

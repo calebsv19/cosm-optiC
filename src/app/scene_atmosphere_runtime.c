@@ -56,18 +56,21 @@ void SceneAtmosphereRuntimeApplyTuning(void) {
     RuntimeVolume3DScatter_SetStepScale(active.step_scale);
     RuntimeVolume3DScatter_SetTint(active.tint[0],active.tint[1],active.tint[2]);
 }
-bool SceneAtmosphereRuntimeSource(const char* scene_path,char* out,size_t n,char* d,size_t dn) {
+static bool source_for(const SceneAtmosphereAttachment* value,const char* scene_path,char* out,size_t n,char* d,size_t dn) {
     char parent[PATH_MAX],resolved_parent[PATH_MAX],candidate[PATH_MAX],resolved[PATH_MAX];
-    if(!active.present || !scene_path || !out || !n || strlen(scene_path)>=sizeof(parent)) return fail(d,dn,"attachment has no scene root");
+    if(!value || !value->present || !scene_path || !out || !n || strlen(scene_path)>=sizeof(parent)) return fail(d,dn,"attachment has no scene root");
     strcpy(parent,scene_path);char* slash=strrchr(parent,'/');
     if(slash) *slash=0;else strcpy(parent,".");
     if(!parent[0]) strcpy(parent,"/");
-    if(!realpath(parent,resolved_parent) || snprintf(candidate,sizeof(candidate),"%s/%s",resolved_parent,active.source_path)>=(int)sizeof(candidate) ||
+    if(!realpath(parent,resolved_parent) || snprintf(candidate,sizeof(candidate),"%s/%s",resolved_parent,value->source_path)>=(int)sizeof(candidate) ||
         !realpath(candidate,resolved)) return fail(d,dn,"atmosphere source is missing; reattach or restore project assets");
     size_t plen=strlen(resolved_parent);
     if(strncmp(resolved,resolved_parent,plen) || resolved[plen]!='/') return fail(d,dn,"atmosphere source escapes its project root");
     if(strlen(resolved)>=n) return fail(d,dn,"atmosphere path exceeds capacity");
-    return SceneAtmosphereAssetPath(scene_path,active.source_path,resolved_parent,out,n,d,dn);
+    return SceneAtmosphereAssetPath(scene_path,value->source_path,resolved_parent,out,n,d,dn);
+}
+bool SceneAtmosphereRuntimeSource(const char* scene_path,char* out,size_t n,char* d,size_t dn) {
+    return source_for(&active,scene_path,out,n,d,dn);
 }
 static bool source_ids(const char* path,int depth,int64_t** ids,size_t* count,char* d,size_t n) {
     if(depth>4) return fail(d,n,"cache bundle nesting exceeds supported depth");
@@ -110,21 +113,25 @@ done:
     if(!ok && (!d || !n || !d[0])) fail(d,n,"cache manifest needs explicit sorted frame_index values");
     return ok;
 }
-bool SceneAtmosphereRuntimeFrame(const char* scene_path,const TimelineEvaluationContext* frame,int64_t* out,char* d,size_t n) {
+bool SceneAtmosphereFrameForAttachment(const SceneAtmosphereAttachment* value,const char* scene_path,const TimelineEvaluationContext* frame,int64_t* out,char* d,size_t n) {
     char path[PATH_MAX];int64_t requested;int64_t* ids=NULL;size_t count=0;
+    if(!value || !frame || !out) return fail(d,n,"missing cache frame selection context");
     if(d && n) d[0]=0;
-    if(!SceneAtmosphereAttachmentRequestedFrame(&active,frame,&requested,d,n) ||
-        !SceneAtmosphereRuntimeSource(scene_path,path,sizeof(path),d,n)) return false;
-    if(!strcmp(active.source_kind,"vf3d") || !strcmp(active.source_kind,"pack")) {
+    if(!SceneAtmosphereAttachmentRequestedFrame(value,frame,&requested,d,n) ||
+        !source_for(value,scene_path,path,sizeof(path),d,n)) return false;
+    if(!strcmp(value->source_kind,"vf3d") || !strcmp(value->source_kind,"pack")) {
         uint64_t actual;
-        RuntimeVolume3DSourceKind kind=!strcmp(active.source_kind,"vf3d")?RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D:RUNTIME_VOLUME_3D_SOURCE_PACK;
+        RuntimeVolume3DSourceKind kind=!strcmp(value->source_kind,"vf3d")?RUNTIME_VOLUME_3D_SOURCE_RAW_VF3D:RUNTIME_VOLUME_3D_SOURCE_PACK;
         if(!fluid_volume_import_3d_single_frame_index(path,kind,&actual) || actual>INT_MAX)
             return fail(d,n,"Single-file cache has no supported actual frame ID.");
         *out=(int64_t)actual;return true;
     }
     if(!source_ids(path,0,&ids,&count,d,n)) return false;
-    bool ok=SceneAtmosphereAttachmentSelectFrame(&active,requested,ids,count,out,d,n);
+    bool ok=SceneAtmosphereAttachmentSelectFrame(value,requested,ids,count,out,d,n);
     free(ids);return ok;
+}
+bool SceneAtmosphereRuntimeFrame(const char* scene_path,const TimelineEvaluationContext* frame,int64_t* out,char* d,size_t n) {
+    return SceneAtmosphereFrameForAttachment(&active,scene_path,frame,out,d,n);
 }
 bool SceneAtmosphereRuntimeSimulation(const char* scene_path,const TimelineEvaluationContext* frame,
     RayEvaluatedSimulationIdentity* out,char* d,size_t n) {

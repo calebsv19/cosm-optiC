@@ -1,4 +1,6 @@
 #include "editor/scene_editor_atmosphere_preview.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
+#include "editor/scene_editor_atmosphere_inspector.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "render/runtime_surface_graph.h"
 #include "render/runtime_surface_sampling.h"
@@ -422,6 +424,9 @@ bool SceneEditorDocumentOpenActive(char* diagnostics, size_t diagnostics_size) {
 
 void SceneEditorDocumentClose(void) {
     SceneEditorAtmospherePreviewReset();
+    SceneEditorAtmospherePreviewSetEnabled(false);
+    SceneEditorAtmosphereViewportReset();
+    SceneEditorAtmosphereInspectorReset();
     SceneEditorAgentControlClose();
     ObjectEditorSelectionTrackerReset();
     if (s_document.root) json_object_put(s_document.root);

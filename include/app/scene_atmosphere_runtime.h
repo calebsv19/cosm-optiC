@@ -12,6 +12,9 @@ void SceneAtmosphereRuntimeApplyTuning(void);
 bool SceneAtmosphereRuntimeSource(const char* scene_path,char* path,size_t size,char* diagnostic,size_t diagnostic_size);
 bool SceneAtmosphereRuntimeFrame(const char* scene_path,const TimelineEvaluationContext* frame,
     int64_t* selected,char* diagnostic,size_t size);
+/* The same sparse-ID selection for a not-yet-committed import candidate. */
+bool SceneAtmosphereFrameForAttachment(const SceneAtmosphereAttachment* value,
+    const char* scene_path,const TimelineEvaluationContext* frame,int64_t* selected,char* diagnostic,size_t size);
 double SceneAtmosphereRuntimeWorldScale(void);
 bool SceneAtmosphereRuntimeContext(int frame_index,TimelineEvaluationContext* context,char* diagnostic,size_t size);
 /* Retained bundle sidecars use the same clock, but their own actual frame IDs. */

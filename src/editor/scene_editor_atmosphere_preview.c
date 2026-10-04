@@ -26,7 +26,7 @@ static struct {
     VkRenderer* owner;
     VkRendererTexture texture;
     char status[512];
-} preview={.enabled=true};
+} preview={.enabled=false};
 static void release_frame(void) {
     if(preview.frame) {RuntimeNative3DPreparedFrame_Free(preview.frame);free(preview.frame);preview.frame=NULL;}
 }

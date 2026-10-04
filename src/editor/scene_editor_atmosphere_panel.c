@@ -1,6 +1,10 @@
 #include "editor/scene_editor_atmosphere_panel.h"
 #include "editor/scene_editor_atmosphere.h"
 #include "editor/scene_editor_atmosphere_preview.h"
+#include "editor/scene_editor_atmosphere_geometry.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
+#include "editor/scene_editor_atmosphere_inspector.h"
+#include "render/runtime_volume_3d_transform.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_render_authoring.h"
@@ -19,21 +23,22 @@
 
 enum {PREVIEW,IMPORT,PRESET,GENERATE,ENABLED,VISIBLE,LIGHTING,APPEARANCE,PLACEMENT,PLAYBACK,
     DENSITY,GAMMA,ABSORPTION,SCATTER,STEP,TINT,TRANSLATION,ROTATION,SCALE,
-    ANIMATED,RATE,START,SOURCE_START,MISSING,REMOVE,COUNT};
+    ANIMATED,RATE,START,SOURCE_START,MISSING,REMOVE,SELECT,FRAME,FIT,COUNT};
 static const char* names[COUNT]={"preview","import","preset","generate","enabled","visible","lighting",
     "appearance","placement","playback","density","gamma","absorption","scatter","step","tint",
-    "translation","rotation","scale","animated","rate","start","source_start","missing","remove"};
+    "translation","rotation","scale","animated","rate","start","source_start","missing","remove","select","frame","fit"};
 static const char* presets[]={"room_haze_v1","low_floor_fog_v1","cloud_bank_v1","mist_patch_v1","plume_column_v1"};
 static const char* preset_names[]={"Room haze","Floor fog","Cloud bank","Mist patch","Plume"};
 static struct {
-    SDL_Rect rects[COUNT];char labels[COUNT][256],draft[128],status[512],source[1200],cache[128];
+    SDL_Rect rects[COUNT];char labels[COUNT][256],draft[128],status[512],source[1200],cache[512];
     int editing,preset;bool visible,appearance,placement,playback;
     unsigned long long revision;
     SceneAtmosphereAttachment value;
 } panel={.editing=-1};
 static void cancel(void) {if(panel.editing>=0) SDL_StopTextInput();panel.editing=-1;}
-bool SceneEditorAtmospherePanelInteractionActive(void) {return panel.editing>=0;}
+bool SceneEditorAtmospherePanelInteractionActive(void) {return panel.editing>=0 || SceneEditorAtmosphereInspectorActive();}
 void SceneEditorAtmospherePanelBeginFrame(void) {
+    SceneEditorAtmosphereInspectorBeginFrame();
     memset(panel.rects,0,sizeof(panel.rects));panel.visible=false;
     if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_ENVIRONMENT) cancel();
 }
@@ -56,22 +61,25 @@ int SceneEditorAtmospherePanelDraw(SDL_Renderer* r,SDL_Rect bounds) {
     if(!SceneEditorAtmosphereRead(&v)) return y;
     if(panel.revision!=SceneEditorDocumentRevision()) cancel();
     panel.value=v;panel.revision=SceneEditorDocumentRevision();panel.visible=true;
-    button(r,bounds,PREVIEW,&y,SceneEditorAtmospherePreviewEnabled()?"Native preview: On":"Native preview: Off",true);
     button(r,bounds,IMPORT,&y,v.present?"Replace atmosphere...":"Attach atmosphere...",true);
     char label[256];snprintf(label,sizeof(label),"Preset: %s",preset_names[panel.preset]);
     button(r,bounds,PRESET,&y,label,true);
-    button(r,bounds,GENERATE,&y,"Create static atmosphere",true);
+    button(r,bounds,GENERATE,&y,v.present?"Replace with static preset":"Create static atmosphere",true);
     if(v.present) {
+        button(r,bounds,SELECT,&y,SceneEditorAtmosphereSelected()?"Atmosphere selected":"Select atmosphere",true);
+        button(r,bounds,FRAME,&y,"Frame atmosphere",true);
         const char* name=strrchr(v.source_path,'/');name=name?name+1:v.source_path;
         snprintf(panel.source,sizeof(panel.source),"%s | %s",name,v.source_kind);
         ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,11,8),panel.source,
             bounds.x+8,y,(SDL_Color){180,195,210,255});y+=24;
-        RayEvaluatedSceneSnapshot snapshot;
-        if(SceneEditorTimelineCopyEvaluated(&snapshot) && snapshot.simulation.valid)
-            snprintf(panel.cache,sizeof(panel.cache),"Selected cache frame: %lld%s",(long long)snapshot.simulation.source_frame_index,v.animated?"":" (static)");
-        else snprintf(panel.cache,sizeof(panel.cache),"%s",v.enabled?"Cache unavailable; check source and timing.":"Atmosphere disabled");
-        ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,11,8),panel.cache,
-            bounds.x+8,y,(SDL_Color){180,195,210,255});y+=24;
+        RuntimeVolumeAttachment3D volume;char diagnostic[256]={0};
+        if(SceneEditorAtmosphereGeometry(&volume,diagnostic,sizeof(diagnostic))) {
+            Vec3 size=vec3_sub(volume.grid.boundsMax,volume.grid.boundsMin);double w=SceneEditorDocumentWorldScale();
+            snprintf(panel.cache,sizeof(panel.cache),"Cache loaded | Frame %llu%s | %.4g x %.4g x %.4g %s",
+                (unsigned long long)volume.grid.frameIndex,v.animated?"":" (static)",
+                size.x*v.scale[0]/w,size.y*v.scale[1]/w,size.z*v.scale[2]/w,SceneEditorDocumentUnitLabel());
+        } else snprintf(panel.cache,sizeof(panel.cache),"Cache unavailable: %.240s",diagnostic);
+        y+=SceneEditorLabelWrapped(r,(SDL_Rect){bounds.x+8,y,bounds.w-16,80},panel.cache,(SDL_Color){180,195,210,255})+8;
         button(r,bounds,ENABLED,&y,v.enabled?"Atmosphere: On":"Atmosphere: Off",true);
         button(r,bounds,VISIBLE,&y,v.visible?"Visible volume: On":"Visible volume: Off",true);
         button(r,bounds,LIGHTING,&y,v.affects_lighting?"Affects lighting: On":"Affects lighting: Off",true);
@@ -84,12 +92,8 @@ int SceneEditorAtmospherePanelDraw(SDL_Renderer* r,SDL_Rect bounds) {
             field(r,bounds,STEP,&y,"Sampling step",&v.step_scale,1);
             field(r,bounds,TINT,&y,"Tint RGB",v.tint,3);
         }
-        button(r,bounds,PLACEMENT,&y,panel.placement?"Volume placement  -":"Volume placement  +",true);
-        if(panel.placement) {
-            field(r,bounds,TRANSLATION,&y,"Position XYZ",v.translation,3);
-            field(r,bounds,ROTATION,&y,"Rotation XYZ (deg)",v.rotation_degrees,3);
-            field(r,bounds,SCALE,&y,"Scale XYZ",v.scale,3);
-        }
+        button(r,bounds,PLACEMENT,&y,"Edit volume placement >",true);
+        button(r,bounds,FIT,&y,"Fit volume to scene",true);
         button(r,bounds,PLAYBACK,&y,panel.playback?"Cache timing  -":"Cache timing  +",true);
         if(panel.playback) {
             bool sequence=!strcmp(v.source_kind,"manifest") || !strcmp(v.source_kind,"scene_bundle");
@@ -105,6 +109,7 @@ int SceneEditorAtmospherePanelDraw(SDL_Renderer* r,SDL_Rect bounds) {
         }
         button(r,bounds,REMOVE,&y,"Remove atmosphere",true);
     }
+    button(r,bounds,PREVIEW,&y,SceneEditorAtmospherePreviewEnabled()?"Direct light preview: On (manual)":"Direct light preview: Off (manual)",true);
     if(panel.status[0]) {
         SDL_Rect message={bounds.x+8,y,bounds.w-16,100};
         y+=SceneEditorLabelWrapped(r,message,panel.status,(SDL_Color){235,200,135,255})+8;
@@ -150,7 +155,7 @@ static bool numeric(int id,const char* text) {
     return true;
 }
 static void report(bool ok) {
-    if(ok) snprintf(panel.status,sizeof(panel.status),"Atmosphere updated. Undo available; File Save to retain.");
+    if(ok && !panel.status[0]) snprintf(panel.status,sizeof(panel.status),"Atmosphere updated. Undo available; File Save to retain.");
     SceneEditorChromeShellSetActionFeedback(panel.status,6000);
 }
 bool SceneEditorAtmospherePanelEvent(SDL_Event* e) {
@@ -174,7 +179,7 @@ bool SceneEditorAtmospherePanelEvent(SDL_Event* e) {
     if(e->type!=SDL_MOUSEBUTTONDOWN || e->button.button!=SDL_BUTTON_LEFT) return false;
     SDL_Point point={e->button.x,e->button.y};
     for(int id=0;id<COUNT;++id) if(panel.rects[id].w && SDL_PointInRect(&point,&panel.rects[id])) {
-        cancel();bool ok=false;
+        cancel();bool ok=false;panel.status[0]=0;
         switch(id) {
           case IMPORT: {
 #ifdef __APPLE__
@@ -190,7 +195,16 @@ bool SceneEditorAtmospherePanelEvent(SDL_Event* e) {
           case PREVIEW:SceneEditorAtmospherePreviewSetEnabled(!SceneEditorAtmospherePreviewEnabled());return true;
           case GENERATE:ok=SceneEditorAtmosphereImport(presets[panel.preset],true,panel.revision,panel.status,sizeof(panel.status));break;
           case APPEARANCE:panel.appearance=!panel.appearance;return true;
-          case PLACEMENT:panel.placement=!panel.placement;return true;
+          case SELECT:case PLACEMENT:SceneEditorAtmosphereSelect(true);SceneEditorAtmospherePreviewSetEnabled(false);return true;
+          case FRAME:SceneEditorAtmosphereSelect(true);SceneEditorAtmosphereFrame();return true;
+          case FIT: {
+            RuntimeVolumeAttachment3D volume;
+            ok=SceneEditorAtmosphereGeometry(&volume,panel.status,sizeof(panel.status)) &&
+                SceneEditorAtmosphereFit(&panel.value,&volume,NULL) &&
+                SceneEditorAtmosphereSet(&panel.value,panel.revision,panel.status,sizeof(panel.status));
+            if(ok) {SceneEditorAtmosphereSelect(true);SceneEditorAtmosphereFrame();}
+            report(ok);return true;
+          }
           case PLAYBACK:panel.playback=!panel.playback;return true;
           case ENABLED:panel.value.enabled=!panel.value.enabled;break;
           case VISIBLE:panel.value.visible=!panel.value.visible;break;

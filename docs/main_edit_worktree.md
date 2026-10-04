@@ -1,5 +1,20 @@
 # RayTracing Main Edit Worktree
 
+## October 4 — atmosphere authoring usability repair
+
+Environment again defaults to geometric editing. Atmosphere resources expose
+loaded cache/frame/size, selectable bounds and a density guide; Inspector/gizmos
+edit centre, rotation and size through retained commands. Initial attachment fits
+visible scene geometry; replacement preserves placement and appearance. Native
+Direct Light preview stays manual/off by default. See [atmosphere editing](atmosphere_attachment.md).
+
+Complex-room native creation/selection, XYZ transforms, cancellation, shared
+Undo/Redo, File Save and fresh-process reopen pass, alongside existing cache,
+MCP, water, timeline and headless export checks. Local package delivery is a
+separate checkpoint recorded in private work status. Preserve the running user
+scene; do not silently replace or close its unsaved session.
+
+
 ## October 4 — retained atmosphere development checkpoint
 
 Main Edit merged the released 0.18.0/worker 0.9.0 source baseline at ca73660,

@@ -30,6 +30,7 @@ with subprocess.Popen([sys.executable,str(ROOT/'tools/scene_editor_mcp.py'),'--s
     original_revision=state['revision']
     state=call('atmosphere_import',{'expected_revision':state['revision'],'source':str(scene.parent/'assets/cache/manifest.json')})
     assert state['dirty'] and state['attachment']['source_path'].startswith('assets/atmosphere/')
+    imported=copy.deepcopy(state['attachment'])
     value=copy.deepcopy(state['attachment']);value['appearance']['density_scale']=0.8
     value['placement']['translation']=[1,2,3]
     value['playback'].update(animated=True,rate_numerator=30000,rate_denominator=1001)
@@ -44,10 +45,11 @@ with subprocess.Popen([sys.executable,str(ROOT/'tools/scene_editor_mcp.py'),'--s
     state=call('scene_save',{'expected_revision':state['revision']});assert not state['dirty']
     saved=json.loads(scene.read_text())['extensions']['ray_tracing']['authoring']['atmosphere_attachment']
     assert saved==value
-    state=call('scene_undo',{'expected_revision':state['revision']});assert state['attachment']['appearance']['density_scale']==1
+    state=call('scene_undo',{'expected_revision':state['revision']});assert state['attachment']==imported
     state=call('scene_redo',{'expected_revision':state['revision']});assert state['attachment']==value
     state=call('atmosphere_generate',{'expected_revision':state['revision'],'preset':'room_haze_v1'})
     assert state['attachment']['source_kind']=='vf3d' and not state['attachment']['playback']['animated']
+    assert state['attachment']['placement']==value['placement'] and state['attachment']['appearance']==value['appearance']
     state=call('atmosphere_remove',{'expected_revision':state['revision']});assert state['attachment'] is None
     state=call('scene_undo',{'expected_revision':state['revision']});assert state['attachment']['source_kind']=='vf3d'
     state=call('scene_save',{'expected_revision':state['revision']});assert not state['dirty']

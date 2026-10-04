@@ -450,6 +450,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_path_smoothing.h"
 
 #include "scene_editor_atmosphere_acceptance.h"
+#include "scene_editor_atmosphere_usability.h"
 #include "scene_editor_atmosphere_water_acceptance.h"
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -472,6 +473,9 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && (!strcmp(argv[3],"--atmosphere-usability") || !strcmp(argv[3],"--atmosphere-usability-reopen"))) {
+        atmosphere_usability(&editor,argv[2],!strcmp(argv[3],"--atmosphere-usability-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if(argc==4 && (!strcmp(argv[3],"--atmosphere-water") || !strcmp(argv[3],"--atmosphere-water-reopen"))) {
         atmosphere_water_native(&editor,argv[2],!strcmp(argv[3],"--atmosphere-water-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

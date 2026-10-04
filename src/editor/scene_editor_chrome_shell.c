@@ -9,6 +9,7 @@
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_transform_ergonomics.h"
 #include "editor/scene_editor_chrome_shell.h"
+#include "editor/scene_editor_atmosphere_preview.h"
 
 #include <SDL2/SDL_ttf.h>
 #include <math.h>
@@ -431,7 +432,9 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
             }
         }
         static char display_label[32];
-        snprintf(display_label,sizeof(display_label),"%s v",SceneEditorMeshDisplayModeName(SceneEditorMeshPreviewModeGet()));
+        snprintf(display_label,sizeof(display_label),"%s v",
+            SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT && SceneEditorAtmospherePreviewEnabled()?"Direct light":
+            SceneEditorMeshDisplayModeName(SceneEditorMeshPreviewModeGet()));
         scene_editor_chrome_shell_render_button(renderer,chrome.display_mode,display_label,true,
             scene_editor_chrome_shell_button_hovered(&chrome.display_mode),false,palette.button_fill,
             disabledFill,borderColor,palette);

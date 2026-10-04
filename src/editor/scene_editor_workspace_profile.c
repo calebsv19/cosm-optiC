@@ -1,6 +1,9 @@
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_camera_inspector.h"
 #include "editor/scene_editor_mesh_preview_render.h"
+#include "editor/scene_editor_atmosphere_preview.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
+#include "editor/scene_editor_atmosphere_inspector.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_internal.h"
 #include "editor/scene_editor_object_move_gizmo.h"
@@ -41,6 +44,9 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     SceneEditorTimelineReleaseFocus();
     SceneEditorToolStateReset();
     SceneEditorObjectMoveGizmoReset();
+    SceneEditorAtmosphereSelect(false);
+    SceneEditorAtmosphereInspectorReset();
+    SceneEditorAtmospherePreviewSetEnabled(false);
     SceneEditorChromeShellSetActionFeedback("",0);
     int selected = ObjectEditorGetSelectedObjectIndex();
     char selected_id[128];snprintf(selected_id,sizeof(selected_id),"%s",ObjectEditorSelectionTrackerId());
@@ -190,6 +196,7 @@ bool SceneEditorWorkspaceProfileHandleEvent(SceneEditor* editor, const SDL_Event
     if (event->button.button!=SDL_BUTTON_LEFT) { bool consumed=menu_open; menu_open=false; return consumed; }
     SDL_Point point={event->button.x,event->button.y};
     if(SDL_PointInRect(&point,&chrome.display_mode)) {
+        SceneEditorAtmospherePreviewSetEnabled(false);
         if(SceneEditorTransformPanelInteractionActive()) return true;
         bool close=menu_open && document_menu==3;
         document_menu=3;add_menu=false;menu_open=!close;menu_focus=SceneEditorMeshPreviewModeGet();return true;

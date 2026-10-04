@@ -14,31 +14,57 @@ The active scene must be saved to disk before importing assets.
 For a starting atmosphere, cycle the preset selector and choose **Create static
 atmosphere**. Room haze, floor fog, cloud bank, mist patch and plume are bounded,
 repeatable initial fields. Generation does not run a fluid solver or PhysicsSim.
+First attachment fits visible geometry bounds, selects the atmosphere, and frames
+its volume. Cloud/mist/plume use uniform scale at 40 percent of the largest scene
+span; room haze fits the room dimensions, and floor fog fits the floor footprint
+with a shallow height. Empty scenes use a bounded ten-metre reference region.
 
-Appearance, volume placement and cache timing have separate collapsible groups.
-Click a numeric field, type its new value, then press Enter. Escape cancels.
-XYZ and RGB fields accept three comma-separated numbers. Source FPS accepts an
-integer or exact `N/D` fraction, such as `30000/1001`.
+There is one attachment. **Replace with static preset** and **Replace atmosphere**
+preserve existing placement and appearance. Playback resets to static for the new
+source. **Fit volume to scene** is an explicit undoable re-fit for existing
+attachments; opening a scene never resizes it automatically. Imported sparse
+sequences use the same actual-frame selection policy before first-load fitting.
+
+Environment defaults to the normal geometric viewport, with the shared evaluated
+playhead. Its Wire/Solid/Material selector continues to control scene geometry.
+A loaded atmosphere shows a coloured wire box, centre marker and bounded density
+guide. The guide indicates occupied cache regions; it is not a shaded cloud or a
+prediction of final lighting. Disabled/hidden volumes keep muted editable bounds.
+The resource panel reports cache loaded/unavailable, actual frame and dimensions.
+
+Click **Select atmosphere**, its box edges or centre marker to edit it. The
+Inspector provides **Move (W)**, **Rotate (R)**, **Scale (E)**, **Frame atmosphere
+(F)**, centre XYZ, rotation, scale, and physical XYZ size. Drag labelled axes or
+the uniform scale handle; release applies one command and Escape cancels. Context
+changes, focus loss, resize, stale revisions and active authoring operations cancel
+gestures. Rotation and scale preserve the volume centre. Inspector values display
+the live drag preview, while retained scene bytes change only on release.
+Editing pauses timeline playback. The existing transform-handle visibility toggle
+and snapping policy apply. Atmosphere axes use the existing world-axis handles.
+
+Appearance and cache timing remain separate collapsible groups in Scene resources.
+Click a numeric field, type its new value, then press Enter. XYZ and RGB fields
+accept three comma-separated numbers; Escape cancels. Source FPS accepts an
+integer or exact `N/D` fraction, such as `30000/1001`. Volume placement lives in
+the Inspector, and centre/size edits convert back into the compatible cache-origin
+placement fields used by the renderer and MCP. Invalid negative size/scale is
+refused without changing the document. Volume transforms do not move bundled
+water geometry.
 
 Attachment changes are ordinary scene commands: Undo/Redo work across UI and
-agents, and **File Save** retains the declaration. Remove releases the retained
-attachment; Undo restores it. Published cache files remain available for redo.
-The panel displays the selected actual cache frame. A missing source or invalid
-sample fails evaluation/preparation with a diagnostic instead of substituting a
-random frame.
+agents, and **File Save** retains the declaration. Remove releases the attachment;
+Undo restores it. Published cache files remain available for redo. Agent mutations
+are refused during active numeric edits or volume gestures. A missing source or
+invalid sample reports an error instead of substituting an arbitrary frame.
 
-Environment defaults to a native scene-camera preview. It uses the shared evaluated
-playhead and the native Direct Light integrator at 160 by 100 pixels, progressively
-rendered in small row batches. Density edits, Undo and direct/reverse seeks replace
-the pending image. During playback the current image completes, then the newest
-playhead is sampled; the label identifies the frame actually displayed. This is a
-low-resolution look-development view, not a final-quality or every-frame playback
-guarantee. Preparation and an individual row can still be expensive in complex scenes.
-
-Use **Native preview: Off** for the existing geometric orbit/placement view. The
-native image uses the authored scene camera rather than the geometric navigation
-camera. Environment exposes the same timeline as Render. Final output may select
-another integrator and quality settings; use final rendering for that review.
+The native preview framework remains available through the manual **Direct light
+preview** toggle. It is off by default. It uses the authored scene camera and native
+Direct Light integrator at 160 by 100 pixels, rendered in small row batches; it
+replaces the geometric view only when explicitly enabled. The header then says
+Direct light. Choosing a geometric display mode, entering another workspace or
+opening a scene returns to geometric editing. This manual diagnostic has no final
+quality or every-frame playback guarantee; higher-quality interactive preview
+remains deferred. Use final rendering to judge scattering, lighting and materials.
 
 ## Playback and identity
 

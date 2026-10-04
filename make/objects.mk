@@ -667,6 +667,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/editor/scene_editor_control_surface.o \
 	$(BUILD_DIR)/editor/scene_editor_digest_overlay_projector.o \
 	$(BUILD_DIR)/editor/scene_editor_object_move_gizmo.o \
+	$(BUILD_DIR)/editor/scene_editor_atmosphere_geometry.o \
+	$(BUILD_DIR)/editor/scene_editor_atmosphere_viewport.o \
+	$(BUILD_DIR)/editor/scene_editor_atmosphere_inspector.o \
 	$(BUILD_DIR)/editor/scene_editor_object_transform_handles.o \
 	$(BUILD_DIR)/editor/scene_editor_transform_feedback.o \
 	$(BUILD_DIR)/editor/scene_editor_object_transform_preview.o \

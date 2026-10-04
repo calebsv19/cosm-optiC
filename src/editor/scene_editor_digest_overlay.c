@@ -2,6 +2,7 @@
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_digest_overlay.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
 #include "editor/scene_editor_light_timeline.h"
 #include "editor/scene_editor_digest_overlay_internal.h"
 #include "editor/scene_editor_mesh_preview_render.h"
@@ -376,6 +377,7 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
                                               active_mode,
                                               selected_object_index,
                                               hover_object_index);
+    SceneEditorAtmosphereViewportDraw(renderer,&projector,&digest);
     if (active_mode == EDITOR_MODE_OBJECT) {
         SceneEditorObjectMoveGizmoRender(renderer, &projector, &digest,
                                          selected_object_index);

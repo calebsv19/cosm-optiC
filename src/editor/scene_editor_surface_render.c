@@ -1,4 +1,5 @@
 #include "editor/scene_editor_atmosphere_panel.h"
+#include "editor/scene_editor_atmosphere_inspector.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_sidebar.h"
 #include "ui/volume_source_ui_labels.h"
@@ -464,6 +465,8 @@ int SceneEditorSurfaceRenderRightPaneStatus(SDL_Renderer* renderer,
         status_bottom = bounds.y + bounds.h;
     }
     cursor_y = bounds.y + 2;
+    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT)
+        return SceneEditorAtmosphereInspectorDraw(renderer,bounds);
     if (contract->activeMode == EDITOR_MODE_OBJECT &&
         SceneEditorWorkspaceProfileGet() != SCENE_WORKSPACE_ENVIRONMENT) {
         cursor_y = SceneEditorTransformPanelRender(renderer,

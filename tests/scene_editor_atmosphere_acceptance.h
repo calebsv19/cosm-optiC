@@ -37,6 +37,7 @@ static void atmosphere_control(SceneEditor* editor,const char* name) {
     SceneEditorSessionRuntimeRender(editor);
 }
 static void atmosphere_preview_pixels(SceneEditor* editor,unsigned char* pixels) {
+    if(!SceneEditorAtmospherePreviewEnabled()) atmosphere_control(editor,"preview");
     int width=0,height=0;
     for(int i=0;i<1000;++i) {
         SceneEditorSessionRuntimeRender(editor);

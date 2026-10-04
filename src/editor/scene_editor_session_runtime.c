@@ -29,6 +29,8 @@
 #include "editor/scene_editor_transform_panel.h"
 #include "editor/scene_editor_viewport_render.h"
 #include "editor/scene_editor_atmosphere_preview.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
+#include "editor/scene_editor_atmosphere_inspector.h"
 #include "engine/Render/render_pipeline.h"
 #include "scene/object_manager.h"
 
@@ -95,6 +97,8 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
         return;
     }
     scene_timeline_sync_tool_selection(editor);
+    if(SceneEditorAtmosphereViewportEvent(event,editor->window)) return;
+    if(SceneEditorAtmosphereInspectorEvent(event)) return;
     if(SceneEditorAtmospherePanelEvent(event)) return;
     if(CameraEditorLegacyGestureActive() && (event->type==SDL_MOUSEMOTION ||
        event->type==SDL_MOUSEBUTTONUP || (event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE))) {

@@ -8,6 +8,7 @@
 #include "editor/scene_editor_workspace_profile.h"
 #include "render/render_helper.h"
 #include "editor/scene_editor_sidebar.h"
+#include "editor/scene_editor_atmosphere_viewport.h"
 #include "editor/scene_editor.h"
 #include "editor/scene_editor_surface_render.h"
 #include "editor/scene_editor_object_list.h"
@@ -186,7 +187,10 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
             SDL_Rect identity=pane->viewport;
             identity.h=22;
             const char* id=ObjectEditorSelectionTrackerId();
-            if(SceneEditorDocumentObjectById(id,&info)) {
+            if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT && SceneEditorAtmosphereSelected()) {
+                SceneEditorLabelLeft(renderer,identity,"Atmosphere selected",title);identity.y+=24;
+                SceneEditorLabelLeft(renderer,identity,"Volume bounds | centre transforms",body);identity.y+=24;
+            } else if(SceneEditorDocumentObjectById(id,&info)) {
                 SceneEditorLabelLeft(renderer,identity,info.name,title);identity.y+=24;
                 static char label[180];snprintf(label,sizeof(label),"%s%s%s",SceneEditorDocumentTypeLabel(info.type),info.locked ? " | Locked" : "",info.visible ? "" : " | Hidden");
                 SceneEditorLabelLeft(renderer,identity,label,body);identity.y+=24;
