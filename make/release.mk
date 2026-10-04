@@ -114,6 +114,7 @@ release-sign: release-bundle-audit
 		fi; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime "$(PACKAGE_MACOS_DIR)/raytracing-bin"; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime "$(PACKAGE_MACOS_DIR)/raytracing-launcher"; \
+		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime --preserve-metadata=entitlements "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"; \
 		codesign --force --sign "$(RELEASE_CODESIGN_IDENTITY)" --timestamp --options runtime "$(PACKAGE_APP_DIR)"; \
 	fi
 	@echo "release-sign complete."
@@ -141,6 +142,7 @@ release-verify: release-sign
 	@echo "release-verify passed."
 
 release-verify-signed: release-sign release-verify
+	@python3 tools/verify_release_signatures.py "$(PACKAGE_APP_DIR)" --identity "$(RELEASE_CODESIGN_IDENTITY)"
 	@echo "release-verify-signed passed."
 
 release-notarize: release-verify-signed
