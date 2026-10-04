@@ -1,5 +1,8 @@
 # RayTracing Headless Agent Render CLI
 
+For editable scene revisions, sampled/consecutive previews and frozen local
+render packages, see [Local scene workflow](scene_workflow.md).
+
 For a repeatable fixed-camera object animation example, see
 [Agent motion frame sets](agent_motion_frame_sets.md).
 

@@ -1,3 +1,36 @@
+# October 4, 2026 — Aurora completion and archive lifecycle
+
+Main Edit adds `scene_workflow_delivery.py`: terminal completion verification,
+all-frame hashes, complete MP4 decode, preserved preflight alias reconciliation,
+and compact/full archive creation plus safe checksum-verified restore. Completed
+render evidence is independent of creative approval and later draft revisions.
+Aurora's real frozen render input is retained separately from baseline-r1.
+Five delivery regressions, seven workflow tests and 21 prior project tests pass.
+The real 200-frame1080p/24FPS movie decodes; all frame hashes are retained.
+Archive restoration validates all82 retained files and renders frame100 from the
+restored portable scene. No source frame deletion or desktop refresh applies.
+See docs/scene_workflow.md for supported CLI commands and remaining UI/PC-submit
+boundaries. Canonical release0.18.0 remains separate from Main Edit's development
+checkpoint; no VERSION, worker deployment or release mutation occurs here.
+
+# October 3, 2026 — local scene workflow foundation
+
+Main Edit adds the scene-only CLI lifecycle in `tools/scene_workflow.py` and
+contained snapshot helper `tools/scene_workflow_bundle.py`. Editable projects,
+immutable revisions, sampled/consecutive preview receipts, explicit approval
+for final rendering and diagnostic/final export are available. The Physics Trio
+project contract and scene-iteration latest-good policy remain separate.
+Missing/external dependencies and changed hashes fail closed. No desktop UI,
+MCP registration, remote submit, archive deletion or installed-app refresh is
+part of this CLI addition. See [Scene workflow](scene_workflow.md).
+
+Python compile and seven workflow regressions pass. Existing scene-project
+contract/export/receipt regressions pass (21 tests). Native fixture lifecycle
+and relocated fixture render pass; the Aurora baseline also renders from an
+isolated package with unchanged scene/assets. Sampled frames 0/50/100/149/199
+and consecutive 0/1/2 complete. These are engineering proofs; Aurora remains
+a draft pending requested visual refinement.
+
 # optiC Current Truth
 
 ## September 30 — stable orientation and shared playhead acceptance
