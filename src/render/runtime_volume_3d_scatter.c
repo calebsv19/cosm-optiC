@@ -1,3 +1,4 @@
+#include "render/runtime_volume_3d_transform.h"
 #include <fisics/extensions.h>
 
 #include "render/runtime_volume_3d_scatter.h"
@@ -28,6 +29,17 @@ static double gRuntimeVolume3DScatterStepScale = 1.0;
 static double gRuntimeVolume3DScatterTintR = 1.0;
 static double gRuntimeVolume3DScatterTintG = 1.0;
 static double gRuntimeVolume3DScatterTintB = 1.0;
+RuntimeVolume3DScatterTuning RuntimeVolume3DScatter_GetTuning(void) {
+    return (RuntimeVolume3DScatterTuning){gRuntimeVolume3DScatterStrengthGain,
+        gRuntimeVolume3DCausticScatterStrengthGain,gRuntimeVolume3DScatterStepScale,
+        {gRuntimeVolume3DScatterTintR,gRuntimeVolume3DScatterTintG,gRuntimeVolume3DScatterTintB}};
+}
+void RuntimeVolume3DScatter_RestoreTuning(RuntimeVolume3DScatterTuning t) {
+    RuntimeVolume3DScatter_SetStrengthGain(t.strength);
+    RuntimeVolume3DScatter_SetCausticStrengthGain(t.caustic_strength);
+    RuntimeVolume3DScatter_SetStepScale(t.step_scale);
+    RuntimeVolume3DScatter_SetTint(t.tint[0],t.tint[1],t.tint[2]);
+}
 
 static double runtime_volume_3d_scatter_zero_length(void) {
     double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
@@ -167,7 +179,7 @@ void RuntimeVolume3DScatter_ResetTuning(void) {
 }
 
 void RuntimeVolume3DScatter_SetStrengthGain(double gain) {
-    if (!(gain > 0.0) || !isfinite(gain)) {
+    if (!(gain >= 0.0) || !isfinite(gain)) {
         gRuntimeVolume3DScatterStrengthGain = 1.0;
         return;
     }
@@ -288,7 +300,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
         return result;
     }
 
-    step = runtime_volume_3d_scatter_clamp(scene->volume.grid.voxelSize * 0.5 *
+    step = runtime_volume_3d_scatter_clamp(RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 0.5 *
                                                gRuntimeVolume3DScatterStepScale,
                                            runtime_volume_3d_scatter_minimum_step(),
                                            t_exit - t_enter);
@@ -470,7 +482,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                         RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
                             caustic_cache,
                             sample_position,
-                            scene->volume.grid.voxelSize * 3.25,
+                            RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 3.25,
                             &caustic_radiance);
                 }
                 if (caustic_sampled) {
@@ -597,7 +609,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
         return result;
     }
 
-    step = runtime_volume_3d_scatter_clamp(scene->volume.grid.voxelSize * 0.5 *
+    step = runtime_volume_3d_scatter_clamp(RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 0.5 *
                                                gRuntimeVolume3DScatterStepScale,
                                            runtime_volume_3d_scatter_minimum_step(),
                                            t_exit - t_enter);

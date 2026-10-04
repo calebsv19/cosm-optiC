@@ -1,4 +1,9 @@
 NATIVE3D_AUDIT_DEPS = \
+	$(BUILD_DIR)/app/scene_atmosphere_assets.o \
+	$(BUILD_DIR)/app/scene_atmosphere_attachment.o \
+	$(BUILD_DIR)/app/scene_atmosphere_runtime.o \
+	$(BUILD_DIR)/app/scene_atmosphere_prepare.o \
+	$(BUILD_DIR)/app/scene_atmosphere_water.o \
 	$(BUILD_DIR)/app/ray_tracing_sha256.o \
 	$(BUILD_DIR)/animation/evaluated_scene_snapshot.o \
 	$(BUILD_DIR)/app/evaluated_scene_service.o \
@@ -117,6 +122,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_transport_utils_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_transport_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_volume_cache_placement_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_transmitted_caustic_3d.o \
@@ -200,6 +206,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_trace_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_transform.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
@@ -221,6 +228,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/fluid_import.o \
 	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_frame_identity_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
 	$(BUILD_DIR)/import/water_body_boundary_contract.o \
 	$(BUILD_DIR)/import/water_surface_import.o \
@@ -551,6 +559,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_caustic_transport_utils_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_transport_volume_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_volume_cache_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_volume_cache_placement_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_caustic_sidecar_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_estimator_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_transmitted_caustic_3d.o \
@@ -620,6 +629,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_triangle_bvh_trace_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_transform.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
@@ -725,6 +735,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/fluid_import.o \
 	$(BUILD_DIR)/import/fluid_volume_import_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_source_import_3d.o \
+	$(BUILD_DIR)/import/fluid_volume_frame_identity_3d.o \
 	$(BUILD_DIR)/import/fluid_volume_pack_import_3d.o \
 	$(BUILD_DIR)/import/water_body_boundary_contract.o \
 	$(BUILD_DIR)/import/water_surface_import.o \

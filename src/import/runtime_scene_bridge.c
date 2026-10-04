@@ -8,6 +8,7 @@
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_timeline.h"
+#include "app/scene_atmosphere_runtime.h"
 
 #include "camera/camera_path_3d.h"
 #include "core_scene_overlay_merge_shared.h"
@@ -62,6 +63,7 @@ static void scene_defaults_reset(void) {
     runtime_scene_motion_bridge_reset();
     RuntimeSceneLightTimelineResetLast();
     RuntimeSceneTimelineReset();
+    SceneAtmosphereRuntimeReset();
     memset(g_last_runtime_object_ids, 0, sizeof(g_last_runtime_object_ids));
     g_last_runtime_object_id_count = 0;
 }
@@ -899,6 +901,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     runtime_scene_bridge_apply_light_seed_scaled(lights, world_scale);
     runtime_scene_bridge_apply_camera_seed_scaled(cameras, world_scale);
     runtime_scene_bridge_apply_ray_authoring_paths(root, world_scale);
+    (void)SceneAtmosphereRuntimeLoad(root,world_scale);
     runtime_scene_bridge_apply_scene3d_extension_digest(root, world_scale);
     g_last_3d_scaffold.valid = true;
     g_last_3d_digest.valid = true;
@@ -975,7 +978,7 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
             json_object_object_get_ex(oe,"ray_tracing",&orr) &&
             json_object_object_get_ex(orr,"authoring",&oa) &&
             json_object_is_type(oa,json_type_object)) {
-            const char *keys[]={"scene_timeline","motion_paths","motion_plans",
+            const char *keys[]={"scene_timeline","motion_paths","motion_plans","atmosphere_attachment",
                                 "camera_focus_target"};
             for(size_t i=0;i<sizeof(keys)/sizeof(keys[0]);++i) {
                 json_object *value=NULL;

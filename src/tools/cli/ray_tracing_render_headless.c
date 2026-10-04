@@ -13,6 +13,7 @@
 
 #include "app/agent_render_request.h"
 #include "app/evaluated_scene_service.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "app/ray_tracing_sha256.h"
 #include "app/ray_tracing_temporal_checkpoint.h"
 #include "config/config_file_io.h"
@@ -139,6 +140,7 @@ static void ray_tracing_headless_note_evaluated_scene(
     }
     preflight->evaluated_scene_bound = true;
     preflight->evaluated_camera = snapshot->camera;
+    preflight->evaluated_simulation = snapshot->simulation;
     preflight->evaluated_light = snapshot->light;
     preflight->evaluated_object_count = snapshot->object_transform_count;
     memcpy(preflight->evaluated_objects,snapshot->object_transforms,snapshot->object_transform_count*sizeof(snapshot->object_transforms[0]));
@@ -536,6 +538,13 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
         &preflight.dynamic_water_cache_stats);
     preflight.caustic_cache_prep_ms = frame.causticCachePrepMs;
     if (preflight.prepared_frame) {
+        if(SceneAtmosphereRuntimeRead()->present) {
+            preflight.volume_attached=frame.scene.volume.enabled;
+            preflight.volume_summary_built=RuntimeVolumeDebugSummary3D_Build(&frame.scene.volume,&preflight.volume_summary);
+            if(!ray_tracing_headless_populate_water_surface_frame_selection(&preflight,request)) {
+                RuntimeNative3DPreparedFrame_Free(&frame);*out_preflight=preflight;return 4;
+            }
+        }
         ray_tracing_headless_note_evaluated_scene(
             &preflight, &evaluated_scene.snapshot, true);
         bool flattened_bvh_required =

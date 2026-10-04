@@ -64,6 +64,9 @@ package-desktop: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	fi
 	@cp "tools/managed_mesh_assets.py" "$(PACKAGE_TOOLS_DIR)/managed_mesh_assets.py"
 	@cp "tools/managed_mesh_placement.py" "$(PACKAGE_TOOLS_DIR)/managed_mesh_placement.py"
+	@cp "tools/scene_atmosphere_assets.py" "$(PACKAGE_TOOLS_DIR)/scene_atmosphere_assets.py"
+	@cp "tools/vf3d_initial_state_preset_tool.py" "$(PACKAGE_TOOLS_DIR)/vf3d_initial_state_preset_tool.py"
+	@cp "tools/scene_editor_mcp.py" "$(PACKAGE_TOOLS_DIR)/scene_editor_mcp.py"
 	@cp "$(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)" "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"
 	@chmod +x "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture"
 	@cp -R config "$(PACKAGE_RESOURCES_DIR)/"
@@ -108,6 +111,9 @@ package-desktop-smoke: package-desktop
 	@test -f "$(PACKAGE_CONTENTS_DIR)/Info.plist" || (echo "Missing Info.plist"; exit 1)
 	@test -f "$(PACKAGE_TOOLS_DIR)/managed_mesh_assets.py" || (echo "Missing bundled managed STL helper"; exit 1)
 	@test -f "$(PACKAGE_TOOLS_DIR)/managed_mesh_placement.py" || (echo "Missing bundled managed STL placement helper"; exit 1)
+	@test -f "$(PACKAGE_TOOLS_DIR)/scene_atmosphere_assets.py" || (echo "Missing bundled atmosphere importer"; exit 1)
+	@test -f "$(PACKAGE_TOOLS_DIR)/vf3d_initial_state_preset_tool.py" || (echo "Missing bundled atmosphere preset generator"; exit 1)
+	@test -f "$(PACKAGE_TOOLS_DIR)/scene_editor_mcp.py" || (echo "Missing bundled scene MCP bridge"; exit 1)
 	@test -x "$(PACKAGE_TOOLS_DIR)/compile_runtime_fixture" || (echo "Missing bundled managed STL compiler"; exit 1)
 	@test "$$('/usr/libexec/PlistBuddy' -c 'Print :CFBundleIdentifier' "$(PACKAGE_CONTENTS_DIR)/Info.plist")" = "$(PACKAGE_BUNDLE_ID)" || (echo "Packaged bundle identifier mismatch"; exit 1)
 	@test "$$('/usr/libexec/PlistBuddy' -c 'Print :CFBundleDisplayName' "$(PACKAGE_CONTENTS_DIR)/Info.plist")" = "$(PACKAGE_DISPLAY_NAME)" || (echo "Packaged display name mismatch"; exit 1)

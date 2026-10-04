@@ -54,7 +54,7 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
     SetSceneMode(editor, profile == SCENE_WORKSPACE_MATERIALS ? EDITOR_MODE_MATERIAL :
         profile == SCENE_WORKSPACE_RENDER ? EDITOR_MODE_CAMERA : EDITOR_MODE_OBJECT);
     if (profile == SCENE_WORKSPACE_RENDER) SceneEditorRenderAuthoringSelect(editor, true);
-    scene_editor_pane_host_set_timeline_visible(SceneEditorGetPaneHost(), profile==SCENE_WORKSPACE_RENDER);
+    scene_editor_pane_host_set_timeline_visible(SceneEditorGetPaneHost(), (profile==SCENE_WORKSPACE_RENDER || profile==SCENE_WORKSPACE_ENVIRONMENT));
     if(selected_id[0]) ObjectEditorSelectionTrackerSelectId(selected_id);
     else ObjectEditorSetSelectedObjectIndex(selected);
     if (entering_material) {
@@ -286,6 +286,6 @@ void SceneEditorWorkspaceProfileSyncMode(int mode) {
     else if (active == SCENE_WORKSPACE_MATERIALS || active == SCENE_WORKSPACE_RENDER) active = SCENE_WORKSPACE_SCENE;
     SceneEditorPaneHost* host=SceneEditorGetPaneHost();
     if (host && host->initialized &&
-        scene_editor_pane_host_set_timeline_visible(host,active==SCENE_WORKSPACE_RENDER))
+        scene_editor_pane_host_set_timeline_visible(host,(active==SCENE_WORKSPACE_RENDER || active==SCENE_WORKSPACE_ENVIRONMENT)))
         SceneEditorRefreshWorkspaceLayout();
 }

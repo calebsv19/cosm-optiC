@@ -304,10 +304,11 @@ bool SceneEditorTimelineSetInterpolation(TimelineInterpolation mode) {return edi
 bool SceneEditorTimelineSetHandles(double fi,double vi,double fo,double vo) {
     const double handles[]={fi,vi,fo,vo};return edit_existing_key(3,0,TIMELINE_INTERPOLATION_STEP,handles);
 }
+bool SceneEditorTimelinePlaying(void) {return session.transport.playing;}
 bool SceneEditorTimelineAdvance(void) {
     uint64_t now=SDL_GetTicks64(), prior=last_ms;
     last_ms=now;
-    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER) {session.transport.playing=false;return false;}
+    if(SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_RENDER && SceneEditorWorkspaceProfileGet()!=SCENE_WORKSPACE_ENVIRONMENT) {session.transport.playing=false;return false;}
     if(!sync_document() || !session.transport.playing) return false;
     return SceneTimelineSessionAdvance(&session,prior?(double)(now-prior)/1000.0:0)==TIMELINE_STATUS_OK;
 }

@@ -2,6 +2,7 @@
 
 #include "render/runtime_caustic_volume_cache_3d.h"
 #include "test_support.h"
+#include "render/runtime_volume_3d_transform.h"
 
 static bool test_caustic_cache_make_grid(RuntimeVolumeGrid3D* grid) {
     RuntimeVolumeGrid3D_Reset(grid);
@@ -378,6 +379,86 @@ static int test_runtime_caustic_volume_cache_clear_reset(void) {
     return 0;
 }
 
+/* Independent Rz=90 reference: local X becomes world Y, local Y becomes -X. */
+static Vec3 placed_reference(Vec3 origin, Vec3 translation, Vec3 scale, Vec3 local) {
+    Vec3 d = vec3_sub(local, origin);
+    return vec3(origin.x + translation.x - scale.y*d.y,
+                origin.y + translation.y + scale.x*d.x,
+                origin.z + translation.z + scale.z*d.z);
+}
+static uint64_t placed_index(unsigned x, unsigned y, unsigned z) {
+    return x + 7u*(y + 7u*z);
+}
+static void test_runtime_caustic_volume_cache_placement(void) {
+    RuntimeVolumeAttachment3D volume;
+    RuntimeCausticVolumeCache3D cache, reference;
+    RuntimeCausticVolumeCacheDiagnostics3D diagnostics;
+    Vec3 t = vec3(30,40,50), scale = vec3(2,3,4), local = vec3(2.5,2.5,3.5);
+    Vec3 point, sample = {0}, baseline = {0};
+    RuntimeVolumeAttachment3D_Init(&volume);
+    RuntimeCausticVolumeCache3D_Init(&cache);
+    RuntimeCausticVolumeCache3D_Init(&reference);
+    assert_true("placed_grid", RuntimeVolumeGrid3D_Configure(&volume.grid,
+        1,7,7,7,1,7,.02,vec3(-1,-1,0),1,vec3(0,0,1),0));
+    volume.hasData = true;
+    assert_true("placed_transform", RuntimeVolume3D_SetPlacement(&volume,t,vec3(0,0,90),scale));
+    point = placed_reference(volume.grid.origin,t,scale,local);
+    assert_true("placed_allocate", RuntimeCausticVolumeCache3D_AllocateFromVolume(&cache,&volume));
+    assert_true("placed_no_volume_ownership", !cache.coordinates.ownsChannelBuffers && !cache.coordinates.channels.density);
+    assert_true("placed_deposit", RuntimeCausticVolumeCache3D_DepositAtPosition(&cache,point,4,2,1));
+    assert_true("placed_old_position_refused", !RuntimeCausticVolumeCache3D_DepositAtPosition(&cache,local,1,1,1));
+    assert_true("placed_sample", RuntimeCausticVolumeCache3D_SampleAtPosition(&cache,point,&sample));
+    /* Existing grid-origin interpolation averages eight nodes at this half-cell point. */
+    assert_close("placed_sample_r",sample.x,.5,1e-6);
+    RuntimeCausticVolumeCache3D_SnapshotDiagnostics(&cache,&diagnostics);
+    assert_close("placed_centroid_x",diagnostics.radianceCentroid.x,point.x,1e-9);
+    assert_close("placed_centroid_y",diagnostics.radianceCentroid.y,point.y,1e-9);
+    assert_close("placed_centroid_z",diagnostics.radianceCentroid.z,point.z,1e-9);
+    assert_close("placed_bounds_min_x",diagnostics.boundsMin.x,8,1e-9);
+    assert_close("placed_bounds_max_y",diagnostics.boundsMax.y,53,1e-9);
+    assert_close("placed_bounds_max_z",diagnostics.boundsMax.z,78,1e-9);
+    assert_close("placed_voxel",diagnostics.voxelSize,2,1e-9);
+
+    /* A spherical world kernel must distinguish 2, 3 and 4 world-unit neighbors. */
+    RuntimeCausticVolumeCache3D_Clear(&cache);
+    assert_true("placed_sphere",RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(&cache,point,5,10,0,0));
+    double center = cache.radianceR[placed_index(3,3,3)];
+    assert_close("placed_sphere_x",cache.radianceR[placed_index(4,3,3)]/center,.6,1e-6);
+    assert_close("placed_sphere_y",cache.radianceR[placed_index(3,4,3)]/center,.4,1e-6);
+    assert_close("placed_sphere_z",cache.radianceR[placed_index(3,3,4)]/center,.2,1e-6);
+    RuntimeCausticVolumeCache3D_SnapshotDiagnostics(&cache,&diagnostics);
+    assert_close("placed_sphere_energy",diagnostics.totalRadianceR,10,1e-5);
+
+    /* World Y is the rotated local X axis: axial 5, perpendicular 2. */
+    RuntimeCausticVolumeCache3D_Clear(&cache);
+    assert_true("placed_directional",RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
+        &cache,point,vec3(0,1,0),2,5,10,0,0));
+    center=cache.radianceR[placed_index(3,3,3)];
+    assert_close("placed_axial_x",cache.radianceR[placed_index(4,3,3)]/center,.6,1e-6);
+    assert_close("placed_perpendicular_y",cache.radianceR[placed_index(3,4,3)],0,1e-9);
+    assert_close("placed_perpendicular_z",cache.radianceR[placed_index(3,3,4)],0,1e-9);
+
+    /* Translation, rotation and uniform scale preserve both deposit and filter values
+       when world radii/directions are changed correspondingly. */
+    scale=vec3(2,2,2);
+    RuntimeVolume3D_SetPlacement(&volume,t,vec3(0,0,90),scale);
+    RuntimeCausticVolumeCache3D_AllocateFromVolume(&cache,&volume);
+    RuntimeCausticVolumeCache3D_Allocate(&reference,&volume.grid);
+    point=placed_reference(volume.grid.origin,t,scale,local);
+    RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(&cache,point,vec3(0,1,0),3,5,10,3,2);
+    RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(&reference,local,vec3(1,0,0),1.5,2.5,10,3,2);
+    for(uint64_t i=0;i<cache.grid.cellCount;++i) {
+        assert_close("placed_uniform_cells",cache.radianceR[i],reference.radianceR[i],1e-6);
+    }
+    RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(&cache,point,4,&sample);
+    RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(&reference,local,2,&baseline);
+    assert_close("placed_uniform_filtered_r",sample.x,baseline.x,1e-6);
+    assert_close("placed_uniform_filtered_g",sample.y,baseline.y,1e-6);
+    assert_close("placed_uniform_filtered_b",sample.z,baseline.z,1e-6);
+    RuntimeCausticVolumeCache3D_Free(&cache);
+    RuntimeCausticVolumeCache3D_Free(&reference);
+}
+
 int run_test_runtime_caustic_volume_cache_3d_tests(void) {
     int before = test_support_failures();
 
@@ -390,6 +471,7 @@ int run_test_runtime_caustic_volume_cache_3d_tests(void) {
     test_runtime_caustic_volume_cache_world_position_sampling();
     test_runtime_caustic_volume_cache_filtered_sampling_expands_coverage();
     test_runtime_caustic_volume_cache_clear_reset();
+    test_runtime_caustic_volume_cache_placement();
 
     return test_support_failures() - before;
 }

@@ -12,6 +12,22 @@ from scene_workflow_bundle import REPO, read, sha, verify, write
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_retained_atmosphere_complete_cache_dependency_snapshot(self):
+        from scene_workflow_bundle import snapshot_inputs
+        cache=self.source/'assets'/'atmosphere'
+        shutil.copytree(REPO/'tests/fixtures/scene_project_worker_snapshot/assets/vf3d/active',cache)
+        scene_path=self.source/'scene_runtime.json';scene=read(scene_path)
+        scene.setdefault('extensions',{}).setdefault('ray_tracing',{}).setdefault('authoring',{})['atmosphere_attachment']={
+            'schema_version':'ray_atmosphere_attachment_v1','source_path':'assets/atmosphere/manifest.json'}
+        write(scene_path,scene)
+        destination=self.root/'atmosphere-snapshot'
+        snapshot_inputs(scene_path,self.request,destination)
+        for index in (0,2,4):
+            rel=f'assets/atmosphere/frame_{index:06d}.vf3d'
+            self.assertEqual((destination/rel).read_bytes(),(self.source/rel).read_bytes())
+        doc=read(cache/'manifest.json');doc['frames'][0]['path']='missing.vf3d';write(cache/'manifest.json',doc)
+        with self.assertRaises(ValueError):snapshot_inputs(scene_path,self.request,self.root/'refused')
+        self.assertFalse((self.root/'refused').exists())
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)

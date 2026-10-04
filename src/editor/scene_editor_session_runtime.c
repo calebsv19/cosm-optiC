@@ -1,3 +1,5 @@
+#include "editor/scene_editor_atmosphere_panel.h"
+#include "editor/scene_editor_agent_control.h"
 #include "editor/scene_editor_motion_paths.h"
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_camera_inspector.h"
@@ -26,6 +28,7 @@
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_transform_panel.h"
 #include "editor/scene_editor_viewport_render.h"
+#include "editor/scene_editor_atmosphere_preview.h"
 #include "engine/Render/render_pipeline.h"
 #include "scene/object_manager.h"
 
@@ -47,6 +50,9 @@ static void scene_editor_session_runtime_update_dirty_objects(void) {
 static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
     /* A hidden or collapsed inspector must never retain last frame hit targets. */
     SceneEditorSurfaceMaterialPanelInvalidateControls();
+    SceneEditorAtmospherePanelBeginFrame();
+    (void)SceneEditorAgentControlPoll();
+    SceneEditorAtmospherePreviewTick();
     static unsigned long long preview_revision;
     unsigned long long revision=SceneEditorDocumentRevision();
     if (SceneEditorDocumentIsOpen() && revision!=preview_revision) {
@@ -89,6 +95,7 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
         return;
     }
     scene_timeline_sync_tool_selection(editor);
+    if(SceneEditorAtmospherePanelEvent(event)) return;
     if(CameraEditorLegacyGestureActive() && (event->type==SDL_MOUSEMOTION ||
        event->type==SDL_MOUSEBUTTONUP || (event->type==SDL_KEYDOWN && event->key.keysym.sym==SDLK_ESCAPE))) {
         HandleCameraEditorEvents(event);return;
@@ -149,13 +156,14 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     {
         SceneEditorPaneLayout layout;
         if (SceneEditorGetPaneLayout(&layout) &&
-            (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER
+            ((SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER || SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT)
                 ? SceneEditorTimelineHandleEvent(event,&layout)
                 : SceneEditorLightTimelineHandleEvent(event,
                                                 SceneEditorGetPaneHost(),
                                                 &layout,
                                                 SceneEditorGetViewportNavState()))) {
             scene_timeline_sync_tool_selection(editor);
+    if(SceneEditorAtmospherePanelEvent(event)) return;
             return;
         }
     }
@@ -181,7 +189,7 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     if (!editor->running || sceneEditorExitFlag) {
         return;
     }
-    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) (void)SceneEditorTimelineAdvance();
+    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER || SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT) (void)SceneEditorTimelineAdvance();
     else (void)SceneEditorLightTimelineAdvancePlayback();
 
     SceneEditorSyncWindowSize(editor);
@@ -207,6 +215,7 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
                 SceneEditorRenderAuthoringDraw(editor,&layout);
                 SceneEditorTimelineRender(editor->renderer,&layout);
             }
+            else if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT) SceneEditorTimelineRender(editor->renderer,&layout);
             else SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
         }
     }
@@ -295,10 +304,12 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 }
                 break;
             }
-            if (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER ? SceneEditorTimelineAdvance() : SceneEditorLightTimelineAdvancePlayback()) {
+            if ((SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER || SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT) ? SceneEditorTimelineAdvance() : SceneEditorLightTimelineAdvancePlayback()) {
                 frame_dirty = true;
             }
             if (SceneEditorSurfaceMaterialPanelPoll()) frame_dirty = true;
+            if (SceneEditorAgentControlPoll()) frame_dirty = true;
+            if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT && SceneEditorAtmospherePreviewPending()) frame_dirty=true;
             if (MaterialEditorAuthoredTextureBindingPoll()) {
                 frame_dirty = true;
             }
@@ -345,6 +356,7 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 SceneEditorRenderAuthoringDraw(editor,&layout);
                 SceneEditorTimelineRender(editor->renderer,&layout);
             }
+            else if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT) SceneEditorTimelineRender(editor->renderer,&layout);
             else SceneEditorLightTimelineRenderPanel(editor->renderer, &layout);
                     SceneEditorTransformPanelRenderImportOverlay(editor->renderer,layout.viewport_rect);
                 }

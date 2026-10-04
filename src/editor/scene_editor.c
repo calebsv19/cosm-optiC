@@ -1,3 +1,4 @@
+#include "editor/scene_editor_atmosphere_preview.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/scene_editor_surface_material_panel.h"
@@ -1063,6 +1064,7 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 
 void DestroySceneEditor(SceneEditor* editor) {
+    SceneEditorAtmospherePreviewReset();
     SceneEditorSurfaceMaterialPanelShutdown();
     SceneEditorRenameCancel();
     if (!editor) {

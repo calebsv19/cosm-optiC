@@ -13,5 +13,6 @@ uint64_t RuntimeNative3DRender_CausticPhotonSurfaceRecordCount(void);
 bool RuntimeNative3DRender_CausticPhotonSurfaceRecordAt(
     uint64_t index,
     RuntimeCausticPhotonMapRecord3D* out_record);
+bool runtime_native_3d_prepare_photon_volume_requested(void);
 
 #endif

@@ -9,6 +9,9 @@
 #include "render/runtime_volume_3d.h"
 
 bool RuntimeVolume3D_HasActiveExtinction(const RuntimeVolumeAttachment3D* attachment);
+typedef struct {double density_scale,density_gamma,absorption_gain,opacity_clamp;} RuntimeVolume3DMaterialTuning;
+RuntimeVolume3DMaterialTuning RuntimeVolume3DMaterial_GetTuning(void);
+void RuntimeVolume3DMaterial_RestoreTuning(RuntimeVolume3DMaterialTuning tuning);
 void RuntimeVolume3DMaterial_ResetTuning(void);
 void RuntimeVolume3DMaterial_SetDensityScale(double scale);
 void RuntimeVolume3DMaterial_SetDensityGamma(double gamma);

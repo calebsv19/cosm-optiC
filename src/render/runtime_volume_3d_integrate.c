@@ -1,3 +1,4 @@
+#include "render/runtime_volume_3d_transform.h"
 #include <fisics/extensions.h>
 
 #include "render/runtime_volume_3d_integrate.h"
@@ -13,6 +14,16 @@ static double gRuntimeVolume3DDensityScale = 1.0;
 static double gRuntimeVolume3DDensityGamma = 1.0;
 static double gRuntimeVolume3DAbsorptionGain = 1.0;
 static double gRuntimeVolume3DOpacityClamp = kRuntimeVolume3DDefaultOpacityClamp;
+RuntimeVolume3DMaterialTuning RuntimeVolume3DMaterial_GetTuning(void) {
+    return (RuntimeVolume3DMaterialTuning){gRuntimeVolume3DDensityScale,gRuntimeVolume3DDensityGamma,
+        gRuntimeVolume3DAbsorptionGain,gRuntimeVolume3DOpacityClamp};
+}
+void RuntimeVolume3DMaterial_RestoreTuning(RuntimeVolume3DMaterialTuning t) {
+    RuntimeVolume3DMaterial_SetDensityScale(t.density_scale);
+    RuntimeVolume3DMaterial_SetDensityGamma(t.density_gamma);
+    RuntimeVolume3DMaterial_SetAbsorptionGain(t.absorption_gain);
+    RuntimeVolume3DMaterial_SetOpacityClamp(t.opacity_clamp);
+}
 
 static double runtime_volume_3d_integrate_zero_length(void) {
     double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
@@ -123,7 +134,7 @@ RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
         return transmittance;
     }
 
-    step = runtime_volume_3d_integrate_clamp(attachment->grid.voxelSize,
+    step = runtime_volume_3d_integrate_clamp(RuntimeVolume3D_WorldVoxelSize(attachment),
                                              runtime_volume_3d_integrate_minimum_step(),
                                              t_exit - t_enter);
     if (!(step > zero_length)) {

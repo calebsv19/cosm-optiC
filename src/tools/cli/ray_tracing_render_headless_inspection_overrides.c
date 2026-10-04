@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "app/animation.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "app/evaluated_scene_service.h"
 #include "render/runtime_caustic_bootstrap_3d.h"
 #include "render/runtime_caustic_transport_3d.h"
@@ -26,6 +27,7 @@ void ray_tracing_headless_apply_inspection_overrides(
         request->caustic_photon_block_solid_dielectric_direct_paths);
     RuntimeVolume3DScatter_ResetTuning();
     RuntimeVolume3DMaterial_ResetTuning();
+    SceneAtmosphereRuntimeApplyTuning();
     RuntimeRay3D_SetTraceRoute(request->trace_route);
     if (request->has_camera_zoom_override) {
         sceneSettings.camera.zoom = request->camera_zoom_override;

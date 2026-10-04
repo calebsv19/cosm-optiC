@@ -127,6 +127,13 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, ",\n");
     /* Values belong to evaluated_scene_last_frame and the bound snapshot. */
     const RayEvaluatedCamera* camera = &preflight->evaluated_camera;
+    const RayEvaluatedSimulationIdentity* cache=&preflight->evaluated_simulation;
+    fprintf(file,"  \"evaluated_cache\": {\"valid\":%s,\"cache_id\":",cache->valid?"true":"false");
+    RayTracingJsonWriteString(file,cache->cache_id);
+    fprintf(file,",\"source_frame_index\":%lld,\"rate_numerator\":%u,\"rate_denominator\":%u,\"content_sha256\":",
+        (long long)cache->source_frame_index,cache->source_rate.frames_per_second_numerator,
+        cache->source_rate.frames_per_second_denominator);
+    RayTracingJsonWriteString(file,cache->content_digest);fprintf(file,"},\n");
     const RayEvaluatedLight* light = &preflight->evaluated_light;
     fprintf(file, "  \"evaluated_camera\": {\"valid\": %s, \"position\": [%.17g, %.17g, %.17g], \"yaw\": %.17g, \"pitch\": %.17g, \"fov_y\": %.17g},\n",
             camera->valid ? "true" : "false", camera->position.x, camera->position.y,

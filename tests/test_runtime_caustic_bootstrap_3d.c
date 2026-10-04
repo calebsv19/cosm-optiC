@@ -13,6 +13,7 @@
 #include "render/runtime_scene_3d.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
 #include "test_support.h"
+#include "render/runtime_volume_3d_transform.h"
 
 static bool test_caustic_bootstrap_make_scene(RuntimeScene3D* scene) {
     if (!scene) return false;
@@ -126,7 +127,7 @@ static int test_runtime_caustic_bootstrap_populates_volume_cache(void) {
     return 0;
 }
 
-static int test_runtime_caustic_bootstrap_render_samples_volume_cache(void) {
+static int test_runtime_caustic_bootstrap_render_samples_volume_cache(bool placed) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
@@ -147,6 +148,8 @@ static int test_runtime_caustic_bootstrap_render_samples_volume_cache(void) {
     RuntimeCausticVolumeCache3D_Init(&frame.causticVolumeCache);
     assert_true("runtime_caustic_bootstrap_render_scene",
                 test_caustic_bootstrap_make_scene(&scene));
+    if (placed) assert_true("bootstrap_placed_volume", RuntimeVolume3D_SetPlacement(
+        &scene.volume, vec3(.1,0,0), vec3(0,0,15), vec3(1.1,.9,1.2)));
     ok = RuntimeCameraProjector3D_Build(&scene.camera, 31, 31, &frame.projector);
     assert_true("runtime_caustic_bootstrap_render_projector", ok);
     frame.scene = scene;
@@ -193,7 +196,8 @@ int run_test_runtime_caustic_bootstrap_3d_tests(void) {
     int before = test_support_failures();
 
     test_runtime_caustic_bootstrap_populates_volume_cache();
-    test_runtime_caustic_bootstrap_render_samples_volume_cache();
+    test_runtime_caustic_bootstrap_render_samples_volume_cache(false);
+    test_runtime_caustic_bootstrap_render_samples_volume_cache(true);
 
     return test_support_failures() - before;
 }

@@ -1,6 +1,7 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include "app/animation.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
 #include "import/water_surface_import.h"
@@ -209,6 +210,15 @@ static bool ray_tracing_headless_inspect_water_surface_frame(
     char diagnostics[256] = {0};
 
     if (out_found) *out_found = false;
+    if(SceneAtmosphereRuntimeRead()->present) {
+        char path[4096];int selected=requested_frame_index;
+        int status=SceneAtmosphereRuntimeWater(animSettings.runtimeScenePath,NULL,path,sizeof(path),&selected,
+            out_diagnostics,out_diagnostics_size);
+        if(status<0) return false;
+        if(!path[0]) return true;
+        return RuntimeWaterSurfaceImport_LoadSourceAtFrame(path,selected,out_frame,out_found,
+            out_diagnostics,out_diagnostics_size);
+    }
     if (out_diagnostics && out_diagnostics_size > 0u) {
         snprintf(out_diagnostics, out_diagnostics_size, "invalid input");
     }
@@ -320,7 +330,8 @@ bool ray_tracing_headless_populate_water_surface_frame_selection(
     const int first_frame_index = request ? request->start_frame : 0;
     const int last_frame_index = ray_tracing_headless_last_requested_frame_index(request);
 
-    if (!preflight || !ray_tracing_headless_request_has_volume_source(request)) return false;
+    if (!preflight || (!SceneAtmosphereRuntimeRead()->present &&
+        !ray_tracing_headless_request_has_volume_source(request))) return false;
     preflight->water_surface_requested_first_frame_index = first_frame_index;
     preflight->water_surface_requested_last_frame_index = last_frame_index;
 

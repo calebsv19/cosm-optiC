@@ -14,6 +14,7 @@
 
 #include "config/config_manager.h"
 #include "import/fluid_volume_import_3d.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_light_timeline_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
@@ -24,6 +25,7 @@
 #include "render/runtime_caustic_photon_map_store_3d.h"
 #include "render/runtime_caustic_photon_scene_descriptor_3d.h"
 #include "render/runtime_volume_3d_sampling.h"
+#include "render/runtime_volume_3d_transform.h"
 #include "render/runtime_dynamic_geometry_accel_3d.h"
 #include "render/runtime_evaluated_scene_3d.h"
 #include "render/runtime_scene_3d_builder.h"
@@ -492,11 +494,16 @@ static RuntimeVolume3DSourceKind runtime_native_3d_render_map_volume_source_kind
 }
 
 static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* scene,
-                                                              int frame_index) {
+                                                              int frame_index,
+                                                              const RayEvaluatedSceneSnapshot* evaluated) {
     RuntimeVolume3DSourceKind source_kind = RUNTIME_VOLUME_3D_SOURCE_NONE;
     char diagnostics[1024] = {0};
 
     if (!scene) return false;
+    int attached=SceneAtmosphereRuntimeAttach(&scene->volume,animSettings.runtimeScenePath,
+        frame_index,evaluated?&evaluated->frame:NULL,evaluated?&evaluated->simulation:NULL,diagnostics,sizeof(diagnostics));
+    if(attached<0) {runtime_native_3d_prepare_frame_set_diag(diagnostics);return false;}
+    if(attached>0) return true;
 
     scene->volume.affectsLighting = animSettings.volumeAffectsLighting;
     scene->volume.debugOverlayEnabled = animSettings.volumeDebugOverlayEnabled;
@@ -763,7 +770,8 @@ static void runtime_native_3d_record_water_surface_accel_lifecycle(
 }
 
 static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScene3D* scene,
-                                                                     int frame_index) {
+                                                                     int frame_index,
+                                                                     const TimelineEvaluationContext* context) {
     RuntimeWaterSurfaceFrame water = {0};
     RuntimeWaterBodyPrepare3DReport body_report = {0};
     RuntimeScene3DHeightfieldSurfaceDesc desc = {0};
@@ -775,13 +783,18 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
 
     if (!scene) return false;
     RuntimeWaterBodyPrepare3D_ResetLastReport();
-    if (animSettings.volumeSourceKind != VOLUME_SOURCE_MANIFEST ||
-        animSettings.volumeSourcePath[0] == '\0') {
+    char retained_path[4096];
+    int retained=SceneAtmosphereRuntimeWater(animSettings.runtimeScenePath,context,retained_path,
+        sizeof(retained_path),&frame_index,diagnostics,sizeof(diagnostics));
+    if(retained<0) {runtime_native_3d_prepare_frame_set_diag(diagnostics);return false;}
+    if(retained && !retained_path[0]) return true;
+    if (!retained && (animSettings.volumeSourceKind != VOLUME_SOURCE_MANIFEST ||
+        animSettings.volumeSourcePath[0] == '\0')) {
         return true;
     }
 
     RuntimeWaterSurfaceFrame_Init(&water);
-    if (!RuntimeWaterSurfaceImport_LoadSourceAtFrame(animSettings.volumeSourcePath,
+    if (!RuntimeWaterSurfaceImport_LoadSourceAtFrame(retained?retained_path:animSettings.volumeSourcePath,
                                                      frame_index,
                                                      &water,
                                                      &found,
@@ -795,6 +808,10 @@ static bool runtime_native_3d_render_attach_configured_water_surface(RuntimeScen
     if (!found) {
         RuntimeWaterSurfaceFrame_Free(&water);
         return true;
+    }
+    if(retained && water.frame_index!=(uint64_t)frame_index) {
+        runtime_native_3d_prepare_frame_set_diag("Water manifest frame ID does not match the selected sidecar payload.");
+        RuntimeWaterSurfaceFrame_Free(&water);return false;
     }
 
     scene_object_index = runtime_native_3d_render_ensure_water_surface_object(&water);
@@ -1218,7 +1235,8 @@ static bool runtime_native_3d_prepare_frame_internal(
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
-    if (!runtime_native_3d_render_attach_configured_volume(&frame.scene, frame_index)) {
+    if (!runtime_native_3d_render_attach_configured_volume(&frame.scene, frame_index,
+        evaluated_scene)) {
         char previous_diagnostics[4096];
         snprintf(previous_diagnostics,
                  sizeof(previous_diagnostics),
@@ -1234,7 +1252,8 @@ static bool runtime_native_3d_prepare_frame_internal(
         RuntimeScene3D_Free(&frame.scene);
         return false;
     }
-    if (!runtime_native_3d_render_attach_configured_water_surface(&frame.scene, frame_index)) {
+    if (!runtime_native_3d_render_attach_configured_water_surface(&frame.scene, frame_index,
+        evaluated_scene?&evaluated_scene->frame:NULL)) {
         char previous_diagnostics[4096];
         snprintf(previous_diagnostics,
                  sizeof(previous_diagnostics),
@@ -1249,6 +1268,15 @@ static bool runtime_native_3d_prepare_frame_internal(
             frame_index);
         RuntimeScene3D_Free(&frame.scene);
         return false;
+    }
+    char cache_diagnostics[512];
+    if(!SceneAtmosphereRuntimeSnapshotMatches(animSettings.runtimeScenePath,evaluated_scene,cache_diagnostics,sizeof(cache_diagnostics))) {
+        runtime_native_3d_prepare_frame_set_diag(cache_diagnostics);RuntimeScene3D_Free(&frame.scene);return false;
+    }
+    if(frame.scene.volume.enabled && !RuntimeVolume3D_PlacementIsIdentity(&frame.scene.volume) &&
+       runtime_native_3d_prepare_photon_volume_requested()) {
+        runtime_native_3d_prepare_frame_set_diag("Moved/scaled atmosphere supports regular volume rendering and bootstrap/lens-transport caches; photon-volume caches require identity placement. Disable photon-volume caustics or restore volume placement.");
+        RuntimeScene3D_Free(&frame.scene);return false;
     }
     if (!runtime_native_3d_prepare_try_skip_frame_bvh_for_tlas(&frame.scene) &&
         !runtime_native_3d_prepare_ensure_frame_bvh(&frame.scene)) {

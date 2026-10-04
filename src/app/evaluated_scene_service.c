@@ -1,5 +1,6 @@
 #include "motion/scene_motion_plans.h"
 #include "app/evaluated_scene_service.h"
+#include "app/scene_atmosphere_runtime.h"
 
 #include "animation/timeline_property_registry.h"
 #include "animation/timeline_frame_snapshot.h"
@@ -483,6 +484,11 @@ static bool ray_evaluated_build_authored(
     inputs.object_transform_count = object_transform_count;
     inputs.simulation.source = RAY_EVALUATED_SIMULATION_NONE;
     inputs.simulation.valid = false;
+    if(!SceneAtmosphereRuntimeSimulation(animSettings.runtimeScenePath,&inputs.frame,
+        &inputs.simulation,out_result->status_line,sizeof(out_result->status_line))) {
+        out_result->status=TIMELINE_STATUS_INVALID_SNAPSHOT;out_result->valid=false;return false;
+    }
+    if(inputs.simulation.valid) inputs.invalidation_domains |= TIMELINE_INVALIDATION_VOLUME;
     inputs.invalidation_domains |= frame_snapshot.invalidation_domains;
     inputs.diagnostics = "immutable authored evaluated-scene snapshot";
     status = RayEvaluatedSceneSnapshotBuild(&inputs, &out_result->snapshot);
@@ -584,6 +590,11 @@ static bool ray_evaluated_build_legacy(
     inputs.object_transform_count = object_transform_count;
     inputs.simulation.source = RAY_EVALUATED_SIMULATION_NONE;
     inputs.simulation.valid = false;
+    if(!SceneAtmosphereRuntimeSimulation(animSettings.runtimeScenePath,&inputs.frame,
+        &inputs.simulation,out_result->status_line,sizeof(out_result->status_line))) {
+        out_result->status=TIMELINE_STATUS_INVALID_SNAPSHOT;out_result->valid=false;return false;
+    }
+    if(inputs.simulation.valid) inputs.invalidation_domains |= TIMELINE_INVALIDATION_VOLUME;
     inputs.invalidation_domains |= TIMELINE_INVALIDATION_LIGHTING |
                                   TIMELINE_INVALIDATION_CAMERA;
     inputs.diagnostics =

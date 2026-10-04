@@ -449,6 +449,8 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_path_gizmo.h"
 #include "scene_editor_path_smoothing.h"
 
+#include "scene_editor_atmosphere_acceptance.h"
+#include "scene_editor_atmosphere_water_acceptance.h"
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
@@ -470,6 +472,15 @@ int main(int argc, char** argv) {
     SDL_PumpEvents();
     SceneEditorSessionRuntimeRender(&editor);
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && (!strcmp(argv[3],"--atmosphere-water") || !strcmp(argv[3],"--atmosphere-water-reopen"))) {
+        atmosphere_water_native(&editor,argv[2],!strcmp(argv[3],"--atmosphere-water-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--atmosphere-mcp")) {
+        atmosphere_mcp_native(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--atmosphere") || !strcmp(argv[3],"--atmosphere-reopen"))) {
+        atmosphere_native(&editor,argv[2],!strcmp(argv[3],"--atmosphere-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if(argc==4 && !strcmp(argv[3],"--path-smoothing")) {path_smoothing_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-gizmo")) {path_gizmo_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-light-setup")) {path_light_setup_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}

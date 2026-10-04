@@ -50,6 +50,8 @@ typedef struct {
 
 typedef struct {
     RuntimeVolumeGrid3D grid;
+    /* Coordinates only: no channel buffers or volume ownership. */
+    RuntimeVolumeAttachment3D coordinates;
     float* radianceR;
     float* radianceG;
     float* radianceB;
@@ -87,6 +89,8 @@ bool RuntimeCausticVolumeCache3D_Allocate(RuntimeCausticVolumeCache3D* cache,
                                           const RuntimeVolumeGrid3D* grid);
 bool RuntimeCausticVolumeCache3D_AllocateFromVolume(
     RuntimeCausticVolumeCache3D* cache,
+    const RuntimeVolumeAttachment3D* volume);
+void RuntimeCausticVolumeCache3D_SetPlacementFromVolume(RuntimeCausticVolumeCache3D* cache,
     const RuntimeVolumeAttachment3D* volume);
 void RuntimeCausticVolumeCache3D_Clear(RuntimeCausticVolumeCache3D* cache);
 void RuntimeCausticVolumeCache3D_Free(RuntimeCausticVolumeCache3D* cache);

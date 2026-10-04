@@ -1,4 +1,3 @@
-# Detached numerical gate; explicit header prerequisites avoid stale test code.
 .PHONY: test-motion-timing-plan test-motion-timing-plan-sanitize
 MOTION_TIMING_TEST_SRC := tests/motion_timing_plan_test.c src/motion/motion_timing_plan.c src/animation/timeline_clock.c
 MOTION_TIMING_TEST_HEADERS := include/motion/motion_timing_plan.h include/animation/timeline_clock.h

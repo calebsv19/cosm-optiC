@@ -4,6 +4,7 @@
 
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 #include "render/runtime_volume_3d_sampling.h"
+#include "render/runtime_volume_3d_transform.h"
 
 bool runtime_caustic_transport_deposit_segment(
     const RuntimeScene3D* scene,
@@ -36,19 +37,19 @@ bool runtime_caustic_transport_deposit_segment(
         debug_path->volumeTEnter = t_enter;
         debug_path->volumeTExit = t_exit;
     }
-    step = fmax(scene->volume.grid.voxelSize * 0.75, 1.0e-4);
+    step = fmax(RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 0.75, 1.0e-4);
     diagnostics->volumeSegmentCount += 1u;
     for (t = t_enter + step * 0.5; t <= t_exit; t += step) {
         Vec3 p = vec3_add(ray->origin, vec3_scale(ray->direction, t));
         double attenuation = 1.0 / (1.0 + 0.10 * fmax(t - t_enter, 0.0));
         double perpendicular_radius = runtime_caustic_transport_clamp(
             base_footprint_radius + (fmax(t - t_enter, 0.0) * 0.060) + (step * 0.75),
-            scene->volume.grid.voxelSize * 2.50,
-            scene->volume.grid.voxelSize * 5.00);
+            RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 2.50,
+            RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 5.00);
         double axial_radius = runtime_caustic_transport_clamp(
             perpendicular_radius + (step * 1.35) + (fmax(t - t_enter, 0.0) * 0.11),
-            scene->volume.grid.voxelSize * 3.00,
-            scene->volume.grid.voxelSize * 6.50);
+            RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 3.00,
+            RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 6.50);
         double effective_radius = ((2.0 * perpendicular_radius) + axial_radius) / 3.0;
         Vec3 deposit = vec3_scale(radiance, attenuation * step * 0.020);
         if (debug_path) {

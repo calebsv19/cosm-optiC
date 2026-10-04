@@ -1,13 +1,9 @@
 #include <fisics/extensions.h>
 
 #include "render/runtime_volume_3d_sampling.h"
+#include "render/runtime_volume_3d_transform.h"
 
 #include <math.h>
-
-static double runtime_volume_3d_sampling_zero_length(void) {
-    double zero FISICS_DIM(length) FISICS_UNIT(meter) = 0.0;
-    return zero;
-}
 
 static double runtime_volume_3d_sampling_length_epsilon(void) {
     double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-9;
@@ -98,6 +94,10 @@ bool RuntimeVolume3D_ClipRayToBounds(const RuntimeVolumeAttachment3D* attachment
     if (!attachment || !ray || !out_t_enter || !out_t_exit) return false;
     if (!RuntimeVolume3D_HasSampleableDensity(attachment)) return false;
     if (!(t_max > t_min)) return false;
+    Ray3D cache_ray=*ray;
+    cache_ray.origin=RuntimeVolume3D_ToCachePoint(attachment,ray->origin);
+    cache_ray.direction=RuntimeVolume3D_ToCacheDirection(attachment,ray->direction);
+    ray=&cache_ray;
 
     if (!runtime_volume_3d_sampling_intersect_axis(ray->origin.x,
                                                    ray->direction.x,
@@ -152,6 +152,7 @@ float RuntimeVolume3D_SampleDensityAtPosition(const RuntimeVolumeAttachment3D* a
         return 0.0f;
     }
 
+    position=RuntimeVolume3D_ToCachePoint(attachment,position);
     grid = &attachment->grid;
     local_x = runtime_volume_3d_sampling_world_to_local(position.x, grid->origin.x, grid->voxelSize);
     local_y = runtime_volume_3d_sampling_world_to_local(position.y, grid->origin.y, grid->voxelSize);

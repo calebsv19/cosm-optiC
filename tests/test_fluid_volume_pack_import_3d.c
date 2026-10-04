@@ -136,6 +136,8 @@ static int test_fluid_volume_pack_import_3d_loads_full_pack(void) {
 
     ok = fluid_volume_import_3d_load_pack(path, &attachment, diagnostics, sizeof(diagnostics));
     assert_true("fluid_volume_pack_import_3d_full_load_ok", ok);
+    uint64_t actual_frame=0;
+    assert_true("static_cache_header_identity",fluid_volume_import_3d_single_frame_index(path,RUNTIME_VOLUME_3D_SOURCE_PACK,&actual_frame) && actual_frame==attachment.grid.frameIndex);
     assert_true("fluid_volume_pack_import_3d_full_diag_ok",
                 strcmp(diagnostics, "ok") == 0);
     assert_true("fluid_volume_pack_import_3d_full_source_pack",

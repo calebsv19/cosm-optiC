@@ -6,25 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct VolumeFrameHeaderVf3dV1 {
-    uint32_t magic;
-    uint32_t version;
-    uint32_t grid_w;
-    uint32_t grid_h;
-    uint32_t grid_d;
-    double time_seconds;
-    uint64_t frame_index;
-    double dt_seconds;
-    float origin_x;
-    float origin_y;
-    float origin_z;
-    float voxel_size;
-    float scene_up_x;
-    float scene_up_y;
-    float scene_up_z;
-    uint32_t solid_mask_crc32;
-    uint32_t reserved[3];
-} VolumeFrameHeaderVf3dV1;
+#include "fluid_volume_header_3d.h"
 
 static const uint32_t VOLUME_VF3D_MAGIC = ('V' << 24) | ('F' << 16) | ('3' << 8) | ('D');
 static const uint32_t VOLUME_VF3D_VERSION_V1 = 1u;

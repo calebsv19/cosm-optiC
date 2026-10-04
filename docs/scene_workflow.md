@@ -3,8 +3,9 @@
 `tools/scene_workflow.py` provides a scene-only CLI workflow without opening
 optiC, submitting remote work, or publishing to Visualizer. It preserves
 `scene_runtime_v1` and the native agent render-request format. It does not replace
-Physics Trio's `scene_project.json` contract. Use that existing exporter for
-simulation/volume projects.
+Physics Trio's `scene_project.json` contract. Retained atmosphere/cache attachments
+are collected with their complete contained dependencies; legacy request-level
+simulation/volume projects still use the existing Physics Trio exporter.
 
 Build the native renderer first:
 
@@ -68,8 +69,8 @@ A diagnostic export does not advance the accepted pointer. The portable bundle
 itself has no submission authority; future submit integration must consult the
 project's approval record and exact manifest digest.
 
-Bundles contain only the current revision and needed dependencies, runtime
-defaults and render request. They exclude preview results, job history and other
+Bundles contain only the current revision and needed dependencies, selected runtime
+rendering defaults and render request. They exclude preview results, job history and other
 revisions. Render settings, inspection overrides, budgets and video FPS are
 preserved; scene/output/progress/video locations are made package-relative.
 `results/` is the only mutable output tree. `bundle_manifest.json` binds file

@@ -1,6 +1,7 @@
 #include "render/runtime_caustic_bootstrap_3d.h"
 
 #include <math.h>
+#include "render/runtime_volume_3d_transform.h"
 #include <string.h>
 
 static RuntimeCausticBootstrap3DRequestState g_caustic_bootstrap_state = {0};
@@ -110,7 +111,8 @@ bool RuntimeCausticBootstrap3D_PopulateAnalyticVolumeCache(
     for (uint32_t z = 0; z < scene->volume.grid.gridD; ++z) {
         for (uint32_t y = 0; y < scene->volume.grid.gridH; ++y) {
             for (uint32_t x = 0; x < scene->volume.grid.gridW; ++x) {
-                const Vec3 p = runtime_caustic_bootstrap_cell_center(&scene->volume.grid, x, y, z);
+                const Vec3 p = RuntimeVolume3D_ToWorldPoint(&scene->volume,
+                    runtime_caustic_bootstrap_cell_center(&scene->volume.grid, x, y, z));
                 const Vec3 from_start = vec3_sub(p, funnel_start);
                 const double t = vec3_dot(from_start, axis) / axis_len2;
                 double radius = 0.0;

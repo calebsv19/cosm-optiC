@@ -35,6 +35,25 @@ a draft pending requested visual refinement.
 
 # optiC Current Truth
 
+## October 4 — retained atmosphere Main Edit workflow
+
+The reconciled 0.18.0/worker 0.9.0 Main Edit adds static preset/import controls,
+live agent MCP commands sharing UI history/File Save, deterministic playhead-bound
+existing volume/water caches, and contained portable export. Environment shows a
+progressive native scene-camera preview and the shared timeline. Native UI/MCP,
+Undo/Redo, File Save/fresh reopen, actual cache IDs/digests, placement, and exact
+relocated render output pass. Ordinary bootstrap/lens-transport volume caches
+support placement; photon-volume caches explicitly require identity placement.
+See [atmosphere attachments](atmosphere_attachment.md) for usage and limits.
+
+This is a local development workflow, not a new release. No PhysicsSim source,
+CFD or solver work is included. One retained attachment is supported; water-only
+editing, water placement, interpolated simulation frames and additional attachments
+remain future extensions. Human complex-scene/performance acceptance and the full
+unrelated renderer/material/worker suite remain separate. Installed package identity
+is recorded independently in private work status.
+
+
 ## September 30 — stable orientation and shared playhead acceptance
 
 Five bounded slices now provide deterministic transported route frames, the same

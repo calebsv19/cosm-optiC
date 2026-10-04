@@ -17,6 +17,10 @@ static bool gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled = false;
 static RuntimeCausticPhotonIntegrationSettings3D
     gRuntimeNative3DCausticPhotonRenderPrepSettings;
 static RuntimeCausticPhotonMapStore3D gRuntimeNative3DCausticPhotonMapStore;
+bool runtime_native_3d_prepare_photon_volume_requested(void) {
+    return gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled &&
+        gRuntimeNative3DCausticPhotonRenderPrepSettings.volumeQueryEnabled;
+}
 
 static double runtime_native_3d_prepare_elapsed_ms_since(
     const struct timespec* started_at) {

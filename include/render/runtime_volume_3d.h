@@ -58,6 +58,9 @@ typedef struct {
     bool debugOverlayEnabled;
     bool hasData;
     bool ownsChannelBuffers;
+    bool hasPlacement;
+    Vec3 placementTranslation, placementScale;
+    Vec3 placementBasis[3];
     RuntimeVolumeGrid3D grid;
     RuntimeVolumeChannels3D channels;
 } RuntimeVolumeAttachment3D;

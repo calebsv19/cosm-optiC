@@ -180,7 +180,7 @@ void ray_tracing_headless_write_frame_dataflow_state_ledger(
         .traceContextCallbackBound =
             preflight &&
             preflight->ray_trace_route_stats.sceneAccelerationTraceCallbackBound,
-        .volumeEnabled = request && request->volume_enabled,
+        .volumeEnabled = preflight && preflight->volume_attached,
         .volumeAttached = preflight && preflight->volume_attached,
         .volumeFrameSelectionDynamic =
             preflight && preflight->volume_frame_selection_dynamic,

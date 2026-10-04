@@ -109,7 +109,9 @@ def snapshot_inputs(scene_path, request_path, dest):
     if type(render.get('start_frame', 0)) is not int or render.get('start_frame', 0) < 0:
         raise ValueError('invalid start_frame')
     dependencies = {}
-    pending = list(references(scene))
+    from scene_atmosphere_assets import scene_dependencies
+    from scene_workflow_dependencies import resolve_references
+    pending = list(references(scene))+scene_dependencies(scene,source)
     while pending:
         rel = pending.pop()
         path = contained(source, rel)
@@ -121,7 +123,7 @@ def snapshot_inputs(scene_path, request_path, dest):
             raise ValueError(f'dependency collides with reserved package input/output: {rel}')
         dependencies[rel] = path
         if path.suffix.lower() == '.json':
-            pending.extend(references(read(path)))
+            pending.extend(resolve_references(source,path,references(read(path)),contained))
         # Native dense-mesh loader uses a same-stem preview sidecar when present.
         if rel.endswith('.runtime.json'):
             preview = rel[:-len('.runtime.json')] + '.preview.json'
@@ -147,12 +149,17 @@ def snapshot_inputs(scene_path, request_path, dest):
     if request.get('checkpoint', {}).get('path'):
         request['checkpoint']['path'] = 'results/checkpoint'
     write(dest / 'render_request.json', request)
-    # Runtime reads defaults from its program root; ship those rather than using checkout state.
+    # Freeze the selected runtime defaults too: native UI/runtime settings can
+    # affect the image even when render intent and authored scene are identical.
     (dest / 'config').mkdir(exist_ok=True)
-    shutil.copy2(REPO / 'config/scene_config.json', dest / 'config/scene_config.json')
-    write(dest / 'data/runtime/animation_config.json', {
-        'inputRoot': 'config', 'outputRoot': 'results',
-        'meshAssetRoot': 'assets/mesh_assets'})
+    scene_config=source/'config/scene_config.json'
+    shutil.copy2(scene_config if scene_config.is_file() else REPO/'config/scene_config.json', dest/'config/scene_config.json')
+    animation_candidates=(source/'data/runtime/animation_config.json',source/'config/animation_config.json',REPO/'config/animation_config.json')
+    defaults=read(next(path for path in animation_candidates if path.is_file()))
+    defaults.update(inputRoot='config',outputRoot='results',meshAssetRoot='assets/mesh_assets',
+        runtimeScenePath='scene_runtime.json',frameDir='results/frames',videoOutputRoot='results',
+        videoOutputPath='results/render.mp4',volumeSourceKind=0,volumeSourcePath='',volumeInteractionEnabled=False)
+    write(dest / 'data/runtime/animation_config.json',defaults)
     if sha(scene_path) != source_scene_digest or sha(request_path) != source_request_digest:
         raise ValueError('source scene/request changed during snapshot')
     return scene
@@ -197,10 +204,14 @@ def verify(root):
             raise ValueError(f'missing bundle input: {rel}')
     for document in sorted(expected):
         if document == 'scene_runtime.json' or document.startswith('assets/') and document.endswith('.json'):
-            for rel in references(read(root / document)):
+            from scene_workflow_dependencies import resolve_references
+            for rel in resolve_references(root,root/document,references(read(root/document)),contained):
                 if rel not in expected:
                     raise ValueError(f'unmanifested scene dependency: {rel}')
                 contained(root, rel)
+    from scene_atmosphere_assets import scene_dependencies
+    for rel in scene_dependencies(read(root/'scene_runtime.json'),root):
+        if rel not in expected:raise ValueError(f'unmanifested atmosphere dependency: {rel}')
     request = read(root / 'render_request.json')
     if request['scene']['runtime_scene_path'] != 'scene_runtime.json' or request['output']['root'] != 'results':
         raise ValueError('nonportable bundle request')

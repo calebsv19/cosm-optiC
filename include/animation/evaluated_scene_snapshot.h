@@ -132,7 +132,8 @@ typedef struct RayEvaluatedSimulationIdentity {
     uint32_t subframe_numerator;
     uint32_t subframe_denominator;
     RayEvaluatedSimulationInterpolation interpolation;
-    char content_digest[TIMELINE_ID_CAPACITY];
+    /* SHA-256 has 64 hexadecimal characters plus its terminator. */
+    char content_digest[65];
 } RayEvaluatedSimulationIdentity;
 
 typedef struct RayEvaluatedSceneSnapshot {

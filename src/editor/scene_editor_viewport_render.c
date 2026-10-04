@@ -1,4 +1,5 @@
 #include "editor/scene_editor_viewport_render.h"
+#include "editor/scene_editor_atmosphere_preview.h"
 
 #include <math.h>
 
@@ -104,7 +105,9 @@ void SceneEditorViewportRenderDraw(SDL_Renderer* renderer,
         use_clip = true;
     }
 
-    if (lane == SCENE_EDITOR_VIEWPORT_RENDER_LANE_PLANAR_2D) {
+    if (use_clip && SceneEditorAtmospherePreviewDraw(renderer,pane_layout.viewport_rect)) {
+        /* Native scene-camera presentation owns this view. */
+    } else if (lane == SCENE_EDITOR_VIEWPORT_RENDER_LANE_PLANAR_2D) {
         scene_editor_viewport_render_active_mode_layer(renderer, current_mode);
         scene_editor_viewport_render_fluid_bounds(renderer);
     } else {

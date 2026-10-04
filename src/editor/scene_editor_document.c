@@ -1,3 +1,4 @@
+#include "editor/scene_editor_atmosphere_preview.h"
 #include "editor/scene_editor_object_timeline.h"
 #include "render/runtime_surface_graph.h"
 #include "render/runtime_surface_sampling.h"
@@ -5,6 +6,7 @@
 #include "app/ray_tracing_sha256.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_document.h"
+#include "editor/scene_editor_agent_control.h"
 #include "scene_editor_document_transaction.h"
 
 #include <errno.h>
@@ -419,6 +421,8 @@ bool SceneEditorDocumentOpenActive(char* diagnostics, size_t diagnostics_size) {
 }
 
 void SceneEditorDocumentClose(void) {
+    SceneEditorAtmospherePreviewReset();
+    SceneEditorAgentControlClose();
     ObjectEditorSelectionTrackerReset();
     if (s_document.root) json_object_put(s_document.root);
     free(s_document.baseline_bytes);

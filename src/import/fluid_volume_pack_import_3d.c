@@ -8,23 +8,7 @@
 
 #include "core_pack.h"
 
-typedef struct Vf3dHeaderCanonical {
-    uint32_t version;
-    uint32_t grid_w;
-    uint32_t grid_h;
-    uint32_t grid_d;
-    double time_seconds;
-    uint64_t frame_index;
-    double dt_seconds;
-    float origin_x;
-    float origin_y;
-    float origin_z;
-    float voxel_size;
-    float scene_up_x;
-    float scene_up_y;
-    float scene_up_z;
-    uint32_t solid_mask_crc32;
-} Vf3dHeaderCanonical;
+#include "fluid_volume_header_3d.h"
 
 static void fluid_volume_pack_import_3d_diag(char* out_diagnostics,
                                              size_t out_diagnostics_size,

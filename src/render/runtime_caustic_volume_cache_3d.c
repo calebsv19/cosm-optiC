@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include "render/runtime_caustic_photon_sparse_brick_cache_3d.h"
+#include "runtime_caustic_volume_cache_placement_3d.h"
+#include "render/runtime_volume_3d_transform.h"
 
 static uint64_t runtime_caustic_volume_cache_cell_index(
     const RuntimeVolumeGrid3D* grid,
@@ -26,6 +28,7 @@ static bool runtime_caustic_volume_cache_position_to_local(
     if (!RuntimeCausticVolumeCache3D_IsAllocated(cache) || !out_x || !out_y || !out_z) {
         return false;
     }
+    position = runtime_caustic_cache_to_local(cache, position);
     grid = &cache->grid;
     *out_x = (position.x - grid->origin.x) / grid->voxelSize;
     *out_y = (position.y - grid->origin.y) / grid->voxelSize;
@@ -101,6 +104,7 @@ bool RuntimeCausticVolumeCache3D_Allocate(RuntimeCausticVolumeCache3D* cache,
 
     RuntimeCausticVolumeCache3D_Free(cache);
     *cache = allocated;
+    RuntimeCausticVolumeCache3D_SetPlacementFromVolume(cache, NULL);
     return true;
 }
 
@@ -110,7 +114,9 @@ bool RuntimeCausticVolumeCache3D_AllocateFromVolume(
     if (!volume || !volume->hasData || !RuntimeVolumeGrid3D_IsConfigured(&volume->grid)) {
         return false;
     }
-    return RuntimeCausticVolumeCache3D_Allocate(cache, &volume->grid);
+    if (!RuntimeCausticVolumeCache3D_Allocate(cache, &volume->grid)) return false;
+    RuntimeCausticVolumeCache3D_SetPlacementFromVolume(cache, volume);
+    return true;
 }
 
 void RuntimeCausticVolumeCache3D_Clear(RuntimeCausticVolumeCache3D* cache) {
@@ -257,9 +263,9 @@ bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
     if (radiance_g < 0.0) radiance_g = 0.0;
     if (radiance_b < 0.0) radiance_b = 0.0;
     if (!(radius_world > 0.0) || !isfinite(radius_world)) {
-        radius_world = cache->grid.voxelSize * 0.5;
+        radius_world = runtime_caustic_cache_world_voxel(cache) * 0.5;
     }
-    radius_voxels = radius_world / cache->grid.voxelSize;
+    radius_voxels = radius_world / runtime_caustic_cache_world_voxel(cache);
     if (!(radius_voxels > 0.0) || !isfinite(radius_voxels)) {
         radius_voxels = 0.5;
     }
@@ -284,9 +290,11 @@ bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
                 const double center_x = (double)x + 0.5;
                 const double center_y = (double)y + 0.5;
                 const double center_z = (double)z + 0.5;
-                const double dx = center_x - local_x;
-                const double dy = center_y - local_y;
-                const double dz = center_z - local_z;
+                const Vec3 displacement = runtime_caustic_cache_voxel_displacement(
+                    cache, vec3(center_x - local_x, center_y - local_y, center_z - local_z));
+                const double dx = displacement.x;
+                const double dy = displacement.y;
+                const double dz = displacement.z;
                 const double distance = sqrt((dx * dx) + (dy * dy) + (dz * dz));
                 double weight = 0.0;
                 if (distance <= radius_voxels) {
@@ -313,9 +321,11 @@ bool RuntimeCausticVolumeCache3D_DepositFootprintAtPosition(
                 const double center_x = (double)x + 0.5;
                 const double center_y = (double)y + 0.5;
                 const double center_z = (double)z + 0.5;
-                const double dx = center_x - local_x;
-                const double dy = center_y - local_y;
-                const double dz = center_z - local_z;
+                const Vec3 displacement = runtime_caustic_cache_voxel_displacement(
+                    cache, vec3(center_x - local_x, center_y - local_y, center_z - local_z));
+                const double dx = displacement.x;
+                const double dy = displacement.y;
+                const double dz = displacement.z;
                 const double distance = sqrt((dx * dx) + (dy * dy) + (dz * dz));
                 double weight = 0.0;
                 if (distance <= radius_voxels) {
@@ -410,8 +420,8 @@ bool RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
     if (radiance_b < 0.0) radiance_b = 0.0;
 
     axis = vec3_normalize(direction);
-    perpendicular_radius_voxels = perpendicular_radius_world / cache->grid.voxelSize;
-    axial_radius_voxels = axial_radius_world / cache->grid.voxelSize;
+    perpendicular_radius_voxels = perpendicular_radius_world / runtime_caustic_cache_world_voxel(cache);
+    axial_radius_voxels = axial_radius_world / runtime_caustic_cache_world_voxel(cache);
     if (!(perpendicular_radius_voxels > 0.0) || !isfinite(perpendicular_radius_voxels)) {
         perpendicular_radius_voxels = 0.5;
     }
@@ -441,9 +451,11 @@ bool RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
                 const double center_x = (double)x + 0.5;
                 const double center_y = (double)y + 0.5;
                 const double center_z = (double)z + 0.5;
-                const double dx = center_x - local_x;
-                const double dy = center_y - local_y;
-                const double dz = center_z - local_z;
+                const Vec3 displacement = runtime_caustic_cache_voxel_displacement(
+                    cache, vec3(center_x - local_x, center_y - local_y, center_z - local_z));
+                const double dx = displacement.x;
+                const double dy = displacement.y;
+                const double dz = displacement.z;
                 const double axial = (dx * axis.x) + (dy * axis.y) + (dz * axis.z);
                 const double distance2 = (dx * dx) + (dy * dy) + (dz * dz);
                 const double perp2 = fmax(0.0, distance2 - (axial * axial));
@@ -476,9 +488,11 @@ bool RuntimeCausticVolumeCache3D_DepositDirectionalFootprintAtPosition(
                 const double center_x = (double)x + 0.5;
                 const double center_y = (double)y + 0.5;
                 const double center_z = (double)z + 0.5;
-                const double dx = center_x - local_x;
-                const double dy = center_y - local_y;
-                const double dz = center_z - local_z;
+                const Vec3 displacement = runtime_caustic_cache_voxel_displacement(
+                    cache, vec3(center_x - local_x, center_y - local_y, center_z - local_z));
+                const double dx = displacement.x;
+                const double dy = displacement.y;
+                const double dz = displacement.z;
                 const double axial = (dx * axis.x) + (dy * axis.y) + (dz * axis.z);
                 const double distance2 = (dx * dx) + (dy * dy) + (dz * dz);
                 const double perp2 = fmax(0.0, distance2 - (axial * axial));
@@ -625,9 +639,9 @@ bool RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
         return false;
     }
     if (!(radius_world > 0.0) || !isfinite(radius_world)) {
-        radius_world = cache->grid.voxelSize;
+        radius_world = runtime_caustic_cache_world_voxel(cache);
     }
-    radius_voxels = radius_world / cache->grid.voxelSize;
+    radius_voxels = radius_world / runtime_caustic_cache_world_voxel(cache);
     if (!(radius_voxels > 0.0) || !isfinite(radius_voxels)) {
         radius_voxels = 1.0;
     }
@@ -653,9 +667,11 @@ bool RuntimeCausticVolumeCache3D_SampleFilteredAtPosition(
                 const double center_x = (double)x + 0.5;
                 const double center_y = (double)y + 0.5;
                 const double center_z = (double)z + 0.5;
-                const double dx = center_x - local_x;
-                const double dy = center_y - local_y;
-                const double dz = center_z - local_z;
+                const Vec3 displacement = runtime_caustic_cache_voxel_displacement(
+                    cache, vec3(center_x - local_x, center_y - local_y, center_z - local_z));
+                const double dx = displacement.x;
+                const double dy = displacement.y;
+                const double dz = displacement.z;
                 const double distance = sqrt((dx * dx) + (dy * dy) + (dz * dz));
                 double weight = 0.0;
                 if (distance <= radius_voxels) {
@@ -705,10 +721,9 @@ void RuntimeCausticVolumeCache3D_SnapshotDiagnostics(
     diagnostics.gridH = cache->grid.gridH;
     diagnostics.gridD = cache->grid.gridD;
     diagnostics.cellCount = cache->grid.cellCount;
-    diagnostics.origin = cache->grid.origin;
-    diagnostics.boundsMin = cache->grid.boundsMin;
-    diagnostics.boundsMax = cache->grid.boundsMax;
-    diagnostics.voxelSize = cache->grid.voxelSize;
+    diagnostics.origin = runtime_caustic_cache_to_world(cache, cache->grid.origin);
+    RuntimeVolume3D_WorldBounds(&cache->coordinates, &diagnostics.boundsMin, &diagnostics.boundsMax);
+    diagnostics.voxelSize = runtime_caustic_cache_world_voxel(cache);
     diagnostics.allocatedCellCount = cache->grid.cellCount;
     diagnostics.depositAttemptCount = cache->depositAttemptCount;
     diagnostics.depositAcceptedCount = cache->depositAcceptedCount;
@@ -748,9 +763,10 @@ void RuntimeCausticVolumeCache3D_SnapshotDiagnostics(
                                    ? (uint32_t)(xy_index % (uint64_t)cache->grid.gridW)
                                    : 0u;
             const Vec3 center =
-                vec3(cache->grid.origin.x + (((double)x + 0.5) * cache->grid.voxelSize),
-                     cache->grid.origin.y + (((double)y + 0.5) * cache->grid.voxelSize),
-                     cache->grid.origin.z + (((double)z + 0.5) * cache->grid.voxelSize));
+                runtime_caustic_cache_to_world(cache,
+                    vec3(cache->grid.origin.x + (((double)x + 0.5) * cache->grid.voxelSize),
+                         cache->grid.origin.y + (((double)y + 0.5) * cache->grid.voxelSize),
+                         cache->grid.origin.z + (((double)z + 0.5) * cache->grid.voxelSize)));
             diagnostics.nonZeroCellCount += 1u;
             if (!diagnostics.hasNonZeroBounds) {
                 diagnostics.nonZeroBoundsMin = center;

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_atmosphere_panel.h"
 #include "editor/scene_editor_typography.h"
 #include "editor/scene_editor_sidebar.h"
 #include "ui/volume_source_ui_labels.h"
@@ -294,21 +295,7 @@ int SceneEditorSurfaceRenderLeftPaneContent(SDL_Renderer* renderer,
     ObjectEditorPanelsHide();
     if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_ENVIRONMENT) {
         ObjectEditorClearObjectListRows();
-        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer, bounds, cursor_y, bottom_y,
-            "Atmosphere & Water", title_color, true, 12);
-        snprintf(line, sizeof(line), "Volume interaction: %s", animSettings.volumeInteractionEnabled ? "enabled" : "disabled");
-        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,line,body_color,true,8);
-        volume_source_ui_format_attach_status(animSettings.volumeSourceKind, animSettings.volumeSourcePath,
-            animSettings.volumeInteractionEnabled, line, sizeof(line));
-        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,line,body_color,true,8);
-        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,
-            animSettings.volumeSourcePath[0] ? animSettings.volumeSourcePath : "No external volume source selected",
-            body_color,true,12);
-        snprintf(line, sizeof(line), "Affects lighting: %s", animSettings.volumeAffectsLighting ? "yes" : "no");
-        cursor_y = SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,line,body_color,true,8);
-        return SceneEditorSurfaceRenderFlowLine(renderer,bounds,cursor_y,bottom_y,
-            "Water geometry and cached resources belong to the loaded scene. Use Preview to inspect the current result. This workspace currently inspects existing resources.",
-            body_color,true,8);
+        return SceneEditorAtmospherePanelDraw(renderer, bounds);
     }
     if (contract->activeMode == EDITOR_MODE_MATERIAL) {
         return SceneEditorObjectListRender(renderer,bounds,cursor_y,bottom_y,

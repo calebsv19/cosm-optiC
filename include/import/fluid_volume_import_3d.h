@@ -12,6 +12,9 @@
 bool fluid_volume_import_3d_classify_path(const char* path,
                                           RuntimeVolume3DSourceKind* out_kind);
 bool fluid_volume_import_3d_path_is_supported(const char* path);
+/* Header identity for one static VF3D/pack; does not allocate field channels. */
+bool fluid_volume_import_3d_single_frame_index(const char* path,
+    RuntimeVolume3DSourceKind kind,uint64_t* frame_index);
 bool fluid_volume_import_3d_load_raw(const char* path,
                                      RuntimeVolumeAttachment3D* out_attachment,
                                      char* out_diagnostics,

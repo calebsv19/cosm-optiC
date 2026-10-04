@@ -9,6 +9,7 @@ bool SceneEditorTimelineAdvance(void);
 void SceneEditorTimelineTogglePlaying(void);
 bool SceneEditorTimelineMoveKeyValue(int64_t frame,double value);
 void SceneEditorTimelinePause(void);
+bool SceneEditorTimelinePlaying(void);
 bool SceneEditorTimelineSelectedTrack(TimelineTrack* track,TimelineRate* rate,TimelineRange* range,TimelineSample* sample);
 void SceneEditorTimelineReleaseFocus(void);
 void SceneEditorTimelineClearSelection(void);

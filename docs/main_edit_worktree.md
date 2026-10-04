@@ -1,5 +1,25 @@
 # RayTracing Main Edit Worktree
 
+## October 4 — retained atmosphere development checkpoint
+
+Main Edit merged the released 0.18.0/worker 0.9.0 source baseline at ca73660,
+preserving the newer scene-workflow commits. Retained atmosphere UI/live MCP,
+static presets/import, actual cache-ID playback and existing water sidecars now
+have native/headless acceptance. See [atmosphere attachments](atmosphere_attachment.md).
+File Save/fresh reopen, identity refusal, raw/pack metadata, portable sealed
+exports and exact relocated images pass. UI/MCP share history and validation.
+PhysicsSim source and solvers remain untouched.
+
+Environment now has a progressive native scene-camera preview and the shared
+timeline. Seek, density edit/Undo, exact native pixels and playback acceptance pass.
+Placed bootstrap/lens-transport volume caches now pass numerical/sanitizer and
+native render checks; photon-volume placement remains explicitly refused pending
+its separate beam-normalization work. Local package identity and human
+complex-scene usability remain separate evidence. No new VERSION, canonical adoption or public
+release is implied. The current installed build identity is recorded in private
+work status after local refresh; older dated identities below are historical.
+
+
 ## September 30 — stable orientation and shared playhead acceptance
 
 Five bounded slices now provide deterministic transported route frames, the same

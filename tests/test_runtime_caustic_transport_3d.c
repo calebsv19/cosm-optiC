@@ -19,6 +19,7 @@
 #include "render/runtime_volume_3d.h"
 #include "test_runtime_native_3d_render_prepared_suite_internal.h"
 #include "test_support.h"
+#include "render/runtime_volume_3d_transform.h"
 
 #define TEST_CAUSTIC_TRANSPORT_RENDER_WIDTH 31
 #define TEST_CAUSTIC_TRANSPORT_RENDER_HEIGHT 31
@@ -1344,7 +1345,7 @@ static int test_runtime_caustic_transport_surface_without_receiver_fallback(void
     return 0;
 }
 
-static int test_runtime_caustic_transport_render_samples_volume_cache(void) {
+static int test_runtime_caustic_transport_render_samples_volume_cache(bool placed) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
     RuntimeScene3D scene;
@@ -1367,6 +1368,8 @@ static int test_runtime_caustic_transport_render_samples_volume_cache(void) {
     animSettings.environmentLightMode = ENVIRONMENT_LIGHT_MODE_OFF;
     assert_true("runtime_caustic_transport_render_scene",
                 test_caustic_transport_make_scene(&scene));
+    if (placed) assert_true("transport_placed_volume", RuntimeVolume3D_SetPlacement(
+        &scene.volume, vec3(.1,0,0), vec3(0,0,15), vec3(1.1,.9,1.2)));
     ok = RuntimeCameraProjector3D_Build(&scene.camera,
                                         TEST_CAUSTIC_TRANSPORT_RENDER_WIDTH,
                                         TEST_CAUSTIC_TRANSPORT_RENDER_HEIGHT,
@@ -2009,7 +2012,8 @@ int run_test_runtime_caustic_transport_3d_tests(void) {
     test_runtime_caustic_transport_suppresses_volume_without_vf3d();
     test_runtime_caustic_transport_surface_calibration_scales_records();
     test_runtime_caustic_transport_surface_without_receiver_fallback();
-    test_runtime_caustic_transport_render_samples_volume_cache();
+    test_runtime_caustic_transport_render_samples_volume_cache(false);
+    test_runtime_caustic_transport_render_samples_volume_cache(true);
     test_runtime_caustic_transport_render_samples_surface_cache();
     test_runtime_caustic_sidecar_uses_prepared_probe_snapshot();
 
