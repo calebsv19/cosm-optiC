@@ -150,3 +150,25 @@ remote archive's payload hashes against the local manifest and use a fresh
 source/destination reconciliation read before treating delivery as complete.
 Archive import, result fetching and render submission remain distinct operations.
 No archive or completion action grants visual acceptance or cleanup authority.
+
+After a verified cold-archive copy, attach its fresh readback and the restored
+render proof to the project:
+
+```sh
+python3 tools/scene_workflow_delivery.py record-archive --project <project> \
+  --run-id <render-run-id> --archive-manifest <archive>/archive_manifest.json \
+  --remote-receipt <fixed-helper-post-copy-readback.json> \
+  --restore-receipt <restored-native-render-proof.json>
+```
+
+This requires `dry_run_destination_matches_source`, every source/destination
+file matching, exact local/remote archive and manifest hashes, no deletion, and
+successful restored-render proof for the same completed input scene. Status
+validates completion and archive receipt hashes. A successful upload or copy
+receipt alone cannot produce `archived_verified_sources_retained`.
+
+Checksum paths in archive exports are rooted at the intake item (`payload/`).
+Local restoration accepts these names relative to the archive directory. This
+matches the established cold-archive helper; do not strip the prefix before PC
+submission. The historical first Aurora dry-run caught this contract mismatch;
+the same export-item identity was repaired before any archive apply.

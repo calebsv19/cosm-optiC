@@ -67,6 +67,20 @@ class DeliveryTests(unittest.TestCase):
         with self.assertRaises(ValueError):d.restore(archive,self.root/'bad')
         self.assertFalse((self.root/'bad').exists())
 
+    def test_remote_archive_record_requires_matching_digest_and_restore(self):
+        self.reconcile();archive=self.root/'archive';d.archive(self.project,self.run,'r1',archive,'compact')
+        manifest=archive/'archive_manifest.json'
+        remote=self.root/'remote.json';restored=self.root/'restored.json'
+        info=read(manifest)
+        write(remote,{'status':'completed','export_item_import':{'status':'dry_run_destination_matches_source','existing_destination_reconciliation':{'matches':True},'delete_performed':False,'destination_path':'/fixed/archive/path','verified_checksums':[{'relpath':'payload/scene.tar.gz','sha256':info['archive_sha256']},{'relpath':'payload/archive_manifest.json','sha256':sha(manifest)}]}})
+        inputs=self.project/'completed_runs/r1/inputs'
+        write(restored,{'verified':True,'diagnostics':'ok','source_scene_sha256':sha(inputs/'scene_runtime.json')})
+        record=d.record_archive(self.project,'r1',manifest,remote,restored)
+        self.assertFalse(record['source_deleted'])
+        self.assertEqual(record,d.record_archive(self.project,'r1',manifest,remote,restored))
+        bad=read(remote);bad['export_item_import']['verified_checksums'][0]['sha256']='wrong';write(remote,bad)
+        with self.assertRaises(ValueError):d.record_archive(self.project,'r1',manifest,remote,restored)
+
     def test_archive_member_traversal_refused(self):
         self.reconcile();archive=self.root/'archive';d.archive(self.project,self.run,'r1',archive,'compact')
         with tarfile.open(archive/'scene.tar.gz','w:gz') as tar:

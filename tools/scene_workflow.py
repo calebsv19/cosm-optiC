@@ -224,7 +224,7 @@ def status(root):
         for rel, digest in entry['dependencies'].items():
             path = contained(root, rel)
             data['editable_changed_since_accepted'] |= not path.is_file() or sha(path) != digest
-    for run_id, entry in data.get('completed_runs', {}).items():
+    for run_id, entry in list(data.get('completed_runs', {}).items()) + list(data.get('archives', {}).items()):
         receipt = contained(root, entry['receipt'])
         if sha(receipt) != entry['receipt_sha256'] or read(receipt)['run_id'] != run_id:
             raise ValueError('completed run receipt changed')

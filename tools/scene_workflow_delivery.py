@@ -204,15 +204,58 @@ def restore(archive_root, output):
     return {'verified': True, 'file_count': len(expected), 'archive_sha256': manifest['archive_sha256'], 'output': str(output)}
 
 
+def record_archive(project, run_id, archive_manifest, remote_receipt, restore_receipt):
+    project = project.resolve(); safe_id(run_id)
+    manifest, remote, restored = read(archive_manifest), read(remote_receipt), read(restore_receipt)
+    imported = remote.get('export_item_import', {})
+    reconciliation = imported.get('existing_destination_reconciliation', {})
+    if (manifest.get('schema') != 'optic_scene_archive_v1' or manifest['run_id'] != run_id
+            or remote.get('status') != 'completed'
+            or imported.get('status') != 'dry_run_destination_matches_source'
+            or not reconciliation.get('matches') or imported.get('delete_performed')
+            or not restored.get('verified') or restored.get('diagnostics') != 'ok'):
+        raise ValueError('archive requires fresh exact-copy readback and restored render proof')
+    hashes = {e['relpath']: e['sha256'] for e in imported.get('verified_checksums', [])}
+    if (hashes.get('payload/scene.tar.gz') != manifest['archive_sha256']
+            or hashes.get('payload/archive_manifest.json') != sha(archive_manifest)):
+        raise ValueError('remote archive digest differs from local archive')
+    with locked(project):
+        data = load(project); completed = data['completed_runs'][run_id]
+        completion = read(contained(project, completed['receipt']))
+        inputs = contained(project, str(Path(completed['receipt']).parent / 'inputs'))
+        if (sha(contained(project, completed['receipt'])) != completed['receipt_sha256']
+                or sha(inputs / 'scene_runtime.json') != restored['source_scene_sha256']):
+            raise ValueError('restored proof is not the completed scene')
+        record = {'schema': 'optic_verified_scene_archive_receipt_v1', 'run_id': run_id,
+            'state': 'archived_verified_sources_retained', 'retention': manifest['retention'],
+            'archive_sha256': manifest['archive_sha256'], 'archive_manifest_sha256': sha(archive_manifest),
+            'remote_path': imported['destination_path'], 'remote_host': 'linux_pc',
+            'remote_readback_sha256': sha(remote_receipt), 'restored_render': restored,
+            'source_deleted': False, 'recorded_at': now()}
+        dest = project / 'archives' / run_id / 'archive_receipt.json'
+        if dest.exists():
+            prior = read(dest)
+            if prior['archive_sha256'] != record['archive_sha256'] or prior['remote_path'] != record['remote_path']:
+                raise ValueError('archive receipt identity conflict')
+            record = prior
+        else: write(dest, record)
+        data.setdefault('archives', {})[run_id] = {'state': record['state'],
+            'receipt': dest.relative_to(project).as_posix(), 'receipt_sha256': sha(dest)}
+        save(project, data)
+    return record
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__); subs = p.add_subparsers(dest='command', required=True)
     s = subs.add_parser('reconcile'); s.add_argument('--project', type=Path, required=True); s.add_argument('--run-root', type=Path, required=True); s.add_argument('--job', required=True); s.add_argument('--renderer', type=Path, required=True)
     s = subs.add_parser('archive'); s.add_argument('--project', type=Path, required=True); s.add_argument('--run-root', type=Path, required=True); s.add_argument('--run-id', required=True); s.add_argument('--output', type=Path, required=True); s.add_argument('--retention', choices=('compact','full'), default='compact')
     s = subs.add_parser('restore'); s.add_argument('--archive', type=Path, required=True); s.add_argument('--output', type=Path, required=True)
+    s = subs.add_parser('record-archive'); s.add_argument('--project', type=Path, required=True); s.add_argument('--run-id', required=True); s.add_argument('--archive-manifest', type=Path, required=True); s.add_argument('--remote-receipt', type=Path, required=True); s.add_argument('--restore-receipt', type=Path, required=True)
     a = p.parse_args()
     try:
         if a.command == 'reconcile': result = reconcile(a.project.resolve(),a.run_root.resolve(),a.job,a.renderer.resolve())
         elif a.command == 'archive': result = archive(a.project.resolve(),a.run_root.resolve(),a.run_id,a.output.resolve(),a.retention)
+        elif a.command == 'record-archive': result = record_archive(a.project.resolve(),a.run_id,a.archive_manifest.resolve(),a.remote_receipt.resolve(),a.restore_receipt.resolve())
         else: result = restore(a.archive.resolve(),a.output.resolve())
         print(json.dumps({k:v for k,v in result.items() if k not in {'files','frames'}}, indent=2))
     except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as exc: p.exit(1, f'error: {exc}\n')

@@ -5,10 +5,12 @@ all-frame hashes, complete MP4 decode, preserved preflight alias reconciliation,
 and compact/full archive creation plus safe checksum-verified restore. Completed
 render evidence is independent of creative approval and later draft revisions.
 Aurora's real frozen render input is retained separately from baseline-r1.
-Five delivery regressions, seven workflow tests and 21 prior project tests pass.
+Six delivery regressions, seven workflow tests and 21 prior project tests pass.
 The real 200-frame1080p/24FPS movie decodes; all frame hashes are retained.
 Archive restoration validates all82 retained files and renders frame100 from the
-restored portable scene. No source frame deletion or desktop refresh applies.
+restored portable scene. The Linux PC media-renders archive is independently
+checksum-verified against its intake; the project records
+archived_verified_sources_retained. All200 original source frames remain. No source frame deletion or desktop refresh applies.
 See docs/scene_workflow.md for supported CLI commands and remaining UI/PC-submit
 boundaries. Canonical release0.18.0 remains separate from Main Edit's development
 checkpoint; no VERSION, worker deployment or release mutation occurs here.
