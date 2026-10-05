@@ -8,6 +8,7 @@
 
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -309,6 +310,13 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     if (!(step > zero_length)) {
         step = runtime_volume_3d_scatter_unit_length();
     }
+    RuntimeIncidentLight3DPreparedSource* prepared = NULL;
+    const char* reference_mode = getenv("RAY_TRACING_VOLUME_INCIDENT_REFERENCE");
+    if (scene->lightSet.lightCount > 0 && !(reference_mode && reference_mode[0]=='1')) {
+        prepared = calloc((size_t)scene->lightSet.lightCount, sizeof(*prepared));
+        if (prepared) for (int q=0;q<scene->lightSet.lightCount;++q)
+            RuntimeIncidentLight3D_Prepare(&scene->lightSet.lights[q], &prepared[q]);
+    }
     for (double t FISICS_DIM(length) FISICS_UNIT(meter) = t_enter;
          t < t_exit;
          t += step) {
@@ -332,11 +340,18 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                     const RuntimeLightSource3D* source = &scene->lightSet.lights[light_index];
                     if (!source->enabled) continue;
                     result.registrySourceEvaluations += 1;
-                    int count = RuntimeIncidentLight3D_SampleCount(source);
+                    int count = prepared ? prepared[light_index].count : RuntimeIncidentLight3D_SampleCount(source);
                     if (count == 0) { result.registryUnsupportedSources += 1; continue; }
+                    RuntimeIncidentLight3DSample samples[4];
+                    bool valid[4] = {false};
+                    if (prepared) RuntimeIncidentLight3D_SamplePrepared(&prepared[light_index], sample_position,
+                        sampling, samples, valid);
                     for (int light_sample = 0; light_sample < count; ++light_sample) {
                         RuntimeIncidentLight3DSample incident;
-                        if (!RuntimeIncidentLight3D_Sample(source, sample_position,
+                        if (prepared) {
+                            if (!valid[light_sample]) continue;
+                            incident = samples[light_sample];
+                        } else if (!RuntimeIncidentLight3D_Sample(source, sample_position,
                             light_sample, sampling, &incident)) continue;
                         double phase = runtime_volume_3d_scatter_phase_henyey_greenstein(
                             vec3_dot(vec3_scale(ray->direction, -1.0),
@@ -607,6 +622,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     result.radiance = runtime_volume_3d_scatter_peak(result.radianceR,
                                                      result.radianceG,
                                                      result.radianceB);
+    free(prepared);
     result.causticRadiance =
         runtime_volume_3d_scatter_peak(result.causticRadianceR,
                                        result.causticRadianceG,

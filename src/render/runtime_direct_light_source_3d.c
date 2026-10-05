@@ -614,6 +614,69 @@ bool RuntimeIncidentLight3D_Sample(const RuntimeLightSource3D* source,
     return true;
 }
 
+void RuntimeIncidentLight3D_Prepare(const RuntimeLightSource3D* source,
+    RuntimeIncidentLight3DPreparedSource* prepared) {
+    if (!prepared) return;
+    *prepared = (RuntimeIncidentLight3DPreparedSource){0};
+    if (!source) return;
+    prepared->source = *source;
+    prepared->count = RuntimeIncidentLight3D_SampleCount(source);
+    prepared->light = runtime_direct_light_3d_compat_light_from_source(source);
+    prepared->axis_u = runtime_direct_light_3d_safe_axis(source->axisU, vec3(1,0,0));
+    prepared->axis_v = runtime_direct_light_3d_safe_axis(source->axisV, vec3(0,0,1));
+    prepared->has_normal = !(vec3_length(source->normal) <= 1e-9);
+    prepared->normal = prepared->has_normal ? vec3_normalize(source->normal) : source->normal;
+}
+
+void RuntimeIncidentLight3D_SamplePrepared(const RuntimeIncidentLight3DPreparedSource* prepared,
+    Vec3 receiver_position, const RuntimeNative3DSamplingContext* sampling,
+    RuntimeIncidentLight3DSample samples[4], bool valid[4]) {
+    if (!prepared || !samples || !valid) return;
+    const RuntimeLightSource3D* source = &prepared->source;
+    HitInfo3D reference = {0};
+    uint32_t seed = 0;
+    reference.position = receiver_position;
+    reference.triangleIndex = -1;
+    reference.primitiveIndex = -1;
+    if (sampling && source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT)
+        seed = runtime_direct_light_3d_seed_from_light_hit(&prepared->light, &reference);
+    for (int q=0; q<prepared->count; ++q) {
+        RuntimeIncidentLight3DSample result = {0};
+        valid[q] = false;
+        samples[q] = result;
+        if (source->kind != RUNTIME_LIGHT_SOURCE_3D_KIND_RECT ||
+            source->radiometryMode != RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY) {
+            valid[q] = RuntimeIncidentLight3D_Sample(source, receiver_position, q, sampling, &samples[q]);
+            continue;
+        }
+        double u = (q % 2 + 0.5) * 0.5;
+        double v = (q / 2 + 0.5) * 0.5;
+        if (sampling) RuntimeNative3DSampling_Stratified2D(sampling,seed,4,q,(uint32_t)(q+31),&u,&v);
+        result.position = vec3_add(source->position,
+            vec3_add(vec3_scale(prepared->axis_u,(u-0.5)*source->width),
+                     vec3_scale(prepared->axis_v,(v-0.5)*source->height)));
+        Vec3 to_light = vec3_sub(result.position,receiver_position);
+        double distance FISICS_DIM(length) FISICS_UNIT(meter) = vec3_length(to_light);
+        double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-9;
+        if (!isfinite(distance) || distance<=epsilon) continue;
+        result.distance = distance;
+        result.direction = vec3_scale(to_light,1.0/distance);
+        double angular = 1.0;
+        if (prepared->has_normal) {
+            double facing = vec3_dot(prepared->normal,vec3_scale(result.direction,-1.0));
+            if (source->emissionProfile == RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED) angular=fmax(0.0,facing);
+            else if (source->emissionProfile == RUNTIME_LIGHT_SOURCE_3D_EMISSION_TWO_SIDED) angular=fabs(facing);
+        }
+        double weight = source->intensity * runtime_direct_light_3d_attenuation(&prepared->light,distance) * angular;
+        if (!isfinite(weight) || weight<=0.0) continue;
+        result.rgb_weight = vec3_scale(source->color,weight);
+        result.target_object_index = source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER ? source->sourceSceneObjectIndex : -1;
+        result.target_triangle_index = source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER ? source->sourceTriangleIndex : -1;
+        samples[q] = result;
+        valid[q] = true;
+    }
+}
+
 static RuntimeRenderTraceCostDirectLightSourceKind3D
 runtime_direct_light_3d_ledger_source_kind(const RuntimeLightSource3D* source) {
     if (!source) return RUNTIME_RENDER_TRACE_COST_DIRECT_LIGHT_SOURCE_UNKNOWN;

@@ -20,4 +20,18 @@ bool RuntimeIncidentLight3D_Sample(const RuntimeLightSource3D* source,
 /* Zero for disabled/unqualified sources; four rectangle strata, one point or
  * four legacy sphere-proxy samples. Physical radiometry is rectangle-only. */
 int RuntimeIncidentLight3D_SampleCount(const RuntimeLightSource3D* source);
+/* Per-ray immutable snapshot; never retained across scene/frame changes. Only
+ * legacy rectangles use the prepared path. Other models use Sample verbatim. */
+typedef struct {
+    RuntimeLightSource3D source;
+    RuntimeLight3D light;
+    Vec3 axis_u, axis_v, normal;
+    bool has_normal;
+    int count;
+} RuntimeIncidentLight3DPreparedSource;
+void RuntimeIncidentLight3D_Prepare(const RuntimeLightSource3D* source,
+    RuntimeIncidentLight3DPreparedSource* prepared);
+void RuntimeIncidentLight3D_SamplePrepared(const RuntimeIncidentLight3DPreparedSource* prepared,
+    Vec3 receiver_position, const RuntimeNative3DSamplingContext* sampling,
+    RuntimeIncidentLight3DSample samples[4], bool valid[4]);
 #endif
