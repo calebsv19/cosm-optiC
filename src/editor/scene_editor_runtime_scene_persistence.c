@@ -392,6 +392,8 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
         json_object_object_add(entry,
                                "emissive_strength",
                                json_object_new_double(sceneSettings.sceneObjects[i].emissiveStrength));
+        if (sceneSettings.sceneObjects[i].emissiveVisualProxy)
+            json_object_object_add(entry, "emissive_visual_proxy", json_object_new_boolean(true));
         {
             char manifest_path[RUNTIME_MATERIAL_AUTHORED_TEXTURE_PATH_CAPACITY];
             char binding_mode[RUNTIME_MATERIAL_AUTHORED_TEXTURE_MODE_CAPACITY];

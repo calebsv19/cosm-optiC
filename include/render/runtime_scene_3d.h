@@ -168,6 +168,7 @@ typedef struct {
     bool hasTransparentSurfaces;
     bool hasEmissiveSurfaces;
     bool hasUnresolvedSurfaces;
+    bool hasVisualEmissionProxies;
 } RuntimeScene3DMaterialFlags;
 
 typedef struct {
@@ -189,6 +190,7 @@ typedef struct {
     bool hasTransmissionSurfaces;
     bool hasLightingExtinctionVolume;
     bool hasLightingScatterVolume;
+    bool hasVisualEmissionProxies;
     bool emissiveLightSetValid;
     bool canUseOpaqueNoVolumeVisibilityFastPath;
     bool canSkipEmissionSupport;

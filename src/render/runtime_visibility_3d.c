@@ -152,6 +152,7 @@ static bool runtime_visibility_3d_can_use_opaque_fast_path(const RuntimeScene3D*
     }
     if (!scene->materialFlags.valid) return false;
     if (scene->materialFlags.hasTransparentSurfaces ||
+        scene->materialFlags.hasVisualEmissionProxies ||
         scene->materialFlags.hasUnresolvedSurfaces) {
         return false;
     }
@@ -296,6 +297,17 @@ static RuntimeVisibility3DTransmittance runtime_visibility_3d_trace_transmittanc
                                                      target_scene_object_index,
                                                      target_triangle_index)) {
             return transmittance;
+        }
+        if (RuntimeMaterialPayload3D_IsVisualEmissionProxy(blocker_hit.sceneObjectIndex)) {
+            remaining_distance -= blocker_hit.t;
+            current_ray = RuntimeRay3D_MakeOffset(blocker_hit.position,
+                HitInfo3D_OffsetNormal(&blocker_hit), ray_dir, length_epsilon);
+            skip_count += 1;
+            /* A bounded proxy walk must never leak light past an unvisited
+             * real blocker when the traversal budget is exhausted. */
+            if (skip_count >= kRuntimeVisibility3DMaxTransparentSurfaceSkips)
+                return runtime_visibility_3d_zero_transmittance();
+            continue;
         }
         if (!RuntimeMaterialPayload3D_ResolveFromHit(&blocker_hit, &payload)) {
             return runtime_visibility_3d_zero_transmittance();

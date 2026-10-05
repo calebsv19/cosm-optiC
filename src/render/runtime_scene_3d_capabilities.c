@@ -37,6 +37,7 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
     for (int i = 0; i < MAX_OBJECTS; ++i) {
         RuntimeMaterialPayload3D payload = {0};
         if (!seen[i]) continue;
+        if (RuntimeMaterialPayload3D_IsVisualEmissionProxy(i)) capabilities.hasVisualEmissionProxies = true;
         if (!RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(i, &payload) ||
             !payload.valid) {
             scene->objectMaterialSummaries[i].resolved = false;
@@ -71,6 +72,7 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
         capabilities.valid &&
         !capabilities.hasTransparentSurfaces &&
         !capabilities.hasUnresolvedSurfaces &&
+        !capabilities.hasVisualEmissionProxies &&
         !capabilities.hasLightingExtinctionVolume;
     capabilities.canSkipEmissionSupport =
         !capabilities.hasEmissiveSurfaces &&
@@ -86,6 +88,7 @@ void RuntimeScene3D_RefreshCapabilities(RuntimeScene3D* scene) {
     flags.hasTransparentSurfaces = capabilities.hasTransparentSurfaces;
     flags.hasEmissiveSurfaces = capabilities.hasEmissiveSurfaces;
     flags.hasUnresolvedSurfaces = capabilities.hasUnresolvedSurfaces;
+    flags.hasVisualEmissionProxies = capabilities.hasVisualEmissionProxies;
     RuntimeLightSet3D_RemoveOrigin(&scene->lightSet,
                                    RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER);
     if (RuntimeEmissiveLightSet3D_BuildForScene(&scene->emissiveLightSet, scene)) {

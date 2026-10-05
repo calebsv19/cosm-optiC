@@ -23,6 +23,11 @@ static bool runtime_material_payload_3d_valid_scene_object_index(int scene_objec
            scene_object_index < sceneSettings.objectCount;
 }
 
+bool RuntimeMaterialPayload3D_IsVisualEmissionProxy(int scene_object_index) {
+    return runtime_material_payload_3d_valid_scene_object_index(scene_object_index) &&
+           sceneSettings.sceneObjects[scene_object_index].emissiveVisualProxy;
+}
+
 static int runtime_material_payload_3d_clamp_material_id(int material_id) {
     int material_count = MaterialManagerCount();
     int default_id = MaterialManagerDefaultId();

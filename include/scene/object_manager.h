@@ -33,6 +33,7 @@ typedef struct {
     double reflectivity;   // 0 (matte) .. 1 (mirror)
     double roughness;      // 0 (sharp) .. 1 (diffuse)
     double emissiveStrength; // Emissive-material strength multiplier (0.0 to 1.0)
+    bool emissiveVisualProxy; // Visible emission only; no source registration or direct-light blocking.
     int textureId;         // Procedural texture selector
     double textureOffsetU; // Per-triangle procedural texture pan, U axis
     double textureOffsetV; // Per-triangle procedural texture pan, V axis

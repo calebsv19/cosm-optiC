@@ -270,6 +270,8 @@ bool SaveSceneConfigChecked(void) {
         json_object_object_add(jsonObj, "reflectivity", json_object_new_double(obj->reflectivity));
         json_object_object_add(jsonObj, "roughness", json_object_new_double(obj->roughness));
         json_object_object_add(jsonObj, "emissiveStrength", json_object_new_double(obj->emissiveStrength));
+        if (obj->emissiveVisualProxy)
+            json_object_object_add(jsonObj, "emissiveVisualProxy", json_object_new_boolean(true));
         json_object_object_add(jsonObj, "textureId", json_object_new_int(obj->textureId));
         json_object_object_add(jsonObj, "textureOffsetU", json_object_new_double(obj->textureOffsetU));
         json_object_object_add(jsonObj, "textureOffsetV", json_object_new_double(obj->textureOffsetV));
@@ -487,7 +489,7 @@ static void LoadCameraConfig(struct json_object* config) {
 
 void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
     struct json_object *texture, *color, *opacity, *alpha, *transparency, *reflectivity, *roughness,
-        *emissiveStrength, *textureId, *textureOffsetU, *textureOffsetV, *textureScale,
+        *emissiveStrength, *emissiveVisualProxy, *textureId, *textureOffsetU, *textureOffsetV, *textureScale,
         *textureStrength, *texturePatternMode, *textureCoverage, *textureGrain, *textureEdgeSoftness,
         *textureContrast, *textureFlow, *textureColorDepth, *textureSurfaceDamage, *textureSeed,
         *materialId, *glassTransportOverride, *glassTransmission, *glassIor,
@@ -546,6 +548,8 @@ void LoadObjectProperties(struct json_object* obj, SceneObject* sceneObject) {
         sceneObject->emissiveStrength = 0.0;
     }
 
+    sceneObject->emissiveVisualProxy = json_object_object_get_ex(obj, "emissiveVisualProxy", &emissiveVisualProxy) &&
+        json_object_is_type(emissiveVisualProxy, json_type_boolean) && json_object_get_boolean(emissiveVisualProxy);
     if (json_object_object_get_ex(obj, "textureId", &textureId)) {
         sceneObject->textureId = json_object_get_int(textureId);
     } else {

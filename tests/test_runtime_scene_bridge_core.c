@@ -1,5 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <json-c/json.h>
+#include "editor/scene_editor_runtime_scene_persistence.h"
 
 #include "app/animation.h"
 #include "core_scene_compile.h"
@@ -1245,6 +1248,46 @@ static int test_runtime_scene_bridge_authoring_overlay_default_emissive_strength
     return 0;
 }
 
+static int test_runtime_scene_bridge_visual_emission_proxy(void) {
+    const char* prefix="{\"schema_family\":\"codework_scene\",\"schema_variant\":\"scene_runtime_v1\","
+        "\"schema_version\":1,\"scene_id\":\"visual_proxy\",\"unit_system\":\"meters\",\"world_scale\":1,"
+        "\"space_mode_default\":\"3d\",\"objects\":[{\"object_id\":\"flame\",\"object_type\":\"plane_primitive\","
+        "\"primitive\":{\"kind\":\"plane_primitive\",\"width\":1,\"height\":1}}],"
+        "\"extensions\":{\"ray_tracing\":{\"authoring\":{\"object_materials\":[{\"object_id\":\"flame\","
+        "\"material_id\":4,\"emissive_strength\":0.7,\"emissive_visual_proxy\":";
+    char json[2048];RuntimeSceneBridgePreflight result={0};
+    snprintf(json,sizeof(json),"%strue}]}}}}",prefix);
+    assert_true("visual_proxy_import",runtime_scene_bridge_apply_json(json,&result));
+    assert_true("visual_proxy_import_role",sceneSettings.sceneObjects[0].emissiveVisualProxy);
+    assert_close("visual_proxy_import_bounded_strength",sceneSettings.sceneObjects[0].emissiveStrength,.7,0);
+    AnimationConfig saved_anim=animSettings;
+    char path[128],diag[256];snprintf(path,sizeof(path),"/tmp/optic_visual_proxy_%ld.json",(long)getpid());
+    assert_true("visual_proxy_save_fixture",write_text_file(path,json));
+    animSettings.sceneSource=SCENE_SOURCE_RUNTIME_SCENE;
+    snprintf(animSettings.runtimeScenePath,sizeof(animSettings.runtimeScenePath),"%s",path);
+    assert_true("visual_proxy_persist_authoring",SceneEditorRuntimeScenePersistAuthoring(diag,sizeof(diag)));
+    sceneSettings.sceneObjects[0].emissiveVisualProxy=false;
+    assert_true("visual_proxy_reopen",runtime_scene_bridge_apply_file(path,&result));
+    assert_true("visual_proxy_reopen_role",sceneSettings.sceneObjects[0].emissiveVisualProxy);
+    unlink(path);animSettings=saved_anim;
+    snprintf(json,sizeof(json),"%sfalse}]}}}}",prefix);
+    assert_true("visual_proxy_false_import",runtime_scene_bridge_apply_json(json,&result));
+    assert_true("visual_proxy_false_resets",!sceneSettings.sceneObjects[0].emissiveVisualProxy);
+    snprintf(json,sizeof(json),"%s\"true\"}]}}}}",prefix);
+    assert_true("visual_proxy_rejects_string",!runtime_scene_bridge_preflight_json(json,&result));
+    snprintf(json,sizeof(json),"%strue}]}}}}",prefix);
+    json_object* root=json_tokener_parse(json),*objects=NULL;
+    json_object_object_get_ex(root,"objects",&objects);
+    json_object_object_add(json_object_array_get_idx(objects,0),"object_type",json_object_new_string("box"));
+    assert_true("visual_proxy_rejects_nonplane",!runtime_scene_bridge_preflight_json(json_object_to_json_string(root),&result));
+    json_object_put(root);
+    SceneObject config_object={0};root=json_tokener_parse("{\"emissiveVisualProxy\":true}");
+    LoadObjectProperties(root,&config_object);assert_true("visual_proxy_config_import",config_object.emissiveVisualProxy);
+    json_object_put(root);root=json_tokener_parse("{}");LoadObjectProperties(root,&config_object);
+    assert_true("visual_proxy_config_default_reset",!config_object.emissiveVisualProxy);json_object_put(root);
+    return 0;
+}
+
 static int test_runtime_scene_bridge_apply_compile_output(void) {
     const char *authoring_json =
         "{"
@@ -1413,6 +1456,7 @@ int run_test_runtime_scene_bridge_core_tests(void) {
     test_runtime_scene_bridge_authoring_overlay_environment_settings_preserved();
     test_runtime_scene_bridge_authoring_overlay_procedural_texture_shorthand_preserved();
     test_runtime_scene_bridge_authoring_overlay_default_emissive_strength_zero();
+    test_runtime_scene_bridge_visual_emission_proxy();
     test_runtime_scene_bridge_apply_compile_output();
     test_runtime_scene_bridge_apply_file_can_defer_mesh_assets();
     test_runtime_scene_bridge_deferred_mesh_missing_sidecar_keeps_runtime_scene();

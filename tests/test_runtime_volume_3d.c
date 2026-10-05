@@ -3,6 +3,9 @@
 #include "render/runtime_incident_light_3d.h"
 #include "render/runtime_visibility_3d.h"
 #include "render/runtime_native_3d_render_internal_host.h"
+#include "render/runtime_material_payload_3d.h"
+#include "config/config_manager.h"
+#include "material/material_manager.h"
 
 #include "render/runtime_caustic_volume_cache_3d.h"
 #include "render/runtime_scene_3d.h"
@@ -696,6 +699,51 @@ static int test_runtime_volume_3d_registered_lights(void) {
     return 0;
 }
 
+static int test_runtime_volume_3d_visual_emission_proxy(void) {
+    SceneConfig saved_scene = sceneSettings;
+    memset(&sceneSettings,0,sizeof(sceneSettings));
+    MaterialManagerResetDefaults();sceneSettings.objectCount=2;
+    sceneSettings.sceneObjects[0].material_id=MATERIAL_PRESET_EMISSIVE;
+    sceneSettings.sceneObjects[0].emissiveStrength=.7;
+    sceneSettings.sceneObjects[0].emissiveVisualProxy=true;
+    sceneSettings.sceneObjects[0].alpha=1;sceneSettings.sceneObjects[0].color=0xFF8000;
+    sceneSettings.sceneObjects[1].material_id=MATERIAL_PRESET_DEFAULT;
+    sceneSettings.sceneObjects[1].alpha=1;sceneSettings.sceneObjects[1].color=0xFFFFFF;
+    RuntimeScene3D scene;RuntimeScene3D_Init(&scene);
+    RuntimeRay3D_SetTraceRoute(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+    scene.triangleMesh.triangles=calloc(2,sizeof(RuntimeTriangle3D));
+    scene.triangleMesh.triangleCount=2;scene.triangleMesh.triangleCapacity=2;
+    for(int q=0;q<2;++q) {
+        RuntimeTriangle3D* t=&scene.triangleMesh.triangles[q];double y=-1-.5*q;
+        t->p0=vec3(-2,y,-2);t->p1=vec3(2,y,-2);t->p2=vec3(0,y,2);
+        t->normal=vec3(0,1,0);t->twoSided=true;t->sceneObjectIndex=q;t->primitiveIndex=-1;
+    }
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    assert_true("visual_proxy_not_registered",scene.emissiveLightSet.candidateCount==0 && scene.lightSet.lightCount==0);
+    RuntimeMaterialPayload3D payload;
+    assert_true("visual_proxy_retains_camera_emission",RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0,&payload) && payload.emissive>0 && payload.transparency==0);
+    RuntimeVisibility3DTransmittance t=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(&scene,vec3(0,0,0),vec3(0,-1.25,0),-1,-1);
+    assert_close("visual_proxy_does_not_self_block",t.r,1,0);
+    t=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(&scene,vec3(0,0,0),vec3(0,-2,0),-1,-1);
+    assert_true("real_blocker_behind_proxy_retained",t.r==0);
+    scene.triangleMesh.triangleCount=1;
+    scene.volume.enabled=true;
+    RuntimeVolumeGrid3D_Configure(&scene.volume.grid,1,2,8,2,0,0,.02,vec3(-.5,-4,-.5),.5,vec3(0,0,1),0);
+    RuntimeVolumeAttachment3D_AllocateOwnedChannels(&scene.volume,RUNTIME_VOLUME_3D_CHANNEL_DENSITY);
+    for(uint64_t q=0;q<scene.volume.grid.cellCount;++q)scene.volume.channels.density[q]=.25f;
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    t=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(&scene,vec3(0,0,0),vec3(0,-2,0),-1,-1);
+    assert_true("visual_proxy_smoke_extinction_retained",t.r>0 && t.r<1);
+    scene.volume.enabled=false;
+    sceneSettings.sceneObjects[0].emissiveVisualProxy=false;
+    RuntimeScene3D_RefreshCapabilities(&scene);
+    assert_true("ordinary_emitter_registration_restored",scene.emissiveLightSet.candidateCount==1);
+    t=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(&scene,vec3(0,0,0),vec3(0,-1.25,0),-1,-1);
+    assert_true("ordinary_panel_occlusion_restored",t.r==0);
+    RuntimeScene3D_Free(&scene);RuntimeRay3D_ResetTraceRouteForTests();sceneSettings=saved_scene;
+    return 0;
+}
+
 static int test_runtime_volume_3d_prepared_incident_parity(void) {
     RuntimeLightSource3D source;
     RuntimeLightSource3D_Init(&source);
@@ -833,6 +881,7 @@ int run_test_runtime_volume_3d_tests(void) {
     test_runtime_volume_3d_registered_lights();
     test_runtime_volume_3d_incident_and_visibility();
     test_runtime_volume_3d_prepared_incident_parity();
+    test_runtime_volume_3d_visual_emission_proxy();
     test_runtime_volume_3d_defaults();
     test_runtime_volume_3d_configures_truthful_layout();
     test_runtime_volume_3d_allocates_owned_channels();

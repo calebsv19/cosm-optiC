@@ -388,7 +388,8 @@ bool RuntimeEmissiveLightSet3D_BuildForScene(RuntimeEmissiveLightSet3D* set,
         RuntimeMaterialPayload3D payload = {0};
         double area = 0.0;
 
-        if (triangle->sceneObjectIndex < 0) {
+        if (triangle->sceneObjectIndex < 0 ||
+            RuntimeMaterialPayload3D_IsVisualEmissionProxy(triangle->sceneObjectIndex)) {
             continue;
         }
         if (!RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(triangle->sceneObjectIndex,

@@ -42,6 +42,8 @@ typedef struct {
 } RuntimeMaterialPayload3D;
 
 void RuntimeMaterialPayload3D_Reset(RuntimeMaterialPayload3D* payload);
+/* Object-local stylized visual geometry role, independent of camera opacity. */
+bool RuntimeMaterialPayload3D_IsVisualEmissionProxy(int scene_object_index);
 
 bool RuntimeMaterialPayload3D_ApplySurfaceEval(
     const RuntimeMaterialSurfaceEval* surface_eval,

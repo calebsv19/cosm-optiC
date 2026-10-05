@@ -370,6 +370,7 @@ static bool runtime_emissive_direct_3d_shade_hit_full_scan_fallback(
         double area = 0.0;
 
         if (triangle->sceneObjectIndex < 0 ||
+            RuntimeMaterialPayload3D_IsVisualEmissionProxy(triangle->sceneObjectIndex) ||
             triangle->sceneObjectIndex == hit->sceneObjectIndex) {
             continue;
         }

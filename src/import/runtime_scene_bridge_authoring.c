@@ -785,6 +785,9 @@ static void apply_ray_authoring_object_materials(json_object *authoring) {
                     sceneSettings.sceneObjects[scene_index].emissiveStrength =
                         fmax(0.0, fmin(1.0, emissive_strength));
                 }
+                bool visual_proxy = false;
+                runtime_scene_bridge_parse_bool_field(entry, "emissive_visual_proxy", &visual_proxy);
+                sceneSettings.sceneObjects[scene_index].emissiveVisualProxy = visual_proxy;
                 if (glass_transport_override ||
                     has_glass_transmission ||
                     has_glass_ior ||

@@ -25,6 +25,7 @@ static void InitDefaultMaterial(SceneObject* obj) {
     obj->reflectivity = 0.35;
     obj->roughness = 0.65;
     obj->emissiveStrength = 0.0;
+    obj->emissiveVisualProxy = false;
     obj->textureId = 0;
     obj->textureOffsetU = 0.0;
     obj->textureOffsetV = 0.0;

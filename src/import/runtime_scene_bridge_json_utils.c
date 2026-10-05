@@ -157,6 +157,38 @@ int runtime_scene_bridge_color_from_material_albedo(json_object *materials_array
     return 0xFFFFFF;
 }
 
+static bool runtime_scene_bridge_validate_visual_proxies(json_object* root,
+    RuntimeSceneBridgePreflight* preflight) {
+    json_object *extensions=NULL,*ray=NULL,*authoring=NULL,*rows=NULL,*objects=NULL;
+    if (!json_object_object_get_ex(root,"extensions",&extensions) ||
+        !json_object_object_get_ex(extensions,"ray_tracing",&ray) ||
+        !json_object_object_get_ex(ray,"authoring",&authoring) ||
+        !json_object_object_get_ex(authoring,"object_materials",&rows) ||
+        !json_object_is_type(rows,json_type_array)) return true;
+    json_object_object_get_ex(root,"objects",&objects);
+    for(size_t i=0;i<json_object_array_length(rows);++i) {
+        json_object *entry=json_object_array_get_idx(rows,i),*role=NULL;
+        if(!json_object_object_get_ex(entry,"emissive_visual_proxy",&role))continue;
+        if(!json_object_is_type(role,json_type_boolean)) {
+            runtime_scene_bridge_preflight_diag(preflight,"emissive_visual_proxy must be boolean");return false;
+        }
+        if(!json_object_get_boolean(role))continue;
+        const char* id=runtime_scene_bridge_json_string_field_or_null(entry,"object_id");
+        bool plane=false;
+        if(id && objects && json_object_is_type(objects,json_type_array))
+            for(size_t q=0;q<json_object_array_length(objects);++q) {
+                json_object* object=json_object_array_get_idx(objects,q);
+                const char* object_id=runtime_scene_bridge_json_string_field_or_null(object,"object_id");
+                const char* type=runtime_scene_bridge_json_string_field_or_null(object,"object_type");
+                if(object_id && strcmp(id,object_id)==0 && type && strcmp(type,"plane_primitive")==0)plane=true;
+            }
+        if(!plane) {
+            runtime_scene_bridge_preflight_diag(preflight,"emissive_visual_proxy requires a plane_primitive object");return false;
+        }
+    }
+    return true;
+}
+
 bool runtime_scene_bridge_validate_root(json_object *root, RuntimeSceneBridgePreflight *out_preflight) {
     json_object *schema_family = NULL;
     json_object *schema_variant = NULL;
@@ -235,6 +267,7 @@ bool runtime_scene_bridge_validate_root(json_object *root, RuntimeSceneBridgePre
     if (!RuntimeSurfaceMappingValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
     if (!RuntimeSceneTimelineValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
     if (!SceneAtmosphereValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
+    if (!runtime_scene_bridge_validate_visual_proxies(root,out_preflight)) return false;
     out_preflight->valid_contract = true;
     runtime_scene_bridge_preflight_diag(out_preflight, "ok");
     return true;
