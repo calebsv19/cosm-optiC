@@ -14,6 +14,7 @@
 #endif
 
 #include "render/runtime_visibility_3d.h"
+#include "render/runtime_incident_light_3d.h"
 #include "render/runtime_native_3d_sampling.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_volume_3d_sampling.h"
@@ -288,7 +289,8 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
         return result;
     }
     if (!has_caustic_source &&
-        (!scene->hasLight || !(scene->light.intensity > 0.0))) {
+        (scene->lightSet.lightCount > 0 ? RuntimeLightSet3D_EnabledCount(&scene->lightSet) == 0
+          : (!scene->hasLight || !(scene->light.intensity > 0.0)))) {
         return result;
     }
     if (!RuntimeVolume3D_ClipRayToBounds(&scene->volume,
@@ -325,7 +327,39 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
 
         if (density > 0.0) {
             const double scatter_probability = 1.0 - exp(-density * segment_length);
-            if (scene->hasLight && scene->light.intensity > 0.0) {
+            if (scene->lightSet.lightCount > 0) {
+                for (int light_index = 0; light_index < scene->lightSet.lightCount; ++light_index) {
+                    const RuntimeLightSource3D* source = &scene->lightSet.lights[light_index];
+                    if (!source->enabled) continue;
+                    result.registrySourceEvaluations += 1;
+                    int count = RuntimeIncidentLight3D_SampleCount(source);
+                    if (count == 0) { result.registryUnsupportedSources += 1; continue; }
+                    for (int light_sample = 0; light_sample < count; ++light_sample) {
+                        RuntimeIncidentLight3DSample incident;
+                        if (!RuntimeIncidentLight3D_Sample(source, sample_position,
+                            light_sample, sampling, &incident)) continue;
+                        double phase = runtime_volume_3d_scatter_phase_henyey_greenstein(
+                            vec3_dot(vec3_scale(ray->direction, -1.0),
+                                     vec3_scale(incident.direction, -1.0)),
+                            kRuntimeVolume3DScatterAnisotropy);
+                        RuntimeVisibility3DTransmittance visibility =
+                            RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(scene,
+                                sample_position, incident.position,
+                                incident.target_object_index, incident.target_triangle_index);
+                        result.registryVisibilityRays += 1;
+                        double scale = camera_transmittance * scatter_probability *
+                            kRuntimeVolume3DScatterStrength * gRuntimeVolume3DScatterStrengthGain * phase / count;
+                        double direct_r = scale * incident.rgb_weight.x * visibility.r * gRuntimeVolume3DScatterTintR;
+                        double direct_g = scale * incident.rgb_weight.y * visibility.g * gRuntimeVolume3DScatterTintG;
+                        double direct_b = scale * incident.rgb_weight.z * visibility.b * gRuntimeVolume3DScatterTintB;
+                        if (direct_r + direct_g + direct_b <= 0.0) continue;
+                        result.radianceR += direct_r; result.radianceG += direct_g; result.radianceB += direct_b;
+                        result.directRadianceR += direct_r; result.directRadianceG += direct_g; result.directRadianceB += direct_b;
+                        result.directSampleCount += 1; result.sampleCount += 1;
+                        result.registryContributingSamples += 1;
+                    }
+                }
+            } else if (scene->hasLight && scene->light.intensity > 0.0) {
                 const Vec3 light_position =
                     runtime_volume_3d_scatter_resolve_light_position(&scene->light,
                                                                      &sample_position,
@@ -373,6 +407,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                     result.directRadianceB += direct_b;
                     result.directSampleCount += 1;
                     result.sampleCount += 1;
+                    result.compatibilityFallbackSamples += 1;
                 }
             }
 

@@ -18,6 +18,12 @@ typedef struct {
     double radianceG;
     double radianceB;
     int directSampleCount;
+    /* Raw work totals, not temporal averages or unique source counts. */
+    uint64_t registrySourceEvaluations;
+    uint64_t registryContributingSamples;
+    uint64_t registryVisibilityRays;
+    uint64_t registryUnsupportedSources;
+    uint64_t compatibilityFallbackSamples;
     double directRadiance;
     double directRadianceR;
     double directRadianceG;

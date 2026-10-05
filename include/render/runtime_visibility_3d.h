@@ -42,6 +42,11 @@ RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceToLightRGB(
     Vec3 surface_normal,
     Vec3 light_position);
 
+/* No fabricated surface normal/source hit at a volume sample. */
+RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(
+    const RuntimeScene3D* scene, Vec3 source_position, Vec3 target_position,
+    int target_scene_object_index, int target_triangle_index);
+
 double RuntimeVisibility3D_TransmittanceToLight(const RuntimeScene3D* scene,
                                                 Vec3 surface_position,
                                                 Vec3 surface_normal,

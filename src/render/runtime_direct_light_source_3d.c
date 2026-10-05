@@ -2,6 +2,7 @@
 
 #include "render/runtime_direct_light_internal_3d.h"
 #include "render/runtime_light_radiometry_3d.h"
+#include "render/runtime_incident_light_3d.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -545,6 +546,72 @@ static RuntimeLight3D runtime_direct_light_3d_compat_light_from_source(
     light.falloffDistance = source->falloffDistance;
     light.falloffMode = source->falloffMode;
     return light;
+}
+
+int RuntimeIncidentLight3D_SampleCount(const RuntimeLightSource3D* source) {
+    if (!source || !source->enabled || source->meshAreaSamplerOnly ||
+        source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE ||
+        source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_DISK ||
+        (source->radiometryMode == RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE &&
+         source->kind != RUNTIME_LIGHT_SOURCE_3D_KIND_RECT)) return 0;
+    if (source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) return 4;
+    return source->radius > 1e-9 ? 4 : 1;
+}
+
+bool RuntimeIncidentLight3D_Sample(const RuntimeLightSource3D* source,
+    Vec3 receiver_position, int sample_index,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeIncidentLight3DSample* out_sample) {
+    RuntimeIncidentLight3DSample result = {0};
+    HitInfo3D reference = {0};
+    RuntimeLight3D light;
+    Vec3 to_light;
+    double distance FISICS_DIM(length) FISICS_UNIT(meter);
+    double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = 1e-9;
+    double weight;
+    if (!out_sample) return false;
+    *out_sample = result;
+    if (sample_index < 0 || sample_index >= RuntimeIncidentLight3D_SampleCount(source)) return false;
+    reference.position = receiver_position;
+    reference.triangleIndex = -1;
+    reference.primitiveIndex = -1;
+    light = runtime_direct_light_3d_compat_light_from_source(source);
+    to_light = vec3_sub(source->position, receiver_position);
+    if (source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) {
+        /* Four uniform rectangular strata; no disk population bias in an area integral. */
+        double u = (sample_index % 2 + 0.5) * 0.5;
+        double v = (sample_index / 2 + 0.5) * 0.5;
+        if (sampling) {
+            RuntimeNative3DSampling_Stratified2D(sampling,
+                runtime_direct_light_3d_seed_from_light_hit(&light, &reference),
+                4, sample_index, (uint32_t)(sample_index + 31), &u, &v);
+        }
+        Vec3 axis_u = runtime_direct_light_3d_safe_axis(source->axisU, vec3(1, 0, 0));
+        Vec3 axis_v = runtime_direct_light_3d_safe_axis(source->axisV, vec3(0, 0, 1));
+        result.position = vec3_add(source->position,
+            vec3_add(vec3_scale(axis_u, (u - 0.5) * source->width),
+                     vec3_scale(axis_v, (v - 0.5) * source->height)));
+    } else {
+        result.position = runtime_direct_light_3d_sample_light_source_position(source,
+            &light, vec3_normalize(to_light), &reference, sample_index, sampling);
+    }
+    to_light = vec3_sub(result.position, receiver_position);
+    distance = vec3_length(to_light);
+    if (!isfinite(distance) || distance <= epsilon) return false;
+    result.distance = distance;
+    result.direction = vec3_scale(to_light, 1.0 / distance);
+    weight = source->radiometryMode == RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE
+        ? RuntimeLightRadiometry3D_RectIrradianceScale(source, result.direction, distance)
+        : source->intensity * runtime_direct_light_3d_attenuation(&light, distance) *
+            runtime_direct_light_3d_emission_profile_weight(source, result.direction);
+    if (!isfinite(weight) || weight <= 0.0) return false;
+    result.rgb_weight = vec3_scale(source->color, weight);
+    result.target_object_index = source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER
+        ? source->sourceSceneObjectIndex : -1;
+    result.target_triangle_index = source->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER
+        ? source->sourceTriangleIndex : -1;
+    *out_sample = result;
+    return true;
 }
 
 static RuntimeRenderTraceCostDirectLightSourceKind3D

@@ -91,6 +91,11 @@ dump-sema-runtime-direct-light-3d:
 	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_direct_light_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_direct_light_3d.o" > "$(RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT)" 2>&1
 	@echo "Wrote semantic dump to $(RAY_TRACING_DIRECT_LIGHT_UNITS_SEMA_OUTPUT)"
 
+dump-sema-runtime-incident-light-3d:
+	@mkdir -p "$(call program_build_dir_for,fisics)"
+	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_direct_light_source_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_direct_light_source_3d.o" > "$(call program_build_dir_for,fisics)/runtime_direct_light_source_3d.sema.txt" 2>&1
+	@echo "Wrote incident-light semantic dump"
+
 dump-sema-runtime-visibility-3d:
 	@mkdir -p "$(call program_build_dir_for,fisics)"
 	$(FISICS_ENV) $(FISICS_BIN) --overlay=$(FISICS_OVERLAY) $(FISICS_CFLAGS) --dump-sema -c "src/render/runtime_visibility_3d.c" -o "$(call program_build_dir_for,fisics)/runtime_visibility_3d.o" > "$(RAY_TRACING_VISIBILITY_UNITS_SEMA_OUTPUT)" 2>&1

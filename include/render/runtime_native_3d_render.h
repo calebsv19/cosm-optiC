@@ -119,7 +119,12 @@ typedef struct {
     int causticSurfaceCacheDepositRejectedCount;
     int causticSurfaceCacheSampleLookupCount;
     int causticSurfaceCacheSampleContributingCount;
-    int volumeScatterDirectSampleCount;
+    uint64_t volumeScatterDirectSampleCount;
+    uint64_t volumeRegistrySourceEvaluations;
+    uint64_t volumeRegistryContributingSamples;
+    uint64_t volumeRegistryVisibilityRays;
+    uint64_t volumeRegistryUnsupportedSources;
+    uint64_t volumeCompatibilityFallbackSamples;
     int causticVolumeScatterSampleCount;
     int causticVolumeScatterContributingSampleCount;
     int causticVolumeScatterContributingPixelCount;

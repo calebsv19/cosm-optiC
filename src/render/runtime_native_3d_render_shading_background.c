@@ -205,6 +205,12 @@ void runtime_native_3d_render_record_scatter_stats(
     int pixel_y) {
     if (!io_stats || !scatter) return;
     io_stats->volumeScatterDirectSampleCount += scatter->directSampleCount;
+    io_stats->volumeRegistrySourceEvaluations += scatter->registrySourceEvaluations;
+    io_stats->volumeRegistryContributingSamples += scatter->registryContributingSamples;
+    io_stats->volumeRegistryVisibilityRays += scatter->registryVisibilityRays;
+    io_stats->volumeRegistryUnsupportedSources += scatter->registryUnsupportedSources;
+    io_stats->volumeCompatibilityFallbackSamples += scatter->compatibilityFallbackSamples;
+
     io_stats->totalDirectVolumeScatterRadianceR += scatter->directRadianceR;
     io_stats->totalDirectVolumeScatterRadianceG += scatter->directRadianceG;
     io_stats->totalDirectVolumeScatterRadianceB += scatter->directRadianceB;

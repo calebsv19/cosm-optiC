@@ -622,3 +622,16 @@ bool RuntimeVisibility3D_HasLineOfSightFromHit(const RuntimeScene3D* scene,
                                                     surface_hit,
                                                     light) > kRuntimeVisibility3DMinimumTransmittance;
 }
+
+RuntimeVisibility3DTransmittance RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(
+    const RuntimeScene3D* scene, Vec3 source_position, Vec3 target_position,
+    int target_scene_object_index, int target_triangle_index) {
+    Vec3 offset = vec3_sub(target_position, source_position);
+    double distance FISICS_DIM(length) FISICS_UNIT(meter) = vec3_length(offset);
+    double epsilon FISICS_DIM(length) FISICS_UNIT(meter) = kRuntimeVisibility3DEpsilon;
+    if (!scene || !isfinite(distance)) return runtime_visibility_3d_zero_transmittance();
+    if (distance <= epsilon) return RuntimeVisibility3D_UnitTransmittance();
+    Vec3 direction = vec3_scale(offset, 1.0 / distance);
+    return runtime_visibility_3d_trace_transmittance_rgb(scene, NULL, source_position,
+        direction, direction, distance, target_scene_object_index, target_triangle_index);
+}

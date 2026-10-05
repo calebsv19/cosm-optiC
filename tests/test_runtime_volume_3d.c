@@ -1,4 +1,8 @@
 #include <string.h>
+#include <stdlib.h>
+#include "render/runtime_incident_light_3d.h"
+#include "render/runtime_visibility_3d.h"
+#include "render/runtime_native_3d_render_internal_host.h"
 
 #include "render/runtime_caustic_volume_cache_3d.h"
 #include "render/runtime_scene_3d.h"
@@ -649,6 +653,90 @@ static int test_runtime_volume_3d_caustic_gain_is_separate_from_direct_gain(void
     return 0;
 }
 
+
+static int test_runtime_volume_3d_registered_lights(void) {
+    RuntimeScene3D scene;
+    RuntimeLightSource3D light;
+    Ray3D ray = {0};
+    RuntimeScene3D_Init(&scene);
+    scene.volume.enabled = true;
+    scene.volume.affectsLighting = true;
+    assert_true("registry_volume_config", RuntimeVolumeGrid3D_Configure(&scene.volume.grid,
+        1, 2, 8, 2, 0, 0, .02, vec3(-.5,-4,-.5), .5, vec3(0,0,1), 0));
+    assert_true("registry_volume_allocate", RuntimeVolumeAttachment3D_AllocateOwnedChannels(
+        &scene.volume, RUNTIME_VOLUME_3D_CHANNEL_DENSITY | RUNTIME_VOLUME_3D_CHANNEL_SOLID_MASK));
+    for (uint64_t q=0; q<scene.volume.grid.cellCount; ++q) scene.volume.channels.density[q]=1;
+    ray.origin=vec3(0,0,0); ray.direction=vec3(0,-1,0);
+    RuntimeLightSource3D_Init(&light);
+    light.kind=RUNTIME_LIGHT_SOURCE_3D_KIND_POINT;
+    light.origin=RUNTIME_LIGHT_SOURCE_3D_ORIGIN_AUTHORED_LIGHT;
+    light.enabled=true; light.radius=0; light.position=vec3(1.5,-4,.5);
+    light.color=vec3(1,0,0); light.intensity=14; light.falloffDistance=10;
+    light.falloffMode=FORWARD_FALLOFF_MODE_LINEAR;
+    assert_true("registry_append_red", RuntimeLightSet3D_Append(&scene.lightSet,&light,NULL));
+    RuntimeVolume3DScatterResult red=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
+    assert_true("registry_works_without_compat_light", red.radianceR>0 && red.radianceG==0 && red.radianceB==0);
+    assert_true("registry_diagnostics", red.registrySourceEvaluations>0 && red.registryContributingSamples>0 && red.registryVisibilityRays>0 && red.compatibilityFallbackSamples==0);
+    scene.hasLight=true; scene.light.position=light.position; scene.light.intensity=100000;
+    RuntimeVolume3DScatterResult no_duplicate=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
+    assert_close("registry_no_compat_duplicate", no_duplicate.radianceR,red.radianceR,1e-12);
+    light.color=vec3(0,1,0);
+    assert_true("registry_append_green", RuntimeLightSet3D_Append(&scene.lightSet,&light,NULL));
+    RuntimeVolume3DScatterResult sum=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
+    assert_close("registry_additive_red",sum.radianceR,red.radianceR,1e-12);
+    assert_close("registry_additive_green",sum.radianceG,red.radianceR,1e-12);
+    scene.lightSet.lights[0].enabled=false; scene.lightSet.lights[1].enabled=false;
+    RuntimeVolume3DScatterResult disabled=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
+    assert_true("registry_disabled_does_not_fall_back",disabled.radiance==0 && disabled.compatibilityFallbackSamples==0);
+    scene.lightSet.lights[0].enabled=true;
+    scene.lightSet.lights[0].kind=RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE;
+    RuntimeVolume3DScatterResult unsupported=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
+    assert_true("registry_mesh_explicitly_unqualified",unsupported.registryUnsupportedSources>0 && unsupported.radiance==0);
+    RuntimeScene3D_Free(&scene);
+    return 0;
+}
+
+static int test_runtime_volume_3d_incident_and_visibility(void) {
+    RuntimeLightSource3D light; RuntimeIncidentLight3DSample sample;
+    RuntimeLightSource3D_Init(&light);
+    light.enabled=true; light.kind=RUNTIME_LIGHT_SOURCE_3D_KIND_RECT;
+    light.origin=RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER;
+    light.sourceSceneObjectIndex=5; light.sourceTriangleIndex=7;
+    light.position=vec3(0,-2,0); light.axisU=vec3(1,0,0); light.axisV=vec3(0,0,1);
+    light.normal=vec3(0,1,0); light.width=.4;light.height=.8;
+    light.color=vec3(1,.5,.25);light.intensity=10;light.falloffDistance=10;
+    light.emissionProfile=RUNTIME_LIGHT_SOURCE_3D_EMISSION_ONE_SIDED;
+    Vec3 centroid=vec3(0,0,0);
+    for(int q=0;q<4;++q) {
+        assert_true("incident_rect_front",RuntimeIncidentLight3D_Sample(&light,vec3(0,0,0),q,NULL,&sample));
+        centroid=vec3_add(centroid,sample.position);
+        assert_close("incident_rgb_ratio",sample.rgb_weight.x*.5,sample.rgb_weight.y,1e-12);
+        assert_true("incident_target_identity",sample.target_object_index==5 && sample.target_triangle_index==7);
+    }
+    assert_close("incident_rect_centroid_x",centroid.x/4,0,1e-12);
+    assert_close("incident_rect_centroid_z",centroid.z/4,0,1e-12);
+    light.normal=vec3(0,-1,0);
+    assert_true("incident_rect_back_dark",!RuntimeIncidentLight3D_Sample(&light,vec3(0,0,0),0,NULL,&sample));
+    light.normal=vec3(0,1,0);light.radiometryMode=RUNTIME_LIGHT_RADIOMETRY_LAMBERTIAN_RADIANCE;light.radiance=2;
+    assert_true("incident_physical_rect",RuntimeIncidentLight3D_Sample(&light,vec3(0,0,0),0,NULL,&sample));
+    double weight=sample.rgb_weight.x;light.radiance=4;
+    assert_true("incident_physical_rect_double",RuntimeIncidentLight3D_Sample(&light,vec3(0,0,0),0,NULL,&sample));
+    assert_close("incident_radiance_linear",sample.rgb_weight.x,2*weight,1e-12);
+    RuntimeScene3D scene;RuntimeScene3D_Init(&scene);
+    RuntimeRay3D_SetTraceRoute(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+    RuntimeVisibility3DTransmittance visible=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(&scene,vec3(0,0,0),vec3(0,-2,0),5,0);
+    assert_close("volume_point_empty_visible",visible.r,1,1e-12);
+    scene.triangleMesh.triangles=calloc(1,sizeof(RuntimeTriangle3D));scene.triangleMesh.triangleCount=1;scene.triangleMesh.triangleCapacity=1;
+    RuntimeTriangle3D* t=scene.triangleMesh.triangles;t->p0=vec3(-2,-1,-2);t->p1=vec3(2,-1,-2);t->p2=vec3(0,-1,2);
+    t->normal=vec3(0,1,0);t->twoSided=true;t->sceneObjectIndex=8;t->primitiveIndex=-1;
+    RuntimeVisibility3DTransmittance blocked=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(&scene,vec3(0,0,0),vec3(0,-2,0),5,0);
+    assert_true("volume_point_other_object_blocks",blocked.r==0 && blocked.g==0 && blocked.b==0);
+    t->sceneObjectIndex=5;
+    RuntimeVisibility3DTransmittance target=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(&scene,vec3(0,0,0),vec3(0,-2,0),5,0);
+    assert_close("volume_point_emitter_identity_not_self_blocked",target.r,1,1e-12);
+    RuntimeScene3D_Free(&scene);RuntimeRay3D_ResetTraceRouteForTests();return 0;
+}
+
 int run_test_runtime_volume_3d_tests(void) {
     int before = test_support_failures();
 
@@ -665,6 +753,17 @@ int run_test_runtime_volume_3d_tests(void) {
     assert_true("opacity_tuning_restored",RuntimeVolume3DMaterial_GetTuning().opacity==0.25);
     RuntimeVolume3DMaterial_ResetTuning();
 
+    RuntimeNative3DRenderStats total={0},part={0};
+    total.volumeScatterDirectSampleCount=UINT64_C(3000000001);
+    part.volumeScatterDirectSampleCount=UINT64_C(3000000000);
+    total.volumeRegistryVisibilityRays=UINT64_C(6000000001);
+    RuntimeNative3DRenderStats_Accumulate(&total,&part);
+    assert_true("volume_counter_above_int_max",total.volumeScatterDirectSampleCount==UINT64_C(6000000001));
+    runtime_native_3d_render_stats_normalize_temporal(&total,2);
+    assert_true("volume_counter_temporal_rounding_wide",total.volumeScatterDirectSampleCount==UINT64_C(3000000001));
+    assert_true("volume_raw_work_not_normalized",total.volumeRegistryVisibilityRays==UINT64_C(6000000001));
+    test_runtime_volume_3d_registered_lights();
+    test_runtime_volume_3d_incident_and_visibility();
     test_runtime_volume_3d_defaults();
     test_runtime_volume_3d_configures_truthful_layout();
     test_runtime_volume_3d_allocates_owned_channels();

@@ -568,8 +568,13 @@ void ray_tracing_headless_write_render_stats_summary(
             preflight->stats.causticVolumeCacheNonZeroBoundsMaxX,
             preflight->stats.causticVolumeCacheNonZeroBoundsMaxY,
             preflight->stats.causticVolumeCacheNonZeroBoundsMaxZ);
-    fprintf(file, "    \"direct_volume_scatter_samples\": %d,\n",
-            preflight->stats.volumeScatterDirectSampleCount);
+    fprintf(file, "    \"volume_registry_source_evaluations\": %llu,\n", (unsigned long long)preflight->stats.volumeRegistrySourceEvaluations);
+    fprintf(file, "    \"volume_registry_contributing_samples\": %llu,\n", (unsigned long long)preflight->stats.volumeRegistryContributingSamples);
+    fprintf(file, "    \"volume_registry_visibility_rays\": %llu,\n", (unsigned long long)preflight->stats.volumeRegistryVisibilityRays);
+    fprintf(file, "    \"volume_registry_unsupported_sources\": %llu,\n", (unsigned long long)preflight->stats.volumeRegistryUnsupportedSources);
+    fprintf(file, "    \"volume_compatibility_fallback_samples\": %llu,\n", (unsigned long long)preflight->stats.volumeCompatibilityFallbackSamples);
+    fprintf(file, "    \"direct_volume_scatter_samples\": %llu,\n",
+            (unsigned long long)preflight->stats.volumeScatterDirectSampleCount);
     fprintf(file,
             "    \"total_direct_volume_scatter_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
             preflight->stats.totalDirectVolumeScatterRadianceR,

@@ -440,6 +440,12 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
     dst->totalCausticSurfaceRadianceG += src->totalCausticSurfaceRadianceG;
     dst->totalCausticSurfaceRadianceB += src->totalCausticSurfaceRadianceB;
     dst->volumeScatterDirectSampleCount += src->volumeScatterDirectSampleCount;
+    dst->volumeRegistrySourceEvaluations += src->volumeRegistrySourceEvaluations;
+    dst->volumeRegistryContributingSamples += src->volumeRegistryContributingSamples;
+    dst->volumeRegistryVisibilityRays += src->volumeRegistryVisibilityRays;
+    dst->volumeRegistryUnsupportedSources += src->volumeRegistryUnsupportedSources;
+    dst->volumeCompatibilityFallbackSamples += src->volumeCompatibilityFallbackSamples;
+
     dst->totalDirectVolumeScatterRadianceR += src->totalDirectVolumeScatterRadianceR;
     dst->totalDirectVolumeScatterRadianceG += src->totalDirectVolumeScatterRadianceG;
     dst->totalDirectVolumeScatterRadianceB += src->totalDirectVolumeScatterRadianceB;
@@ -1193,8 +1199,12 @@ void runtime_native_3d_render_stats_normalize_temporal(
         runtime_native_3d_render_stats_round_divide(
             stats->causticVolumeScatterContributingPixelCount,
             committed_subpasses);
-    stats->volumeScatterDirectSampleCount = runtime_native_3d_render_stats_round_divide(
-        stats->volumeScatterDirectSampleCount, committed_subpasses);
+    /* Registered lights can exceed INT_MAX across pixels/subpasses. Divide
+     * without a floating conversion or overflow in the rounding addition. */
+    uint64_t volume_divisor = (uint64_t)committed_subpasses;
+    uint64_t volume_remainder = stats->volumeScatterDirectSampleCount % volume_divisor;
+    stats->volumeScatterDirectSampleCount = stats->volumeScatterDirectSampleCount / volume_divisor +
+        (volume_remainder >= (volume_divisor + 1u) / 2u);
     stats->totalDirectVolumeScatterRadianceR /= (double)committed_subpasses;
     stats->totalDirectVolumeScatterRadianceG /= (double)committed_subpasses;
     stats->totalDirectVolumeScatterRadianceB /= (double)committed_subpasses;

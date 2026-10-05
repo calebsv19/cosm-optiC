@@ -752,8 +752,8 @@ void ray_tracing_headless_write_caustic_state_summary(
                 preflight->stats.totalCausticSurfaceRadianceR,
                 preflight->stats.totalCausticSurfaceRadianceG,
                 preflight->stats.totalCausticSurfaceRadianceB);
-        fprintf(file, "      \"volume_scatter_direct_sample_count\": %d,\n",
-                preflight->stats.volumeScatterDirectSampleCount);
+        fprintf(file, "      \"volume_scatter_direct_sample_count\": %llu,\n",
+                (unsigned long long)preflight->stats.volumeScatterDirectSampleCount);
         fprintf(file,
                 "      \"volume_scatter_direct_radiance\": { \"r\": %.9f, \"g\": %.9f, \"b\": %.9f },\n",
                 preflight->stats.totalDirectVolumeScatterRadianceR,
