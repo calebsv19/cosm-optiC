@@ -19,7 +19,7 @@ its volume. Cloud/mist/plume use uniform scale at 40 percent of the largest scen
 span; room haze fits the room dimensions, and floor fog fits the floor footprint
 with a shallow height. Empty scenes use a bounded ten-metre reference region.
 
-There is one attachment. **Replace with static preset** and **Replace atmosphere**
+There is one attachment. **Replace field shape** and **Replace atmosphere**
 preserve existing placement and appearance. Playback resets to static for the new
 source. **Fit volume to scene** is an explicit undoable re-fit for existing
 attachments; opening a scene never resizes it automatically. Imported sparse
