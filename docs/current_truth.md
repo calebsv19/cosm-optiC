@@ -1,3 +1,15 @@
+# October 5, 2026 — bounded Fire render qualification
+
+Main Edit completes exact per-ray incident-source preparation and an optional
+visual-emission plane role, with a matching opt-in GrowthSim omnidirectional
+point-source adapter. Frozen all-source BMPs and work totals match exactly;
+two-repeat means improve 9.68% and 5.39%. Four-view receivers, a real-wall control,
+smoke attachment, persistence and targeted native/units/headless checks pass.
+See [qualification and limits](fire_render_qualification.md). This is local
+source/CLI evidence; installed editor acceptance, calibrated fire physics and
+larger flame/texture/performance work remain open. VERSION and packages are
+unchanged, and existing scene-workflow edits are preserved.
+
 # October 4, 2026 — Aurora completion and archive lifecycle
 
 Main Edit adds `scene_workflow_delivery.py`: terminal completion verification,

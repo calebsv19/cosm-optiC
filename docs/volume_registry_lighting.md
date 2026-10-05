@@ -21,3 +21,12 @@ make dump-sema-runtime-volume-3d-scatter dump-sema-runtime-visibility-3d dump-se
 Focused controls establish colored additive lighting without a compatibility light, disabled lights without fallback, one-sided facing, radiance scaling, symmetric rectangular samples, geometric blockers and endpoint identity. Existing empty-registry white and caustic tests pass. The GrowthSim surface-only control remains pixel-identical after the repair.
 
 The cost is proportional to occupied volume march samples times registered sources times source samples, with geometric and volume visibility for each incident connection. No source truncation is used. A dense many-emitter preview needs measured budgets before high-resolution animation. Light selection, visibility amortization and error-bounded negligible-contribution rejection belong in a separate performance slice with comparison against this all-source reference.
+
+
+## October 5 bounded preparation and visual-proxy extension
+
+`RuntimeIncidentLight3D_Prepare` and `RuntimeIncidentLight3D_SamplePrepared` hoist source invariants within each volume ray and batch legacy rectangle samples. The independent sample helper remains the reference. Set `RAY_TRACING_VOLUME_INCIDENT_REFERENCE=1` to compare reference and prepared paths using the same binary. Preparation is discarded at ray completion; allocation failure uses the original helper. No sources or visibility samples are culled, and no geometry/material/volume/time state persists across rays.
+
+An optional boolean authoring role, `emissive_visual_proxy`, allows a `plane_primitive` to remain camera-visible and emissive while excluding it from material-light registration and direct-light blocking. Default false preserves existing materials. Only designated proxies are skipped; ordinary blockers and volume extinction remain. Runtime authoring and config save/reopen preserve the role. Direct Light and volume scattering are qualified; recursive/photon transport is outside this proof.
+
+The [bounded qualification report](fire_render_qualification.md) records byte-identical all-source benchmarks, final-worker parity, the opt-in GrowthSim point-source adapter, four-view receiver/wall controls, unchanged native smoke clocks and full verification. Two-repeat mean timing improvements are 9.68% and 5.39% at ticks 8 and 32, with substantial local timing variation. Remaining work still scales with occupied march samples, registered sources and per-source samples.

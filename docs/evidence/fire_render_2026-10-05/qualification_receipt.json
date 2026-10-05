@@ -1,0 +1,1345 @@
+{
+  "schema": "optic_fire_bounded_review/v1",
+  "source_base": "58d0b5c3fd6867d171a68cc7a6d68199f6a09351",
+  "source_commits": [
+    "3809ff5",
+    "534b3c6"
+  ],
+  "growth_source_commit": "c6d1878",
+  "frozen_inputs": {
+    "inputs/frame-008/scene_runtime.json": {
+      "sha256": "895da64adc837fd5eba8069a4a13f01f3988462f36a807e0aacfba07b43c7287",
+      "reference_sha256": "895da64adc837fd5eba8069a4a13f01f3988462f36a807e0aacfba07b43c7287"
+    },
+    "inputs/frame-008/manifest.json": {
+      "sha256": "0279d194e078263b3298abb9fa9d01d21b91357ca837c0bc66480244f24c5d02",
+      "reference_sha256": "0279d194e078263b3298abb9fa9d01d21b91357ca837c0bc66480244f24c5d02"
+    },
+    "inputs/frame-008/frame_000000.vf3d": {
+      "sha256": "d5f2156a35ac687ca4aa084da3f1ed092ae12d466752102240157198796772cd",
+      "reference_sha256": "d5f2156a35ac687ca4aa084da3f1ed092ae12d466752102240157198796772cd"
+    },
+    "inputs/frame-008/render_request.json": {
+      "sha256": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940",
+      "reference_sha256": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940"
+    },
+    "inputs/frame-008/source_bundle.json": {
+      "sha256": "c2fed6d8e4ed735f85016f2f1bbcb1c1d9aba3e5fc13efed6f5b1622858783d0",
+      "reference_sha256": "c2fed6d8e4ed735f85016f2f1bbcb1c1d9aba3e5fc13efed6f5b1622858783d0"
+    },
+    "inputs/frame-008/appearance.json": {
+      "sha256": "a5cca3b4e8c6844430dd8b28b74e0376f3c64fda7cb36e2a2b96e77e0c1226b3",
+      "reference_sha256": "a5cca3b4e8c6844430dd8b28b74e0376f3c64fda7cb36e2a2b96e77e0c1226b3"
+    },
+    "inputs/frame-032/scene_runtime.json": {
+      "sha256": "d6fbcfc67cf14307aee99057101b7c7132a9621b8a3cdf33e059bbe223db1f49",
+      "reference_sha256": "d6fbcfc67cf14307aee99057101b7c7132a9621b8a3cdf33e059bbe223db1f49"
+    },
+    "inputs/frame-032/manifest.json": {
+      "sha256": "a30293774cddeb0ad646b6da25ffb9c74153f487a48ad862563c66e1f181264f",
+      "reference_sha256": "a30293774cddeb0ad646b6da25ffb9c74153f487a48ad862563c66e1f181264f"
+    },
+    "inputs/frame-032/frame_000000.vf3d": {
+      "sha256": "9e50fc409acb0d8d8e420f8f495ea99d2d30ff5de1e49f003791714cfde1727c",
+      "reference_sha256": "9e50fc409acb0d8d8e420f8f495ea99d2d30ff5de1e49f003791714cfde1727c"
+    },
+    "inputs/frame-032/render_request.json": {
+      "sha256": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940",
+      "reference_sha256": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940"
+    },
+    "inputs/frame-032/source_bundle.json": {
+      "sha256": "051054366cc639298f1cc9cc87dab82278c20cc37d229e1d0fde3cd094386d12",
+      "reference_sha256": "051054366cc639298f1cc9cc87dab82278c20cc37d229e1d0fde3cd094386d12"
+    },
+    "inputs/frame-032/appearance.json": {
+      "sha256": "6a9b2125b3f55d94f41a7f557a507b16e2259dd96f7500ebac3e68597584997b",
+      "reference_sha256": "6a9b2125b3f55d94f41a7f557a507b16e2259dd96f7500ebac3e68597584997b"
+    },
+    "inputs/frame-100/scene_runtime.json": {
+      "sha256": "a5f1661164993851351f386c376ee188c2d7fb1ba4184b246687c62cd600e562",
+      "reference_sha256": "a5f1661164993851351f386c376ee188c2d7fb1ba4184b246687c62cd600e562"
+    },
+    "inputs/frame-100/manifest.json": {
+      "sha256": "0f4b87a00dd41ac6a4035b5bfa47a5edefb5db2a6bd20dc334ed15597477467f",
+      "reference_sha256": "0f4b87a00dd41ac6a4035b5bfa47a5edefb5db2a6bd20dc334ed15597477467f"
+    },
+    "inputs/frame-100/frame_000000.vf3d": {
+      "sha256": "70199acf09743e09b5dd3e5aa057755df8ea8b67aaceb03968f3e82ec5f20bf2",
+      "reference_sha256": "70199acf09743e09b5dd3e5aa057755df8ea8b67aaceb03968f3e82ec5f20bf2"
+    },
+    "inputs/frame-100/render_request.json": {
+      "sha256": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940",
+      "reference_sha256": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940"
+    },
+    "inputs/frame-100/source_bundle.json": {
+      "sha256": "82c78880944c8f42bc0d09ae4257797a5f27cf0f268eba278e241382f8ab1907",
+      "reference_sha256": "82c78880944c8f42bc0d09ae4257797a5f27cf0f268eba278e241382f8ab1907"
+    },
+    "inputs/frame-100/appearance.json": {
+      "sha256": "1ca934c1545d99099567b729bad42a0af245e2915cc2e1b474f7aaea14fbbec8",
+      "reference_sha256": "1ca934c1545d99099567b729bad42a0af245e2915cc2e1b474f7aaea14fbbec8"
+    },
+    "docs/scene_workflow.md": {
+      "sha256": "d71c1639de92794c55a53cee5ee84b482a63a2d0e48ff983b1be5f7681c0f2da",
+      "preserve": true
+    },
+    "tests/test_scene_workflow.py": {
+      "sha256": "58cb79b39ee78875c4e1bc5638aa1450cabd80e22ea6f27e23f1d9d3599deb97",
+      "preserve": true
+    },
+    "tools/scene_workflow_bundle.py": {
+      "sha256": "ac3f565a6ebbd22ea64566d697f93eae70fc0f2f3ba6078a302db93f14da35d1",
+      "preserve": true
+    },
+    "tools/scene_workflow_dependencies.py": {
+      "sha256": "dbcef46baf53ec07238ed1fd943f35a32d6d8385524529f6a2a4bfe166178cf3",
+      "preserve": true
+    }
+  },
+  "benchmarks": [
+    {
+      "mode": "reference",
+      "tick": 8,
+      "repeat": 1,
+      "wall_seconds": 117.93736216705292,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "dc8dee12288e6f02af893ff752d7ad39ceb3736f4d0b3474b1fe3202c5912ae7",
+      "timing": {
+        "runtime_scene_apply_ms": 60.476,
+        "runtime_scene_preflight_ms": 5.817,
+        "native_prepare_frame_ms": 1.441,
+        "object_audit_ms": 12.429,
+        "render_frames_ms": 117501.396,
+        "render_trace_ms": 117501.393,
+        "frame_analysis_ms": 0.041,
+        "frame_write_ms": 0.574,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 117587.35,
+        "mesh_asset_loader": {
+          "total_ms": 5.946,
+          "scene_read_ms": 0.087,
+          "scene_parse_ms": 1.041,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.513,
+          "primitive_seed_ms": 0.134,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.139899371,
+        "emissive_weight": 6.918230588,
+        "emissive_proxy_radius_max": 0.059113443,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-reference-008-1/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10370409,
+        "volume_registry_contributing_samples": 15164853,
+        "volume_registry_visibility_rays": 19933684,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    },
+    {
+      "mode": "prepared",
+      "tick": 8,
+      "repeat": 1,
+      "wall_seconds": 97.51908304262906,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "dc8dee12288e6f02af893ff752d7ad39ceb3736f4d0b3474b1fe3202c5912ae7",
+      "timing": {
+        "runtime_scene_apply_ms": 23.406,
+        "runtime_scene_preflight_ms": 6.699,
+        "native_prepare_frame_ms": 1.208,
+        "object_audit_ms": 13.273,
+        "render_frames_ms": 97279.854,
+        "render_trace_ms": 97279.85,
+        "frame_analysis_ms": 0.037,
+        "frame_write_ms": 1.302,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 97330.367,
+        "mesh_asset_loader": {
+          "total_ms": 3.054,
+          "scene_read_ms": 0.065,
+          "scene_parse_ms": 0.925,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.442,
+          "primitive_seed_ms": 0.127,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.139899371,
+        "emissive_weight": 6.918230588,
+        "emissive_proxy_radius_max": 0.059113443,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-prepared-008-1/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10370409,
+        "volume_registry_contributing_samples": 15164853,
+        "volume_registry_visibility_rays": 19933684,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    },
+    {
+      "mode": "prepared",
+      "tick": 8,
+      "repeat": 2,
+      "wall_seconds": 124.39562624972314,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "dc8dee12288e6f02af893ff752d7ad39ceb3736f4d0b3474b1fe3202c5912ae7",
+      "timing": {
+        "runtime_scene_apply_ms": 27.783,
+        "runtime_scene_preflight_ms": 5.753,
+        "native_prepare_frame_ms": 1.193,
+        "object_audit_ms": 11.092,
+        "render_frames_ms": 124163.776,
+        "render_trace_ms": 124163.771,
+        "frame_analysis_ms": 0.104,
+        "frame_write_ms": 1.4,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 124215.48,
+        "mesh_asset_loader": {
+          "total_ms": 3.729,
+          "scene_read_ms": 0.05,
+          "scene_parse_ms": 0.894,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.401,
+          "primitive_seed_ms": 0.12,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.139899371,
+        "emissive_weight": 6.918230588,
+        "emissive_proxy_radius_max": 0.059113443,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-prepared-008-2/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10370409,
+        "volume_registry_contributing_samples": 15164853,
+        "volume_registry_visibility_rays": 19933684,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    },
+    {
+      "mode": "reference",
+      "tick": 8,
+      "repeat": 2,
+      "wall_seconds": 127.74827774986625,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "dc8dee12288e6f02af893ff752d7ad39ceb3736f4d0b3474b1fe3202c5912ae7",
+      "timing": {
+        "runtime_scene_apply_ms": 44.47,
+        "runtime_scene_preflight_ms": 7.01,
+        "native_prepare_frame_ms": 1.372,
+        "object_audit_ms": 16.737,
+        "render_frames_ms": 127415.817,
+        "render_trace_ms": 127415.811,
+        "frame_analysis_ms": 0.041,
+        "frame_write_ms": 1.288,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 127491.955,
+        "mesh_asset_loader": {
+          "total_ms": 8.722,
+          "scene_read_ms": 0.335,
+          "scene_parse_ms": 2.427,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.465,
+          "primitive_seed_ms": 0.14,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.139899371,
+        "emissive_weight": 6.918230588,
+        "emissive_proxy_radius_max": 0.059113443,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-reference-008-2/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10370409,
+        "volume_registry_contributing_samples": 15164853,
+        "volume_registry_visibility_rays": 19933684,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    },
+    {
+      "mode": "reference",
+      "tick": 32,
+      "repeat": 1,
+      "wall_seconds": 121.52528179064393,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "e7382cba02d46806a45461492be965fa906ed072f1494cfb34ac2cf2bed21c52",
+      "timing": {
+        "runtime_scene_apply_ms": 30.976,
+        "runtime_scene_preflight_ms": 8.805,
+        "native_prepare_frame_ms": 1.701,
+        "object_audit_ms": 11.64,
+        "render_frames_ms": 121273.011,
+        "render_trace_ms": 121273.008,
+        "frame_analysis_ms": 0.04,
+        "frame_write_ms": 0.873,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 121332.089,
+        "mesh_asset_loader": {
+          "total_ms": 2.277,
+          "scene_read_ms": 0.028,
+          "scene_parse_ms": 0.931,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.522,
+          "primitive_seed_ms": 0.121,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.068330915,
+        "emissive_weight": 5.830259249,
+        "emissive_proxy_radius_max": 0.037165172,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-reference-032-1/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10386383,
+        "volume_registry_contributing_samples": 17927096,
+        "volume_registry_visibility_rays": 21226692,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    },
+    {
+      "mode": "prepared",
+      "tick": 32,
+      "repeat": 1,
+      "wall_seconds": 113.31561950035393,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "e7382cba02d46806a45461492be965fa906ed072f1494cfb34ac2cf2bed21c52",
+      "timing": {
+        "runtime_scene_apply_ms": 21.881,
+        "runtime_scene_preflight_ms": 6.306,
+        "native_prepare_frame_ms": 1.239,
+        "object_audit_ms": 11.377,
+        "render_frames_ms": 113059.925,
+        "render_trace_ms": 113059.925,
+        "frame_analysis_ms": 0.043,
+        "frame_write_ms": 0.869,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 113106.818,
+        "mesh_asset_loader": {
+          "total_ms": 2.751,
+          "scene_read_ms": 0.035,
+          "scene_parse_ms": 0.943,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.401,
+          "primitive_seed_ms": 0.121,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.068330915,
+        "emissive_weight": 5.830259249,
+        "emissive_proxy_radius_max": 0.037165172,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-prepared-032-1/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10386383,
+        "volume_registry_contributing_samples": 17927096,
+        "volume_registry_visibility_rays": 21226692,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    },
+    {
+      "mode": "prepared",
+      "tick": 32,
+      "repeat": 2,
+      "wall_seconds": 104.14753775019199,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "e7382cba02d46806a45461492be965fa906ed072f1494cfb34ac2cf2bed21c52",
+      "timing": {
+        "runtime_scene_apply_ms": 20.827,
+        "runtime_scene_preflight_ms": 5.51,
+        "native_prepare_frame_ms": 1.285,
+        "object_audit_ms": 11.898,
+        "render_frames_ms": 103897.875,
+        "render_trace_ms": 103897.871,
+        "frame_analysis_ms": 0.038,
+        "frame_write_ms": 1.328,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 103944.834,
+        "mesh_asset_loader": {
+          "total_ms": 2.233,
+          "scene_read_ms": 0.034,
+          "scene_parse_ms": 0.982,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.42,
+          "primitive_seed_ms": 0.124,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.068330915,
+        "emissive_weight": 5.830259249,
+        "emissive_proxy_radius_max": 0.037165172,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-prepared-032-2/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10386383,
+        "volume_registry_contributing_samples": 17927096,
+        "volume_registry_visibility_rays": 21226692,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    },
+    {
+      "mode": "reference",
+      "tick": 32,
+      "repeat": 2,
+      "wall_seconds": 108.31979825068265,
+      "worker_sha256": "a43dadb597a5b7e967d1051a4fcff65a6d999b153393bbbebc805793eca71fed",
+      "frame_sha256": "e7382cba02d46806a45461492be965fa906ed072f1494cfb34ac2cf2bed21c52",
+      "timing": {
+        "runtime_scene_apply_ms": 23.63,
+        "runtime_scene_preflight_ms": 5.205,
+        "native_prepare_frame_ms": 1.016,
+        "object_audit_ms": 10.252,
+        "render_frames_ms": 108098.707,
+        "render_trace_ms": 108098.706,
+        "frame_analysis_ms": 0.037,
+        "frame_write_ms": 0.677,
+        "video_encode_ms": 0.0,
+        "total_run_ms": 108144.702,
+        "mesh_asset_loader": {
+          "total_ms": 3.707,
+          "scene_read_ms": 0.044,
+          "scene_parse_ms": 0.913,
+          "sidecar_path_resolution_ms": 0.0,
+          "asset_load_total_ms": 0.0,
+          "asset_runtime_document_load_ms": 0.0,
+          "asset_persistent_cache_mode": "read_write",
+          "asset_persistent_cache_read_ms": 0.0,
+          "asset_persistent_cache_write_ms": 0.0,
+          "asset_document_copy_ms": 0.0,
+          "asset_load_calls": 0,
+          "asset_cache_hits": 0,
+          "asset_cache_misses": 0,
+          "asset_persistent_cache_hits": 0,
+          "asset_persistent_cache_misses": 0,
+          "asset_persistent_cache_writes": 0,
+          "asset_persistent_cache_invalidations": 0,
+          "asset_persistent_cache_refreshes": 0,
+          "loaded_assets": 0,
+          "loaded_instances": 0,
+          "loaded_asset_bytes": 0,
+          "loaded_vertices": 0,
+          "loaded_triangles": 0
+        },
+        "scene_builder": {
+          "total_ms": 0.36,
+          "primitive_seed_ms": 0.107,
+          "mesh_append_total_ms": 0.0,
+          "mesh_append_reserve_ms": 0.0,
+          "mesh_append_expand_ms": 0.0,
+          "bvh_rebuild_wall_ms": 0.0,
+          "mesh_append_calls": 1,
+          "mesh_append_assets": 0,
+          "mesh_append_instances": 0,
+          "mesh_append_triangles_expected": 0,
+          "mesh_append_triangles_appended": 0
+        }
+      },
+      "registered_lights": {
+        "light_count": 49,
+        "enabled_count": 49,
+        "shape_counts": {
+          "point": 0,
+          "sphere": 1,
+          "disk": 0,
+          "rect": 48,
+          "mesh_emissive": 0
+        },
+        "source_counts": {
+          "authored": 1,
+          "compatibility": 0,
+          "material_emitter": 48
+        },
+        "material_emitter_enabled_count": 48,
+        "mesh_area_sampler_only_count": 0,
+        "emission_profile_counts": {
+          "omni": 1,
+          "one_sided": 48,
+          "two_sided": 0
+        },
+        "radiometry_counts": {
+          "legacy_intensity": 49,
+          "lambertian_radiance": 0
+        },
+        "emissive_candidate_count": 96,
+        "emissive_area": 0.068330915,
+        "emissive_weight": 5.830259249,
+        "emissive_proxy_radius_max": 0.037165172,
+        "first_position": [
+          0.0,
+          -60.0,
+          55.0
+        ],
+        "first_radius": 0.01,
+        "first_intensity": 0.0001,
+        "first_radiance": 0.0,
+        "first_total_emitted_power": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "first_color": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "summary": "/Users/calebsv/Desktop/CodeWork/_worktrees/ray_tracing_main_edit/build/fire-bounded-20261005/prepared-reference-032-2/summary.json",
+      "stats": {
+        "volume_registry_source_evaluations": 10386383,
+        "volume_registry_contributing_samples": 17927096,
+        "volume_registry_visibility_rays": 21226692,
+        "volume_registry_unsupported_sources": 0,
+        "volume_compatibility_fallback_samples": 0
+      }
+    }
+  ],
+  "timing_means": {
+    "8": {
+      "reference_mean": 122.84281995845959,
+      "prepared_mean": 110.9573546461761,
+      "improvement_percent": 9.675343920224776
+    },
+    "32": {
+      "reference_mean": 114.92254002066329,
+      "prepared_mean": 108.73157862527296,
+      "improvement_percent": 5.387073235831008
+    }
+  },
+  "final_worker_parity": {
+    "worker_sha256": "f6611d9cb66e412b48e671e9e424cd37f7fc4f5d48c7a3ac4575d8b9044f423f",
+    "frame_sha256": "e12f5858f141287e474c736537b3b3e69f9b70b21020d0d4bbf50ac60c066573",
+    "byte_identical": true,
+    "counters": {
+      "volume_registry_source_evaluations": 2592835,
+      "volume_registry_contributing_samples": 3790319,
+      "volume_registry_visibility_rays": 4986424,
+      "volume_registry_unsupported_sources": 0
+    },
+    "width": 64,
+    "height": 48,
+    "qualification": "final source parity only; timings excluded because qualification renders ran concurrently"
+  },
+  "multidirectional": {
+    "coverage": [
+      {
+        "opaque_wall_receiver": {
+          "changed_pixels": 0,
+          "mean_rgb_delta": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "pixels": 63
+        },
+        "receivers": [
+          {
+            "changed_pixels": 140,
+            "mean_rgb_delta": [
+              115.72142857142858,
+              88.42142857142858,
+              44.128571428571426
+            ],
+            "pixels": 140
+          },
+          {
+            "changed_pixels": 24,
+            "mean_rgb_delta": [
+              85.91666666666667,
+              60.416666666666664,
+              26.25
+            ],
+            "pixels": 24
+          },
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              104.34920634920636,
+              77.31746031746032,
+              36.46031746031746
+            ],
+            "pixels": 63
+          },
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              113.92063492063492,
+              86.68253968253968,
+              42.682539682539684
+            ],
+            "pixels": 63
+          }
+        ],
+        "tick": 8,
+        "upper_half_volume_changed_pixels": 1755,
+        "view": "front",
+        "volume_changed_pixels": 7907
+      },
+      {
+        "receivers": [
+          {
+            "changed_pixels": 24,
+            "mean_rgb_delta": [
+              117.125,
+              89.91666666666667,
+              45.125
+            ],
+            "pixels": 24
+          },
+          {
+            "changed_pixels": 140,
+            "mean_rgb_delta": [
+              84.72857142857143,
+              59.41428571428571,
+              25.692857142857143
+            ],
+            "pixels": 140
+          },
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              103.47619047619048,
+              76.41269841269842,
+              35.904761904761905
+            ],
+            "pixels": 63
+          },
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              113.73015873015873,
+              86.4920634920635,
+              42.682539682539684
+            ],
+            "pixels": 63
+          }
+        ],
+        "tick": 8,
+        "upper_half_volume_changed_pixels": 1944,
+        "view": "back",
+        "volume_changed_pixels": 8096
+      },
+      {
+        "receivers": [
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              115.65079365079364,
+              88.3015873015873,
+              44.0
+            ],
+            "pixels": 63
+          },
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              84.12698412698413,
+              58.95238095238095,
+              25.365079365079364
+            ],
+            "pixels": 63
+          },
+          {
+            "changed_pixels": 140,
+            "mean_rgb_delta": [
+              104.05714285714286,
+              76.95714285714286,
+              36.27857142857143
+            ],
+            "pixels": 140
+          },
+          {
+            "changed_pixels": 24,
+            "mean_rgb_delta": [
+              115.375,
+              88.0,
+              43.666666666666664
+            ],
+            "pixels": 24
+          }
+        ],
+        "tick": 8,
+        "upper_half_volume_changed_pixels": 1955,
+        "view": "left",
+        "volume_changed_pixels": 8106
+      },
+      {
+        "receivers": [
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              115.60317460317461,
+              88.38095238095238,
+              44.07936507936508
+            ],
+            "pixels": 63
+          },
+          {
+            "changed_pixels": 63,
+            "mean_rgb_delta": [
+              85.17460317460318,
+              59.74603174603175,
+              25.904761904761905
+            ],
+            "pixels": 63
+          },
+          {
+            "changed_pixels": 24,
+            "mean_rgb_delta": [
+              105.375,
+              78.29166666666667,
+              37.166666666666664
+            ],
+            "pixels": 24
+          },
+          {
+            "changed_pixels": 140,
+            "mean_rgb_delta": [
+              113.92857142857143,
+              86.70714285714286,
+              42.82142857142857
+            ],
+            "pixels": 140
+          }
+        ],
+        "tick": 8,
+        "upper_half_volume_changed_pixels": 1841,
+        "view": "right",
+        "volume_changed_pixels": 7991
+      },
+      {
+        "tick": 32,
+        "upper_half_volume_changed_pixels": 6572,
+        "view": "front",
+        "volume_changed_pixels": 11935
+      },
+      {
+        "tick": 32,
+        "upper_half_volume_changed_pixels": 6120,
+        "view": "back",
+        "volume_changed_pixels": 10608
+      },
+      {
+        "tick": 32,
+        "upper_half_volume_changed_pixels": 5735,
+        "view": "left",
+        "volume_changed_pixels": 10764
+      },
+      {
+        "tick": 32,
+        "upper_half_volume_changed_pixels": 5818,
+        "view": "right",
+        "volume_changed_pixels": 10624
+      },
+      {
+        "tick": 100,
+        "upper_half_volume_changed_pixels": 3386,
+        "view": "front",
+        "volume_changed_pixels": 3386
+      },
+      {
+        "tick": 100,
+        "upper_half_volume_changed_pixels": 2939,
+        "view": "back",
+        "volume_changed_pixels": 2939
+      },
+      {
+        "tick": 100,
+        "upper_half_volume_changed_pixels": 2507,
+        "view": "left",
+        "volume_changed_pixels": 2507
+      },
+      {
+        "tick": 100,
+        "upper_half_volume_changed_pixels": 3371,
+        "view": "right",
+        "volume_changed_pixels": 3371
+      }
+    ],
+    "digest": "4b037bedd71777891e511d314dcd3ac8f2fce20e521e04d6e12fe48f674e0746",
+    "evolution": [
+      {
+        "proxy_count": 12,
+        "source_digest": "0b44f12bc41c3c48ef95609ad63fb99210be6ef889fb873a9cde7a05baef0667",
+        "tick": 8,
+        "time_s": 0.4,
+        "total_legacy_intensity": 22.459744417975266,
+        "visible_strength_max": 0.6164871977986277
+      },
+      {
+        "proxy_count": 12,
+        "source_digest": "5f5c7f5216dfed711c8580e3515abedffefa2d9c40df2a1a1e208467ac873b7c",
+        "tick": 32,
+        "time_s": 1.6,
+        "total_legacy_intensity": 2.123491079671479,
+        "visible_strength_max": 0.20980672387240917
+      },
+      {
+        "proxy_count": 0,
+        "source_digest": "80cbc7a48fc324288c722c0adba090d47518bcce01308732c5744ce2ae3c12ad",
+        "tick": 100,
+        "time_s": 5.0,
+        "total_legacy_intensity": 0.0,
+        "visible_strength_max": 0
+      }
+    ],
+    "initial_source_sha256": "e567bff56e3d7669b92e01025758348feed481f54177e9eed71c5aa96165cd5d",
+    "promotion_eligible": false,
+    "qualification": "stylized normalized visual emission and unchanged passive-smoke carriers; synthetic initial flow, zero buoyancy; no calibrated fire-air energetics",
+    "reference_inputs": {
+      "100": {
+        "checkpoint_digest": "4d7c414a7e9394053bf1aa066fab936be447b375f2471a0899d05f060e973dd8",
+        "frame_000000.vf3d": "70199acf09743e09b5dd3e5aa057755df8ea8b67aaceb03968f3e82ec5f20bf2",
+        "manifest.json": "0f4b87a00dd41ac6a4035b5bfa47a5edefb5db2a6bd20dc334ed15597477467f",
+        "render_request.json": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940",
+        "scene_runtime.json": "a5f1661164993851351f386c376ee188c2d7fb1ba4184b246687c62cd600e562",
+        "source_bundle.json": "82c78880944c8f42bc0d09ae4257797a5f27cf0f268eba278e241382f8ab1907"
+      },
+      "32": {
+        "checkpoint_digest": "a937550b94de31b85da08464e5c0c4834c001959999a1a37949c7f508c67cfe4",
+        "frame_000000.vf3d": "9e50fc409acb0d8d8e420f8f495ea99d2d30ff5de1e49f003791714cfde1727c",
+        "manifest.json": "a30293774cddeb0ad646b6da25ffb9c74153f487a48ad862563c66e1f181264f",
+        "render_request.json": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940",
+        "scene_runtime.json": "d6fbcfc67cf14307aee99057101b7c7132a9621b8a3cdf33e059bbe223db1f49",
+        "source_bundle.json": "051054366cc639298f1cc9cc87dab82278c20cc37d229e1d0fde3cd094386d12"
+      },
+      "8": {
+        "checkpoint_digest": "b72feb6bfe8c08d6a00be56b3634f86a97f129c66ff6f30c4459562eb70babd0",
+        "frame_000000.vf3d": "d5f2156a35ac687ca4aa084da3f1ed092ae12d466752102240157198796772cd",
+        "manifest.json": "0279d194e078263b3298abb9fa9d01d21b91357ca837c0bc66480244f24c5d02",
+        "render_request.json": "e72773d5a347a67a54e3618ceaaa4592a4278f25f645b0253ad4e24398eef940",
+        "scene_runtime.json": "895da64adc837fd5eba8069a4a13f01f3988462f36a807e0aacfba07b43c7287",
+        "source_bundle.json": "c2fed6d8e4ed735f85016f2f1bbcb1c1d9aba3e5fc13efed6f5b1622858783d0"
+      }
+    },
+    "render_worker_sha256": "f6611d9cb66e412b48e671e9e424cd37f7fc4f5d48c7a3ac4575d8b9044f423f",
+    "schema": "growth_fire_multidirectional_qualification/v1",
+    "simulators_advanced_by_render": false,
+    "source_model": "up to twelve legacy zero-radius RGB points; per-column (3*burn+.5*ember)*flicker; falloff .45 m is not finite support"
+  },
+  "promotion_eligible": false
+}
