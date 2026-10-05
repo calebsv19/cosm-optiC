@@ -1,8 +1,8 @@
 # Detached numerical gate; explicit header prerequisites avoid stale test code.
 .PHONY: test-scene-atmosphere-attachment test-scene-atmosphere-attachment-sanitize
-ATMOSPHERE_ATTACHMENT_TEST_SRC := tests/scene_atmosphere_attachment_test.c src/app/scene_atmosphere_attachment.c src/animation/timeline_clock.c
+ATMOSPHERE_ATTACHMENT_TEST_SRC := tests/scene_atmosphere_attachment_test.c src/app/scene_atmosphere_attachment.c src/app/scene_atmosphere_appearance.c src/animation/timeline_clock.c
 ATMOSPHERE_ATTACHMENT_TEST_FLAGS := -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude $(shell pkg-config --cflags --libs json-c)
-$(BUILD_DIR)/tests/scene_atmosphere_attachment_test: $(ATMOSPHERE_ATTACHMENT_TEST_SRC) include/app/scene_atmosphere_attachment.h include/animation/timeline_clock.h include/animation/timeline_track.h
+$(BUILD_DIR)/tests/scene_atmosphere_attachment_test: $(ATMOSPHERE_ATTACHMENT_TEST_SRC) include/app/scene_atmosphere_appearance.h include/app/scene_atmosphere_attachment.h include/animation/timeline_clock.h include/animation/timeline_track.h
 	@mkdir -p $(dir $@)
 	$(CLANG_CC) $(ATMOSPHERE_ATTACHMENT_TEST_FLAGS) $(ATMOSPHERE_ATTACHMENT_TEST_SRC) -lm -o $@
 test-scene-atmosphere-attachment: $(BUILD_DIR)/tests/scene_atmosphere_attachment_test

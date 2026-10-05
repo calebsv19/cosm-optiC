@@ -43,6 +43,33 @@ Editing pauses timeline playback. The existing transform-handle visibility toggl
 and snapping policy apply. Atmosphere axes use the existing world-axis handles.
 
 Appearance and cache timing remain separate collapsible groups in Scene resources.
+The **Field shape** selector creates/replaces the VF3D density field. The **Light
+cloud**, **Soft mist**, and **Smoke** buttons instead change how the existing field
+renders; they preserve its source, position, size, rotation, playback and visibility.
+The selected appearance is highlighted; manually edited settings read **Custom**.
+New static cloud banks start with Light cloud, plumes with Smoke, and other static
+shapes with Soft mist. Existing attachments keep their saved appearance, including
+when their field shape is replaced.
+
+Expand **Appearance** to edit:
+
+- **Transparency (%)**: 0 keeps the full chosen density; 100 removes both scattering
+  and extinction without removing the attachment. Intermediate values multiply the
+  remapped density, so perceived transparency still depends on volume thickness and
+  lighting. This is not a flat image alpha.
+- **Hue (0–360 degrees)** and **Saturation (%)**: recolor the scattering tint. Hue
+  editing on a neutral tint starts at 35% saturation so the hue change is visible;
+  set saturation to zero for neutral white/grey. Tint brightness is preserved.
+- **Density**: controls the field's density independently of transparency.
+- **Light absorption (darkening)** and **Light scattering (brightness)**: control
+  attenuation and the light scattered toward the camera. Cloud/mist looks use lower
+  absorption than Smoke; their appearance still requires suitable scene lighting.
+
+**Advanced appearance** exposes density gamma, sampling step and direct Tint RGB
+entry. These are art-directed single-scattering looks, not a multiple-scattering
+cloud model or a guarantee of photorealistic clouds. Use Disney V2 renders to judge
+the result; the geometric density guide remains an editing aid.
+
 Click a numeric field, type its new value, then press Enter. XYZ and RGB fields
 accept three comma-separated numbers; Escape cancels. Source FPS accepts an
 integer or exact `N/D` fraction, such as `30000/1001`. Volume placement lives in
@@ -73,6 +100,9 @@ There is one retained attachment under
 `ray_atmosphere_attachment_v1`. Absence preserves the previous legacy source
 selection. A declaration, including a disabled declaration, owns selection and
 prevents a legacy volume from appearing in its place.
+The optional `appearance.opacity` value is in [0,1] and defaults to 1 for old
+scenes. It multiplies density after density-scale/gamma remapping for both scattering
+and extinction. UI, retained JSON and `atmosphere.set` use the same command path.
 
 Manifest IDs are explicit, sorted actual `frame_index` values. They are not array
 positions. Animated playback computes:

@@ -32,6 +32,7 @@ void SceneAtmosphereAttachmentDefaults(SceneAtmosphereAttachment* v) {
     v->source_rate=(TimelineRate){24,1};
     v->density_scale=v->density_gamma=v->scatter_gain=v->step_scale=1;
     v->absorption_gain=0.1;
+    v->opacity=1;
     for(int i=0;i<3;++i) v->tint[i]=v->scale[i]=1;
 }
 bool SceneAtmosphereAttachmentValidate(const SceneAtmosphereAttachment* v,char* d,size_t n) {
@@ -50,6 +51,8 @@ bool SceneAtmosphereAttachmentValidate(const SceneAtmosphereAttachment* v,char* 
         v->timeline_start < -1000000000LL || v->timeline_start > 1000000000LL ||
         v->source_start<0 || v->source_start>1000000000LL) return fail(d,n,"invalid cache rate or frame offset");
     const double values[]={v->density_scale,v->density_gamma,v->absorption_gain,v->scatter_gain,v->step_scale};
+    if(!isfinite(v->opacity) || v->opacity<0 || v->opacity>1)
+        return fail(d,n,"atmosphere opacity must be between 0 and 1");
     const double low[]={0,0.01,0,0,0.01}, high[]={1000,100,1000,1000,100};
     for(size_t i=0;i<5;++i) if(!isfinite(values[i]) || values[i]<low[i] || values[i]>high[i])
         return fail(d,n,"atmosphere appearance value is outside its supported range");
@@ -117,7 +120,7 @@ bool SceneAtmosphereAttachmentParse(json_object* author,SceneAtmosphereAttachmen
         (strcmp(missing,"hold") && strcmp(missing,"error")) ||
         !number(appearance,"density_scale",&v.density_scale) || !number(appearance,"density_gamma",&v.density_gamma) ||
         !number(appearance,"absorption_gain",&v.absorption_gain) || !number(appearance,"scatter_gain",&v.scatter_gain) ||
-        !number(appearance,"step_scale",&v.step_scale) || !vector(appearance,"tint",v.tint) ||
+        !number(appearance,"step_scale",&v.step_scale) || !number(appearance,"opacity",&v.opacity) || !vector(appearance,"tint",v.tint) ||
         !vector(placement,"translation",v.translation) || !vector(placement,"rotation_degrees",v.rotation_degrees) || !vector(placement,"scale",v.scale))
         return fail(d,n,"invalid atmosphere attachment field type or value");
     v.source_rate=(TimelineRate){(uint32_t)rn,(uint32_t)rd};v.missing_is_error=!strcmp(missing,"error");
@@ -151,6 +154,7 @@ json_object* SceneAtmosphereAttachmentToJson(const SceneAtmosphereAttachment* v)
     json_object_object_add(a,"absorption_gain",json_object_new_double(v->absorption_gain));
     json_object_object_add(a,"scatter_gain",json_object_new_double(v->scatter_gain));
     json_object_object_add(a,"step_scale",json_object_new_double(v->step_scale));
+    json_object_object_add(a,"opacity",json_object_new_double(v->opacity));
     json_object_object_add(a,"tint",array(v->tint));json_object_object_add(o,"appearance",a);
     json_object_object_add(t,"translation",array(v->translation));
     json_object_object_add(t,"rotation_degrees",array(v->rotation_degrees));

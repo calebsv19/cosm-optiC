@@ -33,6 +33,18 @@ static void atmosphere_mcp_native(SceneEditor* editor,const char* scene) {
 
 static void atmosphere_control(SceneEditor* editor,const char* name) {
     SceneEditorSessionRuntimeRender(editor);SDL_Rect rect;
+    /* Find controls through the same sidebar scrolling as a normal user. */
+    if(!SceneEditorAtmospherePanelControl(name,&rect)) {
+        SceneEditorPaneLayout layout;assert(SceneEditorGetPaneLayout(&layout));
+        SDL_Event e={0};e.type=SDL_MOUSEWHEEL;e.wheel.windowID=SDL_GetWindowID(editor->window);
+        e.wheel.mouseX=layout.left_content_rect.x+20;e.wheel.mouseY=layout.left_content_rect.y+20;
+        e.wheel.y=100;e.wheel.preciseY=100;SceneEditorSessionRuntimeHandleEvent(editor,&e);
+        SceneEditorSessionRuntimeRender(editor);
+        for(int i=0;i<120 && !SceneEditorAtmospherePanelControl(name,&rect);++i) {
+            e.wheel.y=-10;e.wheel.preciseY=-10;SceneEditorSessionRuntimeHandleEvent(editor,&e);
+            SceneEditorSessionRuntimeRender(editor);
+        }
+    }
     assert(SceneEditorAtmospherePanelControl(name,&rect));click(editor,rect);
     SceneEditorSessionRuntimeRender(editor);
 }

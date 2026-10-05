@@ -52,6 +52,7 @@ void SceneAtmosphereRuntimeApplyTuning(void) {
     RuntimeVolume3DMaterial_SetDensityScale(active.density_scale);
     RuntimeVolume3DMaterial_SetDensityGamma(active.density_gamma);
     RuntimeVolume3DMaterial_SetAbsorptionGain(active.absorption_gain);
+    RuntimeVolume3DMaterial_SetOpacity(active.opacity);
     RuntimeVolume3DScatter_SetStrengthGain(active.scatter_gain);
     RuntimeVolume3DScatter_SetStepScale(active.step_scale);
     RuntimeVolume3DScatter_SetTint(active.tint[0],active.tint[1],active.tint[2]);

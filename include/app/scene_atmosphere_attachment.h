@@ -13,6 +13,7 @@ typedef struct SceneAtmosphereAttachment {
     TimelineRate source_rate;
     int64_t timeline_start, source_start;
     double density_scale, density_gamma, absorption_gain, scatter_gain, step_scale;
+    double opacity; /* [0,1] density multiplier after remapping; legacy default 1. */
     double tint[3], translation[3], rotation_degrees[3], scale[3];
 } SceneAtmosphereAttachment;
 

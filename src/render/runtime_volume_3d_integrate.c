@@ -14,15 +14,17 @@ static double gRuntimeVolume3DDensityScale = 1.0;
 static double gRuntimeVolume3DDensityGamma = 1.0;
 static double gRuntimeVolume3DAbsorptionGain = 1.0;
 static double gRuntimeVolume3DOpacityClamp = kRuntimeVolume3DDefaultOpacityClamp;
+static double gRuntimeVolume3DOpacity = 1.0;
 RuntimeVolume3DMaterialTuning RuntimeVolume3DMaterial_GetTuning(void) {
     return (RuntimeVolume3DMaterialTuning){gRuntimeVolume3DDensityScale,gRuntimeVolume3DDensityGamma,
-        gRuntimeVolume3DAbsorptionGain,gRuntimeVolume3DOpacityClamp};
+        gRuntimeVolume3DAbsorptionGain,gRuntimeVolume3DOpacityClamp,gRuntimeVolume3DOpacity};
 }
 void RuntimeVolume3DMaterial_RestoreTuning(RuntimeVolume3DMaterialTuning t) {
     RuntimeVolume3DMaterial_SetDensityScale(t.density_scale);
     RuntimeVolume3DMaterial_SetDensityGamma(t.density_gamma);
     RuntimeVolume3DMaterial_SetAbsorptionGain(t.absorption_gain);
     RuntimeVolume3DMaterial_SetOpacityClamp(t.opacity_clamp);
+    RuntimeVolume3DMaterial_SetOpacity(t.opacity);
 }
 
 static double runtime_volume_3d_integrate_zero_length(void) {
@@ -58,6 +60,7 @@ void RuntimeVolume3DMaterial_ResetTuning(void) {
     gRuntimeVolume3DDensityGamma = 1.0;
     gRuntimeVolume3DAbsorptionGain = 1.0;
     gRuntimeVolume3DOpacityClamp = kRuntimeVolume3DDefaultOpacityClamp;
+    gRuntimeVolume3DOpacity = 1.0;
 }
 
 void RuntimeVolume3DMaterial_SetDensityScale(double scale) {
@@ -92,6 +95,10 @@ void RuntimeVolume3DMaterial_SetOpacityClamp(double clamp_value) {
     gRuntimeVolume3DOpacityClamp = clamp_value;
 }
 
+void RuntimeVolume3DMaterial_SetOpacity(double opacity) {
+    gRuntimeVolume3DOpacity = isfinite(opacity) && opacity >= 0 && opacity <= 1 ? opacity : 1;
+}
+
 double RuntimeVolume3DMaterial_RemapDensity(double density) {
     double remapped = 0.0;
 
@@ -107,7 +114,7 @@ double RuntimeVolume3DMaterial_RemapDensity(double density) {
     }
     return runtime_volume_3d_integrate_clamp(remapped,
                                              0.0,
-                                             gRuntimeVolume3DOpacityClamp);
+                                             gRuntimeVolume3DOpacityClamp) * gRuntimeVolume3DOpacity;
 }
 
 double RuntimeVolume3DMaterial_ExtinctionDensity(double density) {

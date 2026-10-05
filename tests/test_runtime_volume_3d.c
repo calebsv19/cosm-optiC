@@ -652,6 +652,19 @@ static int test_runtime_volume_3d_caustic_gain_is_separate_from_direct_gain(void
 int run_test_runtime_volume_3d_tests(void) {
     int before = test_support_failures();
 
+    RuntimeVolume3DMaterial_ResetTuning();
+    RuntimeVolume3DMaterial_SetDensityScale(2);
+    RuntimeVolume3DMaterial_SetDensityGamma(0.5);
+    const double original_density=RuntimeVolume3DMaterial_RemapDensity(8);
+    RuntimeVolume3DMaterial_SetOpacity(0.25);
+    assert_true("opacity_scales_after_gamma",fabs(RuntimeVolume3DMaterial_RemapDensity(8)-original_density*0.25)<1e-12);
+    RuntimeVolume3DMaterialTuning retained=RuntimeVolume3DMaterial_GetTuning();
+    RuntimeVolume3DMaterial_SetOpacity(0);
+    assert_true("fully_transparent_density_zero",RuntimeVolume3DMaterial_RemapDensity(8)==0 && RuntimeVolume3DMaterial_ExtinctionDensity(8)==0);
+    RuntimeVolume3DMaterial_RestoreTuning(retained);
+    assert_true("opacity_tuning_restored",RuntimeVolume3DMaterial_GetTuning().opacity==0.25);
+    RuntimeVolume3DMaterial_ResetTuning();
+
     test_runtime_volume_3d_defaults();
     test_runtime_volume_3d_configures_truthful_layout();
     test_runtime_volume_3d_allocates_owned_channels();

@@ -2,6 +2,13 @@
 #include "editor/scene_editor_atmosphere_viewport.h"
 #include "editor/scene_editor_atmosphere_inspector.h"
 #include "editor/scene_editor_object_transform_handles.h"
+#include "app/scene_atmosphere_appearance.h"
+
+static void atmosphere_appearance_number(SceneEditor* editor,const char* field,const char* text) {
+    atmosphere_control(editor,field);SDL_Event e={0};e.type=SDL_TEXTINPUT;
+    snprintf(e.text.text,sizeof(e.text.text),"%s",text);SceneEditorSessionRuntimeHandleEvent(editor,&e);
+    key(editor,SDLK_RETURN);SceneEditorSessionRuntimeRender(editor);
+}
 
 static void atmosphere_inspector_control(SceneEditor* editor,const char* name) {
     SceneEditorSessionRuntimeRender(editor);SDL_Rect rect;
@@ -20,6 +27,7 @@ static void atmosphere_usability(SceneEditor* editor,const char* scene,bool reop
     assert(SceneEditorAtmosphereRead(&v));
     if(reopen) {
         assert(v.present && fabs(v.density_scale-1.25)<1e-9);
+        assert(v.opacity==0.25 && fabs(v.tint[2]-1)<1e-9 && fabs(v.tint[0]-0.2)<1e-9);
         assert(SceneEditorAtmosphereGeometry(&volume,diagnostic,sizeof(diagnostic)));
         Vec3 c=SceneEditorAtmosphereCentre(&volume);
         double w=SceneEditorDocumentWorldScale();
@@ -102,6 +110,28 @@ static void atmosphere_usability(SceneEditor* editor,const char* scene,bool reop
     c=SceneEditorAtmosphereCentre(&volume);int x,y;assert(SceneEditorDigestOverlayProjectPoint(&p,c.x,c.y,c.z,&x,&y));
     click(editor,(SDL_Rect){x-1,y-1,2,2});assert(SceneEditorAtmosphereSelected());
     /* Replacement keeps manually authored placement and appearance. */
+    assert(SceneEditorAtmosphereRead(&before));
+    for(int i=0;i<3;++i) {
+        atmosphere_control(editor,i==0?"look_cloud":i==1?"look_mist":"look_smoke");
+        assert(SceneEditorAtmosphereRead(&v));
+        assert(!strcmp(v.source_path,before.source_path) && !memcmp(v.translation,before.translation,sizeof(v.translation)));
+        assert(!memcmp(v.scale,before.scale,sizeof(v.scale)) && !memcmp(v.rotation_degrees,before.rotation_degrees,sizeof(v.rotation_degrees)));
+        assert(SceneEditorDocumentUndo(diagnostic,sizeof(diagnostic)));
+        assert(SceneEditorDocumentRedo(diagnostic,sizeof(diagnostic)));
+    }
+    atmosphere_control(editor,"look_cloud");atmosphere_control(editor,"appearance");
+    atmosphere_appearance_number(editor,"transparency","75");
+    atmosphere_appearance_number(editor,"hue","240");
+    atmosphere_appearance_number(editor,"saturation","80");
+    assert(SceneEditorAtmosphereRead(&v) && v.opacity==0.25 && fabs(v.tint[0]-0.2)<1e-9 && v.tint[2]==1);
+    unsigned long long valid_revision=SceneEditorDocumentRevision();
+    atmosphere_appearance_number(editor,"transparency","101");
+    atmosphere_appearance_number(editor,"hue","-1");
+    assert(SceneEditorDocumentRevision()==valid_revision);
+    atmosphere_control(editor,"transparency");key(editor,SDLK_ESCAPE);
+    assert(SceneEditorDocumentRevision()==valid_revision);
+    capture(editor,"atmosphere_appearance_controls.ppm");
+    atmosphere_control(editor,"appearance");
     assert(SceneEditorAtmosphereRead(&v));v.density_scale=1.25;
     assert(SceneEditorAtmosphereSet(&v,SceneEditorDocumentRevision(),diagnostic,sizeof(diagnostic)));
     before=v;atmosphere_control(editor,"generate");assert(SceneEditorAtmosphereRead(&v));

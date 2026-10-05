@@ -1,10 +1,11 @@
 #include "app/scene_atmosphere_attachment.h"
+#include "app/scene_atmosphere_appearance.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
-int main(void) {
+int main(int argc,char** argv) {
     char d[256];
     SceneAtmosphereAttachment v, decoded;
     SceneAtmosphereAttachmentDefaults(&v); v.present=true;
@@ -16,6 +17,15 @@ int main(void) {
     assert(decoded.present && !decoded.animated && decoded.scatter_gain==1);
     assert(!strcmp(decoded.source_path,v.source_path));
     json_object* o=NULL; json_object_object_get_ex(author,"atmosphere_attachment",&o);
+    json_object* appearance=NULL;json_object_object_get_ex(o,"appearance",&appearance);
+    json_object_object_del(appearance,"opacity"); /* Old scenes keep their exact look. */
+    assert(SceneAtmosphereAttachmentParse(author,&decoded,d,sizeof(d)) && decoded.opacity==1);
+    json_object_object_add(appearance,"opacity",json_object_new_double(0.35));
+    assert(SceneAtmosphereAttachmentParse(author,&decoded,d,sizeof(d)) && decoded.opacity==0.35);
+    json_object_object_add(appearance,"opacity",json_object_new_double(-0.1));
+    assert(!SceneAtmosphereAttachmentParse(author,&decoded,d,sizeof(d)) && decoded.opacity==0.35);
+    json_object_object_add(appearance,"opacity",json_object_new_double(1));
+    assert(SceneAtmosphereAttachmentParse(author,&decoded,d,sizeof(d)));
     SceneAtmosphereAttachment unchanged=decoded;
     json_object_object_add(o,"enabled",json_object_new_string("false"));
     assert(!SceneAtmosphereAttachmentParse(author,&decoded,d,sizeof(d)));
@@ -62,6 +72,29 @@ int main(void) {
     f.sample.subframe_denominator=0;
     assert(!SceneAtmosphereAttachmentRequestedFrame(&v,&f,&mapped,d,sizeof(d)));
     assert(SceneAtmosphereAttachmentParse(NULL,&decoded,d,sizeof(d)) && !decoded.present);
+    SceneAtmosphereAttachment before=v;
+    assert(SceneAtmosphereApplyLook(&v,SCENE_ATMOSPHERE_LIGHT_CLOUD));
+    assert(SceneAtmosphereCurrentLook(&v)==SCENE_ATMOSPHERE_LIGHT_CLOUD);
+    assert(!strcmp(v.source_path,before.source_path) && v.source_start==before.source_start &&
+           !memcmp(v.translation,before.translation,sizeof(v.translation)));
+    assert(v.absorption_gain<before.absorption_gain && v.scatter_gain>before.scatter_gain);
+    double hsv[3]={240,0.5,0.8};assert(SceneAtmosphereSetTintHSV(&v,hsv));
+    assert(SceneAtmosphereCurrentLook(&v)==SCENE_ATMOSPHERE_LOOK_COUNT);
+    assert(fabs(v.tint[0]-0.4)<1e-12 && fabs(v.tint[1]-0.4)<1e-12 && fabs(v.tint[2]-0.8)<1e-12);
+    SceneAtmosphereTintHSV(&v,hsv);assert(fabs(hsv[0]-240)<1e-12 && fabs(hsv[1]-0.5)<1e-12);
+    hsv[1]=2;assert(!SceneAtmosphereSetTintHSV(&v,hsv));
+    hsv[0]=360;hsv[1]=1;assert(SceneAtmosphereSetTintHSV(&v,hsv) && v.tint[0]==0.8 && v.tint[2]==0);
+    if(argc==2) {
+        json_object* looks=json_object_new_object();
+        for(int i=0;i<SCENE_ATMOSPHERE_LOOK_COUNT;++i) {
+            SceneAtmosphereAttachmentDefaults(&v);v.present=true;
+            strcpy(v.source_kind,"vf3d");strcpy(v.source_path,"assets/cloud_bank_v1.vf3d");
+            assert(SceneAtmosphereApplyLook(&v,i));
+            json_object_object_add(looks,SceneAtmosphereLookName(i),SceneAtmosphereAttachmentToJson(&v));
+        }
+        assert(json_object_to_file_ext(argv[1],looks,JSON_C_TO_STRING_PRETTY)==0);
+        json_object_put(looks);
+    }
     puts("Atmosphere attachment contract PASS: codec, refusal preservation, rational/subframe/seek mapping, sparse actual IDs");
     return 0;
 }

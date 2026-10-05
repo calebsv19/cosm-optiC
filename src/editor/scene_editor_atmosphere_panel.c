@@ -4,6 +4,7 @@
 #include "editor/scene_editor_atmosphere_geometry.h"
 #include "editor/scene_editor_atmosphere_viewport.h"
 #include "editor/scene_editor_atmosphere_inspector.h"
+#include "app/scene_atmosphere_appearance.h"
 #include "render/runtime_volume_3d_transform.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_chrome_shell.h"
@@ -23,15 +24,17 @@
 
 enum {PREVIEW,IMPORT,PRESET,GENERATE,ENABLED,VISIBLE,LIGHTING,APPEARANCE,PLACEMENT,PLAYBACK,
     DENSITY,GAMMA,ABSORPTION,SCATTER,STEP,TINT,TRANSLATION,ROTATION,SCALE,
-    ANIMATED,RATE,START,SOURCE_START,MISSING,REMOVE,SELECT,FRAME,FIT,COUNT};
+    ANIMATED,RATE,START,SOURCE_START,MISSING,REMOVE,SELECT,FRAME,FIT,
+    LOOK_CLOUD,LOOK_MIST,LOOK_SMOKE,TRANSPARENCY,HUE,SATURATION,ADVANCED,COUNT};
 static const char* names[COUNT]={"preview","import","preset","generate","enabled","visible","lighting",
     "appearance","placement","playback","density","gamma","absorption","scatter","step","tint",
-    "translation","rotation","scale","animated","rate","start","source_start","missing","remove","select","frame","fit"};
+    "translation","rotation","scale","animated","rate","start","source_start","missing","remove","select","frame","fit",
+    "look_cloud","look_mist","look_smoke","transparency","hue","saturation","advanced"};
 static const char* presets[]={"room_haze_v1","low_floor_fog_v1","cloud_bank_v1","mist_patch_v1","plume_column_v1"};
 static const char* preset_names[]={"Room haze","Floor fog","Cloud bank","Mist patch","Plume"};
 static struct {
     SDL_Rect rects[COUNT];char labels[COUNT][256],draft[128],status[512],source[1200],cache[512];
-    int editing,preset;bool visible,appearance,placement,playback;
+    int editing,preset;bool visible,appearance,placement,playback,advanced;
     unsigned long long revision;
     SceneAtmosphereAttachment value;
 } panel={.editing=-1};
@@ -62,9 +65,9 @@ int SceneEditorAtmospherePanelDraw(SDL_Renderer* r,SDL_Rect bounds) {
     if(panel.revision!=SceneEditorDocumentRevision()) cancel();
     panel.value=v;panel.revision=SceneEditorDocumentRevision();panel.visible=true;
     button(r,bounds,IMPORT,&y,v.present?"Replace atmosphere...":"Attach atmosphere...",true);
-    char label[256];snprintf(label,sizeof(label),"Preset: %s",preset_names[panel.preset]);
+    char label[256];snprintf(label,sizeof(label),"Field shape: %s",preset_names[panel.preset]);
     button(r,bounds,PRESET,&y,label,true);
-    button(r,bounds,GENERATE,&y,v.present?"Replace with static preset":"Create static atmosphere",true);
+    button(r,bounds,GENERATE,&y,v.present?"Replace field shape":"Create static atmosphere",true);
     if(v.present) {
         button(r,bounds,SELECT,&y,SceneEditorAtmosphereSelected()?"Atmosphere selected":"Select atmosphere",true);
         button(r,bounds,FRAME,&y,"Frame atmosphere",true);
@@ -83,14 +86,30 @@ int SceneEditorAtmospherePanelDraw(SDL_Renderer* r,SDL_Rect bounds) {
         button(r,bounds,ENABLED,&y,v.enabled?"Atmosphere: On":"Atmosphere: Off",true);
         button(r,bounds,VISIBLE,&y,v.visible?"Visible volume: On":"Visible volume: Off",true);
         button(r,bounds,LIGHTING,&y,v.affects_lighting?"Affects lighting: On":"Affects lighting: Off",true);
-        button(r,bounds,APPEARANCE,&y,panel.appearance?"Appearance  -":"Appearance  +",true);
+        for(int i=0;i<SCENE_ATMOSPHERE_LOOK_COUNT;++i) {
+            int id=LOOK_CLOUD+i;
+            snprintf(panel.labels[id],sizeof(panel.labels[id]),"%s",SceneAtmosphereLookName(i));
+            SDL_Rect rect={bounds.x+8+i*(bounds.w-16)/3,y,(bounds.w-16)/3-3,26};
+            SceneEditorRenderButton(r,rect,panel.labels[id],SceneAtmosphereCurrentLook(&v)==i,true);
+            if(rect.y>=bounds.y && rect.y+rect.h<=bounds.y+bounds.h) panel.rects[id]=rect;
+        }y+=30;
+        snprintf(label,sizeof(label),"Appearance: %s  %s",SceneAtmosphereLookName(SceneAtmosphereCurrentLook(&v)),panel.appearance?"-":"+");
+        button(r,bounds,APPEARANCE,&y,label,true);
         if(panel.appearance) {
+            double transparency=100*(1-v.opacity),hsv[3];SceneAtmosphereTintHSV(&v,hsv);
+            double saturation=100*hsv[1];
+            field(r,bounds,TRANSPARENCY,&y,"Transparency (%)",&transparency,1);
+            field(r,bounds,HUE,&y,"Hue (0-360 degrees)",hsv,1);
+            field(r,bounds,SATURATION,&y,"Saturation (%)",&saturation,1);
             field(r,bounds,DENSITY,&y,"Density",&v.density_scale,1);
-            field(r,bounds,GAMMA,&y,"Density gamma",&v.density_gamma,1);
-            field(r,bounds,ABSORPTION,&y,"Absorption",&v.absorption_gain,1);
-            field(r,bounds,SCATTER,&y,"Scattering",&v.scatter_gain,1);
-            field(r,bounds,STEP,&y,"Sampling step",&v.step_scale,1);
-            field(r,bounds,TINT,&y,"Tint RGB",v.tint,3);
+            field(r,bounds,ABSORPTION,&y,"Light absorption (darkening)",&v.absorption_gain,1);
+            field(r,bounds,SCATTER,&y,"Light scattering (brightness)",&v.scatter_gain,1);
+            button(r,bounds,ADVANCED,&y,panel.advanced?"Advanced appearance  -":"Advanced appearance  +",true);
+            if(panel.advanced) {
+                field(r,bounds,GAMMA,&y,"Density gamma",&v.density_gamma,1);
+                field(r,bounds,STEP,&y,"Sampling step",&v.step_scale,1);
+                field(r,bounds,TINT,&y,"Tint RGB",v.tint,3);
+            }
         }
         button(r,bounds,PLACEMENT,&y,"Edit volume placement >",true);
         button(r,bounds,FIT,&y,"Fit volume to scene",true);
@@ -141,6 +160,15 @@ static bool numeric(int id,const char* text) {
     if(*p) return false;
     SceneAtmosphereAttachment* v=&panel.value;double* target=NULL;
     switch(id) {
+      case TRANSPARENCY:
+        if(values[0]<0 || values[0]>100) return false;
+        v->opacity=1-values[0]/100;break;
+      case HUE:case SATURATION: {
+        double hsv[3];SceneAtmosphereTintHSV(v,hsv);
+        if(id==HUE) {hsv[0]=values[0];if(hsv[1]<1e-6)hsv[1]=0.35;if(hsv[2]<1e-6)hsv[2]=1;}
+        else hsv[1]=values[0]/100;
+        if(!SceneAtmosphereSetTintHSV(v,hsv)) return false;break;
+      }
       case DENSITY:target=&v->density_scale;break;case GAMMA:target=&v->density_gamma;break;
       case ABSORPTION:target=&v->absorption_gain;break;case SCATTER:target=&v->scatter_gain;break;
       case STEP:target=&v->step_scale;break;case TINT:target=v->tint;break;
@@ -170,6 +198,9 @@ bool SceneEditorAtmospherePanelEvent(SDL_Event* e) {
             else if(e->key.keysym.sym==SDLK_RETURN || e->key.keysym.sym==SDLK_KP_ENTER) {
                 bool ok=numeric(panel.editing,panel.draft);
                 if(ok) ok=SceneEditorAtmosphereSet(&panel.value,panel.revision,panel.status,sizeof(panel.status));
+                else if(panel.editing==TRANSPARENCY) snprintf(panel.status,sizeof(panel.status),"Transparency must be 0 to 100 percent; 100 is fully transparent.");
+                else if(panel.editing==HUE) snprintf(panel.status,sizeof(panel.status),"Hue must be 0 to 360 degrees.");
+                else if(panel.editing==SATURATION) snprintf(panel.status,sizeof(panel.status),"Saturation must be 0 to 100 percent.");
                 else snprintf(panel.status,sizeof(panel.status),"Enter a number, three comma-separated XYZ/RGB values, or source FPS as N/D (for example 30000/1001).");
                 cancel();report(ok);
             }
@@ -195,6 +226,12 @@ bool SceneEditorAtmospherePanelEvent(SDL_Event* e) {
           case PREVIEW:SceneEditorAtmospherePreviewSetEnabled(!SceneEditorAtmospherePreviewEnabled());return true;
           case GENERATE:ok=SceneEditorAtmosphereImport(presets[panel.preset],true,panel.revision,panel.status,sizeof(panel.status));break;
           case APPEARANCE:panel.appearance=!panel.appearance;return true;
+          case ADVANCED:panel.advanced=!panel.advanced;return true;
+          case LOOK_CLOUD:case LOOK_MIST:case LOOK_SMOKE:
+            ok=SceneAtmosphereApplyLook(&panel.value,id-LOOK_CLOUD) &&
+                SceneEditorAtmosphereSet(&panel.value,panel.revision,panel.status,sizeof(panel.status));
+            if(ok) snprintf(panel.status,sizeof(panel.status),"%s look applied. Source and placement preserved; Undo available.",SceneAtmosphereLookName(id-LOOK_CLOUD));
+            break;
           case SELECT:case PLACEMENT:SceneEditorAtmosphereSelect(true);SceneEditorAtmospherePreviewSetEnabled(false);return true;
           case FRAME:SceneEditorAtmosphereSelect(true);SceneEditorAtmosphereFrame();return true;
           case FIT: {

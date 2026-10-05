@@ -3,6 +3,7 @@
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_atmosphere_geometry.h"
 #include "editor/scene_editor_atmosphere_viewport.h"
+#include "app/scene_atmosphere_appearance.h"
 #include "app/data_paths.h"
 #include <errno.h>
 #include <limits.h>
@@ -61,6 +62,9 @@ bool SceneEditorAtmosphereImport(const char* source,bool preset,unsigned long lo
     snprintf(value.source_kind,sizeof(value.source_kind),"%s",json_object_get_string(kind));
     json_object_put(result);
     if(!replacing) {
+        if(preset) SceneAtmosphereApplyLook(&value,
+            !strcmp(source,"cloud_bank_v1") ? SCENE_ATMOSPHERE_LIGHT_CLOUD :
+            !strcmp(source,"plume_column_v1") ? SCENE_ATMOSPHERE_SMOKE : SCENE_ATMOSPHERE_SOFT_MIST);
         RuntimeVolumeAttachment3D volume;
         if(SceneEditorAtmosphereLoadGeometry(&value,&volume,d,n)) {
             bool fit=SceneEditorAtmosphereFit(&value,&volume,preset?source:NULL);
