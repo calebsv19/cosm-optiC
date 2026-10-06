@@ -1,4 +1,5 @@
 #include <string.h>
+#include <stdlib.h>
 
 #include "app/ray_tracing_deep_render_frame_request.h"
 #include "app/ray_tracing_deep_render_session.h"
@@ -63,6 +64,8 @@ static RuntimeNative3DRenderRequestSnapshot make_deep_render_snapshot(
         .tlasInstanceCount = 3u,
         .tlasNodeCount = 5u,
         .traceContextCallbackBound = true,
+        .volumeEnabled = prepared_frame->scene.volume.enabled,
+        .volumeAttached = prepared_frame->scene.volume.hasData,
         .volumeFrameSelectionDynamic = dynamic_volume,
         .waterSurfaceFrameSelectionDynamic = dynamic_water,
     };
@@ -140,6 +143,12 @@ static int test_deep_render_frame_request_owns_immutable_inputs(void) {
     char frame_directory[128] = "/tmp/deep-render/frames";
     char final_frame_path[128] = "/tmp/deep-render/frames/frame_0042.bmp";
     RuntimeNative3DPreparedFrame frame = make_deep_render_prepared_frame(42, 2);
+    frame.scene.volume.enabled = true;
+    frame.scene.volume.hasData = true;
+    frame.scene.volume.ownsChannelBuffers = true;
+    frame.scene.volume.channels.density = malloc(sizeof(float));
+    assert_true("deep_static_volume_allocated", frame.scene.volume.channels.density != NULL);
+    if (frame.scene.volume.channels.density) *frame.scene.volume.channels.density = 0.75f;
     RuntimeNative3DRenderRequestSnapshot snapshot =
         make_deep_render_snapshot(&frame, 2, false, false);
     RayTracingDeepRenderFrameRequestDesc desc = make_deep_render_request_desc(
@@ -164,6 +173,11 @@ static int test_deep_render_frame_request_owns_immutable_inputs(void) {
                 request.preparedFrameOwned && request.preparedFrame.valid && !frame.valid);
     assert_true("deep_request_rebinds_owned_scene",
                 request.preparedFrame.traceScene == &request.preparedFrame.scene);
+    assert_true("deep_request_owns_static_volume",
+                request.renderSnapshot.volumeEnabled && request.renderSnapshot.volumeAttached &&
+                request.preparedFrame.scene.volume.ownsChannelBuffers &&
+                request.preparedFrame.scene.volume.channels.density &&
+                *request.preparedFrame.scene.volume.channels.density == 0.75f);
     output_root[0] = 'X';
     frame_directory[0] = 'Y';
     final_frame_path[0] = 'Z';

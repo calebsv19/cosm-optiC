@@ -424,8 +424,8 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     snapshot_desc.tlasInstanceCount = accel.tlasInstanceCount;
     snapshot_desc.tlasNodeCount = accel.tlasNodeCount;
     snapshot_desc.traceContextCallbackBound = true;
-    snapshot_desc.volumeEnabled = false;
-    snapshot_desc.volumeAttached = false;
+    snapshot_desc.volumeEnabled = prepared.scene.volume.enabled;
+    snapshot_desc.volumeAttached = prepared.scene.volume.hasData;
     snapshot_desc.volumeFrameSelectionDynamic = false;
     snapshot_desc.waterSurfaceFrameSelectionDynamic = false;
     snapshot_desc.outputRoot = desc->outputRoot;

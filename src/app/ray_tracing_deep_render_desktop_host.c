@@ -409,8 +409,8 @@ static bool deep_render_desktop_start_current_frame(
         RuntimeNative3DProgressHUD_BeginFrame(
             state->renderUnit.integratorId,
             state->renderUnit.temporalFrames,
-            state->session.currentAbsoluteFrameIndex,
-            AnimationConfiguredPathFrameCount());
+            state->session.completedFrameCount,
+            state->session.frameCount);
         return true;
     }
     if (start_status == RAY_TRACING_DEEP_RENDER_DESKTOP_START_UNSUPPORTED &&
