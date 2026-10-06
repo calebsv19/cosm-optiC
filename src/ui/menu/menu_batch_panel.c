@@ -13,6 +13,7 @@
 #include "ui/menu_scene_project_summary.h"
 #include "ui/menu_worker_export.h"
 #include "ui/sdl_menu_input.h"
+#include "ui/menu_path_edit.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/shared_theme_font_adapter.h"
 
@@ -61,6 +62,7 @@ static void begin_frame_dir_edit(MenuRuntimeState *state) {
     state->editingOutputRoot = false;
     state->editingFrameDir = true;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.frameDir);
+    menu_path_edit_begin(state);
 }
 
 static void begin_video_root_edit(MenuRuntimeState *state) {
@@ -71,16 +73,11 @@ static void begin_video_root_edit(MenuRuntimeState *state) {
     state->editingOutputRoot = false;
     state->editingVideoOutputRoot = true;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.videoOutputRoot);
+    menu_path_edit_begin(state);
 }
 
-static void apply_frame_dir(MenuRuntimeState *state, const char *path) {
-    if (!state || !path || !path[0]) return;
-    snprintf(animSettings.frameDir, sizeof(animSettings.frameDir), "%s", path);
-    (void)config_runtime_paths_reconcile_frame_output_root();
-    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
-    SaveAnimationConfig();
-    menu_batch_panel_refresh(state);
-    set_status(state, "Frames root set", (SDL_Color){120, 220, 180, 255}, 1800);
+static bool apply_frame_dir(MenuRuntimeState *state, const char *path) {
+    return menu_path_edit_apply_output(state,path,true);
 }
 
 static void apply_video_root(MenuRuntimeState *state, const char *path) {
@@ -271,17 +268,18 @@ bool menu_batch_panel_edit_active(const MenuRuntimeState* state) {
     return state->editingFrameDir || state->editingVideoOutputRoot;
 }
 
-void menu_batch_panel_finish_edit(MenuRuntimeState* state, bool apply) {
-    if (!state) return;
-    if (apply && state->pathInputBuffer[0]) {
+bool menu_batch_panel_finish_edit(MenuRuntimeState* state, bool apply) {
+    if (!state) return false;
+    if (apply) {
         if (state->editingFrameDir) {
-            apply_frame_dir(state, state->pathInputBuffer);
+            if (!apply_frame_dir(state, state->pathInputBuffer)) return false;
         } else if (state->editingVideoOutputRoot) {
             apply_video_root(state, state->pathInputBuffer);
         }
     }
     clear_batch_edit_flags(state);
     state->pathInputBuffer[0] = '\0';
+    menu_path_edit_end(state);return true;
 }
 
 void menu_batch_panel_backspace_edit(MenuRuntimeState* state) {
@@ -294,12 +292,7 @@ void menu_batch_panel_backspace_edit(MenuRuntimeState* state) {
 }
 
 bool menu_batch_panel_append_text(MenuRuntimeState* state, const char* text) {
-    if (!state || !text || !text[0] || !menu_batch_panel_edit_active(state)) return false;
-    if (strlen(state->pathInputBuffer) + strlen(text) >= sizeof(state->pathInputBuffer)) {
-        return false;
-    }
-    strcat(state->pathInputBuffer, text);
-    return true;
+    return menu_batch_panel_edit_active(state) && menu_path_edit_insert(state,text);
 }
 
 void menu_batch_panel_build_frame_count_label(const MenuRuntimeState* state,

@@ -85,6 +85,7 @@ typedef struct {
     bool editingFrameDir;
     bool editingVideoOutputRoot;
     char pathInputBuffer[PATH_MAX];
+    bool pathSelectAll;
     RayTracingFolderPickerRequest folderPickerRequest;
     MenuFolderPickerTarget folderPickerTarget;
 

@@ -9,6 +9,8 @@ void SceneAtmosphereRuntimeReset(void);
 bool SceneAtmosphereRuntimeLoad(json_object* scene,double world_scale);
 const SceneAtmosphereAttachment* SceneAtmosphereRuntimeRead(void);
 void SceneAtmosphereRuntimeApplyTuning(void);
+/* A retained static/disabled atmosphere owns source selection over legacy settings. */
+bool SceneAtmosphereRuntimeRequiresSynchronousSelection(bool legacy_enabled);
 bool SceneAtmosphereRuntimeSource(const char* scene_path,char* path,size_t size,char* diagnostic,size_t diagnostic_size);
 bool SceneAtmosphereRuntimeFrame(const char* scene_path,const TimelineEvaluationContext* frame,
     int64_t* selected,char* diagnostic,size_t size);

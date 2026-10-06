@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include "app/animation.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "config/config_manager.h"
 #include "config/mesh_import_policy.h"
 #include "editor/editor_mode_router.h"
@@ -16,6 +17,7 @@
 #include "render/text_draw.h"
 #include "render/text_upload_policy.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/volume_source_ui_labels.h"
 #include "ui/menu_caustic_product.h"
 #include "ui/menu_environment_settings.h"
 #include "ui/menu_settings_readback.h"
@@ -379,8 +381,8 @@ void menu_render_frame(SDL_Renderer* renderer,
     menu_render_draw_button_rect(renderer,
                                  font,
                                  &buttons.asyncDeepRenderRect,
-                                 "Async Render",
-                                 animSettings.asyncDeepRender);
+                                 animation_config_space_mode_clamp(animSettings.spaceMode)==SPACE_MODE_3D ? "Responsive render: Auto" : "Async Render",
+                                 animation_config_space_mode_clamp(animSettings.spaceMode)==SPACE_MODE_3D || animSettings.asyncDeepRender);
     menu_render_draw_button_rect(renderer,
                                  font,
                                  &buttons.bounceRect,
@@ -445,6 +447,8 @@ void menu_render_frame(SDL_Renderer* renderer,
                                          RAY_TRACING_MESH_IMPORT_NORMAL_MODE_CREASE_AWARE);
     }
     if (buttons.attachVolumeRect.w > 0 && buttons.attachVolumeRect.h > 0) {
+        SceneAtmosphereAttachment saved_atmosphere;
+        bool scene_atmosphere = volume_source_ui_read_scene_attachment(&saved_atmosphere);
         char volumeLabel[160];
         menu_render_format_volume_button_label(state, volumeLabel, sizeof(volumeLabel));
         menu_render_draw_button_rect(renderer, font, &buttons.attachVolumeRect, volumeLabel, state->volumeDropdownOpen);
@@ -461,10 +465,14 @@ void menu_render_frame(SDL_Renderer* renderer,
         menu_render_draw_button_rect(renderer,
                                      font,
                                      &buttons.volumeToggleRect,
-                                     animSettings.volumeInteractionEnabled ? "Atmosphere: ON"
-                                                                          : "Atmosphere: OFF",
-                                     animSettings.volumeInteractionEnabled);
-        menu_render_draw_button_rect(renderer, font, &buttons.volumeClearRect, "Clear Volume", false);
+                                     scene_atmosphere ? (saved_atmosphere.enabled ? "Scene atmosphere: ON" : "Scene atmosphere: OFF") : animSettings.volumeInteractionEnabled ? "External volume: ON"
+                                                                          : "External volume: OFF",
+                                     scene_atmosphere ? saved_atmosphere.enabled : animSettings.volumeInteractionEnabled);
+        menu_render_draw_button_rect(renderer, font, &buttons.volumeClearRect, scene_atmosphere ? "Edit in Environment" : "Clear Volume", false);
+        if (scene_atmosphere) {
+            snprintf(state->volumeSummaryLine1,sizeof(state->volumeSummaryLine1),"Saved scene atmosphere: %s",saved_atmosphere.enabled?"enabled":"disabled");
+            snprintf(state->volumeSummaryLine2,sizeof(state->volumeSummaryLine2),"Placement and appearance: Scene Editor > Environment");
+        }
         if (state->volumeSummaryLine1[0]) {
             SDL_Color summary_color = has_shared_palette ? palette.text_muted
                                                          : (SDL_Color){210, 210, 210, 255};

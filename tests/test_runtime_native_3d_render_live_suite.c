@@ -699,6 +699,8 @@ static int test_runtime_native_3d_disney_result_contract(void) {
     return 0;
 }
 
+/* Position-only lights are virtual point sources. These fixtures deliberately
+ * need a visible sphere to test emitter pixels, including against the sky. */
 static int test_runtime_native_3d_render_live_visible_emitter_bounded(void) {
     SceneConfig saved_scene = sceneSettings;
     AnimationConfig saved_anim = animSettings;
@@ -725,7 +727,7 @@ static int test_runtime_native_3d_render_live_visible_emitter_bounded(void) {
           "}"
         "],"
         "\"materials\":[],"
-        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0}}],"
+        "\"lights\":[{\"kind\":\"sphere\",\"radius\":0.2,\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0}}],"
         "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
         "\"constraints\":[],"
         "\"extensions\":{}"
@@ -804,7 +806,7 @@ static int test_runtime_native_3d_render_environment_floor_lights_miss_pixels(vo
           "}"
         "],"
         "\"materials\":[],"
-        "\"lights\":[{\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0}}],"
+        "\"lights\":[{\"kind\":\"sphere\",\"radius\":0.2,\"position\":{\"x\":0.0,\"y\":-4.0,\"z\":0.0}}],"
         "\"cameras\":[{\"position\":{\"x\":0.0,\"y\":0.0,\"z\":0.0}}],"
         "\"constraints\":[],"
         "\"extensions\":{}"

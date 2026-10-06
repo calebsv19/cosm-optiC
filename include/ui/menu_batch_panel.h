@@ -36,7 +36,7 @@ void menu_batch_panel_build_layout(TTF_Font* font,
                                    MenuBatchPanelLayout* out_layout);
 void menu_batch_panel_refresh(MenuRuntimeState* state);
 bool menu_batch_panel_edit_active(const MenuRuntimeState* state);
-void menu_batch_panel_finish_edit(MenuRuntimeState* state, bool apply);
+bool menu_batch_panel_finish_edit(MenuRuntimeState* state, bool apply);
 void menu_batch_panel_backspace_edit(MenuRuntimeState* state);
 bool menu_batch_panel_append_text(MenuRuntimeState* state, const char* text);
 void menu_batch_panel_apply_picker_result(MenuRuntimeState* state,

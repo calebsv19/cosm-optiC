@@ -405,6 +405,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_config_animation_source_volume_suite.o \
 	$(BUILD_DIR)/tests/test_config_animation_settings_export_suite.o \
 	$(BUILD_DIR)/tests/test_ui_menu_contracts.o \
+	$(BUILD_DIR)/tests/test_menu_render_workflow.o \
 	$(BUILD_DIR)/tests/test_scene_project_render_request.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_core.o \
 	$(BUILD_DIR)/tests/test_runtime_scene_bridge_writeback.o \

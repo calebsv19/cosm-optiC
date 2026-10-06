@@ -3,6 +3,7 @@
 Start here for public repository documentation.
 
 Main Edit atmosphere development: [retained attachments, UI/MCP controls, timing and current limits](atmosphere_attachment.md).
+Matched atmosphere previews: [evaluation scene and reproduction](atmosphere_evaluation.md).
 
 Scene authoring baseline (September 26, 2026):
 - [Current behavior and remaining U2.4 boundary](current_truth.md#september-26-scene-authoring-baseline)

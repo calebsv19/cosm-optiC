@@ -3,6 +3,10 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include "app/scene_atmosphere_attachment.h"
+
+/* Read saved attachment metadata without importing meshes or changing tuning. */
+bool volume_source_ui_read_scene_attachment(SceneAtmosphereAttachment* out);
 
 void volume_source_ui_format_catalog_option_label(const char* path,
                                                   int kind,

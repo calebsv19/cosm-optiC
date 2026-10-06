@@ -29,6 +29,7 @@
 #include "render/vk_shared_device.h"
 #include "ui/shared_theme_font_adapter.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_path_edit.h"
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_host.h"
 #include "ui/sdl_menu_input.h"
@@ -485,14 +486,8 @@ static bool menu_process_event(SDL_Window* window,
             if (menu_batch_panel_append_text(menu_state, mutable_event.text.text)) {
                 return true;
             }
-            if (menu_state->editingInputRoot ||
-                menu_state->editingMeshAssetRoot ||
-                menu_state->editingOutputRoot) {
-                if (strlen(menu_state->pathInputBuffer) + strlen(mutable_event.text.text) <
-                    sizeof(menu_state->pathInputBuffer)) {
-                    strcat(menu_state->pathInputBuffer, mutable_event.text.text);
-                    return true;
-                }
+            if (menu_state->editingInputRoot || menu_state->editingMeshAssetRoot || menu_state->editingOutputRoot) {
+                return menu_path_edit_insert(menu_state,mutable_event.text.text);
             } else if (menu_state->editingBounce ||
                        menu_state->editingFrame ||
                        menu_state->editingStartFrame) {

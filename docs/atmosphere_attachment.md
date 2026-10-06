@@ -3,6 +3,33 @@
 This is a Main Edit development feature. The source baseline is optiC 0.18.0,
 worker 0.9.0; this document does not announce another release.
 
+## Evaluation and desktop rendering
+
+See [the repeatable atmosphere evaluation scene](atmosphere_evaluation.md) for
+matched off/on, appearance and light-direction comparisons with depth markers.
+Cloud and mist are subtle under the current lighting model; smoke gives a clearer
+occlusion check. These comparisons do not qualify a new scattering model.
+
+The render menu reads the selected scene's saved atmosphere metadata before
+loading its geometry. **Scene atmosphere: ON/OFF** reports that attachment's
+enabled state. Its placement and appearance belong to **Scene Editor >
+Environment**; the legacy external-volume controls cannot override it.
+
+In **Output + Batch**, click **Edit** beside Render Frames Root. The existing
+path is selected for replacement. Typing, Cmd/Ctrl+A, paste, UTF-8 backspace,
+Enter/Apply and Escape work after returning from the editor. Changing the output
+root rebases its frames folder while preserving the relative frames suffix.
+Choosing a frames folder outside the old root reconciles the output root to its
+parent. Invalid paths or settings-save failures stay visible and block Start
+until corrected. Relative paths and parent traversal are refused.
+
+**Responsive render: Auto** selects the existing asynchronous route when Start
+is pressed for a supported native, tiled 3D deep render. Static retained
+atmospheres are supported; animated caches and enabled legacy external volumes
+retain the existing synchronous fallback. Escape requests cancellation and a
+canceled frame is not published as a completed frame. This does not extend
+asynchronous rendering to dynamic cache selection.
+
 ## Editor workflow
 
 Open a saved scene and select **Environment**. Attach a VF3D file, VF3D pack,

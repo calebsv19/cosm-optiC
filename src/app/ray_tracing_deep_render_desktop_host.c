@@ -1,3 +1,4 @@
+#include "app/scene_atmosphere_runtime.h"
 #include "app/ray_tracing_deep_render_desktop_host.h"
 
 #include <errno.h>
@@ -311,7 +312,7 @@ bool RayTracingDeepRenderDesktopHost_BeginRun(int start_frame_index,
         animSettings.asyncDeepRender,
         RayTracingModeBackend_IsNative3D(&route),
         route.useTiles,
-        animSettings.volumeInteractionEnabled);
+        SceneAtmosphereRuntimeRequiresSynchronousSelection(animSettings.volumeInteractionEnabled));
     if (state->selection != RAY_TRACING_DEEP_RENDER_DESKTOP_SELECTED) {
         if (state->selection != RAY_TRACING_DEEP_RENDER_DESKTOP_NOT_REQUESTED) {
             fprintf(stderr,

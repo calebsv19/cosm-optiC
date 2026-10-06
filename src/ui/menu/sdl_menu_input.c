@@ -21,6 +21,8 @@
 #include "import/runtime_scene_bridge.h"
 #include "platform/ray_tracing_folder_picker.h"
 #include "ui/menu_batch_panel.h"
+#include "ui/menu_path_edit.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "ui/menu_caustic_product.h"
 #include "ui/menu_environment_settings.h"
 #include "ui/menu_settings_lifecycle.h"
@@ -58,6 +60,7 @@ static void begin_input_root_edit(MenuRuntimeState *state) {
     state->editingFrameDir = false;
     state->editingVideoOutputRoot = false;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.inputRoot);
+    menu_path_edit_begin(state);
 }
 
 static void begin_mesh_asset_root_edit(MenuRuntimeState *state) {
@@ -68,6 +71,7 @@ static void begin_mesh_asset_root_edit(MenuRuntimeState *state) {
     state->editingFrameDir = false;
     state->editingVideoOutputRoot = false;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.meshAssetRoot);
+    menu_path_edit_begin(state);
 }
 
 static void begin_output_root_edit(MenuRuntimeState *state) {
@@ -78,6 +82,7 @@ static void begin_output_root_edit(MenuRuntimeState *state) {
     state->editingFrameDir = false;
     state->editingVideoOutputRoot = false;
     snprintf(state->pathInputBuffer, sizeof(state->pathInputBuffer), "%s", animSettings.outputRoot);
+    menu_path_edit_begin(state);
 }
 
 static void apply_input_root(MenuRuntimeState *state, const char *path) {
@@ -113,14 +118,8 @@ static void apply_mesh_asset_root(MenuRuntimeState *state, const char *path) {
     state->statusExpireMs = SDL_GetTicks() + 1800;
 }
 
-static void apply_output_root(MenuRuntimeState *state, const char *path) {
-    if (!state || !path || !path[0]) return;
-    snprintf(animSettings.outputRoot, sizeof(animSettings.outputRoot), "%s", path);
-    (void)setenv("RAY_TRACING_OUTPUT_ROOT", animSettings.outputRoot, 1);
-    snprintf(state->statusLabel, sizeof(state->statusLabel), "Output root set");
-    state->statusLabel[sizeof(state->statusLabel) - 1] = '\0';
-    state->statusColor = (SDL_Color){120, 200, 240, 255};
-    state->statusExpireMs = SDL_GetTicks() + 1800;
+static bool apply_output_root(MenuRuntimeState *state, const char *path) {
+    return menu_path_edit_apply_output(state,path,false);
 }
 
 bool menu_input_begin_folder_picker(MenuRuntimeState* state,
@@ -189,25 +188,25 @@ void menu_input_cancel_folder_picker(MenuRuntimeState* state) {
     state->folderPickerTarget = MENU_FOLDER_PICKER_NONE;
 }
 
-static void finish_root_edit(MenuRuntimeState *state, bool apply) {
-    if (!state) return;
+static bool finish_root_edit(MenuRuntimeState *state, bool apply) {
+    if (!state) return false;
     if (menu_batch_panel_edit_active(state)) {
-        menu_batch_panel_finish_edit(state, apply);
-        return;
+        return menu_batch_panel_finish_edit(state, apply);
     }
-    if (apply && state->pathInputBuffer[0]) {
+    if (apply) {
         if (state->editingInputRoot) {
             apply_input_root(state, state->pathInputBuffer);
         } else if (state->editingMeshAssetRoot) {
             apply_mesh_asset_root(state, state->pathInputBuffer);
         } else if (state->editingOutputRoot) {
-            apply_output_root(state, state->pathInputBuffer);
+            if (!apply_output_root(state, state->pathInputBuffer)) return false;
         }
     }
     state->editingInputRoot = false;
     state->editingMeshAssetRoot = false;
     state->editingOutputRoot = false;
     state->pathInputBuffer[0] = '\0';
+    menu_path_edit_end(state);return true;
 }
 
 static bool finish_start_frame_edit(MenuRuntimeState *state, bool apply) {
@@ -265,6 +264,7 @@ void menu_input_handle_key(SDL_Event* event,
     if (!event || !running || !font || !state) return;
     if (state->folderPickerRequest.active) return;
     if (menu_numeric_key(state, event)) return;
+    if (menu_path_edit_key(state,event)) return;
     /* Text input owns the keyboard until committed or cancelled. */
     if (path_edit_active(state) || state->editingStartFrame || state->editingBounce || state->editingFrame) {
         SDL_Keycode key = event->key.keysym.sym;
@@ -352,7 +352,7 @@ void menu_input_handle_key(SDL_Event* event,
         case SDLK_TAB:
         case SDLK_RETURN:
             if (path_edit_active(state)) {
-                finish_root_edit(state, true);
+                if (!finish_root_edit(state, true)) return;
                 break;
             }
             if (state->editingStartFrame) {
@@ -500,7 +500,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         return;
     }
     /* A click commits the old field before another editor starts. */
-    if (path_edit_active(state)) finish_root_edit(state, true);
+    if (path_edit_active(state) && !finish_root_edit(state, true)) return;
     if (state->editingStartFrame && !finish_start_frame_edit(state, true)) return;
     state->editingBounce = state->editingFrame = false;
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER &&
@@ -651,6 +651,14 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         menu_state_set_load_scene_enabled(state, !state->manifestDropdownOpen);
         return;
     }
+    SceneAtmosphereAttachment saved_atmosphere;
+    if (volume_source_ui_read_scene_attachment(&saved_atmosphere) &&
+        (point_in_rect(&buttons.attachVolumeRect,x,y) || point_in_rect(&buttons.volumeToggleRect,x,y) ||
+         point_in_rect(&buttons.volumeClearRect,x,y))) {
+        snprintf(state->statusLabel,sizeof(state->statusLabel),"Scene atmosphere owns this volume. Edit or remove it in Environment.");
+        state->statusColor=(SDL_Color){160,210,255,255};state->statusExpireMs=SDL_GetTicks()+5000;
+        return;
+    }
     if (buttons.attachVolumeRect.w > 0 && point_in_rect(&buttons.attachVolumeRect, x, y)) {
         menu_state_set_volume_load_enabled(state, !state->volumeDropdownOpen);
         return;
@@ -711,7 +719,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
     if (point_in_rect(&buttons.inputRootApplyRect, x, y)) {
         if (state->editingInputRoot) {
-            finish_root_edit(state, true);
+            if (!finish_root_edit(state, true)) return;
         } else {
             apply_input_root(state, animSettings.inputRoot);
         }
@@ -731,7 +739,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
     }
     if (point_in_rect(&buttons.meshAssetRootApplyRect, x, y)) {
         if (state->editingMeshAssetRoot) {
-            finish_root_edit(state, true);
+            if (!finish_root_edit(state, true)) return;
         } else {
             apply_mesh_asset_root(state, animSettings.meshAssetRoot);
         }
@@ -779,6 +787,11 @@ void menu_input_handle_mouse_click(SDL_Event* event,
         }
 
         if (point_in_rect(&buttons.asyncDeepRenderRect, x, y)) {
+            if (animation_config_space_mode_clamp(animSettings.spaceMode)==SPACE_MODE_3D) {
+                snprintf(state->statusLabel,sizeof(state->statusLabel),"Responsive rendering is automatic for supported static 3D scenes.");
+                state->statusColor=(SDL_Color){160,210,255,255};state->statusExpireMs=SDL_GetTicks()+4000;
+                return;
+            }
             animSettings.asyncDeepRender = !animSettings.asyncDeepRender;
             menu_settings_lifecycle_commit(state, "menu_async_render", false);
             return;
@@ -1018,7 +1031,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
 
     if (point_in_rect(&buttons.saveRect, x, y)) {
         if (path_edit_active(state)) {
-            finish_root_edit(state, true);
+            if (!finish_root_edit(state, true)) return;
         }
         if (state->editingStartFrame) {
             finish_start_frame_edit(state, true);
@@ -1044,7 +1057,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
 
     if (point_in_rect(&buttons.previewRect, x, y)) {
         if (path_edit_active(state)) {
-            finish_root_edit(state, true);
+            if (!finish_root_edit(state, true)) return;
         }
         if (state->editingStartFrame) {
             finish_start_frame_edit(state, true);
@@ -1067,13 +1080,15 @@ void menu_input_handle_mouse_click(SDL_Event* event,
             return;
         }
         if (path_edit_active(state)) {
-            finish_root_edit(state, true);
+            if (!finish_root_edit(state, true)) return;
         }
         if (state->editingStartFrame) {
             finish_start_frame_edit(state, true);
         }
         menu_state_sync_from_anim(state);
         menu_state_apply_effective_render_recipe(state);
+        if (animation_config_space_mode_clamp(animSettings.spaceMode)==SPACE_MODE_3D && animSettings.deepRenderMode)
+            animSettings.asyncDeepRender = true;
         AnimationPreserveCurrentEnvironmentOnNextInit();
         printf("[Menu] Start pressed: spaceMode=%d integrator2D=%d integrator3D=%d falloffMode=%d decay=%.2f softness=%.2f intensity=%.2f\n",
                animSettings.spaceMode,

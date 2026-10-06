@@ -1,3 +1,4 @@
+#include "app/scene_atmosphere_runtime.h"
 #include "app/ray_tracing_deep_render_desktop_render_internal.h"
 
 #include <SDL2/SDL.h>
@@ -288,7 +289,7 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
         deep_render_desktop_set_reason(out_reason, "route is not native 3D tiled");
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_UNSUPPORTED;
     }
-    if (animSettings.volumeInteractionEnabled) {
+    if (SceneAtmosphereRuntimeRequiresSynchronousSelection(animSettings.volumeInteractionEnabled)) {
         deep_render_desktop_set_reason(
             out_reason, "dynamic volume or water selection requires sync fallback");
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_UNSUPPORTED;
