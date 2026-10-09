@@ -4,6 +4,54 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Row spans avoid a per-pixel tile map and support irregular edge tiles.
+ * They borrow immutable material/statistics buffers after workers are joined. */
+static const RuntimeNative3DFeatureBuffer* guide_source(
+    const void* context, size_t pixel, size_t* local_pixel) {
+    const RuntimeNative3DFrameDenoise* f = context;
+    if (!f || !f->guideSpansReady) return NULL;
+    size_t row = pixel / (size_t)f->width;
+    if (row >= (size_t)f->height) return NULL;
+    size_t lo = f->guideRowOffsets[row], hi = f->guideRowOffsets[row + 1];
+    if (lo == hi) return NULL;
+    const RuntimeNative3DGuideSpan* first = &f->guideSpans[lo];
+    size_t tile_width = first->end - first->start;
+    size_t offset = (pixel - first->start) / tile_width;
+    if (offset < hi - lo) {
+        const RuntimeNative3DGuideSpan* span = &f->guideSpans[lo + offset];
+        if (pixel >= span->start && pixel < span->end) {
+            *local_pixel = span->localStart + pixel - span->start;
+            return span->source;
+        }
+    }
+    /* Arbitrary nonuniform row partitions retain logarithmic lookup. */
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2;
+        const RuntimeNative3DGuideSpan* span = &f->guideSpans[mid];
+        if (pixel < span->start) hi = mid;
+        else if (pixel >= span->end) lo = mid + 1;
+        else { *local_pixel = span->localStart + pixel - span->start; return span->source; }
+    }
+    return NULL;
+}
+
+static int compare_spans(const void* a, const void* b) {
+    size_t x = ((const RuntimeNative3DGuideSpan*)a)->start;
+    size_t y = ((const RuntimeNative3DGuideSpan*)b)->start;
+    return (x > y) - (x < y);
+}
+
+static bool reserve_spans(RuntimeNative3DFrameDenoise* f, size_t count) {
+    if (count <= f->guideSpanCapacity) return true;
+    if (count > SIZE_MAX / sizeof(*f->guideSpans)) return false;
+    size_t capacity = count;
+    if (capacity <= SIZE_MAX / 2 / sizeof(*f->guideSpans)) capacity *= 2;
+    RuntimeNative3DGuideSpan* next = realloc(f->guideSpans, capacity * sizeof(*next));
+    if (!next) return false;
+    f->guideSpans = next; f->guideSpanCapacity = capacity;
+    return true;
+}
+
 static bool runtime_native_3d_frame_denoise_dimensions_valid(int width,
                                                              int height,
                                                              size_t* out_pixels) {
@@ -15,7 +63,7 @@ static bool runtime_native_3d_frame_denoise_dimensions_valid(int width,
         return false;
     }
     pixel_count = (size_t)width * (size_t)height;
-    if (pixel_count > SIZE_MAX / (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS) {
+    if (pixel_count > SIZE_MAX / ((size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS * sizeof(float))) {
         return false;
     }
     if (out_pixels) {
@@ -54,6 +102,8 @@ void RuntimeNative3DFrameDenoise_Init(RuntimeNative3DFrameDenoise* frame_denoise
 
 void RuntimeNative3DFrameDenoise_Free(RuntimeNative3DFrameDenoise* frame_denoise) {
     if (!frame_denoise) return;
+    free(frame_denoise->guideRowOffsets);
+    free(frame_denoise->guideSpans);
     free(frame_denoise->radianceBuffer);
     free(frame_denoise->temporalActivityBuffer);
     RuntimeNative3DFeatureBuffer_Free(&frame_denoise->featureBuffer);
@@ -65,6 +115,13 @@ bool RuntimeNative3DFrameDenoise_Prepare(RuntimeNative3DFrameDenoise* frame_deno
                                          int height,
                                          RayTracing3DIntegratorId integrator_id,
                                          int temporal_frames) {
+    return RuntimeNative3DFrameDenoise_PrepareWithGuides(frame_denoise, width, height,
+        integrator_id, temporal_frames, integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
+}
+
+bool RuntimeNative3DFrameDenoise_PrepareWithGuides(
+    RuntimeNative3DFrameDenoise* frame_denoise, int width, int height,
+    RayTracing3DIntegratorId integrator_id, int temporal_frames, bool material_guides) {
     size_t pixel_count = 0u;
     if (!frame_denoise ||
         !runtime_native_3d_frame_denoise_dimensions_valid(width, height, &pixel_count) ||
@@ -74,17 +131,27 @@ bool RuntimeNative3DFrameDenoise_Prepare(RuntimeNative3DFrameDenoise* frame_deno
 
     RuntimeNative3DFrameDenoise_Free(frame_denoise);
     RuntimeNative3DFrameDenoise_Init(frame_denoise);
+    if (material_guides) {
+        frame_denoise->guideRowOffsets = calloc((size_t)height + 1, sizeof(size_t));
+        if (!frame_denoise->guideRowOffsets) return false;
+    }
     frame_denoise->radianceBuffer =
         (float*)calloc(pixel_count * (size_t)RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
                        sizeof(*frame_denoise->radianceBuffer));
     frame_denoise->temporalActivityBuffer =
         (float*)calloc(pixel_count, sizeof(*frame_denoise->temporalActivityBuffer));
     if (!frame_denoise->radianceBuffer || !frame_denoise->temporalActivityBuffer ||
-        !RuntimeNative3DFeatureBuffer_Ensure(&frame_denoise->featureBuffer, width, height)) {
+        !RuntimeNative3DFeatureBuffer_EnsureWithGuides(&frame_denoise->featureBuffer, width, height,
+            RUNTIME_NATIVE_3D_GUIDES_NONE)) {
         RuntimeNative3DFrameDenoise_Free(frame_denoise);
         return false;
     }
     RuntimeNative3DFeatureBuffer_Clear(&frame_denoise->featureBuffer);
+    frame_denoise->materialGuides = material_guides;
+    if (material_guides) {
+        frame_denoise->featureBuffer.guideSource = guide_source;
+        frame_denoise->featureBuffer.guideContext = frame_denoise;
+    }
     frame_denoise->integratorId = integrator_id;
     frame_denoise->width = width;
     frame_denoise->height = height;
@@ -125,6 +192,15 @@ bool RuntimeNative3DFrameDenoise_GatherUnit(RuntimeNative3DFrameDenoise* frame_d
         return false;
     }
 
+    if (frame_denoise->materialGuides) {
+        if (!unit->featureBuffer.albedoBuffer || !unit->featureBuffer.shadingNormalBuffer ||
+            !unit->featureBuffer.materialGuideMaskBuffer ||
+            frame_denoise->guideSpanCount > SIZE_MAX - (size_t)unit->height ||
+            !reserve_spans(frame_denoise, frame_denoise->guideSpanCount + (size_t)unit->height)) return false;
+        frame_denoise->guideSpansReady = false;
+    }
+    RuntimeNative3DFeatureBuffer_RecordSamplingStatistics(&unit->featureBuffer,
+        unit->accumulation.rawM2Buffer, unit->accumulation.sampleCountBuffer);
     for (int y = 0; y < unit->height; ++y) {
         const size_t src = (size_t)y * (size_t)unit->width;
         const size_t dst =
@@ -140,6 +216,10 @@ bool RuntimeNative3DFrameDenoise_GatherUnit(RuntimeNative3DFrameDenoise* frame_d
         memcpy(frame_denoise->temporalActivityBuffer + dst,
                unit->accumulation.activityBuffer + src,
                row_pixels * sizeof(*frame_denoise->temporalActivityBuffer));
+        if (frame_denoise->materialGuides) {
+            frame_denoise->guideSpans[frame_denoise->guideSpanCount++] =
+                (RuntimeNative3DGuideSpan){dst, dst + row_pixels, src, &unit->featureBuffer};
+        }
         memcpy(frame_denoise->featureBuffer.normalBuffer + dst * 3u,
                unit->featureBuffer.normalBuffer + src * 3u,
                row_pixels * 3u * sizeof(*frame_denoise->featureBuffer.normalBuffer));
@@ -178,6 +258,29 @@ bool RuntimeNative3DFrameDenoise_Apply(RuntimeNative3DFrameDenoise* frame_denois
     if (!frame_denoise || frame_denoise->applied || !frame_denoise->radianceBuffer ||
         !frame_denoise->temporalActivityBuffer) {
         return false;
+    }
+    if (frame_denoise->materialGuides) {
+        qsort(frame_denoise->guideSpans, frame_denoise->guideSpanCount,
+              sizeof(*frame_denoise->guideSpans), compare_spans);
+        size_t covered = 0, indexed_row = 0;
+        for (size_t i = 0; i < frame_denoise->guideSpanCount; ++i) {
+            const RuntimeNative3DGuideSpan* span = &frame_denoise->guideSpans[i];
+            if ((frame_denoise->allowSparseGuides ? span->start < covered : span->start != covered) ||
+                span->end <= span->start ||
+                !span->source->albedoBuffer || !span->source->shadingNormalBuffer ||
+                !span->source->materialGuideMaskBuffer || !span->source->sampleCountBuffer) return false;
+            size_t row = span->start / (size_t)frame_denoise->width;
+            if (row >= (size_t)frame_denoise->height ||
+                span->end > (row + 1) * (size_t)frame_denoise->width) return false;
+            while (indexed_row <= row)
+                frame_denoise->guideRowOffsets[indexed_row++] = i;
+            covered = span->end;
+        }
+        if (!frame_denoise->allowSparseGuides &&
+            covered != (size_t)frame_denoise->width * (size_t)frame_denoise->height) return false;
+        while (indexed_row <= (size_t)frame_denoise->height)
+            frame_denoise->guideRowOffsets[indexed_row++] = frame_denoise->guideSpanCount;
+        frame_denoise->guideSpansReady = true;
     }
     if (!RuntimeNative3DDenoise_ApplyForIntegrator(
             frame_denoise->radianceBuffer,

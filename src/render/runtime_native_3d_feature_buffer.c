@@ -8,6 +8,13 @@
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_payload_3d.h"
 
+const RuntimeNative3DFeatureBuffer* RuntimeNative3DFeatureBuffer_GuideSource(
+    const RuntimeNative3DFeatureBuffer* b, size_t pixel, size_t* local_pixel) {
+    if (!b || !local_pixel || pixel >= (size_t)b->width * (size_t)b->height) return NULL;
+    *local_pixel = pixel;
+    return b->guideSource ? b->guideSource(b->guideContext, pixel, local_pixel) : b;
+}
+
 void RuntimeNative3DFeatureBuffer_Init(RuntimeNative3DFeatureBuffer* buffer) {
     if (!buffer) return;
     memset(buffer, 0, sizeof(*buffer));
@@ -16,6 +23,8 @@ void RuntimeNative3DFeatureBuffer_Init(RuntimeNative3DFeatureBuffer* buffer) {
 void RuntimeNative3DFeatureBuffer_Free(RuntimeNative3DFeatureBuffer* buffer) {
     if (!buffer) return;
     free(buffer->normalBuffer);
+    RuntimeNative3DFeatureBuffer_ReleaseGuides(buffer);
+
     free(buffer->depthBuffer);
     free(buffer->reflectivityBuffer);
     free(buffer->roughnessBuffer);
@@ -38,81 +47,101 @@ static void runtime_native_3d_feature_buffer_clear_identity(RuntimeNative3DFeatu
     }
 }
 
-bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* buffer,
-                                         int width,
-                                         int height) {
-    float* normals = NULL;
-    float* depths = NULL;
-    float* reflectivity = NULL;
-    float* roughness = NULL;
-    float* transparency = NULL;
-    unsigned char* hit_mask = NULL;
-    unsigned char* direct_light_visibility = NULL;
-    int* triangle_index = NULL;
-    int* scene_object_index = NULL;
-    size_t pixel_count = 0;
-    if (!buffer || width <= 0 || height <= 0) return false;
-    if (buffer->normalBuffer &&
-        buffer->depthBuffer &&
-        buffer->reflectivityBuffer &&
-        buffer->roughnessBuffer &&
-        buffer->transparencyBuffer &&
-        buffer->hitMaskBuffer &&
-        buffer->directLightVisibilityOutcomeBuffer &&
-        buffer->triangleIndexBuffer &&
-        buffer->sceneObjectIndexBuffer &&
-        buffer->width == width &&
-        buffer->height == height) {
-        return true;
+void RuntimeNative3DFeatureBuffer_ReleaseGuides(RuntimeNative3DFeatureBuffer* b) {
+    if (!b) return;
+    b->guideSource = NULL; b->guideContext = NULL;
+    free(b->albedoBuffer); free(b->shadingNormalBuffer); free(b->materialGuideMaskBuffer);
+    if (b->guideStorage == RUNTIME_NATIVE_3D_GUIDES_OWNED_STATISTICS) {
+        free(b->varianceOfMeanBuffer); free(b->sampleCountBuffer);
     }
+    b->albedoBuffer = b->shadingNormalBuffer = b->varianceOfMeanBuffer = NULL;
+    b->sampleCountBuffer = NULL; b->materialGuideMaskBuffer = NULL;
+    b->borrowedRawM2Buffer = NULL; b->guideStorage = RUNTIME_NATIVE_3D_GUIDES_NONE;
+}
 
-    pixel_count = (size_t)width * (size_t)height;
-    normals = (float*)calloc(pixel_count * 3u, sizeof(*normals));
-    depths = (float*)calloc(pixel_count, sizeof(*depths));
-    reflectivity = (float*)calloc(pixel_count, sizeof(*reflectivity));
-    roughness = (float*)calloc(pixel_count, sizeof(*roughness));
-    transparency = (float*)calloc(pixel_count, sizeof(*transparency));
-    hit_mask = (unsigned char*)calloc(pixel_count, sizeof(*hit_mask));
-    direct_light_visibility =
-        (unsigned char*)calloc(pixel_count, sizeof(*direct_light_visibility));
-    triangle_index = (int*)calloc(pixel_count, sizeof(*triangle_index));
-    scene_object_index = (int*)calloc(pixel_count, sizeof(*scene_object_index));
-    if (!normals || !depths || !reflectivity || !roughness || !transparency || !hit_mask ||
-        !direct_light_visibility || !triangle_index || !scene_object_index) {
-        free(normals);
-        free(depths);
-        free(reflectivity);
-        free(roughness);
-        free(transparency);
-        free(hit_mask);
-        free(direct_light_visibility);
-        free(triangle_index);
-        free(scene_object_index);
-        return false;
+static bool ensure_guides(RuntimeNative3DFeatureBuffer* b, RuntimeNative3DGuideStorage mode) {
+    if (b->guideStorage == mode) return true;
+    if (mode == RUNTIME_NATIVE_3D_GUIDES_NONE) {
+        RuntimeNative3DFeatureBuffer_ReleaseGuides(b); return true;
     }
-
-    free(buffer->normalBuffer);
-    free(buffer->depthBuffer);
-    free(buffer->reflectivityBuffer);
-    free(buffer->roughnessBuffer);
-    free(buffer->transparencyBuffer);
-    free(buffer->hitMaskBuffer);
-    free(buffer->directLightVisibilityOutcomeBuffer);
-    free(buffer->triangleIndexBuffer);
-    free(buffer->sceneObjectIndexBuffer);
-    buffer->normalBuffer = normals;
-    buffer->depthBuffer = depths;
-    buffer->reflectivityBuffer = reflectivity;
-    buffer->roughnessBuffer = roughness;
-    buffer->transparencyBuffer = transparency;
-    buffer->hitMaskBuffer = hit_mask;
-    buffer->directLightVisibilityOutcomeBuffer = direct_light_visibility;
-    buffer->triangleIndexBuffer = triangle_index;
-    buffer->sceneObjectIndexBuffer = scene_object_index;
-    buffer->width = width;
-    buffer->height = height;
-    runtime_native_3d_feature_buffer_clear_identity(buffer, pixel_count);
+    size_t n = (size_t)b->width * (size_t)b->height;
+    float* albedo = calloc(n * 3u, sizeof(float));
+    float* shading = calloc(n * 3u, sizeof(float));
+    unsigned char* mask = calloc(n, 1);
+    float* variance = mode == RUNTIME_NATIVE_3D_GUIDES_OWNED_STATISTICS ? calloc(n, sizeof(float)) : NULL;
+    uint16_t* counts = mode == RUNTIME_NATIVE_3D_GUIDES_OWNED_STATISTICS ? calloc(n, sizeof(uint16_t)) : NULL;
+    if (!albedo || !shading || !mask ||
+        (mode == RUNTIME_NATIVE_3D_GUIDES_OWNED_STATISTICS && (!variance || !counts))) {
+        free(albedo); free(shading); free(mask); free(variance); free(counts); return false;
+    }
+    RuntimeNative3DFeatureBuffer_ReleaseGuides(b);
+    b->albedoBuffer = albedo; b->shadingNormalBuffer = shading; b->materialGuideMaskBuffer = mask;
+    b->varianceOfMeanBuffer = variance; b->sampleCountBuffer = counts; b->guideStorage = mode;
     return true;
+}
+
+bool RuntimeNative3DFeatureBuffer_Ensure(RuntimeNative3DFeatureBuffer* b, int width, int height) {
+    return RuntimeNative3DFeatureBuffer_EnsureWithGuides(b, width, height, RUNTIME_NATIVE_3D_GUIDES_NONE);
+}
+
+bool RuntimeNative3DFeatureBuffer_EnsureWithGuides(
+    RuntimeNative3DFeatureBuffer* b, int width, int height, RuntimeNative3DGuideStorage mode) {
+    if (!b || width <= 0 || height <= 0 || mode < RUNTIME_NATIVE_3D_GUIDES_NONE ||
+        mode > RUNTIME_NATIVE_3D_GUIDES_BORROWED_STATISTICS ||
+        (size_t)width > SIZE_MAX / (size_t)height / (3u * sizeof(float))) return false;
+    if (b->normalBuffer && b->width == width && b->height == height) return ensure_guides(b, mode);
+    RuntimeNative3DFeatureBuffer next = {0};
+    size_t n = (size_t)width * (size_t)height;
+    next.width = width; next.height = height;
+    next.normalBuffer = calloc(n * 3u, sizeof(float));
+    next.depthBuffer = calloc(n, sizeof(float));
+    next.reflectivityBuffer = calloc(n, sizeof(float));
+    next.roughnessBuffer = calloc(n, sizeof(float));
+    next.transparencyBuffer = calloc(n, sizeof(float));
+    next.hitMaskBuffer = calloc(n, 1); next.directLightVisibilityOutcomeBuffer = calloc(n, 1);
+    next.triangleIndexBuffer = calloc(n, sizeof(int)); next.sceneObjectIndexBuffer = calloc(n, sizeof(int));
+    if (!next.normalBuffer || !next.depthBuffer || !next.reflectivityBuffer || !next.roughnessBuffer ||
+        !next.transparencyBuffer || !next.hitMaskBuffer || !next.directLightVisibilityOutcomeBuffer ||
+        !next.triangleIndexBuffer || !next.sceneObjectIndexBuffer || !ensure_guides(&next, mode)) {
+        RuntimeNative3DFeatureBuffer_Free(&next); return false;
+    }
+    RuntimeNative3DFeatureBuffer_Free(b); *b = next;
+    runtime_native_3d_feature_buffer_clear_identity(b, n);
+    return true;
+}
+
+void RuntimeNative3DFeatureBuffer_BorrowSamplingStatistics(
+    RuntimeNative3DFeatureBuffer* b, const float* raw_m2, uint16_t* counts) {
+    if (!b || b->guideStorage != RUNTIME_NATIVE_3D_GUIDES_BORROWED_STATISTICS) return;
+    b->borrowedRawM2Buffer = raw_m2; b->sampleCountBuffer = counts;
+}
+
+static float variance_of_mean(const float* raw_m2, uint16_t count) {
+    if (!raw_m2 || count < 2u) return INFINITY;
+    float maximum = 0.0f;
+    for (size_t c = 0; c < 3u; ++c) {
+        float m2 = raw_m2[c];
+        if (!isfinite(m2) || m2 < 0.0f) return INFINITY;
+        float v = m2 / ((float)count * (float)(count - 1u));
+        maximum = fmaxf(maximum, v);
+    }
+    return maximum;
+}
+
+float RuntimeNative3DFeatureBuffer_VarianceAt(const RuntimeNative3DFeatureBuffer* b, size_t pixel) {
+    if (!b) return INFINITY;
+    if (b->varianceOfMeanBuffer) return b->varianceOfMeanBuffer[pixel];
+    if (b->borrowedRawM2Buffer && b->sampleCountBuffer)
+        return variance_of_mean(b->borrowedRawM2Buffer + pixel * 3u, b->sampleCountBuffer[pixel]);
+    return INFINITY;
+}
+
+size_t RuntimeNative3DFeatureBuffer_AllocatedBytes(const RuntimeNative3DFeatureBuffer* b) {
+    if (!b || !b->normalBuffer) return 0u;
+    size_t bytes = 38u;
+    if (b->albedoBuffer) bytes += 25u;
+    if (b->guideStorage == RUNTIME_NATIVE_3D_GUIDES_OWNED_STATISTICS) bytes += 6u;
+    return (size_t)b->width * (size_t)b->height * bytes;
 }
 
 void RuntimeNative3DFeatureBuffer_Clear(RuntimeNative3DFeatureBuffer* buffer) {
@@ -126,6 +155,12 @@ void RuntimeNative3DFeatureBuffer_Clear(RuntimeNative3DFeatureBuffer* buffer) {
         return;
     }
     pixel_count = (size_t)buffer->width * (size_t)buffer->height;
+    if (buffer->albedoBuffer) memset(buffer->albedoBuffer, 0, pixel_count * 3u * sizeof(float));
+    if (buffer->shadingNormalBuffer) memset(buffer->shadingNormalBuffer, 0, pixel_count * 3u * sizeof(float));
+    if (buffer->varianceOfMeanBuffer) memset(buffer->varianceOfMeanBuffer, 0, pixel_count * sizeof(float));
+    if (buffer->guideStorage == RUNTIME_NATIVE_3D_GUIDES_OWNED_STATISTICS && buffer->sampleCountBuffer)
+        memset(buffer->sampleCountBuffer, 0, pixel_count * sizeof(uint16_t));
+    if (buffer->materialGuideMaskBuffer) memset(buffer->materialGuideMaskBuffer, 0, pixel_count);
     memset(buffer->normalBuffer, 0, pixel_count * 3u * sizeof(*buffer->normalBuffer));
     memset(buffer->depthBuffer, 0, pixel_count * sizeof(*buffer->depthBuffer));
     memset(buffer->reflectivityBuffer, 0, pixel_count * sizeof(*buffer->reflectivityBuffer));
@@ -149,7 +184,7 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
     const int region_height = end_y - start_y;
     if (!buffer || !scene || !projector) return false;
     if (region_width <= 0 || region_height <= 0) return false;
-    if (!RuntimeNative3DFeatureBuffer_Ensure(buffer, region_width, region_height)) {
+    if (!RuntimeNative3DFeatureBuffer_EnsureWithGuides(buffer, region_width, region_height, buffer->guideStorage)) {
         return false;
     }
     RuntimeNative3DFeatureBuffer_Clear(buffer);
@@ -188,6 +223,20 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
                     trace.geometryHitInfo.sceneObjectIndex;
                 if (RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo, &payload) &&
                     payload.valid) {
+                    if (buffer->albedoBuffer) {
+                    buffer->albedoBuffer[normal_base] = (float)payload.baseColorR;
+                    buffer->albedoBuffer[normal_base + 1u] = (float)payload.baseColorG;
+                    buffer->albedoBuffer[normal_base + 2u] = (float)payload.baseColorB;
+                    (void)RuntimeMaterialPayload3D_ApplyShadingNormal(&payload, &trace.geometryHitInfo);
+                    const Vec3 shading = trace.geometryHitInfo.normal;
+                    buffer->shadingNormalBuffer[normal_base] = (float)shading.x;
+                    buffer->shadingNormalBuffer[normal_base + 1u] = (float)shading.y;
+                    buffer->shadingNormalBuffer[normal_base + 2u] = (float)shading.z;
+                    /* Surface guides cannot describe mixed volume radiance. Preserve
+                     * the existing filter policy until volume signals are separated. */
+                    buffer->materialGuideMaskBuffer[pixel_index] =
+                        !(scene->volume.enabled && scene->volume.hasData);
+                    }
                     buffer->reflectivityBuffer[pixel_index] = (float)fmax(payload.bsdf.reflectivity, 0.0);
                     buffer->roughnessBuffer[pixel_index] = (float)fmax(payload.bsdf.roughness, 0.0);
                     buffer->transparencyBuffer[pixel_index] = (float)fmax(payload.transparency, 0.0);
@@ -247,4 +296,17 @@ RuntimeNative3DFeatureBuffer_ResolveDirectLightVisibilityOutcome(
         return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_NO_TRACE;
     }
     return RUNTIME_NATIVE_3D_DIRECT_LIGHT_VISIBILITY_UNKNOWN;
+}
+
+/* The current native path uses the same fixed primary ray for every lighting
+ * subpass. These material guides therefore match its beauty footprint. Future
+ * camera jitter / motion blur must accumulate guides with the beauty samples. */
+void RuntimeNative3DFeatureBuffer_RecordSamplingStatistics(
+    const RuntimeNative3DFeatureBuffer* buffer, const float* raw_m2, const uint16_t* counts) {
+    if (!buffer || !buffer->varianceOfMeanBuffer || !buffer->sampleCountBuffer || !raw_m2 || !counts) return;
+    size_t pixels = (size_t)buffer->width * (size_t)buffer->height;
+    for (size_t i = 0; i < pixels; ++i) {
+        buffer->sampleCountBuffer[i] = counts[i];
+        buffer->varianceOfMeanBuffer[i] = variance_of_mean(raw_m2 + i * 3u, counts[i]);
+    }
 }

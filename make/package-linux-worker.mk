@@ -144,4 +144,7 @@ package-linux-worker-self-test: package-linux-worker
 	@test -f "$(LINUX_WORKER_ARCHIVE_SHA256)" || (echo "Missing worker archive checksum"; exit 1)
 	@test -f "$(LINUX_WORKER_RELEASE_MANIFEST)" || (echo "Missing worker release manifest"; exit 1)
 	@python3 tools/validate_linux_worker_package.py --archive "$(LINUX_WORKER_ARCHIVE)" --package-root "$(LINUX_WORKER_BASENAME)" --platform "$(LINUX_WORKER_PLATFORM)" --max-glibc "$(LINUX_WORKER_MAX_GLIBC)" --worker-version "$(WORKER_VERSION)" --source-program-version "$(RELEASE_VERSION)" --source-commit "$(SOURCE_COMMIT)"
+	@python3 tests/integration/run_ray_tracing_job_runner_help.py --runner "$(LINUX_WORKER_BIN_DIR)/ray_tracing_job_runner" --package-manifest "$(LINUX_WORKER_MANIFEST)"
+	@python3 tests/integration/run_checkpoint_retention_stack.py
+	@python3 tests/integration/run_cancelled_progress_retention.py
 	@echo "package-linux-worker-self-test passed."

@@ -99,17 +99,7 @@ static uint64_t runtime_native_3d_render_unit_adaptive_state_capacity_bytes(
 
 static uint64_t runtime_native_3d_render_unit_feature_capacity_bytes(
     const RuntimeNative3DRenderUnit* unit) {
-    uint64_t pixel_count = 0u;
-    if (!unit || !unit->featureBuffer.normalBuffer || unit->featureBuffer.width <= 0 ||
-        unit->featureBuffer.height <= 0) {
-        return 0u;
-    }
-    pixel_count = runtime_native_3d_render_unit_pixel_count_bytes(unit->featureBuffer.width,
-                                                                 unit->featureBuffer.height);
-    return runtime_native_3d_render_unit_u64_product(pixel_count, 3u * (uint64_t)sizeof(float)) +
-           runtime_native_3d_render_unit_u64_product(pixel_count, 4u * (uint64_t)sizeof(float)) +
-           runtime_native_3d_render_unit_u64_product(pixel_count, 2u * (uint64_t)sizeof(unsigned char)) +
-           runtime_native_3d_render_unit_u64_product(pixel_count, 2u * (uint64_t)sizeof(int));
+    return unit ? (uint64_t)RuntimeNative3DFeatureBuffer_AllocatedBytes(&unit->featureBuffer) : 0u;
 }
 
 static RuntimeNative3DSamplingContext runtime_native_3d_render_unit_resolve_subpass_sampling(
@@ -180,6 +170,7 @@ void RuntimeNative3DRenderUnit_TakeReusable(RuntimeNative3DRenderUnit* unit) {
 void RuntimeNative3DRenderUnit_ReturnReusable(RuntimeNative3DRenderUnit* unit) {
     RuntimeNative3DRenderUnit* resized_cache = NULL;
     if (!unit) return;
+    RuntimeNative3DFeatureBuffer_ReleaseGuides(&unit->featureBuffer);
     unit->frame = NULL;
     unit->featuresPrepared = false;
     unit->committedSubpasses = 0;
@@ -241,7 +232,11 @@ static bool runtime_native_3d_render_unit_ensure_features(RuntimeNative3DRenderU
     trace_scene = unit->frame->traceScene
                       ? unit->frame->traceScene
                       : &unit->frame->scene;
-    if (!RuntimeNative3DFeatureBuffer_Ensure(&unit->featureBuffer, unit->width, unit->height) ||
+    const bool guided = unit->useDenoise && unit->integratorId == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2 &&
+        !(trace_scene->volume.enabled && trace_scene->volume.hasData) &&
+        !RuntimeNative3DAdaptiveSampling_TemporalBudgetHeatmapEnabled();
+    if (!RuntimeNative3DFeatureBuffer_EnsureWithGuides(&unit->featureBuffer, unit->width, unit->height,
+            guided ? RUNTIME_NATIVE_3D_GUIDES_BORROWED_STATISTICS : RUNTIME_NATIVE_3D_GUIDES_NONE) ||
         !RuntimeNative3DFeatureBuffer_RenderRegion(&unit->featureBuffer,
                                                    trace_scene,
                                                    &unit->frame->projector,
@@ -251,6 +246,8 @@ static bool runtime_native_3d_render_unit_ensure_features(RuntimeNative3DRenderU
                                                    unit->endY)) {
         return false;
     }
+    RuntimeNative3DFeatureBuffer_BorrowSamplingStatistics(&unit->featureBuffer,
+        unit->accumulation.rawM2Buffer, unit->accumulation.sampleCountBuffer);
     unit->featuresPrepared = true;
     return true;
 }
@@ -309,6 +306,8 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
                                            disney_denoise_enabled);
     unit->measureAdaptiveState = unit->temporalFrames > 1;
     unit->featuresPrepared = false;
+    /* Drop frame-local guides before accumulation resize can invalidate borrowed statistics. */
+    RuntimeNative3DFeatureBuffer_ReleaseGuides(&unit->featureBuffer);
 
     if (!RuntimeNative3DTemporalAccumulation_Ensure(&unit->accumulation, unit->width, unit->height)) {
         return false;
@@ -564,6 +563,8 @@ bool RuntimeNative3DRenderUnit_ResolveCurrentToPixelsWithStats(
     memset(unit->resolvedRadiance, 0, pixel_count * sizeof(*unit->resolvedRadiance));
     {
         RuntimeNative3DDenoiseDiagnostics diagnostics = {0};
+        RuntimeNative3DFeatureBuffer_RecordSamplingStatistics(&unit->featureBuffer,
+            unit->accumulation.rawM2Buffer, unit->accumulation.sampleCountBuffer);
         if (!RuntimeNative3DTemporalAccumulation_ResolveRegionToRadianceBuffer(
                 &unit->accumulation,
                 unit->resolvedRadiance,

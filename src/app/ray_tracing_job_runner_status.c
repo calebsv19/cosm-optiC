@@ -538,6 +538,9 @@ bool ray_tracing_job_runner_merge_progress_into_record(const char *progress_path
         !ray_tracing_job_runner_file_exists(progress_path)) {
         return false;
     }
+    /* Cancellation is durable control state; an older renderer progress file
+       must not revive the job or replace its terminal diagnostics. */
+    if (strcmp(record->state, "cancelled") == 0) return false;
     root = json_object_from_file(progress_path);
     if (!root || !json_object_is_type(root, json_type_object)) {
         if (root) json_object_put(root);

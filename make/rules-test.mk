@@ -2865,6 +2865,12 @@ test-ray-tracing-render-headless-water-object-coupling-long-review: $(RAY_TRACIN
 test-ray-tracing-animated-water-photon-caustics: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/run_ray_tracing_animated_water_photon_caustics.py
 
+test-ray-tracing-job-runner-help: $(RAY_TRACING_JOB_RUNNER_BIN)
+	python3 tests/integration/run_ray_tracing_job_runner_help.py --runner "$(RAY_TRACING_JOB_RUNNER_BIN)"
+
+test-ray-tracing-checkpoint-retention-stack:
+	python3 tests/integration/run_checkpoint_retention_stack.py
+
 test-ray-tracing-job-runner-smoke: \
 	$(RAY_TRACING_RENDER_HEADLESS_BIN) \
 	$(RAY_TRACING_JOB_RUNNER_BIN) \
