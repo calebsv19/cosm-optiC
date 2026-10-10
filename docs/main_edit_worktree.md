@@ -1,3 +1,27 @@
+## October 10 — denoise and dielectric transport source checkpoint
+
+Implementation checkpoint `ee9ace0` preserves qualified denoise uncertainty
+handling, bounded pixel/transport diagnostics, camera boundary/medium response,
+TIR and radiance transmission repairs, and photon receiver/estimator accounting.
+The receiver observer uses a fixed 8208-byte table rather than image-sized storage.
+See [transport qualification](transport_weight_audit.md),
+[photon mapping](photon_mapping.md), and
+[denoise guidance](denoise_material_guidance.md) for behavior and limits.
+
+Fresh contained Clang builds, 23 receiver/estimator checks, 39 camera dielectric
+checks, 15 affected regression groups, preparation-capture integration and matched
+native images passed before checkpointing. The commit pass checked retained source
+identities, compiled the transport diagnostic and passed staged whitespace checks.
+No implementation changed during checkpointing; the unrelated full GUI suite was
+not rerun. The local 1280x720, 32-pass still runs from its retained qualified
+executable; completion and high-resolution visual acceptance remain separate.
+
+VERSION 0.18.0 and Main Edit WORKER_VERSION 0.9.0 remain unchanged. Canonical and
+its release-owned changes are preserved. This local source checkpoint leaves
+canonical adoption, package/release qualification and worker delivery as separate
+boundaries. A minor release is recommended for the accumulated runtime work;
+approval is required before a version bump.
+
 ## October 9 — verified Main Edit reconciliation
 
 The local source checkpoint preserves and commits physical-smoke Direct Light

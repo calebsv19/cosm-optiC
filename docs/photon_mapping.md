@@ -60,6 +60,34 @@ not unique pixels or guaranteed full-frame coverage; temporal preparation can
 rebind the consumer. Preparation-only capture can legitimately report zero
 queries. This snapshot reuses constant-size counters and adds no frame buffers.
 
+### Live receiver accounting
+
+The same diagnostic opt-in also preserves `photon_surface_live_queries_NNNN.jsonl`
+before the compatibility grid runs. This bounded list contains up to 8192 actual
+consumer calls, not unique camera pixels. It may include recursive or temporal
+queries and is empty for preparation-only captures without shading queries.
+
+`photon_receiver_accounting_NNNN.json` groups all calls since the last consumer
+bind by object and material in a fixed 64-receiver table (8208 bytes). It records
+support, positive and undersampled call counts, irradiance-density sums and
+receiver radiance before camera throughput. Overflow is explicit. Sums are
+call-weighted observations, not spatially integrated power or final image energy.
+Accounting processing is disabled unless the diagnostic request is active; no
+per-pixel or full-frame guide arrays are added.
+
+Surface packet flux is already emission/PDF compensated. Reconstruction applies
+a normalized area kernel, then the receiver diffuse response once. An undersampled
+sample-centered kernel expands its bounded support rather than multiplying its
+power by a confidence factor. Camera throughput includes radiance IOR factors
+and sampling compensation and is therefore allowed above one; transmitted
+caustics preserve finite nonnegative weights rather than clamping them to one.
+
+Legacy `intensity` and an explicit `photon_emission_energy` are separate authored
+controls. Gain one does not establish direct/photon radiometric equivalence when
+those controls differ. Use landing-flux sums for stored power accounting and
+physical-radiance source fixtures for calibration; do not integrate query-call
+sums as if they were receiver area measurements.
+
 ### Preparation-only path capture
 
 To separate photon transport from image reconstruction, use the local headless

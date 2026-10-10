@@ -22,7 +22,14 @@ preserves the original pixel. Fewer than four samples or invalid variance also
 preserve it. Otherwise reconstruction blends the guided neighborhood result with the
 original value, capped at 90%. Neighbor weights additionally consider evaluated
 base color, roughness and the adjusted shading normal. Existing object, depth,
-strong beauty-edge and transparent/mirror/glossy safeguards remain in place.
+stable beauty-edge and transparent/mirror/glossy safeguards remain in place.
+A brightness contrast that exceeds the legacy edge threshold may mix only when
+both pixels have valid guides and at least four samples, and each RGB difference
+is within three times the combined standard-error scale from the existing raw
+variance of mean. This prevents a noisy bright sample from defining its own
+protected edge. It is a finite-sample heuristic, not a Gaussian confidence
+guarantee; no additional variance arrays are allocated. Stable contrast and
+invalid uncertainty retain the original edge refusal.
 At blend strengths of at least 0.5, guided pixels search a 9×9 neighborhood
 with spatial sigma 2.5; lower uncertainty and legacy surfaces retain the 5×5
 search with sigma 1.25. The wider search retains the same object, depth,
@@ -112,3 +119,28 @@ wood/floor BMPs match byte-for-byte. Targeted sanitizer and contained headless
 smoke checks pass. Shared lookup adds a small filter-only CPU cost in local debug
 probes; Linux optimized total-render timing, RSS and concurrency remain separate
 release qualification requirements. No lower-precision guide packing is used.
+
+## Bounded bright-pixel diagnostics
+
+Set `RAY_TRACING_NATIVE_3D_PIXEL_PROBE` to at most16 nonnegative native pixel
+coordinates separated by semicolons, for example `288,308;287,308`. With no
+selection, ordinary rendering emits no records. Malformed or over-capacity lists
+disable the probe. Selected Disney V2 pixels emit `PIXEL_PROBE` JSON records to
+stderr with per-subpass lighting components, primary sample path throughput/PDF,
+bounded recursive states and per-vertex contribution/MIS slots, material
+normal/base color, and final denoise decisions. Result summary MIS estimates can
+reflect a later recursive vertex; they are distinct from the primary path PDF.
+Invalid variance is JSON `null`. The summary direct-light MIS estimates are
+distinct from the sampled path PDF; this is not a complete per-bounce path dump.
+
+For a diagnostic replay only, `RAY_TRACING_NATIVE_3D_PIXEL_PROBE_ONLY=1` skips
+Disney V2 shading outside a valid selection while preserving the original
+projector, tile coordinates and sampling contexts. Use denoising off for this
+replay and compare selected pixels to the ordinary raw control. Its sparse
+output is a diagnostic artifact and must never be accepted as a beauty frame.
+It does not accelerate scene loading/preparation. No new per-frame guide storage
+is allocated. Keep this flag unset for normal rendering and all visual proofs.
+
+For transport causes rather than reconstruction, use the separate
+[camera transport weight audit](transport_weight_audit.md). Its bounded camera interface repairs pass the local physical checks. Denoised
+appearance still does not certify full-scene energy or worker qualification.
