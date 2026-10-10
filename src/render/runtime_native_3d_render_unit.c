@@ -485,6 +485,12 @@ bool RuntimeNative3DRenderUnit_RenderSubpass(RuntimeNative3DRenderUnit* unit,
                       &unit->adaptiveMask,
                       &unit->adaptivePixelState,
                       RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE)
+                : unit->integratorId == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2
+                ? RuntimeNative3DAdaptiveSampling_RefreshSurfaceBudgetMaskFromPixelState(
+                      &unit->adaptiveMask,
+                      &unit->adaptivePixelState,
+                      &unit->featureBuffer,
+                      RUNTIME_NATIVE_3D_ADAPTIVE_TILE_SIZE)
                 : RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
                       &unit->adaptiveMask,
                       &unit->adaptivePixelState,

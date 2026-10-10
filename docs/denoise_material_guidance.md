@@ -17,6 +17,24 @@ subpass, so the guides match its beauty footprint. Camera jitter, motion blur or
 coverage sampling must accumulate guides with beauty before using this contract.
 The count is the actual per-pixel count, not the requested frame ceiling.
 
+## Shadow sampling and tile independence
+
+The default Disney V2 path completes the requested lighting-subpass budget on
+primary-hit surfaces. A small sample-error estimate over a prefix of the
+stratified light sequence does not qualify the unsampled emitter strata;
+tile-local edge and neighbor checks also cannot inspect adjoining jobs. Early
+surface stopping previously made raw soft-shadow results depend on tile size.
+Background skipping remains active, with no added passes or guide arrays.
+`render.adaptive_sampling_enabled=false` remains a fixed-budget control. The
+explicit experimental temporal-risk early-stop option retains its separate
+qualification boundary; it is not enabled by this repair.
+
+The regression `tests/integration/run_headless_shadow_tile_invariance.py`
+compares actual opaque soft-shadow images at 16, 23 and 32-pixel partitions,
+with raw output checked against adaptation disabled and filtered output checked
+across partitions. This sampling contract is independent of transparent-surface
+denoise preservation and does not change reflection or transmission materials.
+
 For valid guided opaque surfaces, zero or sufficiently low measured uncertainty
 preserves the original pixel. Fewer than four samples or invalid variance also
 preserve it. Otherwise reconstruction blends the guided neighborhood result with the

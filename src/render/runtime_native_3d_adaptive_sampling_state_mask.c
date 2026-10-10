@@ -215,6 +215,44 @@ bool RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
     return true;
 }
 
+bool RuntimeNative3DAdaptiveSampling_RefreshSurfaceBudgetMaskFromPixelState(
+    RuntimeNative3DAdaptiveSamplingMask* mask,
+    const RuntimeNative3DAdaptivePixelStateBuffer* state,
+    const RuntimeNative3DFeatureBuffer* features,
+    int tile_size) {
+    if (!state || !features || !features->hitMaskBuffer ||
+        features->width != state->width || features->height != state->height ||
+        !RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
+            mask, state, tile_size)) return false;
+    /* A low prefix variance does not establish convergence of the remaining
+     * light strata. Tile-local neighborhood dilation also cannot see adjacent
+     * jobs. Complete the requested budget on hits until a prefix-valid,
+     * partition-independent stopping estimator is qualified. No extra samples
+     * or storage are requested; deterministic background skipping survives. */
+    const size_t count = (size_t)state->width * (size_t)state->height;
+    for (size_t i = 0; i < count; ++i) {
+        if (features->hitMaskBuffer[i] && !mask->activeSampleMask[i]) {
+            mask->activeSampleMask[i] = 1;
+            mask->activePixelCount += 1;
+        }
+    }
+    const int tile_count = mask->tilesX * mask->tilesY;
+    memset(mask->activeTileMask, 0, (size_t)tile_count);
+    for (int y = 0; y < state->height; ++y) {
+        for (int x = 0; x < state->width; ++x) {
+            if (mask->activeSampleMask[(size_t)y * (size_t)state->width + (size_t)x]) {
+                const size_t tile = (size_t)(y / mask->tileSize) * (size_t)mask->tilesX +
+                                    (size_t)(x / mask->tileSize);
+                mask->activeTileMask[tile] = 1;
+            }
+        }
+    }
+    mask->activeTileCount = 0;
+    for (int i = 0; i < tile_count; ++i) mask->activeTileCount += mask->activeTileMask[i] != 0;
+    mask->inactiveTileCount = tile_count - mask->activeTileCount;
+    return true;
+}
+
 bool RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelState(
     RuntimeNative3DAdaptiveSamplingMask* mask,
     const RuntimeNative3DAdaptivePixelStateBuffer* state,

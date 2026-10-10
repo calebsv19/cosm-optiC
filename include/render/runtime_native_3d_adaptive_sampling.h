@@ -167,6 +167,12 @@ bool RuntimeNative3DAdaptiveSampling_RefreshActivityMaskFromPixelState(
     RuntimeNative3DAdaptiveSamplingMask* mask,
     const RuntimeNative3DAdaptivePixelStateBuffer* state,
     int tile_size);
+/* Complete the stratified frame budget on surfaces; retain background pruning. */
+bool RuntimeNative3DAdaptiveSampling_RefreshSurfaceBudgetMaskFromPixelState(
+    RuntimeNative3DAdaptiveSamplingMask* mask,
+    const RuntimeNative3DAdaptivePixelStateBuffer* state,
+    const RuntimeNative3DFeatureBuffer* features,
+    int tile_size);
 bool RuntimeNative3DAdaptiveSampling_RefreshConservativeEarlyStopMaskFromPixelState(
     RuntimeNative3DAdaptiveSamplingMask* mask,
     const RuntimeNative3DAdaptivePixelStateBuffer* state,
