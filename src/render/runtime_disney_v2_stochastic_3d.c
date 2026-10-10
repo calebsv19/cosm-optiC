@@ -1,3 +1,4 @@
+#include "render/runtime_camera_dielectric_3d.h"
 #include "render/runtime_surface_sampling.h"
 #include "render/runtime_specular_bsdf_3d.h"
 #include "render/runtime_mirror_composition_3d.h"
@@ -322,6 +323,8 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
     RuntimeDisneyV2_3DMisBranch finite_light_branch = {0};
     RuntimeDisneyV2_3DMisBranch emissive_area_branch = {0};
     bool has_emissive_area_direct = false;
+    bool sampled_delta = false;
+    RuntimeDielectricTransport3D camera_interface={0};
 
     if (!scene || !hit || !io_result || !io_result->principled.valid) return;
     if (RuntimeDisneyV2_3D_ShouldEvaluateEmissiveAreaLightSample(scene,
@@ -354,15 +357,30 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
         return;
     }
 
-    if (io_result->sampledLobe == RUNTIME_DISNEY_V2_3D_LOBE_TRANSMISSION) {
+    bool tir=io_result->principled.transmissionWeight>1e-9 &&
+        RuntimeCameraDielectric3D_Resolve(NULL,&io_result->payload,hit,vec3_scale(view_dir,-1),&camera_interface) &&
+        camera_interface.totalInternalReflection;
+    if (tir && io_result->sampledLobe != RUNTIME_DISNEY_V2_3D_LOBE_DIFFUSE) {
+        io_result->sampledLobe=RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR;
+        sample_dir=camera_interface.reflectionDir;
+        sample_pdf=io_result->transmissionProbability+io_result->specularProbability;
+        throughput_r=throughput_g=throughput_b=1.0/sample_pdf;
+        cos_theta=fabs(vec3_dot(hit->normal,sample_dir));sampled_delta=true;
+    } else     if (io_result->sampledLobe == RUNTIME_DISNEY_V2_3D_LOBE_TRANSMISSION) {
         if (!RuntimeDisneyV2_3D_SampleTransmission(&io_result->payload,
                                                    &io_result->principled,
                                                    hit,
                                                    view_dir,
                                                    io_result->transmissionProbability,
                                                    &transmission_sample)) {
-            return;
+            if(!transmission_sample.dielectric.totalInternalReflection) return;
+            transmission_sample.direction=transmission_sample.dielectric.reflectionDir;
+            transmission_sample.pdf=io_result->transmissionProbability+io_result->specularProbability;
+            transmission_sample.throughputR=transmission_sample.throughputG=
+                transmission_sample.throughputB=1.0/transmission_sample.pdf;
+            io_result->sampledLobe=RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR;
         }
+        sampled_delta=true;
         sample_dir = transmission_sample.direction;
         sample_pdf = transmission_sample.pdf;
         cos_theta = 1.0;
@@ -567,7 +585,7 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                 throughput_r,
                 throughput_g,
                 throughput_b,
-                io_result->misWeightBsdf,
+                sampled_delta ? 1.0 : io_result->misWeightBsdf,
                 1,
                 false,
                 &io_result->pathState,
@@ -653,9 +671,9 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
     }
     if (trace.emitterWins) {
         const double emitter_radiance = trace.emitterHitInfo.radiance;
-        const double contribution_r = throughput_r * emitter_radiance * io_result->misWeightBsdf;
-        const double contribution_g = throughput_g * emitter_radiance * io_result->misWeightBsdf;
-        const double contribution_b = throughput_b * emitter_radiance * io_result->misWeightBsdf;
+        const double contribution_r = throughput_r * emitter_radiance * (sampled_delta?1.0:io_result->misWeightBsdf);
+        const double contribution_g = throughput_g * emitter_radiance * (sampled_delta?1.0:io_result->misWeightBsdf);
+        const double contribution_b = throughput_b * emitter_radiance * (sampled_delta?1.0:io_result->misWeightBsdf);
         io_result->pathState.emitterHit = trace.emitterHit;
         io_result->pathState.emitterWins = true;
         io_result->pathState.emitterHitInfo = trace.emitterHitInfo;

@@ -1080,6 +1080,8 @@ static int run_render(const RayTracingAgentRenderRequest *request,
     return preflight.rendered_frames ? 0 : 9;
 }
 
+#include "render/runtime_caustic_photon_receiver_accounting_3d.h"
+
 int main(int argc, char **argv) {
     if(argc==2 && !strcmp(argv[1],"--surface-capabilities")) {puts(RuntimeSurfaceGraphCapabilities());return 0;}
     if(argc==3 && !strcmp(argv[1],"--validate-surface-graph")) {
@@ -1189,6 +1191,7 @@ int main(int argc, char **argv) {
                 "distinct IDs, and output overwrite permission\n");
         return 2;
     }
+    RuntimePhotonReceiverAccounting3D_SetEnabled(request.caustic_photon_surface_diagnostics_enabled);
     ray_tracing_render_headless_write_process_started_status(job_status_path,
                                                              job_id,
                                                              request_path,

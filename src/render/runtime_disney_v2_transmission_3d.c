@@ -1,3 +1,4 @@
+#include "render/runtime_camera_dielectric_3d.h"
 #include "render/runtime_disney_v2_transmission_internal_3d.h"
 
 #include <math.h>
@@ -175,71 +176,6 @@ static bool runtime_disney_v2_3d_apply_ambient_receiver_fallback(
     return true;
 }
 
-bool RuntimeDisneyV2_3D_SampleTransmission(
-    const RuntimeMaterialPayload3D* payload,
-    const RuntimePrincipledBSDF3D* principled,
-    const HitInfo3D* hit,
-    Vec3 view_dir,
-    double transmission_probability,
-    RuntimeDisneyV2_3DTransmissionSample* out_sample) {
-    RuntimeDisneyV2_3DTransmissionSample sample = {0};
-    double transmission_weight = 0.0;
-    double fresnel_transmission = 0.0;
-
-    if (!payload || !principled || !principled->valid || !hit || !out_sample) return false;
-    if (!(transmission_probability > 1e-9) || !(principled->transmissionWeight > 1e-9)) {
-        *out_sample = sample;
-        return false;
-    }
-    if (!RuntimeDielectricTransport3D_Resolve(payload,
-                                              hit->normal,
-                                              vec3_scale(vec3_normalize(view_dir), -1.0),
-                                              &sample.dielectric) ||
-        !sample.dielectric.hasRefraction) {
-        *out_sample = sample;
-        return false;
-    }
-
-    fresnel_transmission = 1.0 -
-                           runtime_disney_v2_transmission_3d_clamp01(sample.dielectric.fresnel);
-    transmission_weight =
-        runtime_disney_v2_transmission_3d_clamp01(principled->transmissionWeight) *
-        runtime_disney_v2_transmission_3d_clamp(fresnel_transmission, 0.05, 1.0);
-
-    sample.direction = vec3_normalize(sample.dielectric.refractionDir);
-    sample.pdf = fmax(transmission_probability, 1e-6);
-    sample.throughputR =
-        runtime_disney_v2_transmission_3d_clamp(
-            (payload->hasGlassInterfaceTintOverride
-                 ? payload->glassInterfaceTintR
-                 : principled->baseColorR) *
-                                                    transmission_weight / sample.pdf,
-                                                0.0,
-                                                2.0);
-    sample.throughputG =
-        runtime_disney_v2_transmission_3d_clamp(
-            (payload->hasGlassInterfaceTintOverride
-                 ? payload->glassInterfaceTintG
-                 : principled->baseColorG) *
-                                                    transmission_weight / sample.pdf,
-                                                0.0,
-                                                2.0);
-    sample.throughputB =
-        runtime_disney_v2_transmission_3d_clamp(
-            (payload->hasGlassInterfaceTintOverride
-                 ? payload->glassInterfaceTintB
-                 : principled->baseColorB) *
-                                                    transmission_weight / sample.pdf,
-                                                0.0,
-                                                2.0);
-    sample.valid = vec3_length(sample.direction) > 1e-9 &&
-                   (sample.throughputR > 1e-9 ||
-                    sample.throughputG > 1e-9 ||
-                    sample.throughputB > 1e-9);
-    *out_sample = sample;
-    return sample.valid;
-}
-
 static bool runtime_disney_v2_3d_trace_transmission_next_hit(
     const RuntimeScene3D* scene,
     const HitInfo3D* source_hit,
@@ -348,6 +284,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     RuntimeDirectLight3DResult direct = {0};
     RuntimeDisneyV2_3DResult receiver_result = {0};
     RuntimeDisneyV2_3DMediumStackTracker medium_stack = {0};
+    RuntimeCameraMedium3D camera_medium;
+    RuntimeCameraMedium3D_Init(&camera_medium);
     Vec3 direction = sample_direction;
     double throughput_r = initial_sample ? initial_sample->throughputR : 0.0;
     double throughput_g = initial_sample ? initial_sample->throughputG : 0.0;
@@ -389,6 +327,14 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         runtime_disney_v2_3d_medium_stack_enter(&medium_stack,
                                                 primary_hit->hitInfo.sceneObjectIndex);
         runtime_disney_v2_3d_medium_stack_commit(io_result, &medium_stack);
+    }
+    if (runtime_disney_v2_3d_policy_is_physical_transmission(&io_result->payload,
+                                                             &io_result->principled) &&
+        !io_result->payload.thinWalled) {
+        RuntimeDielectricTransport3D first_interface;
+        if (!RuntimeCameraDielectric3D_Resolve(&camera_medium,&io_result->payload,&source_hit,
+                primary_hit->primaryRay.direction,&first_interface) ||
+            !RuntimeCameraMedium3D_Transmit(&camera_medium,&io_result->payload,&source_hit,&first_interface)) return false;
     }
     for (depth = 1; depth <= RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_DEPTH_CAP; ++depth) {
         int ray_count = 0;
@@ -536,13 +482,22 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
 
         if (transparent_policy.physicalTransmission) {
             interface_transport_resolved =
-                RuntimeDielectricTransport3D_Resolve(&payload,
-                                                     hit.normal,
-                                                     direction,
-                                                     &interface_transport);
+                RuntimeCameraDielectric3D_Resolve(&camera_medium,&payload,&hit,
+                                                     direction,&interface_transport);
+            if (!interface_transport_resolved) break;
             if (interface_transport_resolved) {
                 interface_entering = interface_transport.entering;
-                if (interface_transport.hasRefraction) {
+                if (interface_transport.totalInternalReflection) {
+                    direction=interface_transport.reflectionDir;
+                    transparent_policy.transmissionWeight=1.0;
+                    /* No interface transmission tint is crossed by a TIR event. */
+                    transparent_policy.tintR=transparent_policy.tintG=transparent_policy.tintB=1.0;
+                    interface_direction_changed=true;
+                } else if (interface_transport.hasRefraction) {
+                    transparent_policy.transmissionWeight=principled.transmissionWeight*
+                        fmax(0.0,1.0-interface_transport.fresnel)*
+                        RuntimeCameraDielectric3D_RadianceScale(&payload,&interface_transport);
+                    if(!RuntimeCameraMedium3D_Transmit(&camera_medium,&payload,&hit,&interface_transport)) break;
                     interface_angle_delta_deg =
                         runtime_disney_v2_3d_direction_delta_degrees(
                             direction,
@@ -578,7 +533,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             io_result->primaryTransmissionThinWalledSurfaceCount += 1;
         } else {
             io_result->primaryTransmissionSolidSurfaceCount += 1;
-            if (transparent_policy.physicalTransmission) {
+            if (transparent_policy.physicalTransmission && !interface_transport.totalInternalReflection) {
                 runtime_disney_v2_3d_medium_stack_observe_solid_hit(
                     &medium_stack,
                     hit.sceneObjectIndex);

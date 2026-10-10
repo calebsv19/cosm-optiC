@@ -147,12 +147,13 @@ bool ray_tracing_headless_photon_capture_begin(
         const char* stems[] = { "photon_transport_paths", "photon_surface_records",
             "photon_surface_queries", "photon_selected_receiver_queries",
             "photon_surface_query_aggregate", "photon_termination_aggregate",
-            "photon_unmatched_paths" };
+            "photon_unmatched_paths", "photon_surface_live_queries",
+            "photon_receiver_accounting" };
         for (size_t i = 0; i < sizeof(stems) / sizeof(stems[0]); ++i) {
             struct stat info;
             if (snprintf(path, sizeof(path), "%s/%s_%04d.%s",
                          request->output_root, stems[i], request->start_frame,
-                         (i == 4 || i == 5) ? "json" : "jsonl") >= (int)sizeof(path)) return false;
+                         (i == 4 || i == 5 || i == 8) ? "json" : "jsonl") >= (int)sizeof(path)) return false;
             if (stat(path, &info) == 0 || errno != ENOENT) return false;
         }
     }

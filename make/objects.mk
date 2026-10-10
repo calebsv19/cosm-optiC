@@ -56,6 +56,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_direct_light_source_3d.o \
 	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 	$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_camera_dielectric_3d.o \
+	$(BUILD_DIR)/render/runtime_camera_transmission_sample_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_light_set_3d.o \
 	$(BUILD_DIR)/render/runtime_light_set_3d.o \
@@ -91,6 +93,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_bsdf_sampling_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_direct_consumer_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_accounting_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_bsdf_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_patch_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_sample_support_3d.o \
@@ -319,6 +322,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(KIT_RUNTIME_DIAG_OBJS)
 
 RAY_TRACING_RENDER_HEADLESS_DEPS = \
+	$(BUILD_DIR)/render/runtime_native_3d_pixel_probe.o \
+	$(BUILD_DIR)/render/runtime_transport_weight_probe_3d.o \
 	$(BUILD_DIR)/app/ray_tracing_checkpoint_reference.o \
 	$(BUILD_DIR)/app/ray_tracing_checkpoint_transaction.o \
 	$(BUILD_DIR)/app/ray_tracing_durable_io.o \
@@ -344,6 +349,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_prepare.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_surface_diagnostics.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_receiver_accounting.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_callbacks.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_status.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_render_budget.o \
@@ -518,6 +524,8 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_direct_light_source_3d.o \
 		$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 		$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_camera_dielectric_3d.o \
+	$(BUILD_DIR)/render/runtime_camera_transmission_sample_3d.o \
 		$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
 		$(BUILD_DIR)/render/runtime_emissive_light_set_3d.o \
 		$(BUILD_DIR)/render/runtime_light_set_3d.o \

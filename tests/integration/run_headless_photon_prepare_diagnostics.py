@@ -95,7 +95,7 @@ def main():
     run(a.cli, p, ['--preflight', '--photon-prepare-diagnostics', '--photon-path-ids', '1'], 2)
     assert occupied.read_text() == 'retained evidence\n'
     assert not list(out.glob('photon_transport_paths*'))
-    for stem, suffix in [('photon_termination_aggregate', 'json'), ('photon_unmatched_paths', 'jsonl')]:
+    for stem, suffix in [('photon_termination_aggregate', 'json'), ('photon_unmatched_paths', 'jsonl'), ('photon_surface_live_queries', 'jsonl'), ('photon_receiver_accounting', 'json')]:
         p, out = request('occupied_' + stem)
         out.mkdir()
         occupied = out / (stem + '_0000.' + suffix)
@@ -130,8 +130,17 @@ def main():
     assert aggregate['query_count'] > 0  # The tiny camera fixture may miss all deposits.
     assert 0 <= aggregate['positive_query_count'] <= aggregate['query_count']
     assert aggregate['undersampled_positive_query_count'] <= aggregate['positive_query_count']
+    accounting = json.loads((out / 'photon_receiver_accounting_0000.json').read_text())
+    assert accounting['domain'] == 'live_query_calls_before_synthetic_grid'
+    assert accounting['overflow_query_count'] == 0
+    assert sum(b['query_count'] for b in accounting['receivers']) == aggregate['query_count']
+    live = (out / 'photon_surface_live_queries_0000.jsonl').read_text().splitlines()
+    assert len(live) == min(8192, aggregate['query_count'])
+    for name in ('capture_a', 'capture_b'):
+        prep = json.loads((root / name / 'output/photon_receiver_accounting_0000.json').read_text())
+        assert prep['receivers'] == [], 'preparation grid must not masquerade as render queries'
     result = {'schema': 'photon_prepare_tests_v1', 'passed': True,
-              'negative_cases': 15, 'selected_path_sets': 2,
+              'negative_cases': 17, 'selected_path_sets': 2,
               'map_byte_equivalence': True, 'preparation_writes_no_frames': True,
               'ordinary_render_completed': True, 'live_aggregate_checked': True}
     (root / 'result.json').write_text(json.dumps(result, indent=2) + '\n')

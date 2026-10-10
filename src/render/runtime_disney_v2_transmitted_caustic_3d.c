@@ -4,9 +4,8 @@
 
 #include "render/runtime_caustic_photon_direct_consumer_3d.h"
 
-static double transmitted_caustic_clamp01(double value) {
+static double transmitted_caustic_valid_weight(double value) {
     if (!isfinite(value) || value <= 0.0) return 0.0;
-    if (value >= 1.0) return 1.0;
     return value;
 }
 
@@ -26,9 +25,9 @@ void RuntimeDisneyV2TransmittedCaustic3D_AccumulateResolvedSample(
     result->primaryTransmissionCausticLookupCount += 1;
     if (!query_hit) return;
 
-    weighted_r = radiance.x * transmitted_caustic_clamp01(throughput_r);
-    weighted_g = radiance.y * transmitted_caustic_clamp01(throughput_g);
-    weighted_b = radiance.z * transmitted_caustic_clamp01(throughput_b);
+    weighted_r = radiance.x * transmitted_caustic_valid_weight(throughput_r);
+    weighted_g = radiance.y * transmitted_caustic_valid_weight(throughput_g);
+    weighted_b = radiance.z * transmitted_caustic_valid_weight(throughput_b);
     if (!(fmax(weighted_r, fmax(weighted_g, weighted_b)) > 0.0)) return;
 
     result->primaryTransmissionCausticRadianceR += weighted_r;

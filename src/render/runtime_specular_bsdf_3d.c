@@ -21,10 +21,20 @@ static bool valid_sides(const HitInfo3D *hit, Vec3 view, Vec3 direction, Vec3 no
     return vec3_dot(view, normal) > 1e-9 && vec3_dot(direction, normal) > 1e-9 &&
            vec3_dot(view, geometric) > 1e-9 && vec3_dot(direction, geometric) > 1e-9;
 }
+static HitInfo3D reflection_hit(const HitInfo3D* hit,Vec3 view) {
+    HitInfo3D oriented=*hit;
+    if(vec3_dot(HitInfo3D_OffsetNormal(hit),view)<0) {
+        oriented.normal=vec3_scale(oriented.normal,-1);
+        oriented.geometricNormal=vec3_scale(oriented.geometricNormal,-1);
+        oriented.shadingNormal=vec3_scale(oriented.shadingNormal,-1);
+    }
+    return oriented;
+}
 double RuntimeSpecularBSDF3D_Pdf(const RuntimePrincipledBSDF3D *bsdf,
     const HitInfo3D *hit, Vec3 view, Vec3 direction) {
     if (!bsdf || !bsdf->valid || !hit) return 0.0;
     view = vec3_normalize(view);
+    HitInfo3D oriented=reflection_hit(hit,view);hit=&oriented;
     direction = vec3_normalize(direction);
     Vec3 normal = HitInfo3D_ShadingNormalForReflection(hit, view);
     if (!valid_sides(hit, view, direction, normal)) return 0.0;
@@ -39,6 +49,7 @@ RuntimeSpecularBSDF3DSample RuntimeSpecularBSDF3D_Sample(
     RuntimeSpecularBSDF3DSample sample = {0};
     if (!bsdf || !bsdf->valid || !hit || !(lobe_probability > 0.0)) return sample;
     view = vec3_normalize(view);
+    HitInfo3D oriented=reflection_hit(hit,view);hit=&oriented;
     Vec3 normal = HitInfo3D_ShadingNormalForReflection(hit, view);
     Vec3 axis = fabs(normal.z) < 0.999 ? vec3(0,0,1) : vec3(0,1,0);
     Vec3 tangent = vec3_normalize(vec3_cross(axis, normal));

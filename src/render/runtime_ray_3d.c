@@ -309,6 +309,12 @@ void HitInfo3D_Reset(HitInfo3D* hit) {
     hit->source.kind = RUNTIME_PRIMITIVE_3D_KIND_INVALID;
 }
 
+Vec3 HitInfo3D_BoundaryNormal(const HitInfo3D* hit) {
+    Vec3 normal = HitInfo3D_OffsetNormal(hit);
+    return hit && hit->hasBoundaryOrientation && !hit->boundaryEntering
+        ? vec3_scale(normal,-1.0) : normal;
+}
+
 Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit) {
     if (!hit) return vec3(0.0, 0.0, 0.0);
     if (vec3_length(hit->geometricNormal) > 1e-9) {
@@ -459,6 +465,8 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                        bary_w,
                                        &hit.geometricNormal,
                                        &hit.shadingNormal);
+    hit.hasBoundaryOrientation = true;
+    hit.boundaryEntering = vec3_dot(runtime_ray_3d_triangle_normal(triangle),ray->direction) < 0.0;
     hit.normal = hit.shadingNormal;
     hit.constantShadingNormal = !triangle->hasVertexNormals;
     if(triangle->hasVertexNormals) {

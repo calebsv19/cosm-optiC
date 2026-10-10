@@ -851,8 +851,48 @@ static void test_runtime_native_3d_shared_guides_2d(void) {
     RuntimeNative3DFeatureBuffer_Free(&reference);
 }
 
+/* One rare recursive-light sample must not masquerade as a stable beauty edge.
+ * Conversely stable HDR detail, different material/normal and unknown moments
+ * must remain protected even when nearby noisy pixels request reconstruction. */
+static void test_runtime_native_3d_denoise_uncertain_bright_edge(void) {
+    enum { W=9, N=W*W, CENTER=N/2 };
+    RuntimeNative3DFeatureBuffer f = {0};
+    float rgb[N*4];
+    assert_true("bright_edge_allocate",RuntimeNative3DFeatureBuffer_EnsureWithGuides(
+        &f,W,W,RUNTIME_NATIVE_3D_GUIDES_OWNED_STATISTICS));
+    if (!f.normalBuffer) return;
+    for (int mode=0; mode<6; ++mode) {
+        RuntimeNative3DFeatureBuffer_Clear(&f);
+        for (int i=0; i<N; ++i) {
+            f.hitMaskBuffer[i]=f.materialGuideMaskBuffer[i]=1;
+            f.triangleIndexBuffer[i]=i; f.sceneObjectIndexBuffer[i]=0;
+            f.normalBuffer[i*3+2]=f.shadingNormalBuffer[i*3+2]=1;
+            f.depthBuffer[i]=1; f.roughnessBuffer[i]=0.825f;
+            f.sampleCountBuffer[i]=4; f.varianceOfMeanBuffer[i]=0.0001f;
+            for (int c=0;c<3;++c) {
+                f.albedoBuffer[i*3+c]=0.5f;
+                rgb[i*4+c]=i==CENTER ? 2.75f : 0.5f;
+            }
+            rgb[i*4+3]=0.2f;
+        }
+        f.varianceOfMeanBuffer[CENTER]=mode==1 ? 0.0001f : 5.0625f;
+        if (mode==2) for (int c=0;c<3;++c) f.albedoBuffer[CENTER*3+c]=0.7f;
+        if (mode==3) {f.shadingNormalBuffer[CENTER*3+2]=0;f.shadingNormalBuffer[CENTER*3]=1;}
+        if (mode==4) f.varianceOfMeanBuffer[CENTER]=INFINITY;
+        if (mode==5) f.sampleCountBuffer[CENTER]=3;
+        assert_true("bright_edge_apply",RuntimeNative3DDenoise_ApplyForIntegrator(
+            rgb,W,&f,RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,4,NULL,0,NULL));
+        if (mode==0) assert_true("uncertain_bright_edge_reconstructed",rgb[CENTER*4]<1.0f);
+        else assert_close("supported_hdr_material_and_invalid_guards_preserved",rgb[CENTER*4],2.75,1e-7);
+        if (mode==1) assert_close("stable_hdr_edge_not_spread_into_neighbors",rgb[(CENTER-1)*4],0.5,1e-7);
+        assert_close("bright_edge_aux_channel_preserved",rgb[CENTER*4+3],0.2,1e-7);
+    }
+    RuntimeNative3DFeatureBuffer_Free(&f);
+}
+
 int run_test_runtime_native_3d_denoise_tests(void) {
     int before = test_support_failures();
+    test_runtime_native_3d_denoise_uncertain_bright_edge();
 
     test_runtime_native_3d_shared_guides_2d();
     test_runtime_native_3d_frame_denoise_guided_partition();

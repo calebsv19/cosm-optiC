@@ -666,9 +666,10 @@ void runtime_native_3d_render_apply_transmitted_surface_caustic_cache(
                         result->primaryTransmissionPathState.throughputG);
     throughput_b = fmax(result->primaryTransmissionCameraThroughputB,
                         result->primaryTransmissionPathState.throughputB);
-    radiance.x *= fmin(fmax(throughput_r, 0.0), 1.0);
-    radiance.y *= fmin(fmax(throughput_g, 0.0), 1.0);
-    radiance.z *= fmin(fmax(throughput_b, 0.0), 1.0);
+    /* Camera throughput includes radiance IOR and sampling compensation. */
+    radiance.x *= isfinite(throughput_r) && throughput_r > 0.0 ? throughput_r : 0.0;
+    radiance.y *= isfinite(throughput_g) && throughput_g > 0.0 ? throughput_g : 0.0;
+    radiance.z *= isfinite(throughput_b) && throughput_b > 0.0 ? throughput_b : 0.0;
     luma = fmax(fmax(radiance.x, radiance.y), radiance.z);
     if (!(luma > 0.0)) return;
     *io_r += radiance.x;

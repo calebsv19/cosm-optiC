@@ -51,3 +51,26 @@ float RuntimeNative3DDenoiseGuidance_NeighborWeight(
         expf(-rough_delta * rough_delta / (2.0f * 0.08f * 0.08f)) *
         powf(fminf(dot, 1.0f), 2048.0f);
 }
+
+bool RuntimeNative3DDenoiseGuidance_RadianceDifferenceUncertain(
+    const RuntimeNative3DFeatureBuffer* f, size_t a, size_t b,
+    const float* center, const float* sample) {
+    size_t local_a = a, local_b = b;
+    const RuntimeNative3DFeatureBuffer* fa = RuntimeNative3DFeatureBuffer_GuideSource(f,a,&local_a);
+    const RuntimeNative3DFeatureBuffer* fb = RuntimeNative3DFeatureBuffer_GuideSource(f,b,&local_b);
+    if (!center || !sample || !has_material(fa,local_a) || !has_material(fb,local_b) ||
+        fa->sampleCountBuffer[local_a] < 4u || fb->sampleCountBuffer[local_b] < 4u) return false;
+    const float va = RuntimeNative3DFeatureBuffer_VarianceAt(fa,local_a);
+    const float vb = RuntimeNative3DFeatureBuffer_VarianceAt(fb,local_b);
+    if (!isfinite(va) || !isfinite(vb) || va < 0.0f || vb < 0.0f) return false;
+    /* Existing maximum RGB variance of the mean supplies a conservative scale.
+     * This is a finite-sample heuristic, not a Gaussian confidence guarantee.
+     * Material, depth, normal and special-surface gates still apply separately. */
+    const float tolerance = 3.0f * sqrtf(va + vb);
+    if (!isfinite(tolerance)) return false;
+    for (size_t c = 0; c < 3u; ++c) {
+        if (!isfinite(center[c]) || !isfinite(sample[c]) ||
+            fabsf(center[c]-sample[c]) > tolerance) return false;
+    }
+    return true;
+}

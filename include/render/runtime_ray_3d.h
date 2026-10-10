@@ -59,6 +59,8 @@ typedef struct {
     bool hasSurfaceDifferentials, hasPixelFootprint, footprintUnbounded;
     Vec3 surfaceDpDu, surfaceDpDv, pixelDpDx, pixelDpDy;
     bool hasIncidentDifferentials, constantShadingNormal;
+    /* Boundary winding survives face-forward shading; occupies existing bool padding. */
+    bool hasBoundaryOrientation, boundaryEntering;
     bool footprintTransported;
     Vec3 incidentDirection, incidentDirectionDx, incidentDirectionDy;
     bool hasObjectTextureCoord;
@@ -129,6 +131,7 @@ bool RuntimeRay3D_TransportIdealFootprint(const HitInfo3D* hit, Vec3 normal,
     RuntimeRay3DIdealFootprintEvent event, double eta_from, double eta_to, Ray3D* io_ray);
 void HitInfo3D_Reset(HitInfo3D* hit);
 Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit);
+Vec3 HitInfo3D_BoundaryNormal(const HitInfo3D* hit);
 /*
  * Returns the BRDF normal for a direction while preserving the geometric
  * surface's lit hemisphere.  This prevents a coarse triangle with smooth

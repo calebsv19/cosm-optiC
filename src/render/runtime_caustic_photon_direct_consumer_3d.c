@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "render/runtime_material_payload_3d.h"
+#include "render/runtime_caustic_photon_receiver_accounting_3d.h"
 
 static RuntimeCausticPhotonConsumer3D g_consumer =
     RUNTIME_CAUSTIC_PHOTON_CONSUMER_CACHE_BRIDGE;
@@ -59,6 +60,7 @@ static void photon_direct_bsdf_unlock(void) {
 }
 
 static void photon_direct_reset_diagnostics(void) {
+    RuntimePhotonReceiverAccounting3D_Reset();
     photon_direct_bsdf_lock();
     memset(&g_receiver_bsdf_readback, 0, sizeof(g_receiver_bsdf_readback));
     photon_direct_bsdf_unlock();
@@ -448,6 +450,7 @@ static bool photon_direct_sample_surface_map(
     query.estimator.minimumEffectiveSamples = 4u;
     query_map = *surface_map;
     if (!RuntimeCausticPhotonMap3D_Query(&query_map, &query, &result)) {
+        RuntimePhotonReceiverAccounting3D_Record(hit->sceneObjectIndex, material->materialId, &result, *out_radiance);
         photon_direct_record_surface_diagnostic(hit, &result);
         if (out_readback) *out_readback = result;
         return false;
@@ -458,13 +461,15 @@ static bool photon_direct_sample_surface_map(
     result.hit = result.physicalFlux.x > 0.0 || result.physicalFlux.y > 0.0 ||
                  result.physicalFlux.z > 0.0;
     if (!result.hit) {
+        RuntimePhotonReceiverAccounting3D_Record(hit->sceneObjectIndex, material->materialId, &result, *out_radiance);
         photon_direct_record_surface_diagnostic(hit, &result);
         if (out_readback) *out_readback = result;
         return false;
     }
-    photon_direct_record_surface_diagnostic(hit, &result);
     if (!RuntimeCausticPhotonReceiverBsdf3D_EvaluateDiffuse(
             material, &result, out_radiance, &receiver_bsdf)) {
+        RuntimePhotonReceiverAccounting3D_Record(hit->sceneObjectIndex, material->materialId, &result, *out_radiance);
+        photon_direct_record_surface_diagnostic(hit, &result);
         if (out_readback) *out_readback = result;
         return false;
     }
@@ -472,6 +477,8 @@ static bool photon_direct_sample_surface_map(
     g_receiver_bsdf_readback = receiver_bsdf;
     photon_direct_bsdf_unlock();
     *out_radiance = vec3_scale(*out_radiance, g_surface_radiance_scale);
+    RuntimePhotonReceiverAccounting3D_Record(hit->sceneObjectIndex, material->materialId, &result, *out_radiance);
+    photon_direct_record_surface_diagnostic(hit, &result);
     if (out_readback) *out_readback = result;
     return true;
 }

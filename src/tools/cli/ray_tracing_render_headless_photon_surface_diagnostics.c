@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "render/runtime_caustic_photon_direct_consumer_3d.h"
+#include "render/runtime_caustic_photon_receiver_accounting_3d.h"
 #include "render/runtime_native_3d_render_photon_prepare.h"
 
 /* Snapshot before diagnostic probes reset the consumer's live counters.
@@ -86,6 +87,9 @@ static void sample_surface_reconstruction_grid(void) {
         }
     }
 }
+
+bool ray_tracing_headless_write_photon_receiver_accounting(
+    const RayTracingAgentRenderRequest* request, int frame_index);
 
 static bool write_surface_records(FILE* file) {
     const uint64_t count =
@@ -226,6 +230,16 @@ bool ray_tracing_headless_write_photon_surface_diagnostics(
     queries = fopen(queries_path, "w");
     if (!records || !queries) goto cleanup;
     if (!write_surface_query_aggregate(request, frame_index)) goto cleanup;
+    /* Preserve real shading samples before the compatibility grid replaces the
+     * bounded trace. Preparation-only captures correctly contain zero live calls. */
+    char live_path[PATH_MAX];
+    if (snprintf(live_path, sizeof(live_path), "%s/photon_surface_live_queries_%04d.jsonl",
+                 request->output_root, frame_index) >= (int)sizeof(live_path)) goto cleanup;
+    FILE* live = fopen(live_path, "w");
+    if (!live) goto cleanup;
+    bool live_ok = write_surface_queries(live);
+    if (fclose(live) != 0) live_ok = false;
+    if (!live_ok || !ray_tracing_headless_write_photon_receiver_accounting(request, frame_index)) goto cleanup;
     sample_surface_reconstruction_grid();
     ok = write_surface_records(records) && write_surface_queries(queries);
 

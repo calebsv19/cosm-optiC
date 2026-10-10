@@ -17,6 +17,11 @@ typedef struct {
     RuntimeDielectricTransport3D dielectric;
 } RuntimeDisneyV2_3DTransmissionSample;
 
+bool RuntimeDisneyV2_3D_SampleTransmissionInterface(
+    const RuntimeMaterialPayload3D* payload,const RuntimePrincipledBSDF3D* principled,
+    const RuntimeDielectricTransport3D* interface,double transmission_probability,
+    RuntimeDisneyV2_3DTransmissionSample* out_sample);
+
 bool RuntimeDisneyV2_3D_SampleTransmission(
     const RuntimeMaterialPayload3D* payload,
     const RuntimePrincipledBSDF3D* principled,

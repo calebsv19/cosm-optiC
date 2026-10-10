@@ -113,6 +113,7 @@ bool RuntimeDielectricTransport3D_ResolveInterface(
 
     if (sin2_t >= 1.0) {
         transport.totalInternalReflection = true;
+        transport.fresnel = 1.0;
         transport.hasRefraction = false;
         transport.refractionDir = transport.reflectionDir;
         *out_transport = transport;

@@ -1,3 +1,4 @@
+#include "render/runtime_native_3d_pixel_probe.h"
 #include "render/runtime_native_3d_denoise.h"
 
 #include <math.h>
@@ -327,6 +328,10 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 runtime_native_3d_denoise_copy_pixel(filtered, radiance_buffer, center_radiance_base);
                 diagnostics.reconstructedRadianceLumaTotal += center_luma;
                 diagnostics.skippedInvalidSurfacePixelCount += 1;
+                RuntimeNative3DPixelProbe_Denoise(x,y,features,center_index,
+                    radiance_buffer+center_radiance_base,filtered+center_radiance_base,
+                    blend,accepted_neighbor_count,total_weight,"invalid_surface");
+
                 continue;
             }
             if (features->triangleIndexBuffer[center_index] < 0 ||
@@ -334,6 +339,10 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 runtime_native_3d_denoise_copy_pixel(filtered, radiance_buffer, center_radiance_base);
                 diagnostics.reconstructedRadianceLumaTotal += center_luma;
                 diagnostics.skippedInvalidSurfacePixelCount += 1;
+                RuntimeNative3DPixelProbe_Denoise(x,y,features,center_index,
+                    radiance_buffer+center_radiance_base,filtered+center_radiance_base,
+                    blend,accepted_neighbor_count,total_weight,"invalid_surface");
+
                 continue;
             }
             if (runtime_native_3d_denoise_disney_v2_preserves_transparent(features,
@@ -341,6 +350,10 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 runtime_native_3d_denoise_copy_pixel(filtered, radiance_buffer, center_radiance_base);
                 diagnostics.reconstructedRadianceLumaTotal += center_luma;
                 diagnostics.preservedTransparentPixelCount += 1;
+                RuntimeNative3DPixelProbe_Denoise(x,y,features,center_index,
+                    radiance_buffer+center_radiance_base,filtered+center_radiance_base,
+                    blend,accepted_neighbor_count,total_weight,"transparent_preservation");
+
                 continue;
             }
             if (runtime_native_3d_denoise_disney_v2_preserves_mirror_glossy(features,
@@ -348,11 +361,18 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 runtime_native_3d_denoise_copy_pixel(filtered, radiance_buffer, center_radiance_base);
                 diagnostics.reconstructedRadianceLumaTotal += center_luma;
                 diagnostics.preservedMirrorGlossyPixelCount += 1;
+                RuntimeNative3DPixelProbe_Denoise(x,y,features,center_index,
+                    radiance_buffer+center_radiance_base,filtered+center_radiance_base,
+                    blend,accepted_neighbor_count,total_weight,"glossy_preservation");
+
                 continue;
             }
             if (guided && blend <= 1e-6f) {
                 runtime_native_3d_denoise_copy_pixel(filtered, radiance_buffer, center_radiance_base);
                 diagnostics.reconstructedRadianceLumaTotal += center_luma;
+                RuntimeNative3DPixelProbe_Denoise(x,y,features,center_index,
+                    radiance_buffer+center_radiance_base,filtered+center_radiance_base,
+                    blend,accepted_neighbor_count,total_weight,"insufficient_uncertainty");
                 continue;
             }
             if (!guided && temporal_activity_buffer) {
@@ -365,6 +385,10 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                                                          center_radiance_base);
                     diagnostics.reconstructedRadianceLumaTotal += center_luma;
                     diagnostics.skippedUnstableTemporalPixelCount += 1;
+                RuntimeNative3DPixelProbe_Denoise(x,y,features,center_index,
+                    radiance_buffer+center_radiance_base,filtered+center_radiance_base,
+                    blend,accepted_neighbor_count,total_weight,"unstable_temporal");
+
                     continue;
                 }
             }
@@ -408,10 +432,14 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                             runtime_native_3d_denoise_disney_v2_preserves_mirror_glossy(
                                 features,
                                 sample_index) ||
-                            runtime_native_3d_denoise_disney_v2_rejects_visual_edge(
+                            (runtime_native_3d_denoise_disney_v2_rejects_visual_edge(
                                 radiance_buffer,
                                 center_radiance_base,
-                                sample_radiance_base)) {
+                                sample_radiance_base) &&
+                             (!guided || !RuntimeNative3DDenoiseGuidance_RadianceDifferenceUncertain(
+                                 features,center_index,sample_index,
+                                 radiance_buffer+center_radiance_base,
+                                 radiance_buffer+sample_radiance_base)))) {
                             diagnostics.rejectedEdgeSampleCount += 1;
                             continue;
                         }
@@ -467,6 +495,11 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 runtime_native_3d_denoise_copy_pixel(filtered, radiance_buffer, center_radiance_base);
                 diagnostics.reconstructedRadianceLumaTotal += center_luma;
             }
+                RuntimeNative3DPixelProbe_Denoise(x,y,features,center_index,
+                    radiance_buffer+center_radiance_base,filtered+center_radiance_base,
+                    blend,accepted_neighbor_count,total_weight,
+                    accepted_neighbor_count > 0 && total_weight > 1.0f + 1e-6f ?
+                    "weighted_reconstruction" : "no_compatible_neighbors");
         }
     }
 

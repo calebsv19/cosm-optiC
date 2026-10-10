@@ -1,3 +1,4 @@
+#include "render/runtime_transport_weight_probe_3d.h"
 #include "render/runtime_specular_bsdf_3d.h"
 #include "render/runtime_disney_v2_transport_internal_3d.h"
 
@@ -103,7 +104,7 @@ static Vec3 runtime_disney_v2_transport_3d_sample_diffuse_direction(
     return direction;
 }
 
-bool runtime_disney_v2_transport_3d_sample_vertex(
+bool runtime_disney_v2_transport_3d_sample_vertex_with_medium(
     const RuntimeScene3D* scene,
     const HitInfo3D* hit,
     const RuntimeMaterialPayload3D* payload,
@@ -113,6 +114,7 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
     int depth,
     bool has_emissive_area_direct,
     const RuntimeEmissiveDirect3DResult* emissive_area_direct,
+    RuntimeCameraMedium3D* medium,
     RuntimeDisneyV2Transport3DVertexSample* out_sample) {
     RuntimeDisneyV2Transport3DVertexSample sample = {0};
     RuntimeDisneyV2_3DTransmissionSample transmission_sample = {0};
@@ -146,41 +148,28 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
         }
     }
 
-    if (sample.lobe == RUNTIME_DISNEY_V2_3D_LOBE_TRANSMISSION) {
-        Vec3 view_dir = vec3_scale(vec3_normalize(incoming_dir), -1.0);
-        if (RuntimeDisneyV2_3D_SampleTransmission(payload,
-                                                  principled,
-                                                  hit,
-                                                  view_dir,
-                                                  transmission_probability,
-                                                  &transmission_sample)) {
-            sample.direction = transmission_sample.direction;
-            sample.pdf = transmission_sample.pdf;
-            sample.cosTheta = 1.0;
-            sample.throughputR = transmission_sample.throughputR;
-            sample.throughputG = transmission_sample.throughputG;
-            sample.throughputB = transmission_sample.throughputB;
-        } else {
-            sample.direction = light_dir;
-            sample.cosTheta = runtime_disney_v2_transport_3d_clamp01(
-                fabs(vec3_dot(normal, sample.direction)));
-            sample.pdf = fmax(transmission_probability, 1e-6);
-            sample.throughputR =
-                (payload && payload->hasGlassInterfaceTintOverride
-                     ? payload->glassInterfaceTintR
-                     : principled ? principled->baseColorR : 1.0) *
-                                 fmax(transmission_probability, 1e-6);
-            sample.throughputG =
-                (payload && payload->hasGlassInterfaceTintOverride
-                     ? payload->glassInterfaceTintG
-                     : principled ? principled->baseColorG : 1.0) *
-                                 fmax(transmission_probability, 1e-6);
-            sample.throughputB =
-                (payload && payload->hasGlassInterfaceTintOverride
-                     ? payload->glassInterfaceTintB
-                     : principled ? principled->baseColorB : 1.0) *
-                                 fmax(transmission_probability, 1e-6);
-        }
+    if (principled && principled->transmissionWeight > 1e-9 && payload) {
+        sample.dielectricResolved=RuntimeCameraDielectric3D_Resolve(medium,payload,hit,incoming_dir,&sample.dielectric);
+        if(!sample.dielectricResolved) return false;
+    }
+    if (sample.dielectricResolved && sample.dielectric.totalInternalReflection &&
+        sample.lobe != RUNTIME_DISNEY_V2_3D_LOBE_DIFFUSE) {
+        /* Both dielectric branches become one certain reflection event under TIR. */
+        sample.lobe=RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR;
+        /* Internal reflection remains part of dielectric continuation: use its
+         * depth budget rather than truncating at the opaque reflection limit. */
+        sample.policyLobe=RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_TRANSMISSION;
+        sample.direction=sample.dielectric.reflectionDir;
+        sample.pdf=specular_probability+transmission_probability;
+        sample.throughputR=sample.throughputG=sample.throughputB=1.0/sample.pdf;
+        sample.cosTheta=fabs(vec3_dot(hit->normal,sample.direction));sample.delta=true;
+    } else if (sample.lobe == RUNTIME_DISNEY_V2_3D_LOBE_TRANSMISSION) {
+        if (!sample.dielectricResolved || !RuntimeDisneyV2_3D_SampleTransmissionInterface(
+                payload,principled,&sample.dielectric,transmission_probability,&transmission_sample)) return false;
+        sample.direction=transmission_sample.direction;sample.pdf=transmission_sample.pdf;sample.cosTheta=1;
+        sample.throughputR=transmission_sample.throughputR;
+        sample.throughputG=transmission_sample.throughputG;
+        sample.throughputB=transmission_sample.throughputB;sample.delta=true;
     } else if (sample.lobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR) {
         double u, v;
         RuntimeNative3DSampling_Stratified2D(sampling,
@@ -263,10 +252,22 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
                                                sample.directBsdfPdf,
                                                &sample.misWeightLight,
                                                &sample.misWeightBsdf);
+    RuntimeTransportWeightProbe3D_Sample(hit,payload,principled,incoming_dir,depth,
+        diffuse_probability,specular_probability,transmission_probability,&sample);
     *out_sample = sample;
     return sample.pdf > 1e-9 &&
            runtime_disney_v2_transport_3d_peak(sample.throughputR,
                                                sample.throughputG,
                                                sample.throughputB) > 1e-12 &&
            vec3_length(sample.direction) > 0.0;
+}
+
+bool runtime_disney_v2_transport_3d_sample_vertex(
+    const RuntimeScene3D* scene,const HitInfo3D* hit,const RuntimeMaterialPayload3D* payload,
+    const RuntimePrincipledBSDF3D* principled,const RuntimeNative3DSamplingContext* sampling,
+    Vec3 incoming_dir,int depth,bool has_emissive_area_direct,
+    const RuntimeEmissiveDirect3DResult* emissive_area_direct,
+    RuntimeDisneyV2Transport3DVertexSample* out_sample) {
+    return runtime_disney_v2_transport_3d_sample_vertex_with_medium(scene,hit,payload,principled,
+        sampling,incoming_dir,depth,has_emissive_area_direct,emissive_area_direct,NULL,out_sample);
 }

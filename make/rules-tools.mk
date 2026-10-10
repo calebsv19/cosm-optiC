@@ -131,3 +131,19 @@ $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN): tools/smooth_mesh_reflection/compile_ru
 
 smooth-mesh-runtime-compile-tool: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	@echo "smooth mesh runtime compile tool ready: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)"
+
+# Numerical transport audit; writes only BUILD_DIR, never cleans retained output.
+.PHONY: transport-weight-audit
+transport-weight-audit: $(BUILD_DIR)/tests/tools/transport_weight_audit
+
+$(BUILD_DIR)/tests/tools/transport_weight_audit: $(BUILD_DIR)/tests/tools/transport_weight_audit.o $(RAY_TRACING_RENDER_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS)
+
+# Receiver energy and camera-estimator qualification, contained output only.
+.PHONY: photon-receiver-audit
+photon-receiver-audit: $(BUILD_DIR)/tests/tools/photon_receiver_audit
+
+$(BUILD_DIR)/tests/tools/photon_receiver_audit: $(BUILD_DIR)/tests/tools/photon_receiver_audit.o $(RAY_TRACING_RENDER_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS)

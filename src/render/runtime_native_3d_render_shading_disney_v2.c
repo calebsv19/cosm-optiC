@@ -1,4 +1,6 @@
+#include "render/runtime_transport_weight_probe_3d.h"
 #include "render/runtime_native_3d_render_shading_internal.h"
+#include "render/runtime_native_3d_pixel_probe.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -48,6 +50,7 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
 
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
+            if (!RuntimeNative3DPixelProbe_ShouldShade(x,y)) continue;
             RuntimeDisneyV2_3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
@@ -80,7 +83,8 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                              &stats);
                 continue;
             }
-            if (!RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(
+            RuntimeTransportWeightProbe3D_Begin(x,y,sampling);
+            bool shaded = RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(
                     scene,
                     &primary_trace.primary,
                     primary_trace.payloadResolved ? &primary_trace.payload : NULL,
@@ -89,7 +93,9 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                     local_y,
                     end_x - start_x,
                     end_y - start_y,
-                    &result)) {
+                    &result);
+            RuntimeTransportWeightProbe3D_End();
+            if (!shaded) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
                                                                    (double)x,
@@ -224,6 +230,8 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             if (result.radiance > stats.maxRadiance) {
                 stats.maxRadiance = result.radiance;
             }
+            RuntimeNative3DPixelProbe_Shade(x, y, sampling, &result,
+                                           ambient_r, ambient_g, ambient_b);
             runtime_native_3d_render_write_radiance_rgb(radiance_buffer,
                                                         idx,
                                                         result.radianceR,

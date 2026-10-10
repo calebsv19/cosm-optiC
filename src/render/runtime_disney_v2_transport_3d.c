@@ -1,3 +1,4 @@
+#include "render/runtime_transport_weight_probe_3d.h"
 #include "render/runtime_surface_sampling.h"
 #include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_disney_v2_transport_internal_3d.h"
@@ -140,6 +141,8 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
     bool skip_start_vertex_direct,
     RuntimeDisneyV2_3DResult* io_result) {
     HitInfo3D current_hit = {0};
+    RuntimeCameraMedium3D medium;
+    RuntimeCameraMedium3D_Init(&medium);
     double throughput_r = parent_throughput_r;
     double throughput_g = parent_throughput_g;
     double throughput_b = parent_throughput_b;
@@ -150,6 +153,13 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         return false;
     }
 
+    if (io_result->pathState.valid && io_result->pathState.sampledLobe==RUNTIME_DISNEY_V2_3D_LOBE_TRANSMISSION &&
+        io_result->payloadResolved && io_result->principled.transmissionWeight>1e-9) {
+        RuntimeDielectricTransport3D initial_interface;
+        if(!RuntimeCameraDielectric3D_Resolve(&medium,&io_result->payload,&io_result->hitInfo,
+                io_result->pathState.ray.direction,&initial_interface) ||
+            !RuntimeCameraMedium3D_Transmit(&medium,&io_result->payload,&io_result->hitInfo,&initial_interface)) return false;
+    }
     current_hit = *start_hit;
     if (depth < 1) {
         depth = 1;
@@ -201,7 +211,7 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
                                                                    sampling,
                                                                    &emissive_area_direct);
         }
-        if (!runtime_disney_v2_transport_3d_sample_vertex(scene,
+        if (!runtime_disney_v2_transport_3d_sample_vertex_with_medium(scene,
                                                           &current_hit,
                                                           payload_resolved ? &payload : NULL,
                                                           &principled,
@@ -210,6 +220,7 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
                                                           depth,
                                                           has_emissive_area_direct,
                                                           &emissive_area_direct,
+                                                          &medium,
                                                           &vertex_sample)) {
             runtime_disney_v2_transport_3d_note_termination(
                 io_result,
@@ -226,6 +237,7 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
             break;
         }
 
+        const Vec3 probe_parent = vec3(throughput_r,throughput_g,throughput_b);
         const RuntimeMirrorComposition3DPolicy local_policy = RuntimeMirrorComposition3D_Evaluate(&payload);
         const double local_share = local_policy.active ? local_policy.baseAttenuation : 1.0;
         area_throughput_r = throughput_r * local_share;
@@ -249,6 +261,10 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
             io_result->pathPolicy.rouletteThreshold > 0.0 &&
             depth >= io_result->pathPolicy.minDepthBeforeRoulette &&
             io_result->rouletteSurvivalProbability < 1.0;
+        RuntimeTransportWeightProbe3D_Weight(depth,
+            probe_parent,
+            vec3(vertex_sample.throughputR,vertex_sample.throughputG,vertex_sample.throughputB),
+            io_result->rouletteSurvivalProbability,io_result->rouletteSample,local_share);
         if (RuntimePathDepthPolicy3D_ShouldTerminate(&io_result->pathPolicy,
                                                      depth,
                                                      throughput_luma,
@@ -267,6 +283,12 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
             break;
         }
 
+        if (vertex_sample.lobe == RUNTIME_DISNEY_V2_3D_LOBE_TRANSMISSION &&
+            vertex_sample.dielectricResolved && !RuntimeCameraMedium3D_Transmit(
+                &medium,&payload,&current_hit,&vertex_sample.dielectric)) {
+            runtime_disney_v2_transport_3d_note_termination(io_result,
+                RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_NEGLIGIBLE_THROUGHPUT);break;
+        }
         state.valid = true;
         state.depth = depth;
         state.sampledLobe = vertex_sample.lobe;
@@ -314,6 +336,10 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
                                     vertex_sample.finiteLightMis.weightLight;
             const double direct_b = area_throughput_b * finite_direct.radianceB *
                                     vertex_sample.finiteLightMis.weightLight;
+            RuntimeTransportWeightProbe3D_Direct(depth,&current_hit,
+                vec3(area_throughput_r,area_throughput_g,area_throughput_b),
+                vec3(finite_direct.radianceR,finite_direct.radianceG,finite_direct.radianceB),
+                vertex_sample.finiteLightMis.weightLight);
             io_result->recursiveDirectRadianceR += direct_r;
             io_result->recursiveDirectRadianceG += direct_g;
             io_result->recursiveDirectRadianceB += direct_b;
@@ -377,11 +403,11 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         if (trace.emitterWins) {
             const double emitter_radiance = trace.emitterHitInfo.radiance;
             const double contribution_r =
-                state.throughputR * emitter_radiance * io_result->misWeightBsdf;
+                state.throughputR * emitter_radiance * (vertex_sample.delta ? 1.0 : io_result->misWeightBsdf);
             const double contribution_g =
-                state.throughputG * emitter_radiance * io_result->misWeightBsdf;
+                state.throughputG * emitter_radiance * (vertex_sample.delta ? 1.0 : io_result->misWeightBsdf);
             const double contribution_b =
-                state.throughputB * emitter_radiance * io_result->misWeightBsdf;
+                state.throughputB * emitter_radiance * (vertex_sample.delta ? 1.0 : io_result->misWeightBsdf);
             state.emitterHit = trace.emitterHit;
             state.emitterWins = true;
             state.emitterHitInfo = trace.emitterHitInfo;
@@ -434,7 +460,7 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
                         state.throughputR,
                         state.throughputG,
                         state.throughputB,
-                        io_result->misWeightBsdf,
+                        vertex_sample.delta ? 1.0 : io_result->misWeightBsdf,
                         vertex_index,
                         true,
                         &state,

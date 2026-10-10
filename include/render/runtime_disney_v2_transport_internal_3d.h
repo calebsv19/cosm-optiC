@@ -2,6 +2,7 @@
 #define RENDER_RUNTIME_DISNEY_V2_TRANSPORT_INTERNAL_3D_H
 
 #include <stdint.h>
+#include "render/runtime_camera_dielectric_3d.h"
 
 #include "render/runtime_disney_v2_transport_3d.h"
 #include "render/runtime_disney_v2_estimator_3d.h"
@@ -26,6 +27,8 @@ typedef struct RuntimeDisneyV2Transport3DVertexSample {
     double throughputB;
     double pdf;
     double cosTheta;
+    RuntimeDielectricTransport3D dielectric;
+    bool dielectricResolved, delta;
     double lightPdf;
     double directBsdfPdf;
     double misWeightLight;
@@ -93,6 +96,18 @@ bool runtime_disney_v2_transport_3d_sample_vertex(
     int depth,
     bool has_emissive_area_direct,
     const RuntimeEmissiveDirect3DResult* emissive_area_direct,
+    RuntimeDisneyV2Transport3DVertexSample* out_sample);
+bool runtime_disney_v2_transport_3d_sample_vertex_with_medium(
+    const RuntimeScene3D* scene,
+    const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload,
+    const RuntimePrincipledBSDF3D* principled,
+    const RuntimeNative3DSamplingContext* sampling,
+    Vec3 incoming_dir,
+    int depth,
+    bool has_emissive_area_direct,
+    const RuntimeEmissiveDirect3DResult* emissive_area_direct,
+    RuntimeCameraMedium3D* medium,
     RuntimeDisneyV2Transport3DVertexSample* out_sample);
 
 #endif
