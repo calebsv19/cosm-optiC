@@ -24,6 +24,10 @@ int main(int argc, char **argv) {
         usage(argv[0]);
         return 2;
     }
+    if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+        usage(argv[0]);
+        return 0;
+    }
     mode = argv[1];
     for (int i = 2; i < argc; ++i) {
         if (strcmp(argv[i], "--request") == 0 && i + 1 < argc) {

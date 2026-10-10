@@ -790,12 +790,13 @@ static bool write_current_pointer(RayTracingTemporalCheckpointSession* session,
     return true;
 }
 
-static void retain_two_generations(RayTracingTemporalCheckpointSession* session) {
-    RayTracingCheckpointGenerationCandidate candidates[1024];
+static void retain_two_generations(RayTracingTemporalCheckpointSession* session,
+                                   RayTracingCheckpointGenerationCandidate* candidates,
+                                   size_t candidate_capacity) {
     size_t count = scan_generations(session->root,
                                     session->identity.frameIndex,
                                     candidates,
-                                    sizeof(candidates) / sizeof(candidates[0]));
+                                    candidate_capacity);
     for (size_t i = 2u; i < count; ++i) {
         (void)unlink(candidates[i].path);
     }
@@ -898,7 +899,8 @@ bool ray_tracing_temporal_checkpoint_commit(
         set_diag(session, "checkpoint pointer commit failed");
         return false;
     }
-    retain_two_generations(session);
+    /* Reuse the commit scan buffer: a second PATH_MAX array exceeds Linux's stack. */
+    retain_two_generations(session, candidates, sizeof(candidates) / sizeof(candidates[0]));
     if (clock_gettime(CLOCK_MONOTONIC, &finished) == 0) {
         int64_t elapsed_signed =
             (int64_t)(finished.tv_sec - started.tv_sec) * INT64_C(1000000000) +
