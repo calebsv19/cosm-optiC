@@ -1,3 +1,33 @@
+## October 9 — verified Main Edit reconciliation
+
+The local source checkpoint preserves and commits physical-smoke Direct Light
+optics, Disney V2 material-guided denoise, content-addressed mesh caching and
+portable snapshot storage, plus bounded photon transport/diagnostic repairs.
+Mesh-loader fixtures and retained-scene staging no longer place a 54 MiB asset
+set on the platform stack. The standalone atmosphere-optics math remains a
+numerical reference; no renderer or editor consumes that module yet.
+
+Fresh contained app/headless/test builds, 23 affected C groups, 12 surrounding
+regression groups, mesh-pack contracts, atmosphere math with ASan/UBSan, 10
+workflow and three storage tests, strict smoke-request gates, photon preparation
+with 15 negative cases, and ordinary native preflight/two-frame export pass.
+The full unrelated suite and new GUI/Linux qualification were not run for this
+source reconciliation. The Aquarium lane's ongoing four-sample visual comparison
+remains separate from source acceptance.
+
+VERSION remains 0.18.0 and Main Edit WORKER_VERSION remains 0.9.0. Released worker
+0.10.2 is a separately qualified package; its denoise source matches this lane,
+but that does not qualify the newer smoke/photon/storage changes remotely.
+Canonical source and installed app are unchanged. A minor public release is
+recommended for the accumulated features; approval is required before a bump.
+
+Next renderer focus: connect the headless physical-optics contract to saved,
+editable atmosphere settings and qualify Disney V2 transport; preserve legacy
+scene appearance; verify sky/direct-light step invariance and visual presets;
+then prove native simulation-cache playback/export. Physical smoke currently
+requires Direct Light and caustics off. Multiple scattering, calibrated soot and
+combined smoke/photon transport remain separate work.
+
 # RayTracing Main Edit Worktree
 
 ## October 4 — atmosphere authoring usability repair

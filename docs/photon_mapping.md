@@ -47,9 +47,105 @@ When render-prep population and
 `inspection.caustic_photon_surface_diagnostics_enabled` are both active, the
 headless renderer writes per-frame `photon_surface_records_NNNN.jsonl` landing
 records and `photon_surface_queries_NNNN.jsonl` direct-consumer reconstruction samples.
-These diagnostics expose receiver position, identity, flux, support, query
-radius, contributing sample counts, and rejection counters without changing
-the rendered result.
+Landing records expose receiver identity, flux and prepared support. The query
+file currently contains an 80-by-80 reconstruction probe on the first landing's
+XY plane and identity. It replaces the captured query sample list after rendering;
+it is **not** a list of camera pixels or a wall-wide query map.
+
+The same opt-in writer saves `photon_surface_query_aggregate_NNNN.json` before
+those synthetic probes reset the consumer counters. It contains query counts,
+positive/undersampled-positive counts and an effective-support histogram
+(0, 1, 2, 3, 4 or more). These are query calls since the last consumer bind/reset,
+not unique pixels or guaranteed full-frame coverage; temporal preparation can
+rebind the consumer. Preparation-only capture can legitimately report zero
+queries. This snapshot reuses constant-size counters and adds no frame buffers.
+
+### Preparation-only path capture
+
+To separate photon transport from image reconstruction, use the local headless
+CLI with a direct-map request whose render-prep population, contribution, surface
+query and surface diagnostics are enabled:
+
+```bash
+<renderer> --request <request.json> --preflight \
+  --photon-prepare-diagnostics --photon-path-ids 108,294,509
+```
+
+This prepares the scene and photon map without rendering a beauty frame. It adds:
+
+- `photon_transport_paths_NNNN.jsonl`: the actual emission and every traced hit
+  for the selected IDs, including object/material identity, BSDF lobe, PDF,
+  throughput, medium transitions and termination. Capture observes the existing
+  scheduler; it does not retrace paths or change random sampling.
+- `photon_selected_receiver_queries_NNNN.jsonl`: direct-consumer probes at stored
+  landings for those IDs, with the landing normal and receiver identity, physical
+  flux, effective sample count and undersampling status. These are landing probes,
+  not camera-pixel samples; their synthetic hits do not carry interpolated UV or
+  procedural surface payloads, so the reported radiance is diagnostic.
+- The existing landing and XY-plane probe files described above.
+- `photon_termination_aggregate_NNNN.json`: counts all observed path endings,
+  the requested depth, fixed event capacity and effective supported depth,
+  and the count of successfully traced paths with unmatched entry/exit totals.
+- `photon_unmatched_paths_NNNN.jsonl`: the first 64 unmatched successful paths,
+  including their photon IDs, terminal reasons and ordered object/medium events.
+  The aggregate reports omitted exports; this bounded list is not the full
+  population when more than 64 paths qualify. A roulette or depth cutoff inside
+  a medium can legitimately leave unmatched totals. Stored receiver acceptance
+  still requires reconciliation at that receiver.
+
+The ID list must contain 1–64 distinct unsigned integers. Every requested ID must
+be observed or the command fails. The mode rejects `--render`, missing photon
+population/contribution, and incompatible consumers. Existing diagnostic files
+are refused unless `output.overwrite` is true. Paths stream to disk one at a time;
+no per-pixel guides or full-frame buffers are added. The observer is scoped to
+single-threaded preparation and cleared before image work or teardown.
+
+Selected path rows also include the final numeric `reject_reason`. Photon path
+transport treats requested depth as a ceiling and stops normally at the smaller
+of that ceiling and the fixed hit-event capacity (currently eight). The cutoff
+reports `max_depth`, preserving earlier events for the existing receiver filter;
+it does not attempt a ninth hit and discard the whole path as `trace_error`.
+This does not provide ten-bounce transport merely because a request specifies
+ten, and it does not enlarge event arrays or allocate additional frame buffers.
+
+A fixed photon map can leave stable, undersampled illumination dots that temporal
+camera samples and a variance-guided image denoiser cannot reliably distinguish
+from real detail. Compare gain 1 against photon-off before changing transport,
+then inspect sparse support separately from image noise. A diagnostic gain such
+as 500 amplifies the estimator; it is not a physically calibrated material preset.
+
+For a material-guided raw/denoised image comparison, use at least four camera
+samples. Below that confidence floor, the stage can report `denoise.applied=true`
+while preserving every raw pixel. Require a positive
+`render_stats.denoise_reconstructed_pixel_count` and compare the actual images;
+the stage flag alone does not qualify filtering. Keep camera sample counts equal
+within each pair, and label photon-contribution and denoise comparisons separately
+when they use different sample budgets.
+
+### Clear Solid Interfaces and Sparse Surface Reconstruction
+
+Photon BSDF policies for explicitly configured solid glass and runtime water
+exclude the inherited legacy Lambertian lobe. Fresnel reflection and authored
+transmission loss form separate branches. Bulk color attenuation is evaluated
+by the medium stack over travelled distance; it is no longer multiplied into
+each clear-solid interface as well. An explicitly authored interface tint is
+still honored. Thin-walled and legacy materials retain their mixed-lobe policy.
+The expected-energy ledger uses raw branch weights, including interface loss,
+rather than normalized selection probabilities. This is a photon-path change;
+it does not replace the camera integrator's water/glass material model.
+
+The sample-centered `k_nearest` consumer now uses
+`caustic_photon_surface_gather_max_radius` as its maximum query footprint.
+Deposits with fewer than the minimum effective samples in their prepared local
+support use that bounded footprint. Dense deposits retain their prepared local
+support. Each kernel remains normalized over its disk, preserving deposited
+energy while lowering isolated peaks. Receiver identity, material, normal and
+incident-hemisphere rejection remain active. Undersampling counters still report
+the actual available deposits; wider support does not establish convergence.
+No per-pixel or full-frame buffers are introduced. Keep the maximum radius
+constant across a comparison and inspect both wall speckles and focused caustics
+before selecting a scene preset; increasing support trades spatial detail for
+lower reconstruction variance.
 
 ### Dynamic Water Boundary Identity
 

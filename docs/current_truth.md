@@ -1,3 +1,43 @@
+## October 9 — verified Main Edit reconciliation
+
+The local source checkpoint preserves and commits physical-smoke Direct Light
+optics, Disney V2 material-guided denoise, content-addressed mesh caching and
+portable snapshot storage, plus bounded photon transport/diagnostic repairs.
+Mesh-loader fixtures and retained-scene staging no longer place a 54 MiB asset
+set on the platform stack. The standalone atmosphere-optics math remains a
+numerical reference; no renderer or editor consumes that module yet.
+
+Fresh contained app/headless/test builds, 23 affected C groups, 12 surrounding
+regression groups, mesh-pack contracts, atmosphere math with ASan/UBSan, 10
+workflow and three storage tests, strict smoke-request gates, photon preparation
+with 15 negative cases, and ordinary native preflight/two-frame export pass.
+The full unrelated suite and new GUI/Linux qualification were not run for this
+source reconciliation. The Aquarium lane's ongoing four-sample visual comparison
+remains separate from source acceptance.
+
+VERSION remains 0.18.0 and Main Edit WORKER_VERSION remains 0.9.0. Released worker
+0.10.2 is a separately qualified package; its denoise source matches this lane,
+but that does not qualify the newer smoke/photon/storage changes remotely.
+Canonical source and installed app are unchanged. A minor public release is
+recommended for the accumulated features; approval is required before a bump.
+
+Next renderer focus: connect the headless physical-optics contract to saved,
+editable atmosphere settings and qualify Disney V2 transport; preserve legacy
+scene appearance; verify sky/direct-light step invariance and visual presets;
+then prove native simulation-cache playback/export. Physical smoke currently
+requires Direct Light and caustics off. Multiple scattering, calibrated soot and
+combined smoke/photon transport remain separate work.
+
+## October 6, 2026 — content-addressed native mesh cache and snapshot storage
+
+Main Edit now reuses native mesh packs by original-file SHA-256 plus schema/ABI
+across relocated scene/job assets. Snapshot dependencies use independent APFS
+clones. Native pack/loader tests and relocated native render parity pass; the
+actual UV producer removes successful new intermediates while preserving exact
+geometry and pre-existing evidence. See [storage contract](scene_asset_storage.md).
+Existing scenes and old cache files remain untouched. Canonical source, public
+version and worker distribution are separate from this local implementation.
+
 # October 5, 2026 — bounded Fire render qualification
 
 Main Edit completes exact per-ray incident-source preparation and an optional
@@ -2477,3 +2517,31 @@ orbit and right/middle-drag own pan without path mutation. Controls and hints no
 live in the left Paths pane, not over the viewport. Native regression covers
 navigation starting on an existing point, including Option+Shift, and compact
 pane layout with scroll access to attachment/timing controls.
+
+
+## Grounded Fire review: exact-zero volume work (Main Edit, 2026-10-05)
+
+`runtime_volume_3d_scatter.c` skips registered/compatibility direct-light loops
+only when the computed scattering probability is exactly zero, and skips
+visibility only when sampled incident RGB is exactly zero. Camera extinction
+and caustic paths are unchanged; there is no epsilon-density cutoff or reduced
+single-scattering mode. Native zero-contribution controls, volume, visibility,
+incident-light and render-parity groups pass, as do headless preflight/image
+export and the fisiCs semantic dump. A pinned native 96x72 full-scattering
+before/after fixture produces byte-identical BMP (7.97 ->3.26 s on one local
+case); this is not a general benchmark. The optimized worker renders native
+960x720 grounded Fire/smoke stills at 2/4/8 s plus an identical 8 s smoke-off
+control. GrowthSim `docs/fire_ground_plume.md` and its evidence receipts own
+the physical qualification, authored optics and visual limits. No optiC package,
+installation, release version or accepted scene pointer changes.
+
+### Physical smoke-volume local candidate (2026-10-05)
+
+See `docs/physical_smoke_volume.md` for additive cell-centred sampling and the
+strict `physical_smoke_v1` headless optical profile. Native floor/placed sampling,
+Beer-law, sky-energy, actual ground-occlusion, legacy volume/visibility and
+headless request/preflight/image-export controls pass. The physical profile
+uses explicit extinction/albedo/HG anisotropy and scene sky visibility; it is
+a bounded single-scattering quadrature, with authored test optics rather than
+measured soot calibration. This is uncommitted Main Edit work, not installed
+or promoted, and production visual/physical acceptance is still open.

@@ -173,3 +173,5 @@ Local restoration accepts these names relative to the archive directory. This
 matches the established cold-archive helper; do not strip the prefix before PC
 submission. The historical first Aurora dry-run caught this contract mismatch;
 the same export-item identity was repaired before any archive apply.
+
+Nested JSON manifests may use owner-relative references, including parent segments that normalize inside the snapshot root. Absolute, escaping, and symlink dependencies remain refused. Native surface projection mode names (for example `planar_xy`) are semantic values, while projection document paths remain file dependencies. Snapshot containment does not establish remote queue capability: the current submit adapter still restricts material image and nested surface paths.
