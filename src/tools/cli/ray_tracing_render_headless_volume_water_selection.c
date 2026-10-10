@@ -108,6 +108,7 @@ static bool ray_tracing_headless_inspect_volume_frame(
     if (out_loaded_frame_index) {
         *out_loaded_frame_index = attachment.grid.frameIndex;
     }
+    attachment.grid.cellCentered = request->volume_cell_centered;
     attachment.affectsLighting = request->volume_affects_lighting;
     attachment.debugOverlayEnabled = request->volume_debug_overlay;
     if (out_summary) {

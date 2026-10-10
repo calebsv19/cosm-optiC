@@ -412,7 +412,8 @@ static bool photon_direct_sample_surface_map(
     query.triangleIndex = hit->triangleIndex;
     query.materialId = material->materialId;
     query.radius =
-        photon_direct_uses_neighbor_gather(g_surface_estimator)
+        (photon_direct_uses_neighbor_gather(g_surface_estimator) ||
+         g_surface_estimator == RUNTIME_CAUSTIC_PHOTON_ESTIMATOR_K_NEAREST)
             ? g_surface_gather_max_radius
             : g_surface_query_radius;
     query.receiverDomain = RUNTIME_CAUSTIC_PHOTON_RECEIVER_PATCH;

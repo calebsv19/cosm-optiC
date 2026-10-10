@@ -362,8 +362,14 @@ static void photon_map_sample_centered_consider_record(
     const double normal_dot = vec3_dot(query_normal, record->normal);
     const double incident_cosine = -vec3_dot(record->incidentDirection, query_normal);
     const Vec3 normalized_flux = record->flux;
+    /* A sparse deposit uses the configured bounded reconstruction footprint.
+     * This is a per-record normalized kernel, not a query-dependent energy
+     * clamp. Dense records retain their prepared support and fine caustics. */
+    const bool sparse_support = record->sampleCenteredSupportPrepared &&
+        record->sampleCenteredSupportNeighborCount + 1u <
+            result->estimator.minimumEffectiveSamples;
     const double support_radius =
-        record->sampleCenteredSupportPrepared &&
+        !sparse_support && record->sampleCenteredSupportPrepared &&
                 record->sampleCenteredSupportRadius > 0.0
             ? fmin(record->sampleCenteredSupportRadius, query_radius)
             : query_radius;

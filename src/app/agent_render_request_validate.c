@@ -294,6 +294,18 @@ bool agent_render_request_finalize_loaded(RayTracingAgentRenderRequest* request,
         request->caustic_settings.mode = RUNTIME_CAUSTIC_MODE_OFF;
         request->caustic_sidecar_enabled = false;
     }
+    if (request->has_smoke_optics &&
+        (request->integrator_3d != RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT ||
+         request->caustic_settings.mode != RUNTIME_CAUSTIC_MODE_OFF ||
+         !request->volume_affects_lighting ||
+         request->has_volume_density_scale_override || request->has_volume_density_gamma_override ||
+         request->has_volume_absorption_gain_override || request->has_volume_opacity_clamp_override ||
+         request->has_volume_scatter_gain_override || request->has_volume_tint_override || request->has_volume_albedo_override)) {
+        json_object_put(root);
+        agent_render_request_set_diagf(out_diagnostics,out_diagnostics_size,
+            "physical smoke requires direct_light, caustics off, affects_lighting true and no legacy optical overrides");
+        return false;
+    }
     if (request->caustic_photon_integration_settings.productMode ==
             RUNTIME_CAUSTIC_PRODUCT_MODE_PHOTON_MAP &&
         request->caustic_photon_integration_settings.renderContributionEnabled) {

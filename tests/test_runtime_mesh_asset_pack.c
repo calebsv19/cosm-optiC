@@ -1,4 +1,5 @@
 #include <math.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -104,7 +105,7 @@ static void fill_source_key(const char* path,
     out_key->source_size_bytes = (int64_t)st.st_size;
     out_key->source_checksum = checksum;
     out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
-    out_key->ray_tracing_cache_schema_version = 3u;
+    out_key->ray_tracing_cache_schema_version = RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_SCHEMA_VERSION;
     out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
 }
 
@@ -316,8 +317,41 @@ static int test_runtime_mesh_asset_pack_cache_metadata_rejects_stale_key(void) {
     return 0;
 }
 
+static void test_runtime_mesh_asset_content_relocation(void) {
+    char source[] = "/private/tmp/rt-content-source-XXXXXX";
+    char moved[] = "/private/tmp/rt-content-moved-XXXXXX";
+    char path_a[4096], path_b[4096];
+    int fd_a = mkstemp(source), fd_b = mkstemp(moved);
+    RayTracingRuntimeMeshAssetPackSourceKey key_a, key_b;
+    assert_true("content_fixture_files", fd_a >= 0 && fd_b >= 0);
+    if (fd_a < 0 || fd_b < 0) return;
+    assert_true("content_source_write", write(fd_a, "same immutable bytes", 20) == 20);
+    assert_true("content_moved_write", write(fd_b, "same immutable bytes", 20) == 20);
+    close(fd_a); close(fd_b);
+    assert_true("content_source_key", ray_tracing_runtime_mesh_asset_pack_content_key_for_source(source, &key_a));
+    assert_true("content_moved_key", ray_tracing_runtime_mesh_asset_pack_content_key_for_source(moved, &key_b));
+    assert_true("content_relocation_key", memcmp(&key_a, &key_b, sizeof(key_a)) == 0);
+    assert_true("content_source_path", ray_tracing_runtime_mesh_asset_pack_cache_path_for_source("/cache", source, path_a, sizeof(path_a)));
+    assert_true("content_moved_path", ray_tracing_runtime_mesh_asset_pack_cache_path_for_source("/cache", moved, path_b, sizeof(path_b)));
+    assert_true("content_relocation_one_path", strcmp(path_a, path_b) == 0);
+    key_b.pointer_size_bytes += 1;
+    assert_true("content_abi_path", ray_tracing_runtime_mesh_asset_pack_cache_path_for_key("/cache", &key_b, path_b, sizeof(path_b)));
+    assert_true("content_abi_invalidation", strcmp(path_a, path_b) != 0);
+    key_b = key_a; key_b.ray_tracing_cache_schema_version += 1;
+    assert_true("content_schema_path", ray_tracing_runtime_mesh_asset_pack_cache_path_for_key("/cache", &key_b, path_b, sizeof(path_b)));
+    assert_true("content_schema_invalidation", strcmp(path_a, path_b) != 0);
+    fd_b = open(moved, O_WRONLY);
+    assert_true("content_changed_write", fd_b >= 0 && write(fd_b, "DIFF immutable bytes", 20) == 20);
+    if (fd_b >= 0) close(fd_b);
+    assert_true("content_changed_path", ray_tracing_runtime_mesh_asset_pack_cache_path_for_source("/cache", moved, path_b, sizeof(path_b)));
+    assert_true("content_same_size_change_invalidates", strcmp(path_a, path_b) != 0);
+    assert_true("content_truncated_path_refused", !ray_tracing_runtime_mesh_asset_pack_cache_path_for_source("/cache", source, path_a, 8));
+    unlink(source); unlink(moved);
+}
+
 int run_test_runtime_mesh_asset_pack_tests(void) {
     int before = g_runtime_mesh_asset_pack_failures;
+    test_runtime_mesh_asset_content_relocation();
     test_runtime_mesh_asset_pack_pressure_fixture();
     test_runtime_mesh_asset_pack_cache_metadata_rejects_stale_key();
     return g_runtime_mesh_asset_pack_failures - before;

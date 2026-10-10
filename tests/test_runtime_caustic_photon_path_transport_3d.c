@@ -402,6 +402,26 @@ static int test_runtime_caustic_photon_path_transport_reflective_depth_loop(void
                     trace.trace.events[2].outgoingDirection.z < -0.999 &&
                     trace.trace.events[3].outgoingDirection.z > 0.999);
 
+    settings.sceneTrace.maxDepth = RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS;
+    assert_true("runtime_caustic_photon_path_transport_capacity_control",
+                RuntimeCausticPhotonPathTransport3D_Trace(&scene, &sample, &settings, &trace));
+    settings.sceneTrace.maxDepth = 10u;
+    assert_true("runtime_caustic_photon_path_transport_capacity_stops_normally",
+                RuntimeCausticPhotonPathTransport3D_Trace(&scene, &sample, &settings, &replay) &&
+                replay.readback.termination == RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH &&
+                replay.readback.hitEventCount == RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS &&
+                replay.readback.intersectionCount == trace.readback.intersectionCount &&
+                replay.trace.finalState.rejectReason == RUNTIME_CAUSTIC_PHOTON_REJECT_MAX_DEPTH &&
+                replay.trace.valid && replay.readback.succeeded);
+    for (uint32_t i = 0; i < replay.readback.hitEventCount; ++i) {
+        assert_true("runtime_caustic_photon_path_transport_capacity_preserves_prefix",
+                    memcmp(&trace.hitEvents[i].bsdfSampleStream,
+                           &replay.hitEvents[i].bsdfSampleStream,
+                           sizeof(trace.hitEvents[i].bsdfSampleStream)) == 0);
+    }
+    assert_close("runtime_caustic_photon_path_transport_capacity_preserves_flux",
+                 replay.trace.finalState.throughput.x, trace.trace.finalState.throughput.x, 1e-12);
+
     RuntimeSceneAcceleration3D_ResetTLASForTests();
     RuntimeScene3D_Free(&scene);
     return 0;

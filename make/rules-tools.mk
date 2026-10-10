@@ -40,6 +40,9 @@ $(NATIVE3D_AUDIT_BIN): $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS) $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(CC) $(NATIVE3D_AUDIT_OBJ) $(NATIVE3D_AUDIT_DEPS) $(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o -o $@ $(LDFLAGS)
 
+RAY_TRACING_RENDER_HEADLESS_DEPS += $(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_capture.o
+RAY_TRACING_RENDER_HEADLESS_DEPS += $(BUILD_DIR)/tools/cli/ray_tracing_headless_photon_termination.o
+
 ray-tracing-render-headless: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	@echo "ray_tracing headless render CLI ready: $(RAY_TRACING_RENDER_HEADLESS_BIN)"
 

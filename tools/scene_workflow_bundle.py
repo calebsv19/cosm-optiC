@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from scene_asset_storage import copy_asset
 
 REPO = Path(__file__).resolve().parents[1]
 PATH_KEYS = {'runtime_mesh_path', 'runtime_curve_path', 'source_uri', 'source_path',
@@ -61,6 +62,10 @@ def references(doc):
     if isinstance(doc, dict):
         for key, value in doc.items():
             if isinstance(value, str):
+                # Native surface bindings name a mapping mode here; imported
+                # region manifests can instead name a projection document.
+                if key == 'projection' and value in {'planar_xy', 'planar_xz', 'planar_yz', 'triplanar'}:
+                    continue
                 file_key = (key in PATH_KEYS or key.endswith('_path') or key.endswith('_uri')
                             or key in {'runtime', 'authoring', 'projection', 'projected_source'})
                 if file_key and value:
@@ -134,7 +139,7 @@ def snapshot_inputs(scene_path, request_path, dest):
         target = contained(dest, rel)
         target.parent.mkdir(parents=True, exist_ok=True)
         digest = sha(path)
-        shutil.copy2(path, target)
+        copy_asset(path, target)
         if sha(target) != digest or sha(path) != digest:
             raise ValueError(f'dependency changed during snapshot: {rel}')
     write(dest / 'scene_runtime.json', scene)

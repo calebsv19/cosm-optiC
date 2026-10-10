@@ -1,3 +1,6 @@
+#include "render/runtime_volume_3d_transform.h"
+#include "render/runtime_volume_3d_sampling.h"
+#include <math.h>
 #include <string.h>
 #include <stdlib.h>
 #include "render/runtime_incident_light_3d.h"
@@ -695,6 +698,14 @@ static int test_runtime_volume_3d_registered_lights(void) {
     scene.lightSet.lights[0].kind=RUNTIME_LIGHT_SOURCE_3D_KIND_MESH_EMISSIVE;
     RuntimeVolume3DScatterResult unsupported=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
     assert_true("registry_mesh_explicitly_unqualified",unsupported.registryUnsupportedSources>0 && unsupported.radiance==0);
+    scene.lightSet.lights[0].kind=RUNTIME_LIGHT_SOURCE_3D_KIND_POINT;
+    scene.lightSet.lights[0].color=vec3(0,0,0);
+    RuntimeVolume3DScatterResult black=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
+    assert_true("registry_zero_rgb_no_visibility_work",!black.active && black.radiance==0 && black.registryVisibilityRays==0 && black.compatibilityFallbackSamples==0);
+    scene.lightSet.lights[0].color=vec3(1,0,0);
+    for(uint64_t q=0;q<scene.volume.grid.cellCount;++q)scene.volume.channels.density[q]=1e-25f;
+    RuntimeVolume3DScatterResult tail=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,5,NULL);
+    assert_true("registry_underflow_probability_no_visibility_work",!tail.active && tail.radiance==0 && tail.registryVisibilityRays==0 && tail.compatibilityFallbackSamples==0);
     RuntimeScene3D_Free(&scene);
     return 0;
 }
@@ -853,8 +864,82 @@ static int test_runtime_volume_3d_incident_and_visibility(void) {
     RuntimeScene3D_Free(&scene);RuntimeRay3D_ResetTraceRouteForTests();return 0;
 }
 
+static void test_runtime_volume_3d_physical_smoke(void) {
+    RuntimeScene3D scene; RuntimeScene3D_Init(&scene);
+    RuntimeRay3D_SetTraceRoute(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
+    RuntimeVolume3DMaterial_ResetTuning(); RuntimeVolume3DScatter_ResetTuning();
+    scene.volume.enabled=true; scene.volume.affectsLighting=true;
+    assert_true("cell_layout_config",RuntimeVolumeGrid3D_Configure(&scene.volume.grid,1,2,2,2,0,0,.01,vec3(0,0,0),.5,vec3(0,0,1),0));
+    assert_true("cell_layout_allocate",RuntimeVolumeAttachment3D_AllocateOwnedChannels(&scene.volume,RUNTIME_VOLUME_3D_CHANNEL_DENSITY));
+    for (int q=0;q<8;q++) scene.volume.channels.density[q]=q<4?1:3;
+    scene.volume.grid.cellCentered=true;
+    assert_close("cell_first_center",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(.25,.25,.25)),1,1e-12);
+    assert_close("cell_ground_half_cell",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(.25,.25,0)),1,1e-12);
+    assert_close("cell_internal_interpolation",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(.25,.25,.5)),2,1e-12);
+    assert_close("cell_last_half_cell",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(.25,.25,.999)),3,1e-12);
+    assert_close("cell_no_below_ground",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(.25,.25,-.0001)),0,1e-12);
+    assert_close("cell_top_excluded",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(.25,.25,1)),0,1e-12);
+    assert_true("cell_placed_transform",RuntimeVolume3D_SetPlacement(&scene.volume,vec3(2,3,4),vec3(0,0,0),vec3(2,2,2)));
+    assert_close("cell_placed_floor",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(2.5,3.5,4)),1,1e-12);
+    assert_close("cell_placed_no_below_floor",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(2.5,3.5,3.999)),0,1e-12);
+    assert_true("cell_restore_identity",RuntimeVolume3D_SetPlacement(&scene.volume,vec3(0,0,0),vec3(0,0,0),vec3(1,1,1)));
+    scene.volume.grid.cellCentered=false;
+    assert_close("cell_legacy_unchanged",RuntimeVolume3D_SampleDensityAtPosition(&scene.volume,vec3(.25,.25,.25)),2,1e-12);
+    scene.volume.grid.cellCentered=true;
+    for (int q=0;q<8;q++) scene.volume.channels.density[q]=1;
+    assert_true("smoke_optics_valid",RuntimeVolume3DMaterial_SetSmokeOptics(.001,1,.6,0,true));
+    assert_true("smoke_optics_invalid_rejected",!RuntimeVolume3DMaterial_SetSmokeOptics(.001,1,1.1,0,true));
+    assert_close("smoke_extinction_units",RuntimeVolume3DMaterial_ExtinctionDensity(1),.001,1e-14);
+    Ray3D ray={.origin=vec3(.5,.5,-1),.direction=vec3(0,0,1)};
+    RuntimeVisibility3DTransmittance trans=RuntimeVolume3D_TransmittanceAlongRayRGB(&scene.volume,&ray,0,3);
+    assert_close("smoke_beer_law",trans.r,exp(-.001),1e-12);
+    scene.environment.lightMode=ENVIRONMENT_LIGHT_MODE_AMBIENT;
+    scene.environment.backgroundIntensity=1;
+    scene.environment.backgroundTopColor=scene.environment.backgroundBottomColor=vec3(1,1,1);
+    scene.hasLight=false;scene.lightSet.lightCount=0;
+    RuntimeVolume3DScatterResult lit=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    const double upper=.6*(1-exp(-.001));
+    assert_true("sky_thin_slab_energy_upper",lit.radianceR<=upper*(1+1e-10));
+    assert_true("sky_thin_slab_energy_lower",lit.radianceR>=upper*exp(-sqrt(3)*.001));
+    RuntimeVolume3DScatter_SetStepScale(.5);
+    RuntimeVolume3DScatterResult fine_reference=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    assert_true("sky_budget_valid",RuntimeVolume3DMaterial_SetSkyErrorBudget(1e-4));
+    assert_true("sky_budget_invalid_rejected",!RuntimeVolume3DMaterial_SetSkyErrorBudget(-1));
+    RuntimeVolume3DScatterResult bounded=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    assert_true("sky_budget_reduces_work_radiance",bounded.radianceR<fine_reference.radianceR);
+    assert_true("sky_budget_absolute_error_bound",fine_reference.radianceR-bounded.radianceR<=1e-4*(1+1e-10));
+    RuntimeVolume3DMaterial_SetSkyErrorBudget(0);RuntimeVolume3DScatter_SetStepScale(1);
+    scene.triangleMesh.triangles=calloc(2,sizeof(RuntimeTriangle3D));scene.triangleMesh.triangleCount=2;scene.triangleMesh.triangleCapacity=2;scene.triangleMesh.bvhDirty=true;
+    for (int i=0;i<2;i++) {
+        RuntimeTriangle3D *floor=&scene.triangleMesh.triangles[i];floor->p0=vec3(-10,-10,0);
+        floor->p1=i==0?vec3(10,-10,0):vec3(10,10,0);floor->p2=i==0?vec3(10,10,0):vec3(-10,10,0);
+        floor->normal=vec3(0,0,1);floor->twoSided=true;floor->sceneObjectIndex=7;floor->primitiveIndex=-1;
+    }
+    RuntimeVolume3DScatterResult ground_shadow=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    assert_true("sky_actual_ground_occlusion",ground_shadow.radianceR<.8*lit.radianceR && ground_shadow.radianceR>.3*lit.radianceR);
+    free(scene.triangleMesh.triangles);scene.triangleMesh.triangles=NULL;scene.triangleMesh.triangleCount=0;scene.triangleMesh.triangleCapacity=0;scene.triangleMesh.bvhDirty=true;
+    RuntimeVolume3DMaterial_SetSmokeOptics(.001,1,0,0,true);
+    RuntimeVolume3DScatterResult absorb=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    assert_close("pure_absorption_no_scatter",absorb.radianceR,0,1e-14);
+    RuntimeVolume3DMaterial_SetSmokeOptics(.001,1,.6,0,false);
+    RuntimeVolume3DScatterResult no_sky=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    assert_close("sky_opt_out_no_lights",no_sky.radianceR,0,1e-14);
+    RuntimeVolume3DMaterial_SetSmokeOptics(.001,1,.6,.8,true);
+    RuntimeVolume3DMaterialTuning retained=RuntimeVolume3DMaterial_GetTuning();
+    RuntimeVolume3DMaterial_ResetTuning();RuntimeVolume3DMaterial_RestoreTuning(retained);
+    assert_true("physical_tuning_restored",RuntimeVolume3DMaterial_GetTuning().physical_smoke);
+    RuntimeVolume3DScatterResult anisotropic=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    assert_true("sky_constant_energy_anisotropic",anisotropic.radianceR>=upper*exp(-sqrt(3)*.001) && anisotropic.radianceR<=upper*(1+1e-10));
+    scene.environment.lightMode=ENVIRONMENT_LIGHT_MODE_OFF;
+    RuntimeVolume3DScatterResult dark=RuntimeVolume3D_AccumulateSingleScatterAlongRayRGB(&scene,&ray,0,3,NULL);
+    assert_close("sky_environment_off_dark",dark.radianceR,0,1e-14);
+    RuntimeRay3D_ResetTraceRouteForTests();
+    RuntimeScene3D_Free(&scene);RuntimeVolume3DMaterial_ResetTuning();RuntimeVolume3DScatter_ResetTuning();
+}
+
 int run_test_runtime_volume_3d_tests(void) {
     int before = test_support_failures();
+    test_runtime_volume_3d_physical_smoke();
 
     RuntimeVolume3DMaterial_ResetTuning();
     RuntimeVolume3DMaterial_SetDensityScale(2);

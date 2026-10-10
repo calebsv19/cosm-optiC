@@ -15,11 +15,31 @@ static double gRuntimeVolume3DDensityGamma = 1.0;
 static double gRuntimeVolume3DAbsorptionGain = 1.0;
 static double gRuntimeVolume3DOpacityClamp = kRuntimeVolume3DDefaultOpacityClamp;
 static double gRuntimeVolume3DOpacity = 1.0;
+static RuntimeVolume3DMaterialTuning gSmokeOptics;
+bool RuntimeVolume3DMaterial_SetSkyErrorBudget(double budget) {
+    if (!isfinite(budget) || budget<0 || budget>1e-4) return false;
+    gSmokeOptics.sky_error_budget=budget;return true;
+}
+void RuntimeVolume3DMaterial_SetCellCentered(bool enabled) { gSmokeOptics.cell_centered = enabled; }
+bool RuntimeVolume3DMaterial_SetSmokeOptics(double reference, double extinction, double albedo, double anisotropy, bool sky) {
+    if (!isfinite(reference) || reference <= 0 || !isfinite(extinction) || extinction < 0 ||
+        !isfinite(albedo) || albedo < 0 || albedo > 1 || !isfinite(anisotropy) || fabs(anisotropy) > .95) return false;
+    gSmokeOptics.physical_smoke = true;
+    gSmokeOptics.reference_concentration_kg_m3 = reference;
+    gSmokeOptics.mass_extinction_m2_kg = extinction;
+    gSmokeOptics.scattering_albedo = albedo;
+    gSmokeOptics.anisotropy = anisotropy;
+    gSmokeOptics.sky_illumination = sky;
+    return true;
+}
 RuntimeVolume3DMaterialTuning RuntimeVolume3DMaterial_GetTuning(void) {
-    return (RuntimeVolume3DMaterialTuning){gRuntimeVolume3DDensityScale,gRuntimeVolume3DDensityGamma,
-        gRuntimeVolume3DAbsorptionGain,gRuntimeVolume3DOpacityClamp,gRuntimeVolume3DOpacity};
+    RuntimeVolume3DMaterialTuning t = gSmokeOptics;
+    t.density_scale=gRuntimeVolume3DDensityScale; t.density_gamma=gRuntimeVolume3DDensityGamma;
+    t.absorption_gain=gRuntimeVolume3DAbsorptionGain; t.opacity_clamp=gRuntimeVolume3DOpacityClamp; t.opacity=gRuntimeVolume3DOpacity;
+    return t;
 }
 void RuntimeVolume3DMaterial_RestoreTuning(RuntimeVolume3DMaterialTuning t) {
+    gSmokeOptics = t;
     RuntimeVolume3DMaterial_SetDensityScale(t.density_scale);
     RuntimeVolume3DMaterial_SetDensityGamma(t.density_gamma);
     RuntimeVolume3DMaterial_SetAbsorptionGain(t.absorption_gain);
@@ -56,6 +76,7 @@ bool RuntimeVolume3D_HasActiveExtinction(const RuntimeVolumeAttachment3D* attach
 }
 
 void RuntimeVolume3DMaterial_ResetTuning(void) {
+    gSmokeOptics = (RuntimeVolume3DMaterialTuning){0};
     gRuntimeVolume3DDensityScale = 1.0;
     gRuntimeVolume3DDensityGamma = 1.0;
     gRuntimeVolume3DAbsorptionGain = 1.0;
@@ -105,6 +126,7 @@ double RuntimeVolume3DMaterial_RemapDensity(double density) {
     if (!(density > 0.0) || !isfinite(density)) {
         return 0.0;
     }
+    if (gSmokeOptics.physical_smoke) return density * gSmokeOptics.reference_concentration_kg_m3 * gSmokeOptics.mass_extinction_m2_kg;
     remapped = density * gRuntimeVolume3DDensityScale;
     if (!(remapped > 0.0)) {
         return 0.0;
@@ -119,7 +141,7 @@ double RuntimeVolume3DMaterial_RemapDensity(double density) {
 
 double RuntimeVolume3DMaterial_ExtinctionDensity(double density) {
     return RuntimeVolume3DMaterial_RemapDensity(density) *
-           gRuntimeVolume3DAbsorptionGain;
+           (gSmokeOptics.physical_smoke ? 1.0 : gRuntimeVolume3DAbsorptionGain);
 }
 
 RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(

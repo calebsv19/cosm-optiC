@@ -875,23 +875,31 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
             scheduler.jobs[0].renderUnit.useDenoise;
         RuntimeNative3DFrameDenoise_Init(&frame_denoise);
         if (full_frame_denoise &&
-            !RuntimeNative3DFrameDenoise_Prepare(&frame_denoise,
+            !RuntimeNative3DFrameDenoise_PrepareWithGuides(&frame_denoise,
                                                  frame->width,
                                                  frame->height,
                                                  integrator_id,
-                                                 scheduler.committedSubpasses)) {
+                                                 scheduler.committedSubpasses,
+                                                 scheduler.jobs[0].renderUnit.featureBuffer.albedoBuffer != NULL)) {
             ok = false;
         }
+        /* Occupancy may omit tiles proven to contain no geometry. */
+        frame_denoise.allowSparseGuides = true;
         for (size_t i = 0; ok && full_frame_denoise && i < scheduler.jobCount; ++i) {
             ok = RuntimeNative3DFrameDenoise_GatherUnit(
                 &frame_denoise,
                 &scheduler.jobs[i].renderUnit);
+
         }
         if (ok && full_frame_denoise) {
             RuntimeNative3DRenderStats resolve_stats = {0};
             ok = RuntimeNative3DFrameDenoise_Apply(&frame_denoise, &resolve_stats);
             RuntimeNative3DRenderStats_Accumulate(&scheduler.stats, &resolve_stats);
         }
+        /* Apply consumes borrowed tile guides; drop views before releasing owners. */
+        RuntimeNative3DFeatureBuffer_ReleaseGuides(&frame_denoise.featureBuffer);
+        for (size_t i = 0; i < scheduler.jobCount; ++i)
+            RuntimeNative3DFeatureBuffer_ReleaseGuides(&scheduler.jobs[i].renderUnit.featureBuffer);
         for (size_t i = 0; ok && i < scheduler.jobCount; ++i) {
             RuntimeNative3DRenderStats resolve_stats = {0};
             if (heatmap_enabled) {

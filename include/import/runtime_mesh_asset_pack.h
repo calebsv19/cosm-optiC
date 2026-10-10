@@ -6,6 +6,8 @@
 
 #include "core_mesh_asset.h"
 
+#define RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_SCHEMA_VERSION 4u
+
 typedef struct RayTracingRuntimeMeshAssetPackSourceKey {
     char source_path[4096];
     int64_t source_mtime_sec;
@@ -28,6 +30,16 @@ bool ray_tracing_runtime_mesh_asset_pack_read_file(
     CoreMeshAssetRuntimeDocument* out_document,
     char* out_diagnostics,
     size_t out_diagnostics_size);
+
+bool ray_tracing_runtime_mesh_asset_pack_content_key_for_source(
+    const char* source_path,
+    RayTracingRuntimeMeshAssetPackSourceKey* out_key);
+
+bool ray_tracing_runtime_mesh_asset_pack_cache_path_for_key(
+    const char* cache_root,
+    const RayTracingRuntimeMeshAssetPackSourceKey* key,
+    char* out_path,
+    size_t out_path_size);
 
 bool ray_tracing_runtime_mesh_asset_pack_cache_path_for_source(
     const char* cache_root,

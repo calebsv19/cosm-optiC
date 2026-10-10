@@ -225,6 +225,14 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
 
     if (RayTracingJsonGetObject(root, "volume", &volume)) {
         const char *kind_label = "auto";
+        json_object *layout = NULL;
+        if (json_object_object_get_ex(volume, "sampling_layout", &layout)) {
+            if (!json_object_is_type(layout,json_type_string) ||
+                (strcmp(json_object_get_string(layout),"cell_centered") && strcmp(json_object_get_string(layout),"legacy_node"))) {
+                json_object_put(root); agent_render_request_set_diagf(out_diagnostics,out_diagnostics_size,"invalid volume.sampling_layout"); return false;
+            }
+            request.volume_cell_centered = !strcmp(json_object_get_string(layout),"cell_centered");
+        }
         RayTracingJsonGetBool(volume, "enabled", &request.volume_enabled);
         if (RayTracingJsonGetString(volume, "source_path", &value)) {
             if (!RayTracingResolveRequestInputPath(request_dir,
@@ -548,6 +556,32 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                     &double_value)) {
             request.has_caustic_volume_scatter_gain_override = true;
             request.caustic_volume_scatter_gain_override = double_value;
+        }
+        json_object *optics = NULL;
+        if (json_object_object_get_ex(inspection,"volume_smoke_optics",&optics)) {
+            const char *schema = NULL;
+            const char *names[] = {"reference_concentration_kg_m3","mass_extinction_m2_kg","scattering_albedo","anisotropy"};
+            double *values[] = {&request.smoke_reference_concentration,&request.smoke_mass_extinction,&request.smoke_albedo,&request.smoke_anisotropy};
+            bool valid = json_object_is_type(optics,json_type_object) && (json_object_object_length(optics)==6 || json_object_object_length(optics)==7) &&
+                RayTracingJsonGetString(optics,"schema",&schema) && !strcmp(schema,"physical_smoke_v1");
+            for (int i=0;i<4 && valid;i++) {
+                json_object *field=NULL;
+                valid=json_object_object_get_ex(optics,names[i],&field) &&
+                    (json_object_is_type(field,json_type_double) || json_object_is_type(field,json_type_int));
+                if (valid) {*values[i]=json_object_get_double(field); valid=isfinite(*values[i]);}
+            }
+            json_object *sky=NULL;
+            valid=valid && json_object_object_get_ex(optics,"sky_illumination",&sky) && json_object_is_type(sky,json_type_boolean);
+            valid=valid && request.smoke_reference_concentration>0 && request.smoke_mass_extinction>=0 &&
+                request.smoke_albedo>=0 && request.smoke_albedo<=1 && fabs(request.smoke_anisotropy)<=.95;
+            json_object *error_budget=NULL;
+            if (json_object_object_get_ex(optics,"sky_error_budget",&error_budget)) {
+                valid=valid && (json_object_is_type(error_budget,json_type_double) || json_object_is_type(error_budget,json_type_int));
+                request.smoke_sky_error_budget=json_object_get_double(error_budget);
+                valid=valid && isfinite(request.smoke_sky_error_budget) && request.smoke_sky_error_budget>=0 && request.smoke_sky_error_budget<=1e-4;
+            } else valid=valid && json_object_object_length(optics)==6;
+            if (!valid) {json_object_put(root); agent_render_request_set_diagf(out_diagnostics,out_diagnostics_size,"invalid inspection.volume_smoke_optics"); return false;}
+            request.has_smoke_optics=true; request.smoke_sky_illumination=json_object_get_boolean(sky);
         }
         if (RayTracingJsonGetDouble(inspection, "volume_density_scale", &double_value) ||
             RayTracingJsonGetDouble(inspection, "density_scale", &double_value)) {

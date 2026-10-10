@@ -278,18 +278,42 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     double camera_transmittance = 1.0;
     double zero_length = runtime_volume_3d_scatter_zero_length();
     double epsilon = runtime_volume_3d_scatter_length_epsilon();
+    const RuntimeVolume3DMaterialTuning optics = RuntimeVolume3DMaterial_GetTuning();
+    const bool sky = optics.physical_smoke && optics.sky_illumination;
+    const double strength = optics.physical_smoke ? 1.0 : kRuntimeVolume3DScatterStrength * gRuntimeVolume3DScatterStrengthGain;
+    const double anisotropy = optics.physical_smoke ? optics.anisotropy : kRuntimeVolume3DScatterAnisotropy;
+    const double tint_r = optics.physical_smoke ? 1.0 : gRuntimeVolume3DScatterTintR;
+    const double tint_g = optics.physical_smoke ? 1.0 : gRuntimeVolume3DScatterTintG;
+    const double tint_b = optics.physical_smoke ? 1.0 : gRuntimeVolume3DScatterTintB;
+    /* Fixed icosahedral directions. Normalize discrete HG weights so a uniform
+     * unoccluded sky integrates to its radiance for every view and anisotropy.
+     * This is bounded single-scattering quadrature, not multiple scattering. */
+    const double golden = 1.6180339887498948482;
+    Vec3 sky_directions[12], sky_rgb[12]; double sky_weights[12], weight_sum=0;
+    double sky_error_remaining=optics.sky_error_budget;
+    Vec3 sky_upper=vec3(0,0,0);
+    for (int i=0;i<12;i++) {
+        int group=i/4; double a=(i%2 ? -1.0 : 1.0), b=(i%4>=2 ? -golden : golden);
+        sky_directions[i]=vec3_normalize(group==0 ? vec3(0,a,b) : group==1 ? vec3(a,b,0) : vec3(b,0,a));
+        sky_weights[i]=runtime_volume_3d_scatter_phase_henyey_greenstein(vec3_dot(ray ? ray->direction : vec3(0,0,1),sky_directions[i]),anisotropy);
+        weight_sum+=sky_weights[i];
+        sky_rgb[i]=vec3(0,0,0);
+        if (sky && scene) RuntimeEnvironment3D_EvaluateBackgroundRGB(&scene->environment,sky_directions[i],&sky_rgb[i].x,&sky_rgb[i].y,&sky_rgb[i].z);
+        sky_upper=vec3_add(sky_upper,vec3_scale(sky_rgb[i],sky_weights[i]));
+    }
     const bool has_caustic_cache =
         RuntimeCausticVolumeCache3D_IsAllocated(caustic_cache);
     const bool has_caustic_source =
         has_caustic_cache || RuntimeCausticPhotonDirectConsumer3D_Active();
 
+    sky_upper=vec3_scale(sky_upper,1.0/weight_sum);
     if (!scene || !ray) {
         return result;
     }
     if (!RuntimeVolume3D_HasActiveExtinction(&scene->volume)) {
         return result;
     }
-    if (!has_caustic_source &&
+    if (!sky && !has_caustic_source &&
         (scene->lightSet.lightCount > 0 ? RuntimeLightSet3D_EnabledCount(&scene->lightSet) == 0
           : (!scene->hasLight || !(scene->light.intensity > 0.0)))) {
         return result;
@@ -334,8 +358,8 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
         const double extinction_density = RuntimeVolume3DMaterial_ExtinctionDensity(raw_density);
 
         if (density > 0.0) {
-            const double scatter_probability = 1.0 - exp(-density * segment_length);
-            if (scene->lightSet.lightCount > 0) {
+            const double scatter_probability = (optics.physical_smoke ? optics.scattering_albedo : 1.0) * (1.0 - exp(-density * segment_length));
+            if (scatter_probability > 0.0 && scene->lightSet.lightCount > 0) {
                 for (int light_index = 0; light_index < scene->lightSet.lightCount; ++light_index) {
                     const RuntimeLightSource3D* source = &scene->lightSet.lights[light_index];
                     if (!source->enabled) continue;
@@ -353,20 +377,24 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                             incident = samples[light_sample];
                         } else if (!RuntimeIncidentLight3D_Sample(source, sample_position,
                             light_sample, sampling, &incident)) continue;
+                        /* Exactly zero incident RGB cannot contribute even through a fully
+                         * visible medium. Keep extinction/caustic work independent. */
+                        if (incident.rgb_weight.x == 0.0 && incident.rgb_weight.y == 0.0 &&
+                            incident.rgb_weight.z == 0.0) continue;
                         double phase = runtime_volume_3d_scatter_phase_henyey_greenstein(
                             vec3_dot(vec3_scale(ray->direction, -1.0),
                                      vec3_scale(incident.direction, -1.0)),
-                            kRuntimeVolume3DScatterAnisotropy);
+                            anisotropy);
                         RuntimeVisibility3DTransmittance visibility =
                             RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(scene,
                                 sample_position, incident.position,
                                 incident.target_object_index, incident.target_triangle_index);
                         result.registryVisibilityRays += 1;
                         double scale = camera_transmittance * scatter_probability *
-                            kRuntimeVolume3DScatterStrength * gRuntimeVolume3DScatterStrengthGain * phase / count;
-                        double direct_r = scale * incident.rgb_weight.x * visibility.r * gRuntimeVolume3DScatterTintR;
-                        double direct_g = scale * incident.rgb_weight.y * visibility.g * gRuntimeVolume3DScatterTintG;
-                        double direct_b = scale * incident.rgb_weight.z * visibility.b * gRuntimeVolume3DScatterTintB;
+                            strength * phase / count;
+                        double direct_r = scale * incident.rgb_weight.x * visibility.r * tint_r;
+                        double direct_g = scale * incident.rgb_weight.y * visibility.g * tint_g;
+                        double direct_b = scale * incident.rgb_weight.z * visibility.b * tint_b;
                         if (direct_r + direct_g + direct_b <= 0.0) continue;
                         result.radianceR += direct_r; result.radianceG += direct_g; result.radianceB += direct_b;
                         result.directRadianceR += direct_r; result.directRadianceG += direct_g; result.directRadianceB += direct_b;
@@ -374,7 +402,8 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                         result.registryContributingSamples += 1;
                     }
                 }
-            } else if (scene->hasLight && scene->light.intensity > 0.0) {
+            } else if (scatter_probability > 0.0 && scene->lightSet.lightCount == 0 &&
+                       scene->hasLight && scene->light.intensity > 0.0) {
                 const Vec3 light_position =
                     runtime_volume_3d_scatter_resolve_light_position(&scene->light,
                                                                      &sample_position,
@@ -395,11 +424,10 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                     const double phase =
                         runtime_volume_3d_scatter_phase_henyey_greenstein(
                             vec3_dot(view_to_camera_dir, incoming_light_dir),
-                            kRuntimeVolume3DScatterAnisotropy);
+                            anisotropy);
 
                     source_term = scatter_probability * scene->light.intensity * attenuation *
-                                  kRuntimeVolume3DScatterStrength *
-                                  gRuntimeVolume3DScatterStrengthGain * phase;
+                                  strength * phase;
                     light_transmittance = RuntimeVisibility3D_TransmittanceToLightRGB(
                         scene, sample_position, to_light_dir, light_position);
                 }
@@ -407,13 +435,13 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                 if (source_term > 0.0 && light_transmittance.luma > 1e-9) {
                     const double direct_r =
                         camera_transmittance * light_transmittance.r * source_term *
-                        gRuntimeVolume3DScatterTintR;
+                        tint_r;
                     const double direct_g =
                         camera_transmittance * light_transmittance.g * source_term *
-                        gRuntimeVolume3DScatterTintG;
+                        tint_g;
                     const double direct_b =
                         camera_transmittance * light_transmittance.b * source_term *
-                        gRuntimeVolume3DScatterTintB;
+                        tint_b;
                     result.radianceR += direct_r;
                     result.radianceG += direct_g;
                     result.radianceB += direct_b;
@@ -426,6 +454,28 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                 }
             }
 
+            /* Omit only a bounded amount of sky radiance per ray. Geometry and
+             * medium visibility lie in [0,1], so the unoccluded source is an
+             * upper bound for every RGB channel. Zero budget is the reference. */
+            const double sky_bound=camera_transmittance * scatter_probability * fmax(sky_upper.x,fmax(sky_upper.y,sky_upper.z));
+            const bool skip_sky=sky && sky_error_remaining>0 && sky_bound<=sky_error_remaining;
+            if (skip_sky) sky_error_remaining-=sky_bound;
+            if (sky && !skip_sky && scatter_probability > 0.0) {
+                /* Endpoints extend beyond the physical grid. Visibility traces
+                 * actual surfaces and the medium, including ground occlusion. */
+                const double reach = RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE;
+                for (int i=0;i<12;i++) {
+                    double r=sky_rgb[i].x,g=sky_rgb[i].y,b=sky_rgb[i].z;
+                    if (r==0 && g==0 && b==0) continue;
+                    Vec3 endpoint=vec3_add(sample_position,vec3_scale(sky_directions[i],reach));
+                    RuntimeVisibility3DTransmittance visibility=RuntimeVisibility3D_TransmittanceFromPointToEmitterRGB(
+                        scene,sample_position,endpoint,-1,-1);
+                    const double scale=camera_transmittance * scatter_probability * sky_weights[i]/weight_sum;
+                    result.radianceR+=scale*r*visibility.r; result.radianceG+=scale*g*visibility.g; result.radianceB+=scale*b*visibility.b;
+                    result.directRadianceR+=scale*r*visibility.r; result.directRadianceG+=scale*g*visibility.g; result.directRadianceB+=scale*b*visibility.b;
+                    result.directSampleCount++; result.sampleCount++; result.registryVisibilityRays++;
+                }
+            }
             if (has_caustic_source) {
                 Vec3 caustic_radiance = vec3(0.0, 0.0, 0.0);
                 RuntimeCausticBeamMapQueryResult3D beam_query;

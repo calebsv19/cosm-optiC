@@ -38,6 +38,7 @@ typedef struct {
     Vec3 boundsMin;
     Vec3 boundsMax;
     uint32_t solidMaskCrc32;
+    bool cellCentered; /* Origin is the domain corner; samples are at half-cell offsets. */
     bool valid;
 } RuntimeVolumeGrid3D;
 

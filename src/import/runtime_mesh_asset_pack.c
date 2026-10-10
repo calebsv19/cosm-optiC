@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#include "app/ray_tracing_sha256.h"
 
 static const unsigned char kRuntimeMeshAssetPackMagic[8] = {
     'R', 'T', 'M', 'P', 'K', '1', '3', '\0'
@@ -13,7 +15,7 @@ static const uint32_t kRuntimeMeshAssetPackLegacyVersion = 1u;
 static const uint32_t kRuntimeMeshAssetPackLegacyCacheVersion = 2u;
 static const uint32_t kRuntimeMeshAssetPackVersion = 3u;
 static const uint32_t kRuntimeMeshAssetPackCacheVersion = 4u;
-static const uint32_t kRuntimeMeshAssetPackCacheSchemaVersion = 3u;
+static const uint32_t kRuntimeMeshAssetPackCacheSchemaVersion = RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_SCHEMA_VERSION;
 static const uint32_t kRuntimeMeshAssetPackEndianMarker = 0x01020304u;
 static const uint64_t kRuntimeMeshAssetPackFnvOffset = 1469598103934665603ull;
 static const uint64_t kRuntimeMeshAssetPackFnvPrime = 1099511628211ull;
@@ -646,23 +648,50 @@ bool ray_tracing_runtime_mesh_asset_pack_read_file(
                                                       false);
 }
 
+bool ray_tracing_runtime_mesh_asset_pack_content_key_for_source(
+    const char* source_path, RayTracingRuntimeMeshAssetPackSourceKey* out_key) {
+    struct stat before, after;
+    char digest[RAY_TRACING_SHA256_HEX_SIZE] = {0};
+    if (!source_path || !source_path[0] || !out_key) return false;
+    memset(out_key, 0, sizeof(*out_key));
+    if (stat(source_path, &before) != 0 || !S_ISREG(before.st_mode) ||
+        !ray_tracing_sha256_file(source_path, digest) || stat(source_path, &after) != 0 ||
+        before.st_dev != after.st_dev || before.st_ino != after.st_ino ||
+        before.st_size != after.st_size || before.st_mtime != after.st_mtime) return false;
+#if defined(__APPLE__)
+    if (before.st_mtimespec.tv_nsec != after.st_mtimespec.tv_nsec) return false;
+#else
+    if (before.st_mtim.tv_nsec != after.st_mtim.tv_nsec) return false;
+#endif
+    /* Content identity replaces relocation-sensitive provenance in cache keys.
+       The original source remains the authority; native pack formats are unchanged. */
+    snprintf(out_key->source_path, sizeof(out_key->source_path), "sha256:%s", digest);
+    out_key->source_size_bytes = (int64_t)after.st_size;
+    out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
+    out_key->ray_tracing_cache_schema_version = RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_SCHEMA_VERSION;
+    out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
+    return true;
+}
+
+bool ray_tracing_runtime_mesh_asset_pack_cache_path_for_key(
+    const char* cache_root, const RayTracingRuntimeMeshAssetPackSourceKey* key,
+    char* out_path, size_t out_path_size) {
+    int length;
+    if (out_path && out_path_size) out_path[0] = '\0';
+    if (!cache_root || !cache_root[0] || !key || !out_path || !out_path_size ||
+        strncmp(key->source_path, "sha256:", 7) != 0 ||
+        !ray_tracing_sha256_is_valid_hex(key->source_path + 7)) return false;
+    length = snprintf(out_path, out_path_size, "%s/content-v%u-core%u-abi%u-%s.rtmeshpack",
+        cache_root, key->ray_tracing_cache_schema_version, key->core_mesh_asset_schema_version,
+        key->pointer_size_bytes, key->source_path + 7);
+    return length > 0 && (size_t)length < out_path_size;
+}
+
 bool ray_tracing_runtime_mesh_asset_pack_cache_path_for_source(
-    const char* cache_root,
-    const char* source_path,
-    char* out_path,
-    size_t out_path_size) {
-    uint64_t hash = kRuntimeMeshAssetPackFnvOffset;
-    if (out_path && out_path_size > 0u) out_path[0] = '\0';
-    if (!cache_root || !cache_root[0] || !source_path || !source_path[0] ||
-        !out_path || out_path_size == 0u) {
-        return false;
-    }
-    hash = runtime_mesh_asset_pack_hash_bytes(hash, source_path, strlen(source_path));
-    return snprintf(out_path,
-                    out_path_size,
-                    "%s/%016llx.rtmeshpack",
-                    cache_root,
-                    (unsigned long long)hash) > 0;
+    const char* cache_root, const char* source_path, char* out_path, size_t out_path_size) {
+    RayTracingRuntimeMeshAssetPackSourceKey key;
+    if (!ray_tracing_runtime_mesh_asset_pack_content_key_for_source(source_path, &key)) return false;
+    return ray_tracing_runtime_mesh_asset_pack_cache_path_for_key(cache_root, &key, out_path, out_path_size);
 }
 
 bool ray_tracing_runtime_mesh_asset_pack_checksum_file(const char* path,

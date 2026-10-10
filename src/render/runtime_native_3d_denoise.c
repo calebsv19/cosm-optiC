@@ -10,6 +10,7 @@
 #endif
 
 #include "render/runtime_native_3d_render.h"
+#include "render/runtime_native_3d_denoise_guidance.h"
 
 enum {
     RUNTIME_NATIVE_3D_DENOISE_RADIUS = 2
@@ -311,6 +312,13 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
             float accum_g = radiance_buffer[center_radiance_base + 1u];
             float accum_b = radiance_buffer[center_radiance_base + 2u];
             int accepted_neighbor_count = 0;
+            const bool guided = RuntimeNative3DDenoiseGuidance_HasMaterial(features, center_index);
+            const float blend = guided ? RuntimeNative3DDenoiseGuidance_Blend(
+                features, center_index, center_luma) : 1.0f;
+            /* Search farther only for uncertain guided surfaces. Material,
+             * geometric and beauty-edge gates still decide which pixels mix. */
+            const int search_radius = guided && blend >= 0.5f ?
+                4 : RUNTIME_NATIVE_3D_DENOISE_RADIUS;
 
             diagnostics.rawPixelCount += 1;
             diagnostics.rawRadianceLumaTotal += center_luma;
@@ -342,7 +350,12 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 diagnostics.preservedMirrorGlossyPixelCount += 1;
                 continue;
             }
-            if (temporal_activity_buffer) {
+            if (guided && blend <= 1e-6f) {
+                runtime_native_3d_denoise_copy_pixel(filtered, radiance_buffer, center_radiance_base);
+                diagnostics.reconstructedRadianceLumaTotal += center_luma;
+                continue;
+            }
+            if (!guided && temporal_activity_buffer) {
                 const size_t activity_index =
                     (size_t)y * (size_t)temporal_activity_stride + (size_t)x;
                 if (temporal_activity_buffer[activity_index] >
@@ -363,13 +376,13 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                 const float center_nz = features->normalBuffer[center_normal_base + 2u];
                 const int center_object = features->sceneObjectIndexBuffer[center_index];
 
-                for (int dy = -RUNTIME_NATIVE_3D_DENOISE_RADIUS;
-                     dy <= RUNTIME_NATIVE_3D_DENOISE_RADIUS;
+                for (int dy = -search_radius;
+                     dy <= search_radius;
                      ++dy) {
                     const int sample_y = y + dy;
                     if (sample_y < 0 || sample_y >= features->height) continue;
-                    for (int dx = -RUNTIME_NATIVE_3D_DENOISE_RADIUS;
-                         dx <= RUNTIME_NATIVE_3D_DENOISE_RADIUS;
+                    for (int dx = -search_radius;
+                         dx <= search_radius;
                          ++dx) {
                         const int sample_x = x + dx;
                         size_t sample_index = 0u;
@@ -415,9 +428,17 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
                             continue;
                         }
 
-                        weight = runtime_native_3d_denoise_spatial_weight(dx, dy) *
+                        weight = (search_radius > RUNTIME_NATIVE_3D_DENOISE_RADIUS ?
+                                  expf(-(float)(dx * dx + dy * dy) /
+                                       (2.0f * 2.5f * 2.5f)) :
+                                  runtime_native_3d_denoise_spatial_weight(dx, dy)) *
                                  powf(fminf(ndot, 1.0f), 16.0f) *
                                  expf(-(depth_delta * depth_delta) / (2.0f * 0.01f * 0.01f));
+                        if (guided) {
+                            weight *= RuntimeNative3DDenoiseGuidance_NeighborWeight(
+                                features, center_index, sample_index);
+                            if (weight <= 1e-6f) continue;
+                        }
                         accum_r += radiance_buffer[sample_radiance_base] * weight;
                         accum_g += radiance_buffer[sample_radiance_base + 1u] * weight;
                         accum_b += radiance_buffer[sample_radiance_base + 2u] * weight;
@@ -429,9 +450,12 @@ static bool runtime_native_3d_denoise_apply_disney_v2_edge_safe(
             }
 
             if (accepted_neighbor_count > 0 && total_weight > 1.0f + 1e-6f) {
-                filtered[center_radiance_base] = accum_r / total_weight;
-                filtered[center_radiance_base + 1u] = accum_g / total_weight;
-                filtered[center_radiance_base + 2u] = accum_b / total_weight;
+                filtered[center_radiance_base] = radiance_buffer[center_radiance_base] +
+                    blend * (accum_r / total_weight - radiance_buffer[center_radiance_base]);
+                filtered[center_radiance_base + 1u] = radiance_buffer[center_radiance_base + 1u] +
+                    blend * (accum_g / total_weight - radiance_buffer[center_radiance_base + 1u]);
+                filtered[center_radiance_base + 2u] = radiance_buffer[center_radiance_base + 2u] +
+                    blend * (accum_b / total_weight - radiance_buffer[center_radiance_base + 2u]);
                 filtered[center_radiance_base + RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL] =
                     radiance_buffer[center_radiance_base +
                                     RUNTIME_NATIVE_3D_RADIANCE_BACKGROUND_FLOOR_CHANNEL];

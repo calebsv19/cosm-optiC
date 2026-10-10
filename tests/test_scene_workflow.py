@@ -12,6 +12,22 @@ from scene_workflow_bundle import REPO, read, sha, verify, write
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_nested_manifest_parent_reference_is_contained_and_repeatable(self):
+        from scene_workflow_bundle import snapshot_inputs
+        scene=read(self.source/'scene_runtime.json')
+        scene['extensions']['custom']={'manifest_path':'assets/walls/relief/manifest.json'}
+        write(self.source/'scene_runtime.json',scene)
+        write(self.source/'assets/walls/relief/manifest.json',{'path':'../../graphs/material.json'})
+        write(self.source/'assets/graphs/material.json',{'height':.1})
+        dest=self.root/'nested';snapshot_inputs(self.source/'scene_runtime.json',self.request,dest)
+        self.assertEqual(read(dest/'assets/graphs/material.json'),{'height':.1})
+        workflow.seal(dest,'nested',self.renderer)
+        self.assertTrue(verify(dest)['verified'])
+        (self.source/'assets/graphs/link.json').symlink_to(self.source/'assets/graphs/material.json')
+        for invalid in ('../../../../external.json','/tmp/external.json','../../graphs/link.json'):
+            write(self.source/'assets/walls/relief/manifest.json',{'path':invalid})
+            with self.assertRaises(ValueError):snapshot_inputs(self.source/'scene_runtime.json',self.request,self.root/'refused')
+            self.assertFalse((self.root/'refused').exists())
     def test_retained_atmosphere_complete_cache_dependency_snapshot(self):
         from scene_workflow_bundle import snapshot_inputs
         cache=self.source/'assets'/'atmosphere'
@@ -100,6 +116,17 @@ class WorkflowTests(unittest.TestCase):
         write(self.source / 'scene_runtime.json', scene)
         self.init(); workflow.capture(self.project, 'r1', self.renderer)
         self.assertTrue((self.project / 'revisions/r1/assets/image.bin').is_file())
+
+    def test_surface_projection_modes_are_not_file_dependencies(self):
+        scene = read(self.source / 'scene_runtime.json')
+        scene['extensions']['custom'] = {'source_path': 'assets/binding.json'}
+        write(self.source / 'assets/binding.json', {'projection': 'planar_xy'})
+        write(self.source / 'scene_runtime.json', scene)
+        self.init(); workflow.capture(self.project, 'r1', self.renderer)
+        self.assertTrue(verify(self.project / 'revisions/r1')['verified'])
+        write(self.source / 'assets/binding.json', {'projection': 'missing_projection.json'})
+        with self.assertRaisesRegex(ValueError, 'missing dependency'):
+            workflow.snapshot_inputs(self.source / 'scene_runtime.json', self.request, self.root / 'missing-projection')
 
     def test_diagnostic_export_does_not_approve_and_tampered_manifest_fails(self):
         self.init(); workflow.capture(self.project, 'r1', self.renderer)

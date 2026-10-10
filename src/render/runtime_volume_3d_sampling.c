@@ -164,6 +164,11 @@ float RuntimeVolume3D_SampleDensityAtPosition(const RuntimeVolumeAttachment3D* a
         return 0.0f;
     }
 
+    if (grid->cellCentered) {
+        local_x = fmax(0.0, local_x - 0.5);
+        local_y = fmax(0.0, local_y - 0.5);
+        local_z = fmax(0.0, local_z - 0.5);
+    }
     x0 = (uint32_t)local_x;
     y0 = (uint32_t)local_y;
     z0 = (uint32_t)local_z;

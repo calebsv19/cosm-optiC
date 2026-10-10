@@ -286,6 +286,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
     RuntimeRay3DTraceContext ray_context;
     Vec3 previous_normal = vec3(0.0, 0.0, 0.0);
     bool hard_failure = false;
+    uint32_t effective_max_depth;
 
     if (out_trace) memset(out_trace, 0, sizeof(*out_trace));
     if (!scene || !sample || !out_trace) return false;
@@ -295,6 +296,12 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
     }
     if (!active->sceneTrace.materialResolver || active->sceneTrace.maxDepth == 0u) {
         return false;
+    }
+    /* Stop normally before the fixed hit-event storage would overflow. Keep
+       valid prior receiver events available to the reconciliation policy. */
+    effective_max_depth = active->sceneTrace.maxDepth;
+    if (effective_max_depth > RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS) {
+        effective_max_depth = RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS;
     }
 
     memset(&result, 0, sizeof(result));
@@ -350,7 +357,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
             RuntimeSceneAcceleration3D_TraceFirstHit);
 
-    for (uint32_t depth = 1u; depth <= active->sceneTrace.maxDepth; ++depth) {
+    for (uint32_t depth = 1u; depth <= effective_max_depth; ++depth) {
         RuntimeCausticPhotonSceneHitEvent3D* hit_event;
         RuntimeCausticPhotonBsdfSampleStream3D stream;
         RuntimeMaterialPayload3D material;
@@ -756,7 +763,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                 true);
             break;
         }
-        if (depth == active->sceneTrace.maxDepth) {
+        if (depth == effective_max_depth) {
             hit_event->termination =
                 RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MAX_DEPTH;
             trace->events[trace->eventCount - 1u].kind =

@@ -8,6 +8,36 @@
 #include "render/runtime_caustic_photon_direct_consumer_3d.h"
 #include "render/runtime_native_3d_render_photon_prepare.h"
 
+/* Snapshot before diagnostic probes reset the consumer's live counters.
+ * Bind/reset boundaries make these query calls, not unique/full-frame pixels. */
+static bool write_surface_query_aggregate(
+    const RayTracingAgentRenderRequest* request, int frame_index) {
+    char path[PATH_MAX];
+    RuntimeCausticPhotonSurfaceDiagnosticAggregate3D aggregate;
+    RuntimeCausticPhotonDirectConsumer3D_SnapshotSurfaceDiagnosticAggregate(&aggregate);
+    if (snprintf(path, sizeof(path), "%s/photon_surface_query_aggregate_%04d.json",
+                 request->output_root, frame_index) >= (int)sizeof(path)) return false;
+    FILE* file = fopen(path, "w");
+    if (!file) return false;
+    bool ok = fprintf(file,
+        "{\"schema\":\"ray_tracing_photon_surface_query_aggregate_v1\","
+        "\"domain\":\"query_calls_since_last_consumer_reset\","
+        "\"capture_stage\":\"before_synthetic_diagnostic_grid\","
+        "\"query_count\":%" PRIu64 ",\"positive_query_count\":%" PRIu64
+        ",\"undersampled_positive_query_count\":%" PRIu64
+        ",\"effective_sample_count_sum\":%" PRIu64
+        ",\"histogram_bins\":[\"0\",\"1\",\"2\",\"3\",\"4_or_more\"],"
+        "\"effective_sample_histogram\":[%" PRIu64 ",%" PRIu64 ",%" PRIu64
+        ",%" PRIu64 ",%" PRIu64 "]}\n",
+        aggregate.queryCount, aggregate.positiveQueryCount,
+        aggregate.undersampledPositiveQueryCount, aggregate.effectiveSampleCountSum,
+        aggregate.effectiveSampleHistogram[0], aggregate.effectiveSampleHistogram[1],
+        aggregate.effectiveSampleHistogram[2], aggregate.effectiveSampleHistogram[3],
+        aggregate.effectiveSampleHistogram[4]) >= 0;
+    if (fclose(file) != 0) ok = false;
+    return ok;
+}
+
 static void sample_surface_reconstruction_grid(void) {
     enum { GRID_SIZE = 80 };
     RuntimeCausticPhotonMapRecord3D first;
@@ -195,6 +225,7 @@ bool ray_tracing_headless_write_photon_surface_diagnostics(
     records = fopen(records_path, "w");
     queries = fopen(queries_path, "w");
     if (!records || !queries) goto cleanup;
+    if (!write_surface_query_aggregate(request, frame_index)) goto cleanup;
     sample_surface_reconstruction_grid();
     ok = write_surface_records(records) && write_surface_queries(queries);
 

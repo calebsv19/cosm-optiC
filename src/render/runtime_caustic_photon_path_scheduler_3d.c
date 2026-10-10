@@ -7,6 +7,15 @@
 #include "render/runtime_caustic_photon_path_transport_3d.h"
 #include "render/runtime_caustic_photon_emission_proposal_3d.h"
 
+static RuntimeCausticPhotonPathObserver3D g_path_observer;
+static void* g_path_observer_user_data;
+
+void RuntimeCausticPhotonPathScheduler3D_SetObserver(
+    RuntimeCausticPhotonPathObserver3D observer, void* user_data) {
+    g_path_observer = observer;
+    g_path_observer_user_data = observer ? user_data : NULL;
+}
+
 static bool photon_path_scheduler_source_is_collimated(
     const RuntimeLightSource3D* source) {
     if (!source ||
@@ -141,6 +150,9 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
         readback.pathTransportAttemptCount += 1u;
         traced = RuntimeCausticPhotonPathTransport3D_Trace(
             scene, &batch.samples[i], &transport_settings, &trace);
+        if (g_path_observer) {
+            g_path_observer(&batch.samples[i], &trace, g_path_observer_user_data);
+        }
         readback.traceInputCount += 1u;
         readback.pathIntersectionCount += trace.readback.intersectionCount;
         readback.pathMaterialResolveFailureCount +=

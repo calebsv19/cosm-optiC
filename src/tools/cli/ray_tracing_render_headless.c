@@ -36,6 +36,7 @@
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_volume_3d_scatter.h"
 #include "tools/ray_tracing_render_headless_internal.h"
+#include "tools/ray_tracing_render_headless_photon_capture.h"
 
 static void ray_tracing_headless_note_registered_lights(
     RayTracingHeadlessPreflight *preflight,
@@ -718,6 +719,10 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                       job_id,
                                       request_path,
                                       -1);
+        if (!ray_tracing_headless_photon_capture_prepared(request)) {
+            snprintf(preflight.diagnostics, sizeof(preflight.diagnostics),
+                     "photon preparation diagnostics failed");
+        }
         RuntimeNative3DPreparedFrame_Free(&frame);
         RuntimeNative3DPreparedSceneCacheStatsSnapshot(
             &preflight.prepared_scene_cache_stats);
@@ -1092,6 +1097,8 @@ int main(int argc, char **argv) {
     const char *job_id = NULL;
     const char *job_status_path = NULL;
     bool render_mode = false;
+    bool photon_capture = false;
+    const char* photon_path_ids = NULL;
     bool summary_file_only = false;
     RayTracingAgentRenderRequest request;
     RayTracingHeadlessPreflight preflight = {0};
@@ -1115,6 +1122,10 @@ int main(int argc, char **argv) {
             job_id = argv[++i];
         } else if (strcmp(argv[i], "--job-status") == 0 && i + 1 < argc) {
             job_status_path = argv[++i];
+        } else if (strcmp(argv[i], "--photon-prepare-diagnostics") == 0) {
+            photon_capture = true;
+        } else if (strcmp(argv[i], "--photon-path-ids") == 0 && i + 1 < argc) {
+            photon_path_ids = argv[++i];
         } else if (strcmp(argv[i], "--preflight") == 0) {
             render_mode = false;
         } else if (strcmp(argv[i], "--render") == 0) {
@@ -1128,6 +1139,10 @@ int main(int argc, char **argv) {
         }
     }
 
+    if ((photon_capture && render_mode) || (photon_path_ids && !photon_capture)) {
+        fprintf(stderr, "photon diagnostics require preparation-only mode\n");
+        return 2;
+    }
     if (!request_path) {
         ray_tracing_render_headless_usage(argv[0]);
         return 2;
@@ -1167,6 +1182,13 @@ int main(int argc, char **argv) {
                 "ray_tracing_render_headless: --summary-file-only requires a resolved summary path\n");
         return 2;
     }
+    if (photon_capture &&
+        !ray_tracing_headless_photon_capture_begin(&request, photon_path_ids)) {
+        fprintf(stderr, "failed to start photon preparation diagnostics: check "
+                "direct-map population/contribution/surface diagnostics, 1-64 "
+                "distinct IDs, and output overwrite permission\n");
+        return 2;
+    }
     ray_tracing_render_headless_write_process_started_status(job_status_path,
                                                              job_id,
                                                              request_path,
@@ -1184,6 +1206,11 @@ int main(int argc, char **argv) {
                                    job_status_path,
                                    job_id,
                                    request_path);
+    if (!ray_tracing_headless_photon_capture_end()) {
+        snprintf(preflight.diagnostics, sizeof(preflight.diagnostics),
+                 "photon preparation diagnostics failed");
+        run_code = 7;
+    }
     if (!summary_file_only) {
         ray_tracing_render_headless_write_summary(stdout, &request, &preflight);
     }

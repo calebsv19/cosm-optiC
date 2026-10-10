@@ -4,6 +4,15 @@
 #include <stdbool.h>
 
 #include "render/runtime_caustic_photon_integration_3d.h"
+#include "render/runtime_caustic_photon_scene_trace_3d.h"
+
+/* Preparation is single-threaded. The observer borrows each stack trace only
+ * for this call; callers must clear it before releasing their user data. */
+typedef void (*RuntimeCausticPhotonPathObserver3D)(
+    const RuntimeCausticPhotonSample3D* sample,
+    const RuntimeCausticPhotonSceneTrace3D* trace, void* user_data);
+void RuntimeCausticPhotonPathScheduler3D_SetObserver(
+    RuntimeCausticPhotonPathObserver3D observer, void* user_data);
 
 bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     const RuntimeScene3D* scene,

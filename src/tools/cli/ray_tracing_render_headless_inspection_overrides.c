@@ -28,6 +28,7 @@ void ray_tracing_headless_apply_inspection_overrides(
     RuntimeVolume3DScatter_ResetTuning();
     RuntimeVolume3DMaterial_ResetTuning();
     SceneAtmosphereRuntimeApplyTuning();
+    RuntimeVolume3DMaterial_SetCellCentered(request->volume_cell_centered);
     RuntimeRay3D_SetTraceRoute(request->trace_route);
     if (request->has_camera_zoom_override) {
         sceneSettings.camera.zoom = request->camera_zoom_override;
@@ -124,6 +125,11 @@ void ray_tracing_headless_apply_inspection_overrides(
         RuntimeVolume3DScatter_SetTint(request->volume_tint_r,
                                        request->volume_tint_g,
                                        request->volume_tint_b);
+    }
+    if (request->has_smoke_optics) {
+        RuntimeVolume3DMaterial_SetSmokeOptics(request->smoke_reference_concentration,request->smoke_mass_extinction,
+            request->smoke_albedo,request->smoke_anisotropy,request->smoke_sky_illumination);
+        RuntimeVolume3DMaterial_SetSkyErrorBudget(request->smoke_sky_error_budget);
     }
     if (request->has_volume_albedo_override) {
         RuntimeVolume3DScatter_SetTint(request->volume_albedo_r,

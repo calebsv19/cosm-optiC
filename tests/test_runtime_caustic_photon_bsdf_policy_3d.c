@@ -5,6 +5,8 @@
 
 #include "render/runtime_caustic_photon_bsdf_policy_3d.h"
 #include "test_support.h"
+#include "render/runtime_water_material_3d.h"
+#include "render/runtime_caustic_photon_medium_stack_3d.h"
 
 static RuntimeMaterialPayload3D photon_bsdf_material(void) {
     RuntimeMaterialPayload3D material;
@@ -203,8 +205,59 @@ static int test_runtime_caustic_photon_bsdf_policy_specular_emissive_absorbed(vo
     return 0;
 }
 
+static int test_clear_dielectric_no_diffuse_and_single_bulk_absorption(void) {
+    RuntimeMaterialPayload3D material = photon_bsdf_material();
+    RuntimeCausticPhotonBsdfPolicy3D policy;
+    RuntimeCausticPhotonBsdfSelection3D selection;
+    RuntimeCausticPhotonMediumEntry3D medium;
+    Vec3 transmittance;
+    material.hasGlassTransportOverride = true;
+    material.transparency = 0.97;
+    material.absorptionDistance = 2.0;
+    material.bsdf.roughness = 0.006;
+    assert_true("clear_glass_policy", RuntimeCausticPhotonBsdfPolicy3D_Build(
+        &material, 1.0, vec3(1.0, 1.0, 1.0), &policy));
+    assert_true("clear_glass_no_diffuse", policy.candidateCount == 2u &&
+        policy.candidates[0].lobe == RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_SPECULAR &&
+        policy.candidates[1].lobe == RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION);
+    assert_close("clear_glass_normal_fresnel", policy.candidates[0].rawWeight, 0.04, 1e-12);
+    assert_close("clear_glass_authored_transmission", policy.candidates[1].rawWeight, 0.9312, 1e-12);
+    assert_close("clear_glass_energy_ledger", policy.expectedScatteredThroughput.x, 0.9712, 1e-12);
+    assert_close("clear_glass_interface_loss", policy.expectedAbsorbedThroughput.x, 0.0288, 1e-12);
+    assert_true("clear_glass_transmission_select", RuntimeCausticPhotonBsdfPolicy3D_Select(&policy, 0.9, &selection));
+    assert_close("clear_glass_no_interface_bulk_tint", selection.throughputAfter.x, 0.9712, 1e-12);
+    /* The same tint is still applied over actual medium distance. */
+    assert_true("clear_glass_medium", RuntimeCausticPhotonMediumEntry3D_FromMaterial(
+        &material, 0, 1.0, &medium));
+    assert_true("clear_glass_segment", RuntimeCausticPhotonMediumEntry3D_SegmentTransmittance(
+        &medium, 1.0, &transmittance));
+    assert_close("clear_glass_beer_lambert", transmittance.x, sqrt(0.8), 1e-12);
+    material.hasGlassInterfaceTintOverride = true;
+    material.glassInterfaceTintR = 0.5; material.glassInterfaceTintG = 1.0; material.glassInterfaceTintB = 1.0;
+    assert_true("clear_glass_explicit_interface_tint", RuntimeCausticPhotonBsdfPolicy3D_Build(
+        &material, 1.0, vec3(1,1,1), &policy));
+    assert_close("clear_glass_authored_tint_kept", policy.candidates[1].responseTint.x, 0.5, 1e-12);
+    material = photon_bsdf_material();
+    material.sceneObjectIndex = 0;
+    RuntimeWaterMaterial3DOverride water = {0};
+    water.ior = 1.333; water.transparency = 0.92; water.roughness = 0.008;
+    RuntimeWaterMaterial3D_ClearAll();
+    assert_true("clear_water_override", RuntimeWaterMaterial3D_Set(0, &water));
+    assert_true("clear_water_payload", RuntimeWaterMaterial3D_ApplyToPayload(0, &material));
+    assert_true("clear_water_policy", RuntimeCausticPhotonBsdfPolicy3D_Build(
+        &material, 1.0, vec3(1,1,1), &policy));
+    assert_true("clear_water_no_inherited_diffuse", policy.candidateCount == 2u &&
+        policy.candidates[0].lobe != RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_DIFFUSE);
+    assert_close("clear_water_ior_fresnel", policy.fresnelReflectance,
+        pow((1.333-1)/(1.333+1), 2), 1e-12);
+    assert_close("clear_water_no_bulk_tint_at_interface", policy.candidates[1].responseTint.x, 1.0, 1e-12);
+    RuntimeWaterMaterial3D_ClearAll();
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_bsdf_policy_3d_tests(void) {
     int failures = 0;
+    failures += test_clear_dielectric_no_diffuse_and_single_bulk_absorption();
     failures += test_runtime_caustic_photon_bsdf_policy_labels_and_invalid();
     failures += test_runtime_caustic_photon_bsdf_policy_diffuse_ledger();
     failures += test_runtime_caustic_photon_bsdf_policy_mixed_fresnel_ledgers();

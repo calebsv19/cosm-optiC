@@ -21,3 +21,9 @@ bool RuntimeMaterialPayload3D_ResolveFromHit(const HitInfo3D* hit,
     RuntimeMaterialPayload3D_Reset(out_payload);
     return false;
 }
+
+/* Geometry-only fixture stubs have no authored visual-emission proxy. */
+bool RuntimeMaterialPayload3D_IsVisualEmissionProxy(int scene_object_index) {
+    (void)scene_object_index;
+    return false;
+}

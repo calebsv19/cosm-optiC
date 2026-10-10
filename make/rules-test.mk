@@ -2244,6 +2244,7 @@ test-runtime-mesh-asset-loader: $(APP_TARGET) $(TEST_BIN)
 
 RUNTIME_MESH_ASSET_PACK_TEST_BIN := $(BUILD_DIR)/tests/runtime_mesh_asset_pack_test
 RUNTIME_MESH_ASSET_PACK_TEST_SRCS := \
+	$(SRC_DIR)/app/ray_tracing_sha256.c \
 	$(TEST_DIR)/test_runtime_mesh_asset_pack.c \
 	$(SRC_DIR)/import/runtime_mesh_asset_pack.c \
 	$(CORE_MESH_ASSET_DIR)/src/core_mesh_asset.c \

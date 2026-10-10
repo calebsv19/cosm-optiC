@@ -1140,15 +1140,25 @@ bool ray_tracing_runtime_mesh_assets_last_matches_scene_file(const char* runtime
 bool ray_tracing_runtime_mesh_assets_load_scene_file_to_last(const char* runtime_scene_path,
                                                             char* out_diagnostics,
                                                             size_t out_diagnostics_size) {
-    RayTracingRuntimeMeshAssetSet loaded;
-    ray_tracing_runtime_mesh_asset_set_init(&loaded);
-    if (!ray_tracing_runtime_mesh_assets_load_scene_file(runtime_scene_path,
-                                                        &loaded,
-                                                        out_diagnostics,
-                                                        out_diagnostics_size)) {
+    /* Asset-set metadata exceeds the platform stack. Stage it on the heap
+       until ownership transfers to the retained last-scene store. */
+    RayTracingRuntimeMeshAssetSet* loaded = malloc(sizeof(*loaded));
+    if (!loaded) {
+        runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size,
+                                "mesh asset staging allocation failed");
         return false;
     }
-    ray_tracing_runtime_mesh_assets_take_last_for_scene(runtime_scene_path, &loaded);
+    ray_tracing_runtime_mesh_asset_set_init(loaded);
+    if (!ray_tracing_runtime_mesh_assets_load_scene_file(runtime_scene_path,
+                                                        loaded,
+                                                        out_diagnostics,
+                                                        out_diagnostics_size)) {
+        ray_tracing_runtime_mesh_asset_set_free(loaded);
+        free(loaded);
+        return false;
+    }
+    ray_tracing_runtime_mesh_assets_take_last_for_scene(runtime_scene_path, loaded);
+    free(loaded);
     return true;
 }
 

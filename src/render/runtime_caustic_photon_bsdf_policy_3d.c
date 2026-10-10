@@ -3,6 +3,8 @@
 #include <math.h>
 #include <string.h>
 
+#include "render/runtime_water_material_3d.h"
+
 static double photon_bsdf_clamp01(double value) {
     if (value < 0.0) return 0.0;
     if (value > 1.0) return 1.0;
@@ -170,6 +172,19 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
                        material->glassInterfaceTintB)
                 : base_tint);
 
+        /* Explicit solid optics have no Lambertian interface. Preserve the
+         * authored transmission loss, and apply bulk tint only in the medium
+         * stack (once per travelled segment), rather than at both interfaces. */
+        if (!material->thinWalled && transparency > 0.0 &&
+            (material->hasGlassTransportOverride ||
+             RuntimeWaterMaterial3D_Get(material->sceneObjectIndex, NULL))) {
+            diffuse_weight = 0.0;
+            reflection_weight = policy.fresnelReflectance;
+            transmission_weight = transparency * (1.0 - policy.fresnelReflectance);
+            transmission_tint = material->hasGlassInterfaceTintOverride
+                                    ? transmission_tint : white;
+        }
+
         if (!photon_bsdf_append(&policy,
                                 RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_DIFFUSE,
                                 diffuse_weight,
@@ -205,7 +220,7 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
         Vec3 weighted_tint;
         candidate->selectionPdf = candidate->rawWeight / policy.rawWeightSum;
         policy.selectionPdfSum += candidate->selectionPdf;
-        weighted_tint = vec3_scale(candidate->responseTint, candidate->selectionPdf);
+        weighted_tint = vec3_scale(candidate->responseTint, candidate->rawWeight);
         candidate->expectedThroughput =
             photon_bsdf_mul(parent_throughput, weighted_tint);
         policy.expectedScatteredThroughput = vec3_add(

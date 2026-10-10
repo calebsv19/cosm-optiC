@@ -1,3 +1,4 @@
+#include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_native_3d_render_internal.h"
 
 #include <limits.h>
@@ -503,7 +504,7 @@ static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* sc
     int attached=SceneAtmosphereRuntimeAttach(&scene->volume,animSettings.runtimeScenePath,
         frame_index,evaluated?&evaluated->frame:NULL,evaluated?&evaluated->simulation:NULL,diagnostics,sizeof(diagnostics));
     if(attached<0) {runtime_native_3d_prepare_frame_set_diag(diagnostics);return false;}
-    if(attached>0) return true;
+    if(attached>0) {scene->volume.grid.cellCentered=RuntimeVolume3DMaterial_GetTuning().cell_centered;return true;}
 
     scene->volume.affectsLighting = animSettings.volumeAffectsLighting;
     scene->volume.debugOverlayEnabled = animSettings.volumeDebugOverlayEnabled;
@@ -529,6 +530,7 @@ static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* sc
         return false;
     }
 
+    scene->volume.grid.cellCentered = RuntimeVolume3DMaterial_GetTuning().cell_centered;
     scene->volume.affectsLighting = animSettings.volumeAffectsLighting;
     scene->volume.debugOverlayEnabled = animSettings.volumeDebugOverlayEnabled;
     return true;

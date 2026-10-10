@@ -177,8 +177,39 @@ static int test_ppm28_convergent_uniform_density_contract(void) {
     return 0;
 }
 
+static int test_sparse_normalized_support_and_receiver_isolation(void) {
+    RuntimeCausticPhotonMap3D map;
+    RuntimeCausticPhotonMapQuery3D query = ppm28_query();
+    RuntimeCausticPhotonMapQueryResult3D result;
+    RuntimeCausticPhotonMapRecord3D record = ppm28_record(1, 0, 20, 30);
+    double integrated = 0.0;
+    record.queryRadius = 0.045;
+    RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("sparse_allocate", RuntimeCausticPhotonMap3D_Allocate(&map, 1u));
+    assert_true("sparse_store", RuntimeCausticPhotonMap3D_StoreRecord(&map, &record));
+    assert_true("sparse_prepare", RuntimeCausticPhotonMap3D_PrepareSampleCenteredSupports(&map, 4u));
+    query.position = vec3(0.075, 0, 0);
+    assert_true("sparse_bounded_expansion", RuntimeCausticPhotonMap3D_Query(&map, &query, &result) &&
+        result.undersampled && result.supportRadius == 0.1 && result.effectiveSampleCount == 1u);
+    query.sceneObjectIndex++;
+    assert_true("sparse_no_other_receiver", !RuntimeCausticPhotonMap3D_Query(&map, &query, &result) && result.receiverObjectRejectCount == 1u);
+    query = ppm28_query(); query.position = vec3(0.101, 0, 0);
+    assert_true("sparse_no_unbounded_spread", !RuntimeCausticPhotonMap3D_Query(&map, &query, &result));
+    query = ppm28_query();
+    for (int i=0; i<2000; ++i) {
+        double r = (i+0.5)*query.radius/2000.0;
+        query.position = vec3(r, 0, 0);
+        assert_true("sparse_integral_query", RuntimeCausticPhotonMap3D_Query(&map, &query, &result));
+        integrated += result.physicalFlux.x * 2*M_PI*r*query.radius/2000.0;
+    }
+    assert_close("sparse_energy_integral", integrated, 1.0, 1e-6);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_ppm28_3d_tests(void) {
     int failures = 0;
+    failures += test_sparse_normalized_support_and_receiver_isolation();
     failures += test_ppm28_receiver_patch_and_material_discontinuity();
     failures += test_ppm28_query_radius_not_record_radius_and_undersampled();
     failures += test_ppm28_compact_kernel_contract();

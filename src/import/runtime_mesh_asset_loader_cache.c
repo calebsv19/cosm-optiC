@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 
 #include "core_io.h"
+#include "app/ray_tracing_sha256.h"
 #include "import/runtime_mesh_asset_pack.h"
 
 typedef struct RuntimeMeshAssetCacheEntry {
@@ -89,39 +90,19 @@ static bool runtime_mesh_asset_pack_cache_dir(char* out_dir, size_t out_dir_size
     return true;
 }
 
-static void runtime_mesh_asset_pack_source_key(const char* resolved_path,
-                                               long long mtime_sec,
-                                               long long mtime_nsec,
-                                               long long file_size,
-                                               unsigned long long checksum,
-                                               RayTracingRuntimeMeshAssetPackSourceKey* out_key) {
-    if (!out_key) return;
-    memset(out_key, 0, sizeof(*out_key));
-    if (resolved_path) {
-        snprintf(out_key->source_path, sizeof(out_key->source_path), "%s", resolved_path);
-    }
-    out_key->source_mtime_sec = (int64_t)mtime_sec;
-    out_key->source_mtime_nsec = (int64_t)mtime_nsec;
-    out_key->source_size_bytes = (int64_t)file_size;
-    out_key->source_checksum = (uint64_t)checksum;
-    out_key->core_mesh_asset_schema_version = CORE_MESH_ASSET_SCHEMA_VERSION_1;
-    out_key->ray_tracing_cache_schema_version = 3u;
-    out_key->pointer_size_bytes = (uint32_t)sizeof(void*);
-}
-
-static bool runtime_mesh_asset_pack_cache_path(const char* resolved_path,
+static bool runtime_mesh_asset_pack_cache_path(const RayTracingRuntimeMeshAssetPackSourceKey* key,
                                                char* out_path,
                                                size_t out_path_size) {
     char cache_dir[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     if (out_path && out_path_size > 0u) out_path[0] = '\0';
-    if (!resolved_path || !resolved_path[0] || !out_path || out_path_size == 0u) {
+    if (!key || !out_path || out_path_size == 0u) {
         return false;
     }
     if (!runtime_mesh_asset_pack_cache_dir(cache_dir, sizeof(cache_dir))) {
         return false;
     }
-    return ray_tracing_runtime_mesh_asset_pack_cache_path_for_source(cache_dir,
-                                                                     resolved_path,
+    return ray_tracing_runtime_mesh_asset_pack_cache_path_for_key(cache_dir,
+                                                                     key,
                                                                      out_path,
                                                                      out_path_size);
 }
@@ -243,6 +224,7 @@ bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
     bool copy_ok = false;
     char pack_cache_path[RAY_TRACING_RUNTIME_MESH_ASSET_PATH_MAX] = {0};
     bool pack_cache_path_ok = false;
+    RayTracingRuntimeMeshAssetPackSourceKey source_key = {0};
     RayTracingRuntimeMeshAssetPersistentCacheMode pack_cache_mode =
         (RayTracingRuntimeMeshAssetPersistentCacheMode)
             g_runtime_mesh_asset_timing.asset_persistent_cache_mode;
@@ -297,20 +279,14 @@ bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
         g_runtime_mesh_asset_timing.asset_persistent_cache_refreshes += 1;
     }
     if (pack_cache_can_read || pack_cache_can_write) {
-        pack_cache_path_ok = runtime_mesh_asset_pack_cache_path(resolved_path,
+        pack_cache_path_ok = ray_tracing_runtime_mesh_asset_pack_content_key_for_source(resolved_path, &source_key) &&
+                            runtime_mesh_asset_pack_cache_path(&source_key,
                                                                 pack_cache_path,
                                                                 sizeof(pack_cache_path));
     }
     if (pack_cache_can_read && pack_cache_path_ok && core_io_path_exists(pack_cache_path)) {
-        RayTracingRuntimeMeshAssetPackSourceKey source_key;
         char pack_diagnostics[256] = {0};
         struct timespec pack_read_start = {0};
-        runtime_mesh_asset_pack_source_key(resolved_path,
-                                           mtime_sec,
-                                           mtime_nsec,
-                                           file_size,
-                                           0u,
-                                           &source_key);
         (void)clock_gettime(CLOCK_MONOTONIC, &pack_read_start);
         if (ray_tracing_runtime_mesh_asset_pack_read_cache_file(pack_cache_path,
                                                                &source_key,
@@ -346,17 +322,16 @@ bool runtime_mesh_asset_load_document_cached(const char* resolved_path,
         return false;
     }
     if (pack_cache_can_write && pack_cache_path_ok) {
-        RayTracingRuntimeMeshAssetPackSourceKey source_key;
-        uint64_t checksum = 0u;
+        char verified_digest[RAY_TRACING_SHA256_HEX_SIZE] = {0};
         char pack_diagnostics[256] = {0};
         struct timespec pack_write_start = {0};
-        (void)ray_tracing_runtime_mesh_asset_pack_checksum_file(resolved_path, &checksum);
-        runtime_mesh_asset_pack_source_key(resolved_path,
-                                           mtime_sec,
-                                           mtime_nsec,
-                                           file_size,
-                                           checksum,
-                                           &source_key);
+        if (!ray_tracing_sha256_file(resolved_path, verified_digest) ||
+            strcmp(source_key.source_path + 7, verified_digest) != 0) {
+            core_mesh_asset_runtime_document_free(&entry->document);
+            memset(entry, 0, sizeof(*entry));
+            runtime_mesh_asset_diag(out_diagnostics, out_diagnostics_size, "mesh source changed during load");
+            return false;
+        }
         (void)clock_gettime(CLOCK_MONOTONIC, &pack_write_start);
         if (ray_tracing_runtime_mesh_asset_pack_write_cache_file(pack_cache_path,
                                                                 &source_key,
