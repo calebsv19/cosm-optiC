@@ -18,10 +18,11 @@ CSTD      := -std=c2x
 endif
 SRC_DIR   := src
 INC_DIR   := include
-BUILD_DIR_BASE ?= build
+RELEASE_ROOT ?= build/release
+BUILD_DIR_BASE ?= $(if $(filter build/release,$(RELEASE_ROOT)),build,$(RELEASE_ROOT).work/build)
 TARGET    := Ray_anim
 .DEFAULT_GOAL := all
-DIST_DIR := dist
+DIST_DIR ?= $(if $(filter build,$(BUILD_DIR_BASE)),dist,$(BUILD_DIR_BASE)/dist)
 PACKAGE_APP_NAME := optiC.app
 PACKAGE_APP_DIR := $(DIST_DIR)/$(PACKAGE_APP_NAME)
 PACKAGE_CONTENTS_DIR := $(PACKAGE_APP_DIR)/Contents
@@ -71,7 +72,7 @@ WORKER_VERSION ?= $(strip $(shell cat "$(WORKER_VERSION_FILE)" 2>/dev/null))
 ifeq ($(WORKER_VERSION),)
 $(error Missing canonical worker version in $(WORKER_VERSION_FILE))
 endif
-WORKER_VERSION_GENERATED_DIR ?= build/generated
+WORKER_VERSION_GENERATED_DIR ?= $(BUILD_DIR_BASE)/generated
 WORKER_VERSION_HEADER := $(WORKER_VERSION_GENERATED_DIR)/app/ray_tracing_worker_version.h
 RELEASE_CHANNEL ?= stable
 RELEASE_PRODUCT_NAME := optiC
@@ -100,7 +101,6 @@ MAIN_EDIT_PACKAGE_DIST_DIR := dist/dev/main-edit
 MAIN_EDIT_PACKAGE_APP_DIR := $(MAIN_EDIT_PACKAGE_DIST_DIR)/$(MAIN_EDIT_PACKAGE_APP_NAME)
 MAIN_EDIT_DESKTOP_APP_DIR ?= $(HOME)/Desktop/$(MAIN_EDIT_PACKAGE_APP_NAME)
 RELEASE_ARTIFACT_BASENAME = $(RELEASE_PRODUCT_NAME)-$(RELEASE_VERSION)-$(RELEASE_PLATFORM)-$(RELEASE_ARCH)-$(RELEASE_CHANNEL)
-RELEASE_ROOT ?= build/release
 RELEASE_DIR := $(RELEASE_ROOT)
 RELEASE_APP_ZIP = $(RELEASE_DIR)/$(RELEASE_ARTIFACT_BASENAME).zip
 RELEASE_MANIFEST = $(RELEASE_DIR)/$(RELEASE_ARTIFACT_BASENAME).manifest.txt
@@ -111,3 +111,21 @@ APPLE_NOTARY_PROFILE ?=
 APPLE_TEAM_ID ?=
 STAPLE_MAX_ATTEMPTS ?= 6
 STAPLE_RETRY_DELAY_SEC ?= 15
+
+# Fixed preparation gates refuse canonical output defaults before any recipe.
+# Existing ordinary app builds retain their defaults; selected isolated roots
+# also contain generated headers, packaging and integration-fixture outputs.
+RAY_TRACING_TEST_WORK_ROOT ?= $(BUILD_DIR_BASE)/agent_runs/ray_tracing
+export BUILD_DIR_BASE WORKER_VERSION_GENERATED_DIR RAY_TRACING_TEST_WORK_ROOT
+RAY_TRACING_PREPARATION_GOALS := run-headless-smoke package-desktop-self-test release-output-root-conformance
+ifneq ($(filter $(RAY_TRACING_PREPARATION_GOALS),$(MAKECMDGOALS)),)
+ifeq ($(BUILD_DIR_BASE),build)
+$(error Fixed preparation gates require an isolated BUILD_DIR_BASE or RELEASE_ROOT)
+endif
+endif
+ifneq ($(BUILD_DIR_BASE),build)
+RAY_TRACING_PATH_ADMISSION := $(shell python3 tools/preparation_paths.py --repository "$(CURDIR)" --build-root "$(BUILD_DIR_BASE)" --generated-root "$(WORKER_VERSION_GENERATED_DIR)" --dist-root "$(DIST_DIR)" --test-root "$(RAY_TRACING_TEST_WORK_ROOT)" $(if $(filter build/release,$(RELEASE_ROOT)),,--release-root "$(RELEASE_ROOT)") 2>&1)
+ifneq ($(RAY_TRACING_PATH_ADMISSION),ok)
+$(error $(RAY_TRACING_PATH_ADMISSION))
+endif
+endif

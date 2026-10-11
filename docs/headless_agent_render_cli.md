@@ -1352,3 +1352,19 @@ guarantee. Existing loose scenes keep their current behavior.
 See [M6 graph and producer tools](surface_material_m6_contract.md). The headless
 renderer exposes `--surface-capabilities` and `--validate-surface-graph <file>`;
 normal scene preflight additionally checks graph/source/geometry combinations.
+# Isolated preparation checks
+
+Run fixed preparation gates with a fresh, task-owned `BUILD_DIR_BASE`, for example
+`make BUILD_DIR_BASE=/absolute/task/output/build run-headless-smoke package-desktop-self-test`.
+Generated worker headers, fixture requests/jobs, and the unsigned app bundle stay
+under that root. The fixtures select only executable tools in its
+`toolchains/clang/<architecture>/tools/cli` directory; they never fall back to
+canonical or legacy binaries. Unsafe, overlapping, symlinked, or occupied fixture
+roots refuse before replacement. Existing canonical packages and render evidence
+are preserved.
+
+For a job-scoped `RELEASE_ROOT`, package preparation defaults its build/staging
+root to `<RELEASE_ROOT>.work/build`; the archive remains at the declared release
+root. Worker staging refuses occupied package/sidecar paths. Retained release
+preparation must bind the selected roots through its owner before resuming;
+changing an approved candidate requires supported source reconciliation.

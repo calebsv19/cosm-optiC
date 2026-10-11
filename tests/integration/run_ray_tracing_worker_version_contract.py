@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -24,7 +25,8 @@ def main() -> int:
     require(SEMVER.fullmatch(worker_version) is not None, "invalid WORKER_VERSION")
     require(SEMVER.fullmatch(app_version) is not None, "invalid VERSION")
 
-    generated = root / "build/generated/app/ray_tracing_worker_version.h"
+    generated_root = Path(os.environ.get('WORKER_VERSION_GENERATED_DIR', 'build/generated'))
+    generated = (generated_root if generated_root.is_absolute() else root / generated_root) / "app/ray_tracing_worker_version.h"
     subprocess.run(
         [
             "python3",

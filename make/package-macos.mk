@@ -3,7 +3,9 @@
 package-desktop: $(SMOOTH_MESH_RUNTIME_COMPILE_TOOL_BIN)
 	@echo "Preparing desktop package..."
 	@$(MAKE) BUILD_TOOLCHAIN="$(PACKAGE_TOOLCHAIN)" "$(PACKAGE_SOURCE_BIN)"
-	@rm -rf "$(PACKAGE_APP_DIR)"
+	@if [ "$(BUILD_DIR_BASE)" = "build" ]; then rm -rf "$(PACKAGE_APP_DIR)"; \
+	else test ! -e "$(PACKAGE_APP_DIR)" && test ! -L "$(PACKAGE_APP_DIR)" || \
+		{ echo "Refusing occupied preparation package: $(PACKAGE_APP_DIR)"; exit 1; }; fi
 	@mkdir -p "$(PACKAGE_MACOS_DIR)" "$(PACKAGE_RESOURCES_DIR)" "$(PACKAGE_FRAMEWORKS_DIR)" "$(PACKAGE_TOOLS_DIR)"
 	@cp "$(PACKAGE_INFO_PLIST_SRC)" "$(PACKAGE_CONTENTS_DIR)/Info.plist"
 	@/usr/libexec/PlistBuddy -c 'Set :CFBundleIdentifier $(PACKAGE_BUNDLE_ID)' "$(PACKAGE_CONTENTS_DIR)/Info.plist"

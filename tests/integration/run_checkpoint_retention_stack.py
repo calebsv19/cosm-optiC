@@ -3,6 +3,7 @@
 import argparse
 import os
 from pathlib import Path
+import os
 import re
 import resource
 import sys
@@ -83,7 +84,7 @@ int main(int argc, char** argv) {
 """.replace("CALL", call)
     # The fixed Linux package container deliberately mounts /tmp noexec.
     # Keep invocation-owned executable fixtures in the build mount instead.
-    fixture_parent = Path("build/checkpoint-stack-fixtures")
+    fixture_parent = Path(os.environ.get("BUILD_DIR_BASE", "build")) / "checkpoint-stack-fixtures"
     fixture_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="ray-checkpoint-stack-", dir=fixture_parent) as temporary:
         root = Path(temporary)

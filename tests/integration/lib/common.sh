@@ -30,6 +30,11 @@ ray_tracing_tool_path() {
   local root_dir="${2:-$(ray_tracing_root_dir)}"
   local arch
   arch="$(uname -m)"
+  if [[ "${BUILD_DIR_BASE:-build}" != "build" ]]; then
+    python3 "$root_dir/tools/preparation_paths.py" --repository "$root_dir" \
+      --build-root "$BUILD_DIR_BASE" --tool "$tool_name" --architecture "$arch"
+    return $?
+  fi
   local fallback="$root_dir/build/$arch/tools/cli/$tool_name"
   local toolchain="$root_dir/build/toolchains/clang/$arch/tools/cli/$tool_name"
   if [[ -x "$toolchain" ]]; then
@@ -42,7 +47,14 @@ ray_tracing_tool_path() {
 ray_tracing_test_work_root() {
   local label="$1"
   local root_dir="${2:-$(ray_tracing_root_dir)}"
-  printf '%s\n' "$root_dir/build/agent_runs/ray_tracing/$label"
+  local selected="${RAY_TRACING_TEST_WORK_ROOT:-${BUILD_DIR_BASE:-build}/agent_runs/ray_tracing}"
+  if [[ "${BUILD_DIR_BASE:-build}" != "build" ]]; then
+    python3 "$root_dir/tools/preparation_paths.py" --repository "$root_dir" \
+      --build-root "$BUILD_DIR_BASE" --test-root "$selected" --fixture-label "$label"
+    return $?
+  fi
+  if [[ "$selected" != /* ]]; then selected="$root_dir/$selected"; fi
+  printf '%s\n' "$selected/$label"
 }
 
 ray_tracing_test_reset_work_root() {
@@ -50,7 +62,14 @@ ray_tracing_test_reset_work_root() {
   local root_dir="${2:-$(ray_tracing_root_dir)}"
   local work_root
   work_root="$(ray_tracing_test_work_root "$label" "$root_dir")"
-  rm -rf "$work_root"
+  if [[ "${BUILD_DIR_BASE:-build}" != "build" ]]; then
+    if [[ -e "$work_root" || -L "$work_root" ]]; then
+      echo "Refusing occupied preparation fixture root: $work_root" >&2
+      return 1
+    fi
+  else
+    rm -rf "$work_root"
+  fi
   mkdir -p "$work_root"
   printf '%s\n' "$work_root"
 }

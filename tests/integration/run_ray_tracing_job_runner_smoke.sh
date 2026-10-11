@@ -7,12 +7,24 @@ source "$SCRIPT_DIR/lib/common.sh"
 ROOT_DIR="$(ray_tracing_root_dir)"
 RUNNER="$(ray_tracing_tool_path ray_tracing_job_runner "$ROOT_DIR")"
 
-REQUEST="$ROOT_DIR/tests/fixtures/agent_render_job_runner_request.json"
-JOBS_ROOT="$ROOT_DIR/build/agent_runs/jobs"
-RENDER_OUTPUT_ROOT="$ROOT_DIR/build/agent_runs/ray_tracing/job_runner_smoke/render_output"
+TEMPLATE_REQUEST="$ROOT_DIR/tests/fixtures/agent_render_job_runner_request.json"
+WORK_ROOT="$(ray_tracing_test_reset_work_root job_runner_smoke "$ROOT_DIR")"
+REQUEST="$WORK_ROOT/request.json"
+JOBS_ROOT="$WORK_ROOT/jobs"
+RENDER_OUTPUT_ROOT="$WORK_ROOT/render_output"
 
 mkdir -p "$JOBS_ROOT"
-rm -rf "$RENDER_OUTPUT_ROOT"
+python3 - "$TEMPLATE_REQUEST" "$REQUEST" "$RENDER_OUTPUT_ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+source, destination, output = map(Path, sys.argv[1:])
+request = json.loads(source.read_text())
+request['scene']['runtime_scene_path'] = str((source.parent / request['scene']['runtime_scene_path']).resolve())
+request['output']['root'] = str(output)
+request['progress']['summary_path'] = str(destination.parent / 'render_summary_unused.json')
+request['progress']['progress_path'] = str(destination.parent / 'render_progress_unused.json')
+destination.write_text(json.dumps(request, indent=2) + '\n')
+PY
 
 SUBMIT_OUTPUT="$("$RUNNER" submit --request "$REQUEST" --jobs-root "$JOBS_ROOT")"
 JOB_ID="$(printf '%s' "$SUBMIT_OUTPUT" | sed -n 's/.*"job_id":"\([^"]*\)".*/\1/p')"

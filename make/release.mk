@@ -50,7 +50,7 @@ release-bundle-audit: package-desktop-self-test
 	@/usr/bin/grep -q '^VK_ICD_FILENAMES=' "$(RELEASE_DIR)/print_config.txt" || (echo "missing VK_ICD_FILENAMES in print-config"; exit 1)
 	@/usr/bin/grep -q '^VK_DRIVER_FILES=' "$(RELEASE_DIR)/print_config.txt" || (echo "missing VK_DRIVER_FILES in print-config"; exit 1)
 	@otool -L "$(PACKAGE_MACOS_DIR)/raytracing-bin" > "$(RELEASE_DIR)/otool_raytracing_bin.txt"
-	@if /usr/bin/grep -Eq '/opt/homebrew|/usr/local/Cellar|/Users/.*/CodeWork' "$(RELEASE_DIR)/otool_raytracing_bin.txt"; then \
+	@if /usr/bin/tail -n +2 "$(RELEASE_DIR)/otool_raytracing_bin.txt" | /usr/bin/grep -Eq '/opt/homebrew|/usr/local/Cellar|/Users/.*/CodeWork'; then \
 		echo "non-portable dylib dependency detected in $(PACKAGE_MACOS_DIR)/raytracing-bin"; \
 		cat "$(RELEASE_DIR)/otool_raytracing_bin.txt"; \
 		exit 1; \
@@ -58,7 +58,7 @@ release-bundle-audit: package-desktop-self-test
 	@for file in $$(/usr/bin/find "$(PACKAGE_FRAMEWORKS_DIR)" -type f -name '*.dylib' 2>/dev/null); do \
 		base="$$(/usr/bin/basename "$$file")"; \
 		otool -L "$$file" > "$(RELEASE_DIR)/otool_$$base.txt" || exit 1; \
-		if /usr/bin/grep -Eq '/opt/homebrew|/usr/local/Cellar|/Users/.*/CodeWork' "$(RELEASE_DIR)/otool_$$base.txt"; then \
+		if /usr/bin/tail -n +2 "$(RELEASE_DIR)/otool_$$base.txt" | /usr/bin/grep -Eq '/opt/homebrew|/usr/local/Cellar|/Users/.*/CodeWork'; then \
 			echo "non-portable dylib dependency detected in $$file"; \
 			cat "$(RELEASE_DIR)/otool_$$base.txt"; \
 			exit 1; \

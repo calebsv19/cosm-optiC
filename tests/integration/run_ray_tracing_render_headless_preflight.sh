@@ -24,6 +24,22 @@ DIAG_ROOT="$WORK_ROOT/diagnostics"
 ROUTE_ROOT="$WORK_ROOT/route_requests"
 
 mkdir -p "$NEGATIVE_ROOT" "$DIAG_ROOT" "$ROUTE_ROOT"
+# Stage the base request as well as derived cases: its progress paths must stay
+# under the selected fixture root, even when --summary overrides one output.
+python3 - "$REQUEST" "$WORK_ROOT/preflight_request.json" "$WORK_ROOT" <<'PY_REQUEST'
+import json
+from pathlib import Path
+import sys
+source, destination, work = map(Path, sys.argv[1:])
+request = json.loads(source.read_text())
+scene = Path(request["scene"]["runtime_scene_path"])
+request["scene"]["runtime_scene_path"] = str(scene if scene.is_absolute() else (source.parent / scene).resolve())
+request["output"]["root"] = str(work)
+request["progress"]["summary_path"] = str(work / "render_summary.json")
+request["progress"]["progress_path"] = str(work / "render_progress.json")
+destination.write_text(json.dumps(request, indent=2) + "\n")
+PY_REQUEST
+REQUEST="$WORK_ROOT/preflight_request.json"
 "$CLI" --request "$REQUEST" --preflight --summary "$SUMMARY" > "$STDOUT_SUMMARY"
 "$CLI" --request "$REQUEST" --preflight --summary "$FILE_ONLY_SUMMARY" \
   --summary-file-only > "$FILE_ONLY_STDOUT"

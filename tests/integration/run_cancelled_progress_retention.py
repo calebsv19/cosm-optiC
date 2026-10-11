@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise production progress merge against cancelled and live records."""
 from pathlib import Path
+import os
 import subprocess
 import tempfile
 from run_checkpoint_retention_stack import block, limits
@@ -34,7 +35,7 @@ int main(int argc,char** argv) {
  puts("cancelled terminal state preserved; live renderer progress still merges");return 0;
 }
 """
-root=Path("build/cancelled-progress-fixtures");root.mkdir(parents=True,exist_ok=True)
+root=Path(os.environ.get("BUILD_DIR_BASE", "build"))/"cancelled-progress-fixtures";root.mkdir(parents=True,exist_ok=True)
 with tempfile.TemporaryDirectory(dir=root) as tmp:
  tmp=Path(tmp);c=tmp/"test.c";exe=tmp/"test";progress=tmp/"progress.json"
  c.write_text(prefix+record+"\n"+production+driver)

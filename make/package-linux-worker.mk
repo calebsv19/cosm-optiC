@@ -62,7 +62,9 @@ package-linux-worker-clean:
 package-linux-worker: ray-tracing-render-headless ray-tracing-job-runner
 	@printf '%s\n' "$(SOURCE_COMMIT)" | grep -Eq '^[0-9a-f]{40}$$' || (echo "SOURCE_COMMIT must be an exact 40-character lowercase Git commit"; exit 1)
 	@echo "Preparing Linux worker package..."
-	@rm -rf "$(LINUX_WORKER_DIR)"
+	@test ! -e "$(LINUX_WORKER_DIR)" && test ! -L "$(LINUX_WORKER_DIR)" || (echo "Refusing occupied worker staging root: $(LINUX_WORKER_DIR)"; exit 1)
+	@for output in "$(LINUX_WORKER_ARCHIVE)" "$(LINUX_WORKER_ARCHIVE_SHA256)" "$(LINUX_WORKER_RELEASE_MANIFEST)"; do \
+		test ! -e "$$output" && test ! -L "$$output" || { echo "Refusing occupied worker output: $$output"; exit 1; }; done
 	@mkdir -p "$(LINUX_WORKER_BIN_DIR)" "$(LINUX_WORKER_CONFIG_DIR)" "$(LINUX_WORKER_DOCS_DIR)"
 	@cp "$(RAY_TRACING_RENDER_HEADLESS_BIN)" "$(LINUX_WORKER_BIN_DIR)/ray_tracing_render_headless"
 	@cp "$(RAY_TRACING_JOB_RUNNER_BIN)" "$(LINUX_WORKER_BIN_DIR)/ray_tracing_job_runner"
