@@ -14,3 +14,5 @@ Headers for the pre-launch SDL menu.
 - `sdl_menu_render.h` – Menu layout and render contracts (button and slider layout structs + frame rendering API).
 - `sdl_menu_state.h` – Shared menu runtime state model, manifest list policy, and slider/scroll helpers.
 - `text_zoom_shortcuts.h` – Shared text zoom shortcut contract used by menu/runtime/editor paths.
+
+- `scene_catalog_labels.h` – Identity-preserving directory provenance from copied scene catalog paths.

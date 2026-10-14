@@ -47,6 +47,7 @@ TimelineStatus PreviewWorkspacePointerDown(PreviewWorkspace *workspace, int x,
                                            int y);
 TimelineStatus PreviewWorkspacePointerMotion(PreviewWorkspace *workspace, int x,
                                              int y);
+void PreviewWorkspaceCancelPointer(PreviewWorkspace *workspace);
 TimelineStatus PreviewWorkspacePointerUp(PreviewWorkspace *workspace, int x,
                                          int y);
 TimelineStatus

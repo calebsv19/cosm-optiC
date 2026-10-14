@@ -133,7 +133,31 @@ static void test_preview_workspace_frame_step_and_resize(void) {
                   workspace.layout.slider_track.w > 400);
 }
 
+static void test_preview_workspace_compact_and_cancel(void) {
+  PreviewWorkspace workspace=preview_workspace_fixture();
+  const int sizes[][2]={{320,240},{480,360},{639,360},{640,360},{800,600},{1024,768}};
+  for (size_t i=0;i<sizeof(sizes)/sizeof(sizes[0]);++i) {
+    (void)PreviewWorkspaceResize(&workspace,sizes[i][0],sizes[i][1]);
+    PreviewWorkspaceRect rows[]={workspace.layout.panel,workspace.layout.play_pause_button,
+      workspace.layout.loop_button,workspace.layout.bounce_button,workspace.layout.slider_track,workspace.layout.frame_label};
+    for (size_t j=0;j<sizeof(rows)/sizeof(rows[0]);++j)
+      assert_true("preview_workspace_compact_contains",rows[j].x>=0 && rows[j].y>=0 && rows[j].w>0 && rows[j].h>0 &&
+          rows[j].x+rows[j].w<=sizes[i][0] && rows[j].y+rows[j].h<=sizes[i][1]);
+    assert_true("preview_workspace_compact_buttons_disjoint",workspace.layout.play_pause_button.x+workspace.layout.play_pause_button.w<workspace.layout.loop_button.x &&
+      workspace.layout.loop_button.x+workspace.layout.loop_button.w<workspace.layout.bounce_button.x);
+  }
+  PreviewWorkspaceRect track=workspace.layout.slider_track;
+  (void)PreviewWorkspacePointerDown(&workspace,track.x+track.w/2,track.y+9);
+  TimelineSample before=workspace.transport.sample;
+  PreviewWorkspaceCancelPointer(&workspace);
+  assert_true("preview_workspace_cancel_resumes_without_seek",workspace.transport.playing && !workspace.scrubbing && !workspace.resume_after_scrub &&
+      workspace.transport.sample.absolute_frame==before.absolute_frame);
+  (void)PreviewWorkspacePointerUp(&workspace,track.x+track.w,track.y+9);
+  assert_true("preview_workspace_canceled_release_no_seek",workspace.transport.sample.absolute_frame==before.absolute_frame);
+}
+
 int run_test_preview_workspace_tests(void) {
+  test_preview_workspace_compact_and_cancel();
   test_preview_workspace_defaults_and_controls();
   test_preview_workspace_exact_scrub_and_resume();
   test_preview_workspace_paused_scrub_and_endpoints();

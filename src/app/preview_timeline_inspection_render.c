@@ -1,6 +1,7 @@
 #include "app/preview_timeline_inspection_render.h"
 
-#include "render/render_helper.h"
+#include "editor/scene_editor_shared_text.h"
+#include "ui/shared_theme_font_adapter.h"
 
 void PreviewTimelineInspectionRender(
     SDL_Renderer *renderer, const PreviewWorkspace *workspace,
@@ -39,22 +40,24 @@ void PreviewTimelineInspectionRender(
 
   if (!inspection->has_selection)
     return;
-  readout = (SDL_Rect){12, workspace->layout.panel.y - 92,
-                       workspace->layout.panel.w - 24, 84};
-  SDL_SetRenderDrawColor(renderer, 24, 27, 34, 238);
+  RayTracingThemePalette palette = {0};
+  (void)ray_tracing_shared_theme_resolve_palette(&palette);
+  int available = workspace->layout.panel.y - 56;
+  if (available <= 0) return;
+  int height = available < 112 ? available : 112;
+  readout = (SDL_Rect){8, workspace->layout.panel.y - height - 8,
+                       workspace->layout.panel.w - 16, height};
+  SDL_SetRenderDrawColor(renderer, palette.panel_fill.r, palette.panel_fill.g, palette.panel_fill.b, palette.panel_fill.a);
   SDL_RenderFillRect(renderer, &readout);
-  SDL_SetRenderDrawColor(renderer, 108, 86, 140, 255);
+  SDL_SetRenderDrawColor(renderer, palette.panel_border.r, palette.panel_border.g, palette.panel_border.b, palette.panel_border.a);
   SDL_RenderDrawRect(renderer, &readout);
-  line = (SDL_Rect){readout.x + 10, readout.y + 5, readout.w - 20, 18};
-  RenderLabelTextLeft(renderer, line, inspection->frame_line,
-                      (SDL_Color){255, 218, 112, 255});
-  line.y += 19;
-  RenderLabelTextLeft(renderer, line, inspection->channel_line,
-                      (SDL_Color){228, 230, 238, 255});
-  line.y += 19;
-  RenderLabelTextLeft(renderer, line, inspection->interpolation_line,
-                      (SDL_Color){192, 198, 212, 255});
-  line.y += 19;
-  RenderLabelTextLeft(renderer, line, inspection->provenance_line,
-                      (SDL_Color){168, 194, 224, 255});
+  const char *rows[] = {inspection->frame_line, inspection->channel_line,
+      inspection->interpolation_line, inspection->provenance_line};
+  int row_height = (height - 8) / 4;
+  for (unsigned i = 0; i < 4; ++i) {
+    line = (SDL_Rect){readout.x + 8, readout.y + 4 + (int)i * row_height,
+                     readout.w - 16, row_height};
+    scene_editor_shared_label(renderer, line, rows[i],
+        i == 0 ? palette.accent_primary : palette.text_primary, 13, 0, 0);
+  }
 }

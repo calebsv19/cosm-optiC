@@ -47,18 +47,30 @@ TimelineStatus PreviewWorkspaceResize(PreviewWorkspace *workspace, int width,
   if (!workspace || width <= 0 || height <= 0) {
     return TIMELINE_STATUS_INVALID_ARGUMENT;
   }
-  layout.panel = (PreviewWorkspaceRect){0, height - 88, width, 88};
-  layout.play_pause_button = (PreviewWorkspaceRect){12, height - 68, 76, 34};
-  layout.loop_button = (PreviewWorkspaceRect){98, height - 68, 64, 34};
-  layout.bounce_button = (PreviewWorkspaceRect){170, height - 68, 76, 34};
-  slider_x = 266;
-  slider_right = width - 144;
-  if (slider_right < slider_x + 40)
-    slider_right = slider_x + 40;
-  layout.slider_track = (PreviewWorkspaceRect){slider_x, height - 60,
-                                               slider_right - slider_x, 18};
-  layout.frame_label =
-      (PreviewWorkspaceRect){slider_right + 12, height - 68, 120, 34};
+  if (width >= 640 && height >= 180) {
+    layout.panel = (PreviewWorkspaceRect){0, height - 88, width, 88};
+    layout.play_pause_button = (PreviewWorkspaceRect){12, height - 68, 76, 34};
+    layout.loop_button = (PreviewWorkspaceRect){98, height - 68, 64, 34};
+    layout.bounce_button = (PreviewWorkspaceRect){170, height - 68, 76, 34};
+    slider_x = 266;
+    slider_right = width - 144;
+    layout.slider_track = (PreviewWorkspaceRect){slider_x, height - 60, slider_right - slider_x, 18};
+    layout.frame_label = (PreviewWorkspaceRect){slider_right + 12, height - 68, 120, 34};
+  } else {
+    int panel_height = height < 132 ? height : 132;
+    int margin = width < 80 ? 2 : 8;
+    int gap = width < 80 ? 2 : 6;
+    int button_width = (width - 2 * margin - 2 * gap) / 3;
+    int y = height - panel_height + 8;
+    int h = panel_height < 80 ? panel_height / 3 : 34;
+    if (button_width < 1) button_width = 1;
+    layout.panel = (PreviewWorkspaceRect){0, height - panel_height, width, panel_height};
+    layout.play_pause_button = (PreviewWorkspaceRect){margin, y, button_width, h};
+    layout.loop_button = (PreviewWorkspaceRect){margin + button_width + gap, y, button_width, h};
+    layout.bounce_button = (PreviewWorkspaceRect){margin + 2 * (button_width + gap), y, button_width, h};
+    layout.slider_track = (PreviewWorkspaceRect){margin, y + h + 8, width - 2 * margin, 18};
+    layout.frame_label = (PreviewWorkspaceRect){margin, y + h + 34, width - 2 * margin, 28};
+  }
   workspace->layout = layout;
   return TIMELINE_STATUS_OK;
 }
@@ -234,4 +246,11 @@ double PreviewWorkspaceNormalizedPosition(const PreviewWorkspace *workspace) {
     return 0.0;
   }
   return context.normalized_t;
+}
+
+void PreviewWorkspaceCancelPointer(PreviewWorkspace *workspace) {
+  if (!workspace || !workspace->valid) return;
+  bool resume = workspace->scrubbing && workspace->resume_after_scrub;
+  workspace->scrubbing = workspace->resume_after_scrub = false;
+  if (resume) (void)PreviewTransportPlay(&workspace->transport);
 }

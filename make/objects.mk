@@ -748,6 +748,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/config/scene/config_scene_path_io.o \
 	$(BUILD_DIR)/config/core/config_manager.o \
 	$(BUILD_DIR)/ui/menu/scene_source_ui_labels.o \
+	$(BUILD_DIR)/ui/menu/scene_catalog_labels.o \
 	$(BUILD_DIR)/ui/menu/volume_source_ui_labels.o \
 	$(BUILD_DIR)/ui/menu/shared_theme_font_adapter.o \
 	$(BUILD_DIR)/tools/make_video.o \

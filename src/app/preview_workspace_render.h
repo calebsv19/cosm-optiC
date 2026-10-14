@@ -4,8 +4,10 @@
 #include <SDL2/SDL.h>
 
 #include "app/preview_workspace.h"
+#include "app/preview_shared_controls.h"
 
 void PreviewWorkspaceRender(SDL_Renderer *renderer,
-                            const PreviewWorkspace *workspace);
+                            const PreviewWorkspace *workspace,
+                            const PreviewSharedControls *controls);
 
 #endif

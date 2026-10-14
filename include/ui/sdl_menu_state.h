@@ -129,6 +129,7 @@ typedef struct MenuRuntimeState {
     bool manifestLoadEnabled;
     SDL_Rect manifestPanelRect;
     SDL_Rect manifestListRect;
+    int manifestItemHeight; /* Painted scene name + directory; volume rows remain independent. */
     SDL_Rect manifestScrollbarRect;
     bool manifestScrollbarVisible;
     float manifestThumbHeight;

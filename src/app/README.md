@@ -51,3 +51,6 @@ Application lifecycle orchestration.
 - `scene_loop_diag.c` – Schema-1 `LoopDiag` emission helper for loop idle calibration parity.
 - `starter_scene_profile.c` – Versioned, scene-agnostic starter-profile loader and non-destructive activation planner. It validates safe relative template/working paths and distinguishes seed, activate, preserve-user-selection, and incomplete-copy states.
 - `starter_scene_startup.c` – Fresh-install startup adapter for the packaged optiC studio preset. It activates the launcher-seeded writable showcase only when no saved animation config exists and requests direct entry into the 3D Object editor.
+
+- `preview_shared_controls.c` / `preview_shared_controls_render.c` – Shared preview activation/focus/cancellation and native rectangular presentation.
+- `preview_status_render.c` – Bounded shared theme/text diagnostics; preview evaluation and transport stay in their existing owners.

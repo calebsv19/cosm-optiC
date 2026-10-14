@@ -6,6 +6,9 @@
 #include "app/animation.h"
 #include "config/config_manager.h"
 #include "ui/scene_source_ui_labels.h"
+#include "ui/scene_catalog_labels.h"
+#include "ui/shared_hud_text.h"
+#include "render/text_draw.h"
 #include "ui/shared_theme_font_adapter.h"
 
 static const char* menu_render_selected_scene_source_path(void) {
@@ -45,6 +48,11 @@ void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
     const bool has_shared_palette = ray_tracing_shared_theme_resolve_palette(&palette);
     SDL_Rect panel_rect = {0, 0, 0, 0};
     if (!state || !buttons) return;
+    int line_height=18;
+    (void)ray_tracing_text_line_height(renderer,font,&line_height);
+    if (line_height<18) line_height=18;
+    int item_height=line_height*2+10;
+    state->manifestItemHeight=item_height;
 
     if (screen_layout && screen_layout->manifestReserveRect.w > 0 &&
         screen_layout->manifestReserveRect.h > 0) {
@@ -64,7 +72,7 @@ void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
     }
 
     {
-        const int min_h = SDL_MENU_MANIFEST_ITEM_HEIGHT +
+        const int min_h = item_height +
                           SDL_MENU_RENDER_MANIFEST_ITEM_PADDING * 2 + 4;
         if (panel_rect.h < min_h) panel_rect.h = min_h;
     }
@@ -112,7 +120,10 @@ void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
         }
     }
 
-    int content_h = visible_count * SDL_MENU_MANIFEST_ITEM_HEIGHT;
+    const char *catalog_paths[SDL_MENU_MAX_MANIFEST_OPTIONS];
+    for (size_t i=0;i<state->manifestOptionCount;++i) catalog_paths[i]=state->manifestOptions[i].path;
+
+    int content_h = visible_count * item_height;
     state->manifestMaxScroll = (content_h > list_h) ? (float)(content_h - list_h) : 0.0f;
     state->manifestScrollbarVisible = state->manifestMaxScroll > 0.5f;
     menu_state_manifest_clamp_scroll(state);
@@ -130,8 +141,8 @@ void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
         state->manifestTrackHeight = scroll->layout.track.h;
     }
 
-    int first_index = (int)(state->manifestScroll / SDL_MENU_MANIFEST_ITEM_HEIGHT);
-    int y_offset = -(int)state->manifestScroll % SDL_MENU_MANIFEST_ITEM_HEIGHT;
+    int first_index = (int)(state->manifestScroll / item_height);
+    int y_offset = -(int)state->manifestScroll % item_height;
     SDL_Rect prev_clip = {0, 0, 0, 0};
     SDL_bool clip_was_enabled = SDL_RenderIsClipEnabled(renderer);
     if (clip_was_enabled) {
@@ -140,9 +151,9 @@ void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
     SDL_RenderSetClipRect(renderer, &state->manifestListRect);
     for (int row = first_index; row < visible_count; ++row) {
         int i = visible_indices[row];
-        int item_y = list_y + y_offset + (row - first_index) * SDL_MENU_MANIFEST_ITEM_HEIGHT;
-        if (item_y > list_y + list_h - SDL_MENU_MANIFEST_ITEM_HEIGHT) break;
-        SDL_Rect item_rect = {list_x, item_y, list_w, SDL_MENU_MANIFEST_ITEM_HEIGHT};
+        int item_y = list_y + y_offset + (row - first_index) * item_height;
+        if (item_y > list_y + list_h - item_height) break;
+        SDL_Rect item_rect = {list_x, item_y, list_w, item_height};
         bool is_selected = manifest_option_is_selected(&state->manifestOptions[i]);
         if (has_shared_palette) {
             SDL_Color fill = is_selected ? palette.accent_primary : palette.button_fill;
@@ -186,12 +197,15 @@ void menu_render_draw_manifest_dropdown(SDL_Renderer *renderer,
                                       item_rect.w - 12,
                                       label_fit,
                                       sizeof(label_fit));
-        menu_render_draw_text_color(renderer,
-                                    font,
-                                    item_rect.x + 6,
-                                    item_rect.y + 4,
-                                    text_color,
-                                    label_fit);
+        ray_tracing_shared_hud_text(renderer,font,
+            (SDL_Rect){item_rect.x+6,item_rect.y+3,item_rect.w-12,line_height},label_fit,text_color);
+        char provenance[PATH_MAX], provenance_fit[256];
+        scene_catalog_directory_label(state->manifestOptions[i].path,catalog_paths,
+            state->manifestOptionCount,provenance,sizeof(provenance));
+        menu_render_fit_text_to_width(font,provenance,item_rect.w-12,provenance_fit,sizeof(provenance_fit));
+        ray_tracing_shared_hud_text(renderer,font,
+            (SDL_Rect){item_rect.x+6,item_rect.y+line_height+6,item_rect.w-12,line_height},provenance_fit,text_color);
+
     }
 
     if (visible_count == 0) {

@@ -2737,7 +2737,7 @@ $(BUILD_DIR)/tests/scene_editor_workspace_app.o: $(SRC_DIR)/app/animation.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -Dmain=scene_editor_workspace_unused_app_main -c $< -o $@
 
-$(SCENE_EDITOR_WORKSPACE_VISUAL_BIN): $(BUILD_DIR)/tests/scene_editor_workspace_visual_test.o $(BUILD_DIR)/tests/scene_editor_workspace_app.o $(filter-out $(BUILD_DIR)/app/animation.o,$(OBJ))
+$(SCENE_EDITOR_WORKSPACE_VISUAL_BIN): $(BUILD_DIR)/tests/preview_shared_ui_native_test.o $(BUILD_DIR)/tests/scene_editor_workspace_visual_test.o $(BUILD_DIR)/tests/scene_editor_workspace_app.o $(filter-out $(BUILD_DIR)/app/animation.o,$(OBJ))
 	$(CC) $^ -o $@ $(LDFLAGS)
 
 .PHONY: scene-editor-workspace-visual-test
@@ -3519,4 +3519,19 @@ $(MENU_SHARED_CONTROLS_TEST_BIN): $(MENU_SHARED_CONTROLS_TEST_SRCS)
 	$(CC) $(filter-out -include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h,$(CFLAGS)) -Werror -o $@ $^ $(SDL_LIBS) -lm
 .PHONY: test-menu-shared-controls-contract
 test-menu-shared-controls-contract: $(MENU_SHARED_CONTROLS_TEST_BIN)
+	@$<
+
+PREVIEW_SHARED_CONTROLS_TEST_BIN := $(BUILD_DIR)/tests/preview_shared_controls_contract_test
+$(PREVIEW_SHARED_CONTROLS_TEST_BIN): $(TEST_DIR)/preview_shared_controls_contract_test.c $(SRC_DIR)/app/preview_shared_controls.c $(KIT_UI_DIR)/src/kit_ui_interaction.c $(KIT_UI_DIR)/src/kit_ui_interaction_sdl.c $(KIT_UI_DIR)/src/kit_ui_surface.c
+	@mkdir -p $(dir $@)
+	$(CC) $(filter-out -include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h,$(CFLAGS)) -Werror -o $@ $^ $(SDL_LIBS) -lm
+.PHONY: test-preview-shared-controls-contract
+test-preview-shared-controls-contract: $(PREVIEW_SHARED_CONTROLS_TEST_BIN)
+	@$<
+
+$(BUILD_DIR)/tests/scene_catalog_labels_test: $(TEST_DIR)/scene_catalog_labels_test.c $(SRC_DIR)/ui/menu/scene_catalog_labels.c include/ui/scene_catalog_labels.h
+	@mkdir -p $(dir $@)
+	$(CC) -std=c11 -Wall -Wextra -Werror -Iinclude $(TEST_DIR)/scene_catalog_labels_test.c $(SRC_DIR)/ui/menu/scene_catalog_labels.c -o $@
+.PHONY: test-scene-catalog-labels
+test-scene-catalog-labels: $(BUILD_DIR)/tests/scene_catalog_labels_test
 	@$<

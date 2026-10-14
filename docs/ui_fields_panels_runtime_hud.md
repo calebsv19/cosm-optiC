@@ -42,12 +42,11 @@ and returns to the menu. This local package proof does not establish operator or
 other-platform acceptance. The combined optical/atmosphere/MCP/UI source checkpoint
 is adopted into local canonical main, retaining persistent Main Edit for development.
 
-## Remaining preview presentation
+## Timeline preview and catalog follow-ups
 
-Embedded timeline preview transport buttons and diagnostic readouts still use the
-local painting helpers in `preview_workspace_render.c`, `preview_session.c` and
-`preview_timeline_inspection_render.c`. A bounded shared-control/text presentation
-pass remains for that surface, with compact sizing and input cancellation checks.
-Its timeline, scrubbing, camera evaluation and scientific rendering must retain
-their application owners. This remaining presentation work does not block the
-qualified menu, editor and runtime progress/timer HUD checkpoint.
+Timeline preview transport/Close controls now use a separate shared surface and
+native shared button painter. Diagnostics, frame and selected-marker readouts use
+the same shared text/theme integration. Catalog rows show directory provenance;
+scene paths, ordering and selection retain their original owners. See
+[preview and catalog integration](ui_preview_catalog.md) for the scope and checks.
+Operator and other-platform acceptance remain separate from local qualification.

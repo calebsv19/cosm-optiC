@@ -557,7 +557,7 @@ void menu_input_handle_mouse_click(SDL_Event* event,
                         visible_indices[visible_count++] = i;
                     }
                 }
-                row_idx = relativeY / SDL_MENU_MANIFEST_ITEM_HEIGHT;
+                row_idx = relativeY / (state->manifestItemHeight > 0 ? state->manifestItemHeight : SDL_MENU_MANIFEST_ITEM_HEIGHT);
                 if (row_idx >= 0 && row_idx < visible_count) {
                     idx = visible_indices[row_idx];
                 }

@@ -11,6 +11,8 @@
 #include "app/preview_timeline_inspection_render.h"
 #include "app/preview_workspace.h"
 #include "app/preview_workspace_render.h"
+#include "app/preview_status_render.h"
+#include "kit_ui_window_sdl.h"
 #include "app/runtime_time.h"
 #include "config/config_manager.h"
 #include "editor/material_editor_face_preview.h"
@@ -54,62 +56,6 @@ static void DrawPreviewMarker(SDL_Renderer* renderer,
             }
         }
     }
-}
-
-static void DrawPreviewRouteStatus(SDL_Renderer* renderer,
-                                   const PreviewModeRouteDecision* decision,
-                                   const RayEvaluatedSceneServiceResult* evaluation,
-                                   PreviewRetainedSceneQuality quality) {
-    SDL_Rect line1 = {12, 10, 360, 22};
-    SDL_Rect line2 = {12, 32, 520, 38};
-    SDL_Rect line3 = {12, 68, 520, 22};
-    SDL_Rect line4 = {12, 92, 520, 22};
-    SDL_Rect line5 = {12, 116, 520, 22};
-    SDL_Color primary = {220, 224, 232, 255};
-    SDL_Color secondary = {170, 176, 188, 255};
-    char quality_line[128];
-    char mesh_line[128];
-    if (!renderer || !decision) return;
-    RenderLabelTextLeft(renderer, line1, decision->branchLabel, primary);
-    RenderLabelTextWrappedLeft(renderer, line2, decision->statusLine, secondary);
-    if (evaluation && evaluation->status_line[0] != '\0') {
-        RenderLabelTextWrappedLeft(renderer, line3, evaluation->status_line, secondary);
-    }
-    snprintf(quality_line,
-             sizeof(quality_line),
-             "Preview quality: %s (Q cycles; wireframe is always retained)",
-             PreviewRetainedSceneQualityLabel(quality));
-    RenderLabelTextLeft(renderer, line4, quality_line, secondary);
-    snprintf(mesh_line,
-             sizeof(mesh_line),
-             "Mesh presentation: %d objects, %d AABB fallback",
-             SceneEditorMeshPreviewStoreInstanceCount(),
-             SceneEditorMeshPreviewStoreBoundsFallbackInstanceCount());
-    RenderLabelTextLeft(renderer, line5, mesh_line, secondary);
-}
-
-static SDL_Rect PreviewCloseButtonRect(int window_width) {
-    SDL_Rect rect = {0};
-    int button_width = 132;
-    int button_height = 34;
-    int margin = 12;
-    rect.x = window_width - button_width - margin;
-    rect.y = margin;
-    rect.w = button_width;
-    rect.h = button_height;
-    return rect;
-}
-
-static void DrawPreviewCloseButton(SDL_Renderer* renderer, SDL_Rect rect, bool hovered) {
-    SDL_Color fill = hovered ? (SDL_Color){78, 82, 92, 255} : (SDL_Color){58, 62, 72, 255};
-    SDL_Color border = {122, 128, 142, 255};
-    SDL_Color text = {228, 232, 238, 255};
-    if (!renderer) return;
-    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-    SDL_RenderFillRect(renderer, &rect);
-    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-    SDL_RenderDrawRect(renderer, &rect);
-    RenderButtonTextWithColor(renderer, rect, "Close Preview", text);
 }
 
 static void PreviewSessionRestoreHostWindow(SDL_Window* host_window) {
@@ -162,7 +108,8 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     SDL_Renderer* preview_renderer = NULL;
     uint64_t prev_ns = 0;
     bool running_preview = true;
-    bool close_button_pressed = false;
+    PreviewSharedControls shared_controls = {0};
+    KitUiWindowState observed_window = {0};
     bool sample_initialized = false;
     PreviewWorkspace preview_workspace = {0};
     PreviewTimelineInspection timeline_inspection = {0};
@@ -310,10 +257,7 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
     prev_ns = runtime_time_now_ns();
     while (running_preview) {
         SDL_Event event;
-        SDL_Rect close_button_rect = PreviewCloseButtonRect(sceneSettings.windowWidth);
-        int mouse_x = 0;
-        int mouse_y = 0;
-        bool close_button_hovered = false;
+        SDL_Rect close_button_rect = PreviewSharedCloseRect(sceneSettings.windowWidth);
         RayEvaluatedSceneServiceResult evaluation = {0};
         TimelineSample selected_sample = {0};
         PreviewTransportDirection selected_direction =
@@ -334,117 +278,91 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
         uint64_t now_ns;
         double dt;
 
+        uint32_t window_changes = 0;
+        if (kit_ui_window_refresh_sdl(&observed_window, preview_window, &window_changes).code != CORE_OK)
+            observed_window.presentable = 0;
+        if (window_changes) {
+            PreviewSharedControlsCancel(&shared_controls);
+            PreviewWorkspaceCancelPointer(&preview_workspace);
+            PreviewSessionSyncWindowSize(preview_window, &preview_workspace);
+        }
         while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_WINDOWEVENT &&
-                event.window.windowID == preview_window_id &&
-                (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
-                 event.window.event == SDL_WINDOWEVENT_RESIZED)) {
+            Uint32 event_window = 0;
+            switch (event.type) {
+                case SDL_WINDOWEVENT: event_window = event.window.windowID; break;
+                case SDL_KEYDOWN: case SDL_KEYUP: event_window = event.key.windowID; break;
+                case SDL_MOUSEBUTTONDOWN: case SDL_MOUSEBUTTONUP: event_window = event.button.windowID; break;
+                case SDL_MOUSEMOTION: event_window = event.motion.windowID; break;
+                case SDL_MOUSEWHEEL: event_window = event.wheel.windowID; break;
+                default: break;
+            }
+            if (event_window && event_window != preview_window_id) continue;
+            if (kit_ui_window_event_invalidates_sdl(&event)) {
+                PreviewSharedControlsCancel(&shared_controls);
+                PreviewWorkspaceCancelPointer(&preview_workspace);
                 PreviewSessionSyncWindowSize(preview_window, &preview_workspace);
             }
-            if ((event.type == SDL_WINDOWEVENT &&
-                 event.window.windowID == preview_window_id &&
-                 event.window.event == SDL_WINDOWEVENT_CLOSE) ||
-                (event.type == SDL_KEYDOWN &&
-                 event.key.windowID == preview_window_id &&
-                 event.key.keysym.sym == SDLK_ESCAPE)) {
+            if (event.type == SDL_QUIT ||
+                (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE) ||
+                (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE)) {
                 running_preview = false;
+                continue;
             }
-            if (event.type == SDL_MOUSEBUTTONDOWN &&
-                event.button.button == SDL_BUTTON_LEFT &&
-                event.button.windowID == preview_window_id) {
-                if (event.button.x >= close_button_rect.x &&
-                    event.button.x <= close_button_rect.x + close_button_rect.w &&
-                    event.button.y >= close_button_rect.y &&
-                    event.button.y <= close_button_rect.y + close_button_rect.h) {
-                    close_button_pressed = true;
+            if (event.type == SDL_WINDOWEVENT) continue;
+            if (!observed_window.presentable ||
+                ((event.type == SDL_KEYDOWN || event.type == SDL_KEYUP) &&
+                 !(observed_window.flags & SDL_WINDOW_INPUT_FOCUS))) continue;
+            if (kit_ui_window_fullscreen_key_sdl(preview_window, &event)) {
+                PreviewSharedControlsCancel(&shared_controls);
+                PreviewWorkspaceCancelPointer(&preview_workspace);
+                continue;
+            }
+            /* Until fresh geometry has been painted, neither controls nor
+             * scientific pointer gestures may acquire a stale target. */
+            if (!shared_controls.ready &&
+                (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP ||
+                 event.type == SDL_MOUSEMOTION || event.type == SDL_KEYDOWN || event.type == SDL_KEYUP)) continue;
+            PreviewSharedAction action = PREVIEW_SHARED_NONE;
+            if (!preview_workspace.scrubbing && PreviewSharedControlsRoute(&shared_controls, &event, &action)) {
+                switch (action) {
+                    case PREVIEW_SHARED_PLAY: (void)PreviewWorkspaceTogglePlayback(&preview_workspace); break;
+                    case PREVIEW_SHARED_LOOP: (void)PreviewWorkspaceSetMode(&preview_workspace, PREVIEW_TRANSPORT_MODE_LOOP); break;
+                    case PREVIEW_SHARED_BOUNCE: (void)PreviewWorkspaceSetMode(&preview_workspace, PREVIEW_TRANSPORT_MODE_BOUNCE); break;
+                    case PREVIEW_SHARED_CLOSE: running_preview = false; break;
+                    default: break;
+                }
+                continue;
+            }
+            if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT) {
+                TimelineSample marker_sample = {0};
+                if (PreviewTimelineInspectionSelectAt(&timeline_inspection,
+                        preview_workspace.layout.slider_track, event.button.x, event.button.y, 7, &marker_sample)) {
+                    (void)PreviewWorkspaceInspectSample(&preview_workspace, marker_sample);
                 } else {
-                    TimelineSample marker_sample = {0};
-                    if (PreviewTimelineInspectionSelectAt(
-                            &timeline_inspection,
-                            preview_workspace.layout.slider_track,
-                            event.button.x, event.button.y, 7,
-                            &marker_sample)) {
-                        (void)PreviewWorkspaceInspectSample(
-                            &preview_workspace, marker_sample);
-                    } else {
-                        if (event.button.y >=
-                                preview_workspace.layout.slider_track.y &&
-                            event.button.y <=
-                                preview_workspace.layout.slider_track.y +
-                                    preview_workspace.layout.slider_track.h) {
-                            PreviewTimelineInspectionClearSelection(
-                                &timeline_inspection);
-                        }
-                        (void)PreviewWorkspacePointerDown(
-                            &preview_workspace, event.button.x, event.button.y);
-                    }
+                    if (event.button.y >= preview_workspace.layout.slider_track.y &&
+                        event.button.y <= preview_workspace.layout.slider_track.y + preview_workspace.layout.slider_track.h)
+                        PreviewTimelineInspectionClearSelection(&timeline_inspection);
+                    (void)PreviewWorkspacePointerDown(&preview_workspace, event.button.x, event.button.y);
                 }
             }
-            if (event.type == SDL_MOUSEMOTION &&
-                event.motion.windowID == preview_window_id) {
-                (void)PreviewWorkspacePointerMotion(
-                    &preview_workspace, event.motion.x, event.motion.y);
-            }
-            if (event.type == SDL_MOUSEBUTTONUP &&
-                event.button.button == SDL_BUTTON_LEFT &&
-                event.button.windowID == preview_window_id) {
-                bool released_on_close_button =
-                    event.button.x >= close_button_rect.x &&
-                    event.button.x <= close_button_rect.x + close_button_rect.w &&
-                    event.button.y >= close_button_rect.y &&
-                    event.button.y <= close_button_rect.y + close_button_rect.h;
-                if (close_button_pressed && released_on_close_button) {
-                    running_preview = false;
+            if (event.type == SDL_MOUSEMOTION)
+                (void)PreviewWorkspacePointerMotion(&preview_workspace, event.motion.x, event.motion.y);
+            if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT)
+                (void)PreviewWorkspacePointerUp(&preview_workspace, event.button.x, event.button.y);
+            if (event.type == SDL_KEYDOWN && !event.key.repeat) {
+                switch (event.key.keysym.sym) {
+                    case SDLK_SPACE: (void)PreviewWorkspaceTogglePlayback(&preview_workspace); continue;
+                    case SDLK_l: (void)PreviewWorkspaceSetMode(&preview_workspace, PREVIEW_TRANSPORT_MODE_LOOP); continue;
+                    case SDLK_b: (void)PreviewWorkspaceSetMode(&preview_workspace, PREVIEW_TRANSPORT_MODE_BOUNCE); continue;
+                    case SDLK_LEFT: (void)PreviewWorkspaceSeekFrameDelta(&preview_workspace,-1); continue;
+                    case SDLK_RIGHT: (void)PreviewWorkspaceSeekFrameDelta(&preview_workspace,1); continue;
+                    case SDLK_q: preview_quality = PreviewRetainedSceneQualityCycle(preview_quality); continue;
+                    default: break;
                 }
-                close_button_pressed = false;
-                (void)PreviewWorkspacePointerUp(
-                    &preview_workspace, event.button.x, event.button.y);
-            }
-            if (event.type == SDL_KEYDOWN) {
-                if (event.key.windowID == preview_window_id &&
-                    event.key.keysym.sym == SDLK_SPACE) {
-                    (void)PreviewWorkspaceTogglePlayback(&preview_workspace);
-                    continue;
-                }
-                if (event.key.windowID == preview_window_id &&
-                    event.key.keysym.sym == SDLK_l) {
-                    (void)PreviewWorkspaceSetMode(
-                        &preview_workspace, PREVIEW_TRANSPORT_MODE_LOOP);
-                    continue;
-                }
-                if (event.key.windowID == preview_window_id &&
-                    event.key.keysym.sym == SDLK_b) {
-                    (void)PreviewWorkspaceSetMode(
-                        &preview_workspace, PREVIEW_TRANSPORT_MODE_BOUNCE);
-                    continue;
-                }
-                if (event.key.windowID == preview_window_id &&
-                    event.key.keysym.sym == SDLK_LEFT) {
-                    (void)PreviewWorkspaceSeekFrameDelta(&preview_workspace, -1);
-                    continue;
-                }
-                if (event.key.windowID == preview_window_id &&
-                    event.key.keysym.sym == SDLK_RIGHT) {
-                    (void)PreviewWorkspaceSeekFrameDelta(&preview_workspace, 1);
-                    continue;
-                }
-                if (event.key.windowID == preview_window_id &&
-                    event.key.keysym.sym == SDLK_q) {
-                    preview_quality =
-                        PreviewRetainedSceneQualityCycle(preview_quality);
-                    continue;
-                }
-                if (animation_handle_text_zoom_shortcut(&event.key)) {
-                    continue;
-                }
+                if (animation_handle_text_zoom_shortcut(&event.key)) continue;
                 animation_handle_fluid_overlay_key(event.key.keysym.sym);
             }
         }
-        SDL_GetMouseState(&mouse_x, &mouse_y);
-        close_button_hovered = (mouse_x >= close_button_rect.x &&
-                                mouse_x <= close_button_rect.x + close_button_rect.w &&
-                                mouse_y >= close_button_rect.y &&
-                                mouse_y <= close_button_rect.y + close_button_rect.h);
 
         now_ns = runtime_time_now_ns();
         dt = runtime_time_diff_seconds(now_ns, prev_ns);
@@ -590,14 +508,17 @@ static void RunPreviewInternal(bool standalone, SDL_Window* host_window, SDL_Ren
                               (SDL_Color){120, 200, 255, 255},
                               6);
         }
-        DrawPreviewRouteStatus(preview_renderer,
+        PreviewStatusRender(preview_renderer, sceneSettings.windowWidth, preview_workspace.layout.panel.y, timeline_inspection.has_selection,
                                &route_decision,
                                &evaluation,
                                preview_quality);
-        PreviewWorkspaceRender(preview_renderer, &preview_workspace);
+        PreviewSharedControlsPublish(&shared_controls, &preview_workspace);
+        PreviewWorkspaceRender(preview_renderer, &preview_workspace, &shared_controls);
         PreviewTimelineInspectionRender(preview_renderer, &preview_workspace,
                                         &timeline_inspection);
-        DrawPreviewCloseButton(preview_renderer, close_button_rect, close_button_hovered);
+        close_button_rect = PreviewSharedCloseRect(sceneSettings.windowWidth);
+        PreviewSharedButtonRender(preview_renderer, &shared_controls, PREVIEW_SHARED_CLOSE,
+                                  close_button_rect, "Close Preview", false);
         render_end_frame();
     }
 

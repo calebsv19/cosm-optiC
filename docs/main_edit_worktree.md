@@ -1,3 +1,20 @@
+## October 14 — preview and catalog UI follow-ups
+
+Preview Play/Pause, Loop/Bounce and Close use a dedicated shared control surface,
+matching-release activation, F6 traversal and interrupted-gesture cancellation.
+Native shared text/theme presentation covers preview diagnostics, frame and selected
+marker readouts; normal/compact transport geometry stays inside the qualified
+viewport. Timeline, scrubbing, camera evaluation and rendering remain application-owned.
+Scene catalog rows expose distinguishing directory provenance with font-aware row
+height and matching hit testing; paths, ordering, selection and save identity stay
+unchanged. Existing resolved-path alias deduplication is preserved.
+
+Fresh Clang application/native builds, six focused gates, aggregate regression and
+three validation-enabled native acceptance modes pass, including preview interrupted
+Close/step/document/host parity and surrounding editor controls/fields/save behavior.
+See [preview and catalog contract](ui_preview_catalog.md). Operator and other-platform
+acceptance remain separate. Versions stay app 0.18.0 and worker 0.11.0.
+
 ## October 14 — combined optical, atmosphere, MCP and shared UI checkpoint
 
 The operator approved one coherent source checkpoint containing the retained
