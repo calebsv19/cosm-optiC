@@ -1,3 +1,6 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
 #include "editor/scene_editor_atmosphere_panel.h"
 #include "editor/scene_editor_atmosphere.h"
 #include "editor/scene_editor_atmosphere_preview.h"
@@ -25,11 +28,11 @@
 enum {PREVIEW,IMPORT,PRESET,GENERATE,ENABLED,VISIBLE,LIGHTING,APPEARANCE,PLACEMENT,PLAYBACK,
     DENSITY,GAMMA,ABSORPTION,SCATTER,STEP,TINT,TRANSLATION,ROTATION,SCALE,
     ANIMATED,RATE,START,SOURCE_START,MISSING,REMOVE,SELECT,FRAME,FIT,
-    LOOK_CLOUD,LOOK_MIST,LOOK_SMOKE,TRANSPARENCY,HUE,SATURATION,ADVANCED,COUNT};
+    LOOK_CLOUD,LOOK_MIST,LOOK_SMOKE,TRANSPARENCY,HUE,SATURATION,ADVANCED,PROFILE,CONCENTRATION,EXTINCTION,ALBEDO,ANISOTROPY,SKY,LAYOUT,SKY_BUDGET,COUNT};
 static const char* names[COUNT]={"preview","import","preset","generate","enabled","visible","lighting",
     "appearance","placement","playback","density","gamma","absorption","scatter","step","tint",
     "translation","rotation","scale","animated","rate","start","source_start","missing","remove","select","frame","fit",
-    "look_cloud","look_mist","look_smoke","transparency","hue","saturation","advanced"};
+    "look_cloud","look_mist","look_smoke","transparency","hue","saturation","advanced","optical_profile","concentration","mass_extinction","scattering_albedo","anisotropy","sky_illumination","sampling_layout","sky_error_budget"};
 static const char* presets[]={"room_haze_v1","low_floor_fog_v1","cloud_bank_v1","mist_patch_v1","plume_column_v1"};
 static const char* preset_names[]={"Room haze","Floor fog","Cloud bank","Mist patch","Plume"};
 static struct {
@@ -38,7 +41,7 @@ static struct {
     unsigned long long revision;
     SceneAtmosphereAttachment value;
 } panel={.editing=-1};
-static void cancel(void) {if(panel.editing>=0) SDL_StopTextInput();panel.editing=-1;}
+static void cancel(void) {if(panel.editing>=0) do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);panel.editing=-1;}
 bool SceneEditorAtmospherePanelInteractionActive(void) {return panel.editing>=0 || SceneEditorAtmosphereInspectorActive();}
 void SceneEditorAtmospherePanelBeginFrame(void) {
     SceneEditorAtmosphereInspectorBeginFrame();
@@ -48,7 +51,7 @@ void SceneEditorAtmospherePanelBeginFrame(void) {
 static void button(SDL_Renderer* r,SDL_Rect bounds,int id,int* y,const char* label,bool enabled) {
     snprintf(panel.labels[id],sizeof(panel.labels[id]),"%s",label);
     SDL_Rect rect={bounds.x+8,*y,bounds.w-16,26};
-    SceneEditorRenderButton(r,rect,panel.labels[id],false,enabled);
+    SceneEditorSharedUiPanelButton(r,70,128+id,rect,panel.labels[id],false,enabled);
     if(enabled && rect.y>=bounds.y && rect.y+rect.h<=bounds.y+bounds.h) panel.rects[id]=rect;
     *y+=30;
 }
@@ -73,8 +76,7 @@ int SceneEditorAtmospherePanelDraw(SDL_Renderer* r,SDL_Rect bounds) {
         button(r,bounds,FRAME,&y,"Frame atmosphere",true);
         const char* name=strrchr(v.source_path,'/');name=name?name+1:v.source_path;
         snprintf(panel.source,sizeof(panel.source),"%s | %s",name,v.source_kind);
-        ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,11,8),panel.source,
-            bounds.x+8,y,(SDL_Color){180,195,210,255});y+=24;
+        scene_editor_shared_label_at(r,panel.source,bounds.x+8,y,(SDL_Color){180,195,210,255},11);y+=24;
         RuntimeVolumeAttachment3D volume;char diagnostic[256]={0};
         if(SceneEditorAtmosphereGeometry(&volume,diagnostic,sizeof(diagnostic))) {
             Vec3 size=vec3_sub(volume.grid.boundsMax,volume.grid.boundsMin);double w=SceneEditorDocumentWorldScale();
@@ -85,17 +87,29 @@ int SceneEditorAtmospherePanelDraw(SDL_Renderer* r,SDL_Rect bounds) {
         y+=SceneEditorLabelWrapped(r,(SDL_Rect){bounds.x+8,y,bounds.w-16,80},panel.cache,(SDL_Color){180,195,210,255})+8;
         button(r,bounds,ENABLED,&y,v.enabled?"Atmosphere: On":"Atmosphere: Off",true);
         button(r,bounds,VISIBLE,&y,v.visible?"Visible volume: On":"Visible volume: Off",true);
-        button(r,bounds,LIGHTING,&y,v.affects_lighting?"Affects lighting: On":"Affects lighting: Off",true);
+        button(r,bounds,LIGHTING,&y,v.affects_lighting?"Affects lighting: On":"Affects lighting: Off",!(v.optics.present && v.optics.physical));
+        bool physical=v.optics.present && v.optics.physical;
+        button(r,bounds,PROFILE,&y,physical?"Optics: Physical smoke (Direct/Disney V2)":"Optics: Legacy artistic",true);
         for(int i=0;i<SCENE_ATMOSPHERE_LOOK_COUNT;++i) {
             int id=LOOK_CLOUD+i;
             snprintf(panel.labels[id],sizeof(panel.labels[id]),"%s",SceneAtmosphereLookName(i));
             SDL_Rect rect={bounds.x+8+i*(bounds.w-16)/3,y,(bounds.w-16)/3-3,26};
-            SceneEditorRenderButton(r,rect,panel.labels[id],SceneAtmosphereCurrentLook(&v)==i,true);
-            if(rect.y>=bounds.y && rect.y+rect.h<=bounds.y+bounds.h) panel.rects[id]=rect;
+            SceneEditorSharedUiPanelButton(r,70,256+id,rect,panel.labels[id],!physical && SceneAtmosphereCurrentLook(&v)==i,!physical);
+            if(!physical && rect.y>=bounds.y && rect.y+rect.h<=bounds.y+bounds.h) panel.rects[id]=rect;
         }y+=30;
-        snprintf(label,sizeof(label),"Appearance: %s  %s",SceneAtmosphereLookName(SceneAtmosphereCurrentLook(&v)),panel.appearance?"-":"+");
+        snprintf(label,sizeof(label),"Appearance: %s  %s",physical?"Physical smoke":SceneAtmosphereLookName(SceneAtmosphereCurrentLook(&v)),panel.appearance?"-":"+");
         button(r,bounds,APPEARANCE,&y,label,true);
-        if(panel.appearance) {
+        if(panel.appearance && physical) {
+            field(r,bounds,CONCENTRATION,&y,"Reference concentration (kg/m3)",&v.optics.reference_concentration_kg_m3,1);
+            field(r,bounds,EXTINCTION,&y,"Mass extinction (m2/kg)",&v.optics.mass_extinction_m2_kg,1);
+            field(r,bounds,ALBEDO,&y,"Scattering albedo (0..1)",&v.optics.scattering_albedo,1);
+            field(r,bounds,ANISOTROPY,&y,"Anisotropy (-0.95..0.95)",&v.optics.anisotropy,1);
+            button(r,bounds,SKY,&y,v.optics.sky_illumination?"Sky illumination: On":"Sky illumination: Off",true);
+            button(r,bounds,LAYOUT,&y,v.optics.cell_centered?"Sampling: Cell centered":"Sampling: Legacy nodes",true);
+            field(r,bounds,STEP,&y,"Integration step scale",&v.step_scale,1);
+            field(r,bounds,SKY_BUDGET,&y,"Sky omission budget (0..0.0001)",&v.optics.sky_error_budget,1);
+        }
+        if(panel.appearance && !physical) {
             double transparency=100*(1-v.opacity),hsv[3];SceneAtmosphereTintHSV(&v,hsv);
             double saturation=100*hsv[1];
             field(r,bounds,TRANSPARENCY,&y,"Transparency (%)",&transparency,1);
@@ -171,6 +185,11 @@ static bool numeric(int id,const char* text) {
       }
       case DENSITY:target=&v->density_scale;break;case GAMMA:target=&v->density_gamma;break;
       case ABSORPTION:target=&v->absorption_gain;break;case SCATTER:target=&v->scatter_gain;break;
+      case CONCENTRATION:target=&v->optics.reference_concentration_kg_m3;break;
+      case EXTINCTION:target=&v->optics.mass_extinction_m2_kg;break;
+      case ALBEDO:target=&v->optics.scattering_albedo;break;
+      case ANISOTROPY:target=&v->optics.anisotropy;break;
+      case SKY_BUDGET:target=&v->optics.sky_error_budget;break;
       case STEP:target=&v->step_scale;break;case TINT:target=v->tint;break;
       case TRANSLATION:target=v->translation;break;case ROTATION:target=v->rotation_degrees;break;
       case SCALE:target=v->scale;break;
@@ -191,7 +210,8 @@ bool SceneEditorAtmospherePanelEvent(SDL_Event* e) {
     if(!panel.visible) return false;
     if(e->type==SDL_WINDOWEVENT && e->window.event==SDL_WINDOWEVENT_FOCUS_LOST) {cancel();return false;}
     if(panel.editing>=0) {
-        if(e->type==SDL_TEXTINPUT) {if(strlen(panel.draft)+strlen(e->text.text)<sizeof(panel.draft)) strcat(panel.draft,e->text.text);return true;}
+        if((panel.editing>=0) && scene_editor_shared_field_event(panel.draft,sizeof(panel.draft),e))return true;
+    if(e->type==SDL_TEXTINPUT) {if(strlen(panel.draft)+strlen(e->text.text)<sizeof(panel.draft)) strcat(panel.draft,e->text.text);return true;}
         if(e->type==SDL_KEYDOWN) {
             if(e->key.keysym.sym==SDLK_ESCAPE) cancel();
             else if(e->key.keysym.sym==SDLK_BACKSPACE) {size_t n=strlen(panel.draft);if(n) panel.draft[n-1]=0;}
@@ -243,15 +263,21 @@ bool SceneEditorAtmospherePanelEvent(SDL_Event* e) {
             report(ok);return true;
           }
           case PLAYBACK:panel.playback=!panel.playback;return true;
+          case PROFILE:
+            panel.value.optics.present=true;panel.value.optics.physical=!panel.value.optics.physical;
+            if(panel.value.optics.physical) panel.value.affects_lighting=true;
+            break;
+          case SKY:panel.value.optics.sky_illumination=!panel.value.optics.sky_illumination;break;
+          case LAYOUT:panel.value.optics.cell_centered=!panel.value.optics.cell_centered;break;
           case ENABLED:panel.value.enabled=!panel.value.enabled;break;
           case VISIBLE:panel.value.visible=!panel.value.visible;break;
           case LIGHTING:panel.value.affects_lighting=!panel.value.affects_lighting;break;
           case ANIMATED:panel.value.animated=!panel.value.animated;break;
           case MISSING:panel.value.missing_is_error=!panel.value.missing_is_error;break;
           case REMOVE:ok=SceneEditorAtmosphereRemove(panel.revision,panel.status,sizeof(panel.status));report(ok);return true;
-          default:panel.editing=id;panel.draft[0]=0;SDL_StartTextInput();return true;
+          default:panel.editing=id;panel.draft[0]=0;do{scene_editor_shared_field_begin(panel.draft,sizeof(panel.draft),0);SDL_StartTextInput();}while(0);return true;
         }
-        if(id==ENABLED || id==VISIBLE || id==LIGHTING || id==ANIMATED || id==MISSING)
+        if(id==PROFILE || id==SKY || id==LAYOUT || id==ENABLED || id==VISIBLE || id==LIGHTING || id==ANIMATED || id==MISSING)
             ok=SceneEditorAtmosphereSet(&panel.value,panel.revision,panel.status,sizeof(panel.status));
         report(ok);return true;
     }

@@ -28,6 +28,7 @@
 #include "render/text_font_cache.h"
 #include "render/vk_shared_device.h"
 #include "ui/shared_theme_font_adapter.h"
+#include "ui/menu_shared_controls.h"
 #include "ui/menu_batch_panel.h"
 #include "ui/menu_path_edit.h"
 #include "ui/menu/workspace_authoring/ray_tracing_workspace_authoring_overlay.h"
@@ -331,7 +332,9 @@ static uint32_t menu_elapsed_ms(uint64_t start, uint64_t end, uint64_t frequency
 
 static bool menu_state_interaction_active(const MenuRuntimeState* state) {
     if (!state) return false;
-    return ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost) ||
+    return state->sharedControls.surface.interaction.pointer_owned ||
+           state->sharedControls.surface.interaction.armed_key != KIT_UI_INTERACTION_KEY_NONE ||
+           ray_tracing_menu_pane_host_splitter_drag_active(&state->menuPaneHost) ||
            state->numericEdit.active ||
            state->scrolls[MENU_SCROLL_SCENE].dragging ||
            state->scrolls[MENU_SCROLL_VOLUME].dragging ||
@@ -390,6 +393,7 @@ static bool menu_process_event(SDL_Window* window,
     }
 
     mutable_event = *event;
+    if (menu_shared_controls_filter_window(menu_state,window,&mutable_event)) return true;
     {
         int authoring_width = 0;
         int authoring_height = 0;
@@ -430,6 +434,7 @@ static bool menu_process_event(SDL_Window* window,
             authoring_host,
             &mutable_event,
             menu_state_interaction_active(menu_state))) {
+        menu_shared_controls_cancel(menu_state);
         (void)menu_workspace_authoring_apply_pending_visuals(font, authoring_host);
         return true;
     }
@@ -448,8 +453,20 @@ static bool menu_process_event(SDL_Window* window,
         return dirty;
     }
 
+    SDL_Event activation;
+    if (menu_shared_controls_route(menu_state,&mutable_event,&activation)) {
+        if (activation.type==SDL_MOUSEBUTTONDOWN) {
+            menu_input_handle_mouse_click(&activation,running,menu_exited_normally,renderer,font,menu_state);
+            menu_state->sharedControls.geometry_dirty=true;
+            if (menu_state->activeView!=MENU_VIEW_MAIN) menu_shared_controls_cancel(menu_state);
+        }
+        return true;
+    }
+
     switch (mutable_event.type) {
         case SDL_KEYDOWN:
+            if (menu_state->sharedControls.surface.interaction.captured_id || menu_state->sharedControls.surface.interaction.key_owner_id)
+                menu_shared_controls_cancel(menu_state);
             menu_input_handle_key(&mutable_event, running, font, menu_state);
             return true;
         case SDL_MOUSEBUTTONDOWN:
@@ -511,7 +528,12 @@ static bool menu_process_event(SDL_Window* window,
             if (mutable_event.window.windowID == SDL_GetWindowID(window) &&
                 (mutable_event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED ||
                  mutable_event.window.event == SDL_WINDOWEVENT_RESIZED ||
-                 mutable_event.window.event == SDL_WINDOWEVENT_EXPOSED)) {
+                 mutable_event.window.event == SDL_WINDOWEVENT_EXPOSED ||
+                 mutable_event.window.event == SDL_WINDOWEVENT_SHOWN ||
+                 mutable_event.window.event == SDL_WINDOWEVENT_HIDDEN ||
+                 mutable_event.window.event == SDL_WINDOWEVENT_MINIMIZED ||
+                 mutable_event.window.event == SDL_WINDOWEVENT_RESTORED ||
+                 mutable_event.window.event == SDL_WINDOWEVENT_DISPLAY_CHANGED)) {
                 menu_refresh_render_context(window, renderer);
                 return true;
             }

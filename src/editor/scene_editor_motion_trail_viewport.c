@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_motion_trail.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_timeline.h"
@@ -69,7 +70,7 @@ void SceneEditorMotionTrailDraw(SceneEditor *editor,const SceneEditorPaneLayout 
     ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,10,8),view.labels[i],x+7,y-12,(SDL_Color){245,210,130,255});
   }
   view.frame_button=(SDL_Rect){layout->viewport_rect.x+8,layout->viewport_rect.y+6,150,26};
-  SceneEditorRenderButton(r,view.frame_button,"Frame XYZ trail",false,true);
+  SceneEditorSharedUiPanelButton(r,141,128,view.frame_button,"Frame XYZ trail",false,true);
   ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,10,8),view.message[0]?view.message:"Drag: XY | Z: inspector | Esc: cancel",layout->viewport_rect.x+8,layout->viewport_rect.y+36,(SDL_Color){180,225,240,255});
   SDL_RenderSetClipRect(r,clipped?&prior:NULL);
 }

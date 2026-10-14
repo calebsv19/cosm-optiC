@@ -2,6 +2,8 @@
 #define SCENE_EDITOR_MOTION_PATHS_H
 #include "editor/scene_editor.h"
 #include "motion/scene_motion_paths.h"
+bool SceneEditorMotionPathInsertPoint(MotionPath *path,size_t after,char *id,size_t size);
+bool SceneEditorMotionPathPanelInteractionActive(void);
 bool SceneEditorMotionPathsRead(MotionPaths *out);
 /* All writes are one revision-checked, validated scene undo command. */
 bool SceneEditorMotionPathsSet(const MotionPaths *paths,

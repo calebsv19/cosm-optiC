@@ -1,4 +1,5 @@
 #include "editor/scene_editor_light_authoring.h"
+#include "editor/scene_editor_lighting.h"
 #include "editor/scene_editor_document.h"
 #include "scene_editor_document_transaction.h"
 #include "import/runtime_scene_light_timeline_io.h"
@@ -10,6 +11,13 @@
 bool SceneEditorDocumentSetLightPath(const Path* path,const CameraPath3D* depth,
     unsigned long long revision,char* diagnostics,size_t size) {
     if(!path || !depth || !SceneEditorDocumentIsOpen() || revision!=SceneEditorDocumentRevision()) return false;
+    if(path->numPoints==1 && SceneEditorLightingPrimaryEditable(NULL,0)) {
+        double xyz[3]={path->points[0].x,path->points[0].y,depth->point_z[0]};
+        json_object *read=SceneEditorLightingRead(),*primary=NULL,*v=NULL;
+        json_object_object_get_ex(read,"primary",&primary);json_object_object_get_ex(primary,"intensity",&v);double intensity=json_object_get_double(v);
+        json_object_object_get_ex(primary,"radius_m",&v);double radius=json_object_get_double(v);
+        bool ok=SceneEditorLightingSetPrimary(xyz,intensity,radius,revision,diagnostics,size);json_object_put(read);return ok;
+    }
     RuntimeSceneLightTimelineDocument* light=malloc(sizeof(*light));
     if(!light) return false;
     bool loaded=RuntimeSceneLightTimelineGetLast(light);

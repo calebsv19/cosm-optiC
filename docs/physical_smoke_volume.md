@@ -1,4 +1,81 @@
-# Local physical smoke-volume candidate
+# Physical smoke-volume settings (local source checkpoint)
+
+
+Saved atmosphere attachments can opt into the same physical kernel through
+`extensions.ray_tracing.authoring.atmosphere_attachment.optics`. Scene Editor's
+**Environment > Optics** selector and MCP `atmosphere_set` edit this same retained
+block, using the existing revision checks, Undo/Redo and File Save:
+
+```json
+"optics": {
+  "profile": "physical_smoke_v1",
+  "sampling_layout": "cell_centered",
+  "reference_concentration_kg_m3": 0.0002,
+  "mass_extinction_m2_kg": 1250,
+  "scattering_albedo": 0.65,
+  "anisotropy": 0.35,
+  "sky_illumination": true,
+  "sky_error_budget": 0
+}
+```
+
+All fields except `sky_error_budget` are required. Concentration must be positive,
+mass extinction nonnegative, albedo within 0..1, anisotropy within -0.95..0.95,
+and the sky budget within 0..0.0001. Numeric fields require finite JSON numbers;
+unknown keys, null blocks and unsupported vocabulary are refused. Physical
+settings require `affects_lighting: true`; selecting the profile in the UI enables
+it. Appearance exposes these coefficients, sky illumination, sampling layout,
+integration step and sky budget. Artistic presets are unavailable in physical
+mode; their retained settings remain available when switching back.
+
+An omitted `optics` block retains the old scene behavior and is not added during
+ordinary serialization. `legacy_artistic_v1` retains dormant physical coefficients
+for switching back, but renders with the legacy artistic policy and node layout.
+Field replacement preserves the optical block and placement. This is an opt-in
+contract; existing scenes and VF3D bytes require no migration.
+
+Saved physical settings support **Direct Light and Disney V2 with caustics off**.
+Each prepared frame captures material and scattering tuning by value with its
+volume attachment. Render queries read that frame's optical snapshot; subsequent
+authoring changes cannot change prepared pixels. Static retained physical volumes
+can use the existing responsive asynchronous route. Animated retained caches
+still select synchronously to preserve the existing cache-selection lifecycle.
+
+Disney V2 applies the existing extinction and single-scattering kernel to camera,
+reflection, diffuse continuation, transmission and environment segments. Segment
+composition uses incoming path weight times scattering, followed by extinction
+of the outgoing path weight. Camera attenuation includes transmission and ambient
+contributions once. Legacy artistic scenes preserve their previous transport.
+This remains bounded single scattering; combined caustics, multiple scattering,
+measured soot calibration and production visual acceptance remain outside this
+checkpoint. Other integrators refuse an active physical profile.
+
+Headless rendering consumes the saved block. A retained block owns optical
+appearance and sampling: request-level smoke optics, sampling-layout and legacy
+optical overrides (including step) are refused. Camera and lighting inspection
+remain available. `inspection.saved_atmosphere_optics` in the summary reports the
+saved policy; other inspection override fields continue to describe the request.
+Portable scene snapshots carry the block and its existing contained cache assets.
+
+The local acceptance runner is `tests/tools/run_atmosphere_optics.py`. Supply
+`--native <workspace-visual-test> --cli <headless-cli> --out <fresh-test-root>`;
+it copies fixtures before opening an isolated native editor. It verifies native
+controls, active-edit/stale/typed refusals, shared history, save/reopen, real MCP,
+exact Direct Light kernel parity, exact legacy parity, rendered coefficient
+changes and a sealed relocated snapshot. It also checks saved/inspection Disney
+V2 parity, both integrators' legacy pixels and Disney coefficient effects. To
+reuse a previously verified saved fixture for renderer checks, supply
+`--native-fixture <contained-fixture>`; UI/MCP acceptance then comes from that
+fixture's original proof, rather than a new UI run.
+
+`scene_editor_workspace_visual_test <isolated-program-root> <saved-physical-scene>
+--atmosphere-snapshot` verifies prepared Direct Light/Disney V2 pixels after
+mutating all global optical tuning, concurrent distinct-frame rendering and exact
+legacy lookup parity. C tests cover analytic attenuation/scattering, independent
+snapshot threads and reflection/transmission path weights. These local gates do
+not qualify packages or workers.
+
+## Request-level inspection profile
 
 The headless request supports two additive opt-ins. Existing requests keep the
 legacy sampling and artistic optical tuning.
@@ -23,7 +100,9 @@ legacy sampling and artistic optical tuning.
 ```
 
 This is a fragment; scene, source, render and output fields are still required.
-Use `direct_light` with caustics off. The physical profile rejects simultaneous
+Use `direct_light` or `disney_v2` with caustics off. For Disney V2 set
+`inspection.caustic_mode: "off"` and `inspection.caustic_sidecar_enabled: false`;
+physical profiles also refuse photon render contributions. The physical profile rejects simultaneous
 legacy density scale/gamma, opacity clamp, absorption gain, scatter gain or
 RGB tint/albedo overrides. Step scale remains a numerical integration setting.
 Numeric strings, booleans in numeric fields, unknown optical keys and invalid

@@ -1,6 +1,7 @@
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include "app/ray_tracing_request_utils.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "app/ray_tracing_temporal_checkpoint.h"
 #include "import/runtime_mesh_asset_loader.h"
 
@@ -312,7 +313,11 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"has_forward_decay_override\": %s,\n",
             request->has_forward_decay_override ? "true" : "false");
     fprintf(file, "    \"forward_decay\": %.9f,\n", request->forward_decay_override);
-    fprintf(file, "    \"volume_sampling_layout\": \"%s\",\n", request->volume_cell_centered ? "cell_centered" : "legacy_node");
+    const SceneAtmosphereAttachment* retained=SceneAtmosphereRuntimeRead();
+    json_object* optics=retained->present?SceneAtmosphereOpticsToJson(&retained->optics):NULL;
+    fprintf(file,"    \"saved_atmosphere_optics\": %s,\n",optics?json_object_to_json_string_ext(optics,JSON_C_TO_STRING_PLAIN):"null");
+    if(optics) json_object_put(optics);
+    fprintf(file, "    \"volume_sampling_layout\": \"%s\",\n", (retained->present && retained->optics.present ? retained->optics.physical && retained->optics.cell_centered : request->volume_cell_centered) ? "cell_centered" : "legacy_node");
     fprintf(file, "    \"smoke_sky_error_budget\": %.12g,\n",request->smoke_sky_error_budget);
     fprintf(file, "    \"physical_smoke_optics\": %s,\n",request->has_smoke_optics ? "true" : "false");
     fprintf(file, "    \"smoke_reference_concentration_kg_m3\": %.12g,\n    \"smoke_mass_extinction_m2_kg\": %.12g,\n    \"smoke_scattering_albedo\": %.12g,\n    \"smoke_anisotropy\": %.12g,\n    \"smoke_sky_illumination\": %s,\n",request->smoke_reference_concentration,request->smoke_mass_extinction,request->smoke_albedo,request->smoke_anisotropy,request->smoke_sky_illumination ? "true" : "false");

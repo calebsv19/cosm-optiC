@@ -1,4 +1,6 @@
+#include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_render_authoring.h"
+#include "editor/scene_editor_scene_commands.h"
 #include "editor/scene_editor_camera_inspector.h"
 #include "editor/scene_editor_mesh_preview_render.h"
 #include "editor/scene_editor_atmosphere_preview.h"
@@ -98,7 +100,7 @@ void SceneEditorWorkspaceProfileSelectMode(SceneEditor* editor, int mode) {
 }
 static int menu_count(void) {
     if (document_menu==3) return SCENE_EDITOR_MESH_DISPLAY_COUNT;
-    if (document_menu==0) return 2;
+    if (document_menu==0) return 5;
     if (document_menu==1) return 2;
     if (document_menu==2) return 8;
     return add_menu ? 4 : SCENE_WORKSPACE_PROFILE_COUNT;
@@ -109,7 +111,7 @@ static SDL_Rect menu_row(const SceneEditorWorkspaceChrome* chrome,int i) {
     return (SDL_Rect){document_menu==3 ? anchor.x+anchor.w-140 : anchor.x,anchor.y+anchor.h+4+i*(anchor.h+4),document_menu==3 ? 140 : 230,anchor.h+4};
 }
 static const char* menu_label(int i) {
-    static const char* file[]={"Save", "Leave editor..."};
+    static const char* file[]={"Save", "Leave editor...", "Open scene...", "Create scene...", "Save As..."};
     static const char* edit[]={"Undo", "Redo"};
     static const char* view[]={"Frame all", "Frame selected", "Expand / restore viewport", "Reset layout",
         "World / Local label", "Toggle snapping", "Light path (Render)", "Light animation (Render)"};
@@ -155,6 +157,7 @@ static void select_menu(SceneEditor* editor,int i) {
         return;
     }
     if(document_menu==3) { SceneEditorMeshPreviewModeSet(i);return; }
+    if(document_menu==0 && i>=2) {SceneEditorSceneDialogOpen(i==2?"open":i==3?"create":"save_as");return;}
     SceneEditorChromeAction action={0};
     if(document_menu==0) action.kind=i==0 ? SCENE_EDITOR_CHROME_ACTION_SAVE : SCENE_EDITOR_CHROME_ACTION_BACK_TO_MENU;
     else if(document_menu==1) { SceneEditorTransformPanelHistory(i==1); return; }
@@ -275,13 +278,8 @@ void SceneEditorWorkspaceProfileRenderOverlay(SDL_Renderer* renderer) {
         SDL_SetRenderDrawColor(renderer,fill.r,fill.g,fill.b,255); SDL_RenderFillRect(renderer,&row);
         SDL_SetRenderDrawColor(renderer,palette.panel_border.r,palette.panel_border.g,palette.panel_border.b,255);
         SDL_RenderDrawRect(renderer,&row);
-        if(add_menu && document_menu<0)
-            SceneEditorButtonText(renderer,row,menu_label(i),ray_tracing_theme_choose_button_text(fill,palette));
-        else {
-            row.x+=8; row.w-=16;
-            SceneEditorLabelLeft(renderer,row,menu_label(i),
-                menu_enabled(i) ? ray_tracing_theme_choose_button_text(fill,palette) : palette.text_muted);
-        }
+        unsigned key=(unsigned)((document_menu+2)*32+(add_menu?256:0)+i+1);
+        SceneEditorSharedUiModalButton(renderer,2,key,row,menu_label(i),menu_enabled(i),fill,palette);
     }
     SDL_RenderSetClipRect(renderer,clipped ? &prior : NULL);
 }

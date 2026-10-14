@@ -5,6 +5,7 @@
 #include "editor/scene_editor_digest_overlay.h"
 void SceneEditorTimelineRenderEvaluatedMarkers(SDL_Renderer* renderer,
     const SceneEditorDigestOverlayProjector* projector);
+bool SceneEditorTimelineInteractionActive(void);
 bool SceneEditorTimelineAdvance(void);
 void SceneEditorTimelineTogglePlaying(void);
 bool SceneEditorTimelineMoveKeyValue(int64_t frame,double value);

@@ -1,7 +1,7 @@
 """Typed physical-smoke request rejection gates; a public local preflight only."""
-import copy,json,subprocess,tempfile,unittest
+import copy,json,os,subprocess,tempfile,unittest
 from pathlib import Path
-ROOT=Path(__file__).resolve().parents[1];WORKER=ROOT/'build/toolchains/clang/arm64/tools/cli/ray_tracing_render_headless'
+ROOT=Path(__file__).resolve().parents[1];WORKER=Path(os.environ.get('RAY_TRACING_HEADLESS_CLI',ROOT/'build/toolchains/clang/arm64/tools/cli/ray_tracing_render_headless'))
 class SmokeRequestTests(unittest.TestCase):
  def test_strict_physical_profile(self):
   original=json.loads((ROOT/'tests/fixtures/agent_render_preflight_request.json').read_text())
@@ -16,7 +16,8 @@ class SmokeRequestTests(unittest.TestCase):
   for value in ('node',True):
    bad=copy.deepcopy(original);bad['volume']['sampling_layout']=value;cases.append(('bad_layout',bad,False))
   bad=copy.deepcopy(original);bad['inspection']['volume_density_scale']=1;cases.append(('mixed_legacy',bad,False))
-  bad=copy.deepcopy(original);bad['render']['integrator_3d']='disney_v2';cases.append(('unsupported_integrator',bad,False))
+  bad=copy.deepcopy(original);bad['render']['integrator_3d']='disney_v2';bad['inspection'].update(caustic_mode='off',caustic_sidecar_enabled=False);cases.append(('disney_supported',bad,True))
+  bad=copy.deepcopy(original);bad['render']['integrator_3d']='diffuse_bounce';cases.append(('unsupported_integrator',bad,False))
   with tempfile.TemporaryDirectory() as tmp:
    for name,req,accepted in cases:
     req['output']={'root':str(Path(tmp)/'render'),'overwrite':True};path=Path(tmp)/'request.json';path.write_text(json.dumps(req));result=subprocess.run([str(WORKER),'--request',str(path),'--preflight','--summary',str(Path(tmp)/'summary.json')],capture_output=True,text=True)

@@ -1,3 +1,6 @@
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_scene_commands.h"
+#include "editor/scene_editor_render_control.h"
 #include "editor/scene_editor_atmosphere_panel.h"
 #include "editor/scene_editor_agent_control.h"
 #include "editor/scene_editor_motion_paths.h"
@@ -54,7 +57,8 @@ static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
     SceneEditorSurfaceMaterialPanelInvalidateControls();
     SceneEditorAtmospherePanelBeginFrame();
     (void)SceneEditorAgentControlPoll();
-    SceneEditorAtmospherePreviewTick();
+    SceneEditorRenderPoll();
+    if(!SceneEditorRenderActive()) SceneEditorAtmospherePreviewTick();
     static unsigned long long preview_revision;
     unsigned long long revision=SceneEditorDocumentRevision();
     if (SceneEditorDocumentIsOpen() && revision!=preview_revision) {
@@ -95,6 +99,15 @@ void SceneEditorSessionRuntimeHandleEvent(SceneEditor* editor, SDL_Event* event)
     SceneEditorInputRouterCallbacks callbacks = {0};
     if (!editor || !event) {
         return;
+    }
+    if(SceneEditorSharedUiFilter(editor,event) || SceneEditorSharedUiRoute(editor,event)) return;
+    if(SceneEditorSceneDialogEvent(event)) return;
+    if(SceneEditorRenderPanelEvent(event)) return;
+    if(SceneEditorRenderActive()) {
+        if(event->type==SDL_DROPFILE) {SDL_free(event->drop.file);event->drop.file=NULL;}
+        bool close_requested=event->type==SDL_QUIT || (event->type==SDL_WINDOWEVENT && event->window.event==SDL_WINDOWEVENT_CLOSE && editor->window && event->window.windowID==SDL_GetWindowID(editor->window));
+        if(close_requested) SceneEditorRenderShutdown(); /* Continue through the ordinary unsaved-scene close flow. */
+        else return;
     }
     scene_timeline_sync_tool_selection(editor);
     if(SceneEditorAtmosphereViewportEvent(event,editor->window)) return;
@@ -193,8 +206,8 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
     if (!editor->running || sceneEditorExitFlag) {
         return;
     }
-    if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER || SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT) (void)SceneEditorTimelineAdvance();
-    else (void)SceneEditorLightTimelineAdvancePlayback();
+    if(!SceneEditorRenderActive() && (SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER || SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_ENVIRONMENT)) (void)SceneEditorTimelineAdvance();
+    else if(!SceneEditorRenderActive()) (void)SceneEditorLightTimelineAdvancePlayback();
 
     SceneEditorSyncWindowSize(editor);
     scene_editor_session_runtime_update_dirty_objects();
@@ -207,13 +220,14 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
         return;
     }
 
-    SceneEditorViewportRenderDraw(editor->renderer,
+    SceneEditorSharedUiBegin(editor);
+    if(!SceneEditorRenderActive()) SceneEditorViewportRenderDraw(editor->renderer,
                                   editor->currentMode,
                                   RenderSceneDigestOverlay);
-    RenderSceneButtons(editor->renderer);
+    if(!SceneEditorRenderActive()) RenderSceneButtons(editor->renderer);
     {
         SceneEditorPaneLayout layout;
-        if (SceneEditorGetPaneLayout(&layout)) {
+        if (!SceneEditorRenderActive() && SceneEditorGetPaneLayout(&layout)) {
             if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {
                 if(!SceneEditorRenderAuthoringTiming()) SceneEditorCameraInspectorRender(editor->renderer,&layout);
                 SceneEditorRenderAuthoringDraw(editor,&layout);
@@ -232,8 +246,11 @@ void SceneEditorSessionRuntimeRenderWithPostDraw(SceneEditor* editor,
             SceneEditorTransformPanelRenderImportOverlay(editor->renderer,layout.viewport_rect);
     }
     SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
+    SceneEditorRenderPanelDraw(editor->renderer);
     SceneEditorLifecycleRender(editor->renderer);
+    SceneEditorSceneDialogDraw(editor->renderer);
     SceneEditorRenameRender(editor->renderer);
+    SceneEditorSharedUiEnd();
     render_end_frame();
 }
 
@@ -348,13 +365,14 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
                 continue;
             }
 
-            SceneEditorViewportRenderDraw(editor->renderer,
+            SceneEditorSharedUiBegin(editor);
+            if(!SceneEditorRenderActive()) SceneEditorViewportRenderDraw(editor->renderer,
                                           editor->currentMode,
                                           RenderSceneDigestOverlay);
-            RenderSceneButtons(editor->renderer);
+            if(!SceneEditorRenderActive()) RenderSceneButtons(editor->renderer);
             {
                 SceneEditorPaneLayout layout;
-                if (SceneEditorGetPaneLayout(&layout)) {
+                if (!SceneEditorRenderActive() && SceneEditorGetPaneLayout(&layout)) {
                     if(SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER) {
                 if(!SceneEditorRenderAuthoringTiming()) SceneEditorCameraInspectorRender(editor->renderer,&layout);
                 SceneEditorRenderAuthoringDraw(editor,&layout);
@@ -367,8 +385,11 @@ void SceneEditorSessionRuntimeLoop(SceneEditor* editor) {
             }
 
             SceneEditorWorkspaceProfileRenderOverlay(editor->renderer);
-            SceneEditorLifecycleRender(editor->renderer);
+            SceneEditorRenderPanelDraw(editor->renderer);
+    SceneEditorLifecycleRender(editor->renderer);
+    SceneEditorSceneDialogDraw(editor->renderer);
     SceneEditorRenameRender(editor->renderer);
+            SceneEditorSharedUiEnd();
             render_end_frame();
             frame_dirty = false;
             last_render_ms = SDL_GetTicks();

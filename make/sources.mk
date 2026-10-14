@@ -51,8 +51,11 @@ CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
 CORE_HEADLESS_JOB_SRCS := $(CORE_HEADLESS_JOB_DIR)/src/core_headless_job.c
 KIT_RENDER_SRCS := \
 	$(KIT_RENDER_DIR)/src/kit_render.c \
+	$(KIT_RENDER_DIR)/src/kit_render_command_validation.c \
 	$(KIT_RENDER_DIR)/src/kit_render_external_text.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
+	$(KIT_RENDER_DIR)/src/kit_render_backend_vk_commands.c \
+	$(KIT_RENDER_DIR)/src/kit_render_native_font.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_vk.c
 KIT_PANE_SRCS := $(KIT_PANE_DIR)/src/kit_pane.c
 KIT_VIZ_SRCS := $(KIT_VIZ_DIR)/src/kit_viz.c

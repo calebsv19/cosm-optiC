@@ -46,7 +46,11 @@ int run_test_menu_render_workflow_tests(void) {
     assert_true("scene_static_overrides_legacy_dynamic",!SceneAtmosphereRuntimeRequiresSynchronousSelection(true));
     char label[160];volume_source_ui_format_active_button_label(label,sizeof(label));
     assert_true("scene_volume_label_on",strstr(label,"Scene atmosphere [On]")!=NULL);
-    v.animated=true;json_object_object_add(author,"atmosphere_attachment",SceneAtmosphereAttachmentToJson(&v));
+    v.animated=true;
+    assert_true("single_vf3d_animation_refused", !SceneAtmosphereAttachmentValidate(&v, NULL, 0));
+    strcpy(v.source_kind,"manifest");strcpy(v.source_path,"assets/cloud_manifest.json");
+    assert_true("animated_manifest_valid", SceneAtmosphereAttachmentValidate(&v, NULL, 0));
+    json_object_object_add(author,"atmosphere_attachment",SceneAtmosphereAttachmentToJson(&v));
     assert_true("scene_dynamic_load",SceneAtmosphereRuntimeLoad(scene,1));
     assert_true("scene_dynamic_stays_guarded",SceneAtmosphereRuntimeRequiresSynchronousSelection(false));
     v.enabled=false;json_object_object_add(author,"atmosphere_attachment",SceneAtmosphereAttachmentToJson(&v));

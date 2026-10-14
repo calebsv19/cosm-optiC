@@ -22,6 +22,14 @@ static struct {
     struct {int fd;size_t used,sent,total;double activity;char input[CAPACITY],output[CAPACITY];} clients[CLIENTS];
 } control={.listener=-1};
 static bool registered;
+/* Keep every published scene binding for the lifetime of this endpoint.
+   Matrix runs can visit many scenes; evicting old bindings disconnects clients. */
+typedef struct SceneAttachment {
+    struct SceneAttachment* next;
+    char descriptor[];
+} SceneAttachment;
+static SceneAttachment* aliases;
+static bool reserved;
 static double now(void) {
     struct timespec stamp;clock_gettime(CLOCK_MONOTONIC,&stamp);
     return stamp.tv_sec+stamp.tv_nsec/1e9;
@@ -54,6 +62,14 @@ void SceneEditorAgentControlClose(void) {
        json_object_is_type(path,json_type_string) && !strcmp(json_object_get_string(path),control.socket_path))
         unlink(control.descriptor);
     if(descriptor) json_object_put(descriptor);
+    while(aliases) {
+        SceneAttachment* attachment=aliases;aliases=attachment->next;
+        json_object* info=json_object_from_file(attachment->descriptor),*pid=NULL;
+        if(info && json_object_object_get_ex(info,"pid",&pid) && json_object_get_int64(pid)==getpid()) unlink(attachment->descriptor);
+        if(info) json_object_put(info);
+        free(attachment);
+    }
+    reserved=false;
     memset(&control,0,sizeof(control));control.listener=-1;
 }
 static bool begin(void) {
@@ -90,9 +106,43 @@ static bool begin(void) {
     if(!registered) {atexit(SceneEditorAgentControlClose);registered=true;}
     return true;
 }
+bool SceneEditorAgentControlReservePath(const char* scene,char* message,size_t size) {
+    char descriptor[PATH_MAX];
+    reserved=false;
+    if(control.listener<0 || snprintf(descriptor,sizeof(descriptor),"%s.optic-agent.json",scene)>=(int)sizeof(descriptor)) {
+        snprintf(message,size,"No active editor endpoint or path too long.");return false;
+    }
+    if(!strcmp(descriptor,control.descriptor)) return true;
+    for(SceneAttachment* attachment=aliases;attachment;attachment=attachment->next)
+        if(!strcmp(descriptor,attachment->descriptor)) return true;
+    /* Allocate before publishing: failure leaves the scene and endpoint intact. */
+    SceneAttachment* attachment=malloc(sizeof(*attachment)+strlen(descriptor)+1);
+    if(!attachment) {snprintf(message,size,"Cannot allocate editor attachment.");return false;}
+    strcpy(attachment->descriptor,descriptor);
+    int fd=open(descriptor,O_CREAT|O_EXCL|O_WRONLY,0600);
+    if(fd<0 && errno==EEXIST && reclaim_stale_descriptor(descriptor,scene)) fd=open(descriptor,O_CREAT|O_EXCL|O_WRONLY,0600);
+    if(fd<0) {free(attachment);snprintf(message,size,"Destination has an existing editor endpoint or cannot be attached.");return false;}
+    json_object* info=json_object_new_object();
+    json_object_object_add(info,"schema_version",json_object_new_string("optic_agent_control_v1"));
+    json_object_object_add(info,"socket",json_object_new_string(control.socket_path));
+    json_object_object_add(info,"scene_path",json_object_new_string(scene));
+    json_object_object_add(info,"pid",json_object_new_int64(getpid()));
+    const char* text=json_object_to_json_string_ext(info,JSON_C_TO_STRING_PLAIN);size_t len=strlen(text);
+    bool ok=write(fd,text,len)==(ssize_t)len;close(fd);json_object_put(info);
+    if(!ok) {unlink(descriptor);free(attachment);snprintf(message,size,"Cannot publish editor attachment.");return false;}
+    attachment->next=aliases;aliases=attachment;reserved=true;return true;
+}
+void SceneEditorAgentControlReleaseReservedPath(void) {
+    if(reserved && aliases) {
+        SceneAttachment* attachment=aliases;aliases=attachment->next;
+        unlink(attachment->descriptor);free(attachment);
+    }
+    reserved=false;
+}
+
 bool SceneEditorAgentControlPoll(void) {
     if(!SceneEditorDocumentIsOpen()) {SceneEditorAgentControlClose();return false;}
-    if(control.listener>=0 && strcmp(control.scene,SceneEditorDocumentPath())) SceneEditorAgentControlClose();
+    /* Lifecycle commands reserve an alias before switching; keep live replies. */
     if(control.listener<0 && !begin()) return false;
     bool changed=false;
     for(int i=0;i<CLIENTS;++i) {

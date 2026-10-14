@@ -1,3 +1,5 @@
+#include "editor/scene_editor_lighting.h"
+#include "editor/scene_editor_document.h"
 
 #include "editor/bezier_editor.h"
 #include "editor/scene_editor_workspace_profile.h"
@@ -97,6 +99,11 @@ static bool bezier_editor_slider_range(BezierEditorPaneSliderKind slider_kind,
 }
 
 static void bezier_editor_slider_set_value(BezierEditorPaneSliderKind slider_kind, double value) {
+    if(SceneEditorDocumentIsOpen()) {
+        if(slider_kind==BEZIER_EDITOR_PANE_SLIDER_LIGHT_RADIUS) SceneEditorLightingSetPrimaryValue("radius_m",value);
+        else if(slider_kind==BEZIER_EDITOR_PANE_SLIDER_LIGHT_INTENSITY) SceneEditorLightingSetPrimaryValue("intensity",value);
+        return;
+    }
     switch (slider_kind) {
         case BEZIER_EDITOR_PANE_SLIDER_LIGHT_RADIUS:
             animSettings.lightRadius = bezier_editor_clamp(value,
@@ -249,6 +256,13 @@ static bool viewportPanDragging = false;
 static int viewportPanLastMouseX = 0;
 static int viewportPanLastMouseY = 0;
 static BezierEditorPaneSliderKind activePaneSlider = BEZIER_EDITOR_PANE_SLIDER_NONE;
+bool BezierEditorLightingSliderActive(void) {return activePaneSlider!=BEZIER_EDITOR_PANE_SLIDER_NONE;}
+bool BezierEditorLightingSliderRect(const char* property,SDL_Rect* out) {
+    if(!property || !out) return false;
+    if(!strcmp(property,"intensity")) *out=bezierLightIntensitySlider;
+    else if(!strcmp(property,"radius_m")) *out=bezierLightRadiusSlider;
+    else return false;return out->w>0 && out->h>0;
+}
 
 typedef enum BezierEditorAction {
     BEZIER_EDITOR_ACTION_NONE = 0,
@@ -966,12 +980,14 @@ int BezierEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_boun
         }
         return cursor_y;
     }
+    double primary_xyz[3],primary_intensity=animSettings.lightIntensity,primary_radius=animSettings.lightRadius;
+    if(SceneEditorDocumentIsOpen() && SceneEditorLightingPrimaryEditable(NULL,0)) SceneEditorLightingGetPrimary(primary_xyz,&primary_intensity,&primary_radius);
     if (cursor_y + slider_h <= bottom_y) {
         SDL_Rect slider_bounds = {content_bounds.x, cursor_y, content_bounds.w, slider_h};
         bezier_editor_draw_slider(renderer,
                                   slider_bounds,
                                   "Light Radius",
-                                  animSettings.lightRadius,
+                                  primary_radius,
                                   BEZIER_EDITOR_LIGHT_RADIUS_MIN,
                                   BEZIER_EDITOR_LIGHT_RADIUS_MAX,
                                   true,
@@ -983,7 +999,7 @@ int BezierEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_boun
         bezier_editor_draw_slider(renderer,
                                   slider_bounds,
                                   "Light Brightness",
-                                  animSettings.lightIntensity,
+                                  primary_intensity,
                                   BEZIER_EDITOR_LIGHT_INTENSITY_MIN,
                                   BEZIER_EDITOR_LIGHT_INTENSITY_MAX,
                                   false,

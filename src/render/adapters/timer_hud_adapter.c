@@ -1,3 +1,4 @@
+#include "ui/shared_hud_text.h"
 #include "render/timer_hud_adapter.h"
 
 #include "timer_hud/time_scope.h"
@@ -144,11 +145,13 @@ static void timer_hud_draw_text(const char* text, int x, int y, int align_flags,
     if (align_flags & TIMER_HUD_ALIGN_MIDDLE)  dst.y -= logical_h / 2;
     if (align_flags & TIMER_HUD_ALIGN_BOTTOM)  dst.y -= logical_h;
 
-    (void)ray_tracing_text_draw_utf8(ctx->renderer,
-                                     font,
-                                     text,
-                                     (SDL_Color){color.r, color.g, color.b, color.a},
-                                     &dst);
+    int width=ctx->logical_width>0?ctx->logical_width:ctx->width;
+    int height=ctx->logical_height>0?ctx->logical_height:ctx->height;
+    SDL_Rect viewport={0,0,width,height},prior;SDL_bool clipped=SDL_RenderIsClipEnabled(ctx->renderer);SDL_RenderGetClipRect(ctx->renderer,&prior);
+    if(clipped && !SDL_IntersectRect(&prior,&viewport,&viewport))return;
+    SDL_RenderSetClipRect(ctx->renderer,&viewport);
+    ray_tracing_shared_hud_text(ctx->renderer,font,dst,text,(SDL_Color){color.r,color.g,color.b,color.a});
+    SDL_RenderSetClipRect(ctx->renderer,clipped?&prior:NULL);
 }
 
 static const TimerHUDBackend g_timer_hud_backend = {

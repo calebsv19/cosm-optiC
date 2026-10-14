@@ -51,6 +51,24 @@ static int selected(int x, int y) {
 
 bool RuntimeNative3DPixelProbe_IsSelected(int x, int y) { return selected(x,y); }
 
+void RuntimeNative3DPixelProbe_Receiver(int x, int y, const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload, const Ray3D* ray) {
+    if (!hit || !payload || !ray || !selected(x,y)) return;
+    pthread_mutex_lock(&output_lock);
+    fprintf(stderr,"PIXEL_PROBE {\"stage\":\"receiver\",\"x\":%d,\"y\":%d,"
+        "\"albedo\":[%.9g,%.9g,%.9g],\"position\":[%.9g,%.9g,%.9g],"
+        "\"footprint\":%d,\"unbounded\":%d,\"transported\":%d,"
+        "\"dx\":[%.9g,%.9g,%.9g],\"dy\":[%.9g,%.9g,%.9g],"
+        "\"direction\":[%.9g,%.9g,%.9g]}\n",x,y,
+        payload->baseColorR,payload->baseColorG,payload->baseColorB,
+        hit->position.x,hit->position.y,hit->position.z,
+        hit->hasPixelFootprint,hit->footprintUnbounded,hit->footprintTransported,
+        hit->pixelDpDx.x,hit->pixelDpDx.y,hit->pixelDpDx.z,
+        hit->pixelDpDy.x,hit->pixelDpDy.y,hit->pixelDpDy.z,
+        ray->direction.x,ray->direction.y,ray->direction.z);
+    pthread_mutex_unlock(&output_lock);
+}
+
 bool RuntimeNative3DPixelProbe_ShouldShade(int x, int y) {
     pthread_once(&init_once, initialize);
     return !selected_only || selected(x,y);
@@ -63,7 +81,9 @@ void RuntimeNative3DPixelProbe_Shade(int x, int y,
     pthread_mutex_lock(&output_lock);
     fprintf(stderr, "PIXEL_PROBE {\"stage\":\"shade\",\"x\":%d,\"y\":%d,"
         "\"sequence\":%u,\"subpass\":%u,\"object\":%d,\"triangle\":%d,"
-        "\"normal\":[%.9g,%.9g,%.9g],\"albedo\":[%.9g,%.9g,%.9g],\"roughness\":%.9g,\"rgb\":[%.9g,%.9g,%.9g],"
+        "\"normal\":[%.9g,%.9g,%.9g],\"albedo\":[%.9g,%.9g,%.9g],"
+        "\"footprint\":%d,\"unbounded\":%d,\"dx\":[%.9g,%.9g,%.9g],\"dy\":[%.9g,%.9g,%.9g],"
+        "\"roughness\":%.9g,\"rgb\":[%.9g,%.9g,%.9g],"
         "\"diffuse\":[%.9g,%.9g,%.9g],\"specular\":[%.9g,%.9g,%.9g],"
         "\"stochastic_direct\":[%.9g,%.9g,%.9g],\"stochastic_bsdf\":[%.9g,%.9g,%.9g],"
         "\"recursive_direct\":[%.9g,%.9g,%.9g],\"recursive_bsdf\":[%.9g,%.9g,%.9g],"
@@ -75,7 +95,10 @@ void RuntimeNative3DPixelProbe_Shade(int x, int y,
         x,y,sampling?sampling->sampleSequence:0,sampling?sampling->temporalSubpassIndex:0,
         r->hitInfo.sceneObjectIndex,r->hitInfo.triangleIndex,
         r->hitInfo.normal.x,r->hitInfo.normal.y,r->hitInfo.normal.z,
-        r->principled.baseColorR,r->principled.baseColorG,r->principled.baseColorB,r->principled.roughness,
+        r->principled.baseColorR,r->principled.baseColorG,r->principled.baseColorB,
+        r->hitInfo.hasPixelFootprint,r->hitInfo.footprintUnbounded,
+        r->hitInfo.pixelDpDx.x,r->hitInfo.pixelDpDx.y,r->hitInfo.pixelDpDx.z,
+        r->hitInfo.pixelDpDy.x,r->hitInfo.pixelDpDy.y,r->hitInfo.pixelDpDy.z,r->principled.roughness,
         r->radianceR,r->radianceG,r->radianceB,
         r->diffuseRadianceR,r->diffuseRadianceG,r->diffuseRadianceB,
         r->specularRadianceR,r->specularRadianceG,r->specularRadianceB,

@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
 #include "scene_editor_light_path_panel.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -25,12 +27,11 @@ int SceneEditorLightPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     if (target[0] && paths->bindings[i].enabled && !strcmp(paths->bindings[i].target_id, target)) binding = &paths->bindings[i];
   bool bound = path && binding && !strcmp(binding->path_id, path->id);
   snprintf(relationship, sizeof(relationship), "%s: %s", target[0] ? target : "Light (activate timeline first)", binding ? binding->path_id : "legacy position source");
-  ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-      relationship, x, y, SceneEditorChromeShellResolvePalette().text_primary);
+  scene_editor_shared_label_at(r,relationship,x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
   y += 26;
   if (binding && binding->restore_known) {
     snprintf(predecessor,sizeof(predecessor),"Inactive source: %s",binding->restore_count?binding->restore_xyz_tracks[0]:"static placement");
-    ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),predecessor,x,y,SceneEditorChromeShellResolvePalette().text_primary);
+    scene_editor_shared_label_at(r,predecessor,x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
     y += 26;
   }
   const char *labels[] = {bound ? "Light attached to this route" : "Attach light on this route",
@@ -39,12 +40,11 @@ int SceneEditorLightPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
   for (int i = 0; i < 4; ++i) {
     if(i==2) {controls[i]=(SDL_Rect){0};continue;} /* shared follower header owns timing */
     controls[i] = (SDL_Rect){x, y, width, 28};
-    SceneEditorRenderButton(r, controls[i], labels[i], false, enabled[i]);
+    SceneEditorSharedUiPanelButton(r,101,128+(i),controls[i],labels[i],false,enabled[i]);
     if (y < clip.y || y + 28 > clip.y + clip.h) controls[i] = (SDL_Rect){0};
     y += 34;
   }
-  ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-      "Intensity stays independent.", x, y, SceneEditorChromeShellResolvePalette().text_primary);
+  scene_editor_shared_label_at(r,"Intensity stays independent.",x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
   return y + 30;
 }
 bool SceneEditorLightPathPanelEvent(SDL_Event *e, const MotionPath *path,

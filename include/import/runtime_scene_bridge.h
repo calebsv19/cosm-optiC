@@ -151,6 +151,11 @@ void runtime_scene_bridge_get_last_3d_scaffold_state(RuntimeSceneBridge3DScaffol
 void runtime_scene_bridge_get_last_3d_digest_state(RuntimeSceneBridge3DDigestState *out_state);
 void runtime_scene_bridge_get_last_3d_primitive_seed_state(
     RuntimeSceneBridge3DPrimitiveSeedState *out_state);
+/* Small by-value queries for exclusive prepared render/scene consumers. */
+int runtime_scene_bridge_last_3d_primitive_seed_count(void);
+bool runtime_scene_bridge_get_last_3d_primitive_seed(
+    int index, RuntimeSceneBridgePrimitiveSeed *out_seed);
+
 void runtime_scene_bridge_get_last_3d_light_seed_state(
     RuntimeSceneBridge3DLightSeedState *out_state);
 bool runtime_scene_bridge_get_last_object_id_for_scene_index(int scene_index,

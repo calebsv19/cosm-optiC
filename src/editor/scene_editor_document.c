@@ -1,3 +1,5 @@
+#include "scene_editor_retained_material_save.h"
+#include "editor/scene_editor_runtime_scene_persistence.h"
 #include "editor/scene_editor_atmosphere_preview.h"
 #include "editor/scene_editor_atmosphere_viewport.h"
 #include "editor/scene_editor_atmosphere_inspector.h"
@@ -223,6 +225,7 @@ static bool document_apply_current(char* diagnostics, size_t diagnostics_size) {
         document_diag(diagnostics, diagnostics_size, summary.diagnostics);
         goto done;
     }
+    SceneEditorRuntimeSceneCaptureMaterialBaseline();
     runtime_scene_motion_bridge_get_last_summary(&motion_summary);
     ObjectEditorMotionHydrateFromRuntimeSummary(&motion_summary);
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
@@ -246,6 +249,7 @@ static bool document_apply_saved_file(char* diagnostics, size_t diagnostics_size
         document_diag(diagnostics, diagnostics_size, summary.diagnostics);
         return false;
     }
+    SceneEditorRuntimeSceneCaptureMaterialBaseline();
     runtime_scene_motion_bridge_get_last_summary(&motion_summary);
     ObjectEditorMotionHydrateFromRuntimeSummary(&motion_summary);
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
@@ -412,6 +416,56 @@ bool SceneEditorDocumentOpen(const char* path, char* diagnostics, size_t diagnos
     return true;
 }
 
+/* Lifecycle swap: keep the prior document/history until the new runtime applies.
+ * Revision is monotonic across documents, so queued old commands cannot alias. */
+char* document_dependency_roots_json(void) {
+    if(!s_document.root) return NULL;
+    json_object* snapshot=json_object_new_object(),*docs=json_object_new_array();
+    json_object_object_add(snapshot,"schema_version",json_object_new_string("optic_save_as_snapshot_v1"));
+    json_object_object_add(snapshot,"documents",docs);json_object_array_add(docs,json_object_get(s_document.root));
+    for(int stack=0;stack<2;++stack) {
+        int count=stack?s_document.redo_count:s_document.undo_count;
+        char** values=stack?s_document.redo:s_document.undo;
+        for(int i=0;i<count;++i) {
+            json_object* root=json_tokener_parse(values[i]);
+            if(!root) {json_object_put(snapshot);return NULL;}json_object_array_add(docs,root);
+        }
+    }
+    char* text=document_serialize_root(snapshot,NULL);json_object_put(snapshot);return text;
+}
+
+bool SceneEditorDocumentSwitch(const char* path, bool retain_history, char* diagnostics, size_t size) {
+    char* bytes=NULL; size_t length=0;
+    if(!path || strlen(path)>=sizeof(s_document.path) ||
+       !document_read_file(path,&bytes,&length)) {
+        document_diag(diagnostics,size,"Cannot read destination scene."); return false;
+    }
+    json_object* root=document_parse_valid(bytes,path,diagnostics,size);
+    if(!root) {free(bytes);return false;}
+    SceneEditorDocumentState prior=s_document;
+    memset(&s_document,0,sizeof(s_document));
+    s_document.root=root;s_document.baseline_bytes=bytes;s_document.baseline_size=length;
+    s_document.revision=prior.revision+1;
+    snprintf(s_document.path,sizeof(s_document.path),"%s",path);
+    bool forced=document_fail(SCENE_DOCUMENT_FAIL_SWITCH_APPLY);
+    if(forced || !document_apply_saved_file(diagnostics,size)) {
+        if(forced) document_diag(diagnostics,size,"Injected scene switch application failure.");
+        json_object_put(root);free(bytes);s_document=prior;
+        char restore[512];document_apply_current(restore,sizeof(restore));return false;
+    }
+    if(prior.root) json_object_put(prior.root);
+    free(prior.baseline_bytes);free(prior.pending_before);
+    if(prior.pending_root) json_object_put(prior.pending_root);
+    if(retain_history) {
+        memcpy(s_document.undo,prior.undo,sizeof(prior.undo));s_document.undo_count=prior.undo_count;
+        memcpy(s_document.redo,prior.redo,sizeof(prior.redo));s_document.redo_count=prior.redo_count;
+    } else {document_clear_stack(prior.undo,&prior.undo_count);document_clear_stack(prior.redo,&prior.redo_count);}
+    SceneEditorAtmospherePreviewReset();SceneEditorAtmospherePreviewSetEnabled(false);
+    SceneEditorAtmosphereViewportReset();SceneEditorAtmosphereInspectorReset();
+    ObjectEditorSelectionTrackerReset();
+    return true;
+}
+
 bool SceneEditorDocumentOpenActive(char* diagnostics, size_t diagnostics_size) {
     if (animSettings.sceneSource != SCENE_SOURCE_RUNTIME_SCENE ||
         !animSettings.runtimeScenePath[0]) {
@@ -423,6 +477,7 @@ bool SceneEditorDocumentOpenActive(char* diagnostics, size_t diagnostics_size) {
 }
 
 void SceneEditorDocumentClose(void) {
+    SceneEditorRetainedMaterialBaseline(NULL);
     SceneEditorAtmospherePreviewReset();
     SceneEditorAtmospherePreviewSetEnabled(false);
     SceneEditorAtmosphereViewportReset();
@@ -607,6 +662,14 @@ bool SceneEditorDocumentSetMaterialIdForSceneIndex(int scene_object_index,
     return document_finish_command(diagnostics, diagnostics_size);
 }
 
+size_t SceneEditorDocumentSurfaceMappingJSONSize(int index) {
+    json_object* object=document_object_for_scene_index(index,NULL,0);
+    json_object *ext=NULL,*ray=NULL,*mapping=NULL;
+    if(!object || !json_object_object_get_ex(object,"extensions",&ext) ||
+       !json_object_object_get_ex(ext,"ray_tracing",&ray) || !json_object_object_get_ex(ray,"surface_mapping",&mapping)) return 0;
+    const char* text=json_object_to_json_string_ext(mapping,JSON_C_TO_STRING_PLAIN);
+    return text?strlen(text)+1:0;
+}
 bool SceneEditorDocumentGetSurfaceMappingJSON(int index,char* out,size_t size) {
     json_object* object=document_object_for_scene_index(index,NULL,0);
     json_object *ext=NULL,*ray=NULL,*mapping=NULL;

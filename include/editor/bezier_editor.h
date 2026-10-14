@@ -16,6 +16,9 @@ void RenderBezierEditor(SDL_Renderer* renderer);
 int BezierEditorRenderPaneControls(SDL_Renderer* renderer, SDL_Rect content_bounds, int top_y, int bottom_y);
 void HandleBezierEditorEvents(SDL_Event* event, int* draggingPoint, int* draggingVelocity);
 void ToggleBezierPathMode(Path* path);
+/* Interaction/readback for native lighting controls and acceptance. */
+bool BezierEditorLightingSliderActive(void);
+bool BezierEditorLightingSliderRect(const char* property,SDL_Rect* out);
 
 typedef enum BezierEditorHitRegion {
     BEZIER_EDITOR_HIT_NONE = 0,

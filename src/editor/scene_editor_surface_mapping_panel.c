@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
 #include "editor/scene_editor_surface_mapping_panel.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_typography.h"
@@ -40,7 +42,7 @@ static const char* field_key(json_object* m,int i) {
     if(json_object_get_int(get(m,"version"))==3 && i<4) return i<2?"uv_scale":"uv_offset";
     return keys[i];
 }
-static void cancel(void) {edit=-1;draft_selected=false;SDL_StopTextInput();}
+static void cancel(void) {edit=-1;draft_selected=false;do{scene_editor_shared_field_end(draft);SDL_StopTextInput();}while(0);}
 static void button(SDL_Renderer* r,SDL_Rect rect,const char* text,bool active) {
     SDL_SetRenderDrawColor(r,active?66:38,active?76:42,active?85:46,255);SDL_RenderFillRect(r,&rect);
     SceneEditorLabelLeft(r,(SDL_Rect){rect.x+5,rect.y,rect.w-10,rect.h},text,(SDL_Color){220,223,226,255});
@@ -69,7 +71,7 @@ static json_object* defaults(bool axial) {
 static int mapping_panel_render_content(SDL_Renderer* r,SDL_Rect b,int y,int index,bool editable) {
     if(index!=selected) {cancel();selected=index;status[0]=0;}
     enabled=editable;memset(methods,0,sizeof(methods));memset(fields,0,sizeof(fields));space=axis=(SDL_Rect){0};
-    expand=(SDL_Rect){b.x,y,b.w,25};button(r,expand,opened?"Surface mapping  -":"Surface mapping  +",opened);y+=29;
+    expand=(SDL_Rect){b.x,y,b.w,25};SceneEditorSharedUiPanelButton(r,403,128,expand,opened?"Surface mapping  -":"Surface mapping  +",opened,true);y+=29;
     if(mapping_graph_owned(index)) {
         /* Graph coordinates belong to retained nodes, not a second mapping declaration. */
         cancel();enabled=false;
@@ -94,28 +96,28 @@ static int mapping_panel_render_content(SDL_Renderer* r,SDL_Rect b,int y,int ind
             fields[i]=(SDL_Rect){b.x+(k%2)*(b.w/2),y,b.w/2-3,24};
             if(edit==i) snprintf(text,sizeof(text),"%s: %s",uv_labels[k],draft);
             else snprintf(text,sizeof(text),"%s: %.7g",uv_labels[k],json_object_get_double(v));
-            button(r,fields[i],text,edit==i);if(k%2) y+=27;
+            SceneEditorSharedUiPanelButton(r,403,256+(i),fields[i],text,edit==i,true);if(k%2) y+=27;
         }
         if(status[0]) {SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,24},status,(SDL_Color){225,195,150,255});y+=27;}
         json_object_put(m);return y;
     }
     if(RuntimeSurfaceGraphActive(index)) {
         SceneEditorLabelLeft(r,(SDL_Rect){b.x,y,b.w,25},"Image chart: Planar (procedural XYZ in Sources)",(SDL_Color){185,200,210,255});y+=29;
-    } else {for(int i=0;i<3;++i) {methods[i]=(SDL_Rect){b.x+i*b.w/3,y,b.w/3-3,25};button(r,methods[i],(const char*[]){"Legacy","Planar","Axial brick"}[i],version==i);}y+=29;}
+    } else {for(int i=0;i<3;++i) {methods[i]=(SDL_Rect){b.x+i*b.w/3,y,b.w/3-3,25};SceneEditorSharedUiPanelButton(r,403,384+(i),methods[i],(const char*[]){"Legacy","Planar","Axial brick"}[i],version==i,true);}y+=29;}
     if(m) {
         const char* sp=json_object_get_string(get(m,"space"));
         space=(SDL_Rect){b.x,y,b.w/2-2,25};axis=(SDL_Rect){b.x+b.w/2,y,b.w/2,25};
-        button(r,space,sp && !strcmp(sp,"world")?"Space: World":"Space: Object",false);
+        SceneEditorSharedUiPanelButton(r,403,512,space,sp && !strcmp(sp,"world")?"Space: World":"Space: Object",false,true);
         json_object* av=get(m,"axis_v");int direction=0;
         for(int i=1;i<3;++i) if(fabs(json_object_get_double(json_object_array_get_idx(av,i)))>.9) direction=i;
-        char text[100];snprintf(text,sizeof(text),"%s axis: %c",version==2?"Height":"V",'X'+direction);button(r,axis,text,false);y+=29;
+        char text[100];snprintf(text,sizeof(text),"%s axis: %c",version==2?"Height":"V",'X'+direction);SceneEditorSharedUiPanelButton(r,403,640,axis,text,false,true);y+=29;
         int column=0;
         for(int i=0;i<FIELDS;++i) {
             if((version==1 && (i==4 || i==5 || i==6 || i>=12)) || (version==2 && i==7)) continue;
             fields[i]=(SDL_Rect){b.x+column*(b.w/2),y,b.w/2-3,24};json_object* v=get(m,field_key(m,i));if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
             if(edit==i) snprintf(text,sizeof(text),"%s: %s",labels[i],draft);
             else snprintf(text,sizeof(text),"%s: %.7g",labels[i],json_object_get_double(v));
-            button(r,fields[i],text,edit==i);column=1-column;if(column==0) y+=27;
+            SceneEditorSharedUiPanelButton(r,403,768+(i),fields[i],text,edit==i,true);column=1-column;if(column==0) y+=27;
         }
         if(column) y+=27;
         if(version==2) {
@@ -171,7 +173,8 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
     }
     if(edit>=0) {
         if(SceneEditorDocumentRevision()!=edit_revision) {cancel();return false;}
-        if(e->type==SDL_TEXTINPUT) {if(draft_selected){draft[0]=0;draft_selected=false;}if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
+        if((edit>=0) && scene_editor_shared_field_event(draft,sizeof(draft),e))return true;
+    if(e->type==SDL_TEXTINPUT) {if(draft_selected){draft[0]=0;draft_selected=false;}if(strlen(draft)+strlen(e->text.text)<sizeof(draft)) strcat(draft,e->text.text);return true;}
         if(e->type==SDL_KEYDOWN) {
             if(e->key.keysym.sym==SDLK_ESCAPE) {cancel();return true;}
             if(e->key.keysym.sym==SDLK_BACKSPACE) {if(draft_selected){draft[0]=0;draft_selected=false;}else{size_t n=strlen(draft);if(n) draft[n-1]=0;}return true;}
@@ -219,7 +222,7 @@ bool SceneEditorSurfaceMappingPanelEvent(const SDL_Event* e,int index) {
         json_object* m=current(index);if(!m) return true;
         json_object* v=get(m,field_key(m,i));if(components[i]>=0) v=json_object_array_get_idx(v,components[i]);
         snprintf(draft,sizeof(draft),"%.12g",json_object_get_double(v));json_object_put(m);
-        edit=i;draft_selected=true;edit_revision=SceneEditorDocumentRevision();SDL_StartTextInput();return true;
+        edit=i;draft_selected=true;edit_revision=SceneEditorDocumentRevision();do{scene_editor_shared_field_begin(draft,sizeof(draft),1);SDL_StartTextInput();}while(0);return true;
     }
     return false;
 }

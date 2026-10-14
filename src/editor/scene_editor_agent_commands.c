@@ -1,3 +1,6 @@
+#include "editor/scene_editor_agent_mesh.h"
+#include "editor/scene_editor_scene_commands.h"
+#include "editor/scene_editor_command_guard.h"
 #include "editor/scene_editor_agent_control.h"
 #include "editor/scene_editor_atmosphere.h"
 #include "editor/scene_editor_atmosphere_panel.h"
@@ -9,6 +12,22 @@
 #include "editor/scene_editor_chrome_actions.h"
 #include "editor/scene_editor_transform_panel.h"
 #include "editor/scene_editor_lifecycle.h"
+#include "editor/scene_editor_agent_material.h"
+#include "editor/scene_editor_agent_object.h"
+#include "editor/scene_editor_agent_camera.h"
+#include "editor/scene_editor_agent_animation.h"
+#include "editor/scene_editor_agent_paths.h"
+#include "editor/scene_editor_agent_motion.h"
+#include "editor/scene_editor_agent_lighting.h"
+#include "editor/scene_editor_agent_render.h"
+#include "editor/scene_editor_render_control.h"
+#include "editor/bezier_editor.h"
+#include "editor/scene_editor_camera_authoring.h"
+#include "editor/scene_editor_camera_inspector.h"
+#include "editor/scene_editor_light_authoring.h"
+#include "editor/scene_editor_rename.h"
+#include "editor/scene_editor_object_move_gizmo.h"
+#include "editor/scene_editor_surface_material_panel.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -25,7 +44,42 @@ json_object* SceneEditorAgentControlDispatch(json_object* request) {
     const char* name=json_object_get_string(method);
     unsigned long long revision=SceneEditorDocumentRevision();
     if(!strcmp(name,"scene.read")) {ok=true;goto done;}
-    if(SceneEditorTransformPanelInteractionActive() || SceneEditorAtmospherePanelInteractionActive() || SceneEditorAtmosphereGestureActive() || SceneEditorLifecycleClosePending()) {
+    if(SceneEditorAgentRenderReadOnly(name)) {
+        ok=SceneEditorAgentRenderDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentLightingReadOnly(name)) {
+        ok=SceneEditorAgentLightingDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentMotionReadOnly(name)) {
+        ok=SceneEditorAgentMotionDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentPathsReadOnly(name)) {
+        ok=SceneEditorAgentPathsDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentAnimationReadOnly(name)) {
+        ok=SceneEditorAgentAnimationDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentCameraReadOnly(name)) {
+        ok=SceneEditorAgentCameraDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentMeshReadOnly(name)) {
+        ok=SceneEditorAgentMeshDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentObjectReadOnly(name)) {
+        ok=SceneEditorAgentObjectDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(SceneEditorAgentMaterialReadOnly(name)) {
+        ok=SceneEditorAgentMaterialDispatch(name,params,response,message,sizeof(message));goto done;
+    }
+    if(!strcmp(name,"render.cancel")) {
+        json_object* expected=get(params,"expected_revision");
+        if(expected && json_object_is_type(expected,json_type_int) && json_object_get_int64(expected)>=0 && (unsigned long long)json_object_get_int64(expected)==revision)
+            ok=SceneEditorAgentRenderDispatch(name,params,response,message,sizeof(message));
+        else snprintf(message,sizeof(message),"Scene changed; supply the current expected_revision.");goto done;
+    }
+    json_object* owner=get(request,"scene_path");
+    if(owner && (!json_object_is_type(owner,json_type_string) || strcmp(json_object_get_string(owner),SceneEditorDocumentPath()))) {snprintf(message,sizeof(message),"Editor changed scenes; read current state before editing.");goto done;}
+    if(SceneEditorCommandInteractionActive()) {
         snprintf(message,sizeof(message),"Finish or cancel the active editor operation before agent edits.");goto done;
     }
     json_object* expected=get(params,"expected_revision");
@@ -33,7 +87,29 @@ json_object* SceneEditorAgentControlDispatch(json_object* request) {
        json_object_get_int64(expected)<0 || (unsigned long long)json_object_get_int64(expected)!=revision) {
         snprintf(message,sizeof(message),"Scene changed; read current state and supply expected_revision.");goto done;
     }
-    if(!strcmp(name,"atmosphere.set")) {
+    if(!strcmp(name,"scene.open") || !strcmp(name,"scene.create") || !strcmp(name,"scene.save_as")) {
+        json_object* path=get(params,"scene_path");
+        if(json_object_is_type(path,json_type_string) && strlen(json_object_get_string(path))==(size_t)json_object_get_string_len(path)) ok=SceneEditorSceneCommand(name+6,json_object_get_string(path),revision,message,sizeof(message));
+        else snprintf(message,sizeof(message),"Scene lifecycle requires an absolute scene_path.");
+    } else if(!strncmp(name,"render.",7)) {
+        ok=SceneEditorAgentRenderDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"lighting.",9)) {
+        ok=SceneEditorAgentLightingDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"motion_plan.",12) || !strncmp(name,"follower_orientation.",21)) {
+        ok=SceneEditorAgentMotionDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"path.",5)) {
+        ok=SceneEditorAgentPathsDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"animation.",10)) {
+        ok=SceneEditorAgentAnimationDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"camera.",7)) {
+        ok=SceneEditorAgentCameraDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"mesh.",5)) {
+        ok=SceneEditorAgentMeshDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"object.",7)) {
+        ok=SceneEditorAgentObjectDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"material.",9)) {
+        ok=SceneEditorAgentMaterialDispatch(name,params,response,message,sizeof(message));
+    } else if(!strcmp(name,"atmosphere.set")) {
         json_object* value=get(params,"attachment");json_object* author=json_object_new_object();
         if(value) json_object_object_add(author,"atmosphere_attachment",json_object_get(value));
         SceneAtmosphereAttachment spec;
@@ -76,7 +152,8 @@ done:
         json_object_object_add(cache,"content_sha256",json_object_new_string(snapshot.simulation.content_digest));
         json_object_object_add(response,"evaluated_cache",cache);
     } else json_object_object_add(response,"evaluated_cache",NULL);
-    if(strcmp(json_object_get_string(method)?json_object_get_string(method):"","scene.read"))
-        SceneEditorChromeShellSetActionFeedback(ok?"Agent scene command applied; shared Undo available.":message,6000);
+    const char *feedback_method=json_object_get_string(method);
+    if(feedback_method && strcmp(feedback_method,"scene.read") && !SceneEditorAgentMaterialReadOnly(feedback_method) && !SceneEditorAgentObjectReadOnly(feedback_method) && !SceneEditorAgentCameraReadOnly(feedback_method) && !SceneEditorAgentLightingReadOnly(feedback_method) && !SceneEditorAgentRenderReadOnly(feedback_method) && !SceneEditorAgentAnimationReadOnly(feedback_method) && !SceneEditorAgentPathsReadOnly(feedback_method) && !SceneEditorAgentMotionReadOnly(feedback_method))
+        SceneEditorChromeShellSetActionFeedback(ok?((!strcmp(feedback_method,"scene.open") || !strcmp(feedback_method,"scene.create") || !strcmp(feedback_method,"scene.save_as"))?message:!strcmp(feedback_method,"motion_plan.preview")?"Movement preview ready; scene unchanged.":!strncmp(feedback_method,"render.",7)?"Render command accepted; scene unchanged.":"Agent scene command applied; shared Undo available."):message,6000);
     return response;
 }

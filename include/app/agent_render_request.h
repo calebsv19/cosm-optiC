@@ -88,7 +88,7 @@ typedef struct RayTracingAgentRenderRequest {
     double light_radius_override;
     bool has_forward_decay_override;
     double forward_decay_override;
-    bool volume_cell_centered;
+    bool volume_cell_centered, has_volume_sampling_layout;
     bool has_smoke_optics, smoke_sky_illumination;
     double smoke_reference_concentration, smoke_mass_extinction, smoke_albedo, smoke_anisotropy, smoke_sky_error_budget;
     bool has_volume_scatter_gain_override;

@@ -1,0 +1,1249 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "motion_orientation_acceptance",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 2,
+  "objects": [
+    {
+      "object_id": "surface",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "primitive": {
+        "kind": "rect_prism_primitive",
+        "width": 2,
+        "height": 2,
+        "frame": {
+          "origin": {
+            "x": 0.0,
+            "y": 0,
+            "z": 0
+          },
+          "axis_u": {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "axis_v": {
+            "x": 0.0,
+            "y": 1.0,
+            "z": 0.0
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        },
+        "depth": 0.5
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "producer_metadata": {
+        "preserve": "surface"
+      }
+    },
+    {
+      "object_id": "recipient",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "primitive": {
+        "kind": "rect_prism_primitive",
+        "width": 2,
+        "height": 2,
+        "frame": {
+          "origin": {
+            "x": 2.5,
+            "y": 0,
+            "z": 0
+          },
+          "axis_u": {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "axis_v": {
+            "x": 0.0,
+            "y": 1.0,
+            "z": 0.0
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        },
+        "depth": 0.5
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      },
+      "producer_metadata": {
+        "preserve": "recipient"
+      }
+    },
+    {
+      "object_id": "rowless",
+      "object_type": "rect_prism_primitive",
+      "space_mode_intent": "3d",
+      "dimensional_mode": "full_3d",
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      },
+      "primitive": {
+        "kind": "rect_prism_primitive",
+        "width": 2,
+        "height": 2,
+        "frame": {
+          "origin": {
+            "x": 5.0,
+            "y": 0,
+            "z": 0
+          },
+          "axis_u": {
+            "x": 1.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "axis_v": {
+            "x": 0.0,
+            "y": 1.0,
+            "z": 0.0
+          },
+          "normal": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 1.0
+          }
+        },
+        "depth": 0.5
+      },
+      "producer_metadata": {
+        "preserve": "rowless"
+      }
+    }
+  ],
+  "materials": [],
+  "lights": [
+    {
+      "light_id": "mirror_key_light",
+      "kind": "point",
+      "position": {
+        "x": 0.82,
+        "y": -0.92,
+        "z": 0.34
+      },
+      "intensity": 9.5,
+      "radius": 0.0
+    }
+  ],
+  "cameras": [
+    {
+      "camera_id": "cam_main",
+      "kind": "perspective",
+      "position": {
+        "x": 0.0,
+        "y": -4.4,
+        "z": 0.62
+      },
+      "target": {
+        "x": 0.0,
+        "y": 0.55,
+        "z": -0.02
+      },
+      "yaw": 0.0,
+      "look_pitch": -0.08
+    }
+  ],
+  "extensions": {
+    "t1_provenance": {
+      "preserve": [
+        "unrelated",
+        123
+      ]
+    },
+    "overlay_merge": {
+      "producer_clocks": {
+        "ray_tracing": 2
+      }
+    },
+    "ray_tracing": {
+      "authoring": {
+        "light_path": {
+          "mode": "BEZIER_CUBIC",
+          "points": [
+            {
+              "x": 0.82,
+              "y": -0.92,
+              "rotation": 0.0,
+              "handleLink": false,
+              "velocity1": {
+                "vx": 0.1,
+                "vy": 0.0
+              }
+            },
+            {
+              "x": 1.12,
+              "y": -0.92,
+              "rotation": 0.0,
+              "handleLink": false,
+              "velocity2": {
+                "vx": -0.1,
+                "vy": 0.0
+              }
+            }
+          ]
+        },
+        "light_path_depth": {
+          "points": [
+            {
+              "z": 0.34,
+              "lookPitch": 0.0,
+              "velocity1": {
+                "vz": 0.0
+              }
+            },
+            {
+              "z": 0.34,
+              "lookPitch": 0.0,
+              "velocity2": {
+                "vz": 0.0
+              }
+            }
+          ]
+        },
+        "light_settings": {
+          "intensity": 7.5,
+          "radius": 0.0,
+          "producer_metadata": {
+            "preserve": "legacy-light"
+          }
+        },
+        "environment": {
+          "light_mode": 2,
+          "ambient_brightness": 40.800000000000004,
+          "ambient_strength": 0.16,
+          "environment_preset": 1,
+          "background_brightness_auto": true,
+          "background_brightness": 0.16,
+          "background_color": {
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0
+          },
+          "top_fill_strength": 0.45
+        },
+        "camera_path": {
+          "mode": "BEZIER_CUBIC",
+          "points": [
+            {
+              "x": 0.625,
+              "y": -1.25,
+              "rotation": 3.141592653589793,
+              "handleLink": false
+            }
+          ]
+        },
+        "camera_path_depth": {
+          "points": [
+            {
+              "z": 1.875,
+              "lookPitch": -0.7853981633974483
+            }
+          ]
+        },
+        "object_materials": [
+          {
+            "object_id": "surface",
+            "material_id": 0,
+            "object_color": 12756864,
+            "roughness": 0.65,
+            "reflectivity": 0.02,
+            "glass_ior": 1.8,
+            "t1_unknown_producer_metadata": {
+              "preserve": "surface"
+            }
+          },
+          {
+            "object_id": "recipient",
+            "material_id": 0,
+            "object_color": 12756864,
+            "roughness": 0.65,
+            "reflectivity": 0.02,
+            "glass_ior": 1.1,
+            "t1_unknown_producer_metadata": {
+              "preserve": "recipient"
+            }
+          }
+        ],
+        "light_timeline": {
+          "version": 2,
+          "rate": {
+            "numerator": 30,
+            "denominator": 1
+          },
+          "range": {
+            "start_frame": 0,
+            "frame_count": 40
+          },
+          "target_id": "light/mirror_key_light",
+          "spatial_path": {
+            "path": {
+              "mode": "BEZIER_CUBIC",
+              "points": [
+                {
+                  "x": 0.82,
+                  "y": -0.92,
+                  "rotation": 0.0,
+                  "velocity1": {
+                    "vx": 0.1,
+                    "vy": 0
+                  },
+                  "handleLink": false
+                },
+                {
+                  "x": 1.12,
+                  "y": -0.92,
+                  "rotation": 0.0,
+                  "velocity2": {
+                    "vx": -0.1,
+                    "vy": 0
+                  },
+                  "handleLink": false
+                }
+              ]
+            },
+            "depth": {
+              "points": [
+                {
+                  "z": 0.34,
+                  "lookPitch": 0
+                },
+                {
+                  "z": 0.34,
+                  "lookPitch": 0
+                }
+              ]
+            }
+          },
+          "tracks": [
+            {
+              "id": "light-progress",
+              "property_id": "light/path_progress",
+              "value_type": "scalar",
+              "unit": "unitless",
+              "enabled": true,
+              "producer_metadata": {
+                "preserve": "light-progress"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 39,
+                  "value": 1,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 39
+                  }
+                }
+              ]
+            }
+          ],
+          "producer_legacy": {
+            "preserve": "light timing"
+          }
+        },
+        "scene_timeline": {
+          "version": 1,
+          "rate": {
+            "numerator": 30,
+            "denominator": 1,
+            "producer_rate": "keep"
+          },
+          "range": {
+            "start_frame": 0,
+            "frame_count": 80,
+            "producer_range": "keep"
+          },
+          "tracks": [
+            {
+              "id": "lens",
+              "target_id": "camera/main",
+              "property_id": "camera/fov_y",
+              "value_type": "scalar",
+              "unit": "degrees",
+              "source": "authored",
+              "enabled": true,
+              "producer_metadata": {
+                "preserve": "lens"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 60,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 24,
+                  "value": 70,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 24
+                  }
+                },
+                {
+                  "frame": 39,
+                  "value": 55,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 39
+                  }
+                }
+              ]
+            },
+            {
+              "id": "yaw",
+              "target_id": "camera/main",
+              "property_id": "camera/yaw",
+              "value_type": "scalar",
+              "unit": "radians",
+              "source": "authored",
+              "enabled": true,
+              "producer_metadata": {
+                "preserve": "yaw"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 3.141592653589793,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 24,
+                  "value": 3.291592653589793,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 24
+                  }
+                }
+              ]
+            },
+            {
+              "id": "light-progress",
+              "target_id": "light/mirror_key_light",
+              "property_id": "light/path_progress",
+              "value_type": "scalar",
+              "unit": "unitless",
+              "source": "authored",
+              "enabled": false,
+              "producer_metadata": {
+                "preserve": "light-progress"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 39,
+                  "value": 1,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 39
+                  }
+                }
+              ]
+            },
+            {
+              "id": "intensity",
+              "target_id": "light/mirror_key_light",
+              "property_id": "light/intensity",
+              "value_type": "scalar",
+              "unit": "relative_intensity",
+              "source": "authored",
+              "enabled": true,
+              "producer_metadata": {
+                "preserve": "intensity"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 7.5,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 24,
+                  "value": 1.5,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 24
+                  }
+                }
+              ]
+            },
+            {
+              "id": "position-x",
+              "target_id": "object/surface",
+              "property_id": "object/transform/position_x",
+              "value_type": "scalar",
+              "unit": "world_distance",
+              "source": "authored",
+              "enabled": false,
+              "producer_metadata": {
+                "preserve": "position-x"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 24,
+                  "value": 0.8,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 24
+                  }
+                }
+              ]
+            },
+            {
+              "id": "position-y",
+              "target_id": "object/surface",
+              "property_id": "object/transform/position_y",
+              "value_type": "scalar",
+              "unit": "world_distance",
+              "source": "authored",
+              "enabled": false,
+              "producer_metadata": {
+                "preserve": "position-y"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 24,
+                  "value": 0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 24
+                  }
+                }
+              ]
+            },
+            {
+              "id": "position-z",
+              "target_id": "object/surface",
+              "property_id": "object/transform/position_z",
+              "value_type": "scalar",
+              "unit": "world_distance",
+              "source": "authored",
+              "enabled": false,
+              "producer_metadata": {
+                "preserve": "position-z"
+              },
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 0
+                  }
+                },
+                {
+                  "frame": 24,
+                  "value": 0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 24
+                  }
+                }
+              ]
+            },
+            {
+              "id": "dormant-camera",
+              "target_id": "camera/main",
+              "property_id": "camera/pitch",
+              "value_type": "scalar",
+              "unit": "radians",
+              "source": "authored",
+              "enabled": false,
+              "producer_metadata": {
+                "preserve": "dormant-camera"
+              },
+              "keys": [
+                {
+                  "frame": 60,
+                  "value": 0.2,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "key_producer": {
+                    "preserve": 60
+                  }
+                }
+              ]
+            },
+            {
+              "id": "path-progress-1",
+              "target_id": "object/surface",
+              "property_id": "object/path_progress",
+              "value_type": "scalar",
+              "unit": "unitless",
+              "source": "authored",
+              "enabled": true,
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0.0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  }
+                },
+                {
+                  "frame": 79,
+                  "value": 1.0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  }
+                }
+              ]
+            },
+            {
+              "id": "camera-route-1",
+              "target_id": "camera/main",
+              "property_id": "camera/route_progress",
+              "value_type": "scalar",
+              "unit": "unitless",
+              "source": "authored",
+              "enabled": true,
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0.0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  }
+                },
+                {
+                  "frame": 79,
+                  "value": 1.0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  }
+                }
+              ]
+            },
+            {
+              "id": "light-route-1",
+              "target_id": "light/mirror_key_light",
+              "property_id": "light/route_progress",
+              "value_type": "scalar",
+              "unit": "unitless",
+              "source": "authored",
+              "enabled": true,
+              "keys": [
+                {
+                  "frame": 0,
+                  "value": 0.0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  }
+                },
+                {
+                  "frame": 79,
+                  "value": 1.0,
+                  "interpolation": "linear",
+                  "tangent_mode": "broken",
+                  "incoming_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  },
+                  "outgoing_handle": {
+                    "frame_offset": 0.0,
+                    "value_offset": 0.0
+                  }
+                }
+              ]
+            }
+          ],
+          "producer_timeline": {
+            "preserve": [
+              "old",
+              1
+            ]
+          }
+        },
+        "motion_paths": {
+          "schema": "ray_motion_paths_v1",
+          "producer_root": "keep",
+          "paths": [
+            {
+              "id": "retained-route",
+              "name": "Dormant legacy route",
+              "producer_path": 42,
+              "points": [
+                {
+                  "id": "old-1",
+                  "position": [
+                    0,
+                    0,
+                    0
+                  ],
+                  "incoming": [
+                    -0.2,
+                    0,
+                    0
+                  ],
+                  "outgoing": [
+                    0.2,
+                    0,
+                    0
+                  ],
+                  "segment": "cubic",
+                  "producer_point": "keep"
+                },
+                {
+                  "id": "old-2",
+                  "position": [
+                    1,
+                    0,
+                    0
+                  ],
+                  "incoming": [
+                    -0.2,
+                    0,
+                    0
+                  ],
+                  "outgoing": [
+                    0.2,
+                    0,
+                    0
+                  ],
+                  "segment": "cubic"
+                }
+              ]
+            },
+            {
+              "id": "path-1",
+              "name": "Cached bridge object route",
+              "points": [
+                {
+                  "id": "point-1",
+                  "position": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "incoming": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "outgoing": [
+                    0.0,
+                    0.0,
+                    0.0
+                  ],
+                  "handle_mode": "independent",
+                  "segment": "cubic"
+                },
+                {
+                  "id": "point-2",
+                  "position": [
+                    0.4,
+                    0.0,
+                    0.0
+                  ],
+                  "incoming": [
+                    -0.06666666666666665,
+                    0.0,
+                    0.0
+                  ],
+                  "outgoing": [
+                    0.13333333333333333,
+                    0.0,
+                    0.0
+                  ],
+                  "handle_mode": "linked",
+                  "segment": "cubic"
+                }
+              ]
+            },
+            {
+              "id": "path-2",
+              "name": "Camera route",
+              "points": [
+                {
+                  "id": "point-1",
+                  "position": [
+                    0.625,
+                    -1.25,
+                    1.875
+                  ],
+                  "incoming": [
+                    -0.06666666666666667,
+                    0.0,
+                    0.0
+                  ],
+                  "outgoing": [
+                    0.06666666666666667,
+                    0.0,
+                    0.0
+                  ],
+                  "handle_mode": "independent",
+                  "segment": "cubic"
+                },
+                {
+                  "id": "point-2",
+                  "position": [
+                    0.825,
+                    -1.25,
+                    1.875
+                  ],
+                  "incoming": [
+                    -0.06666666666666667,
+                    0.0,
+                    0.0
+                  ],
+                  "outgoing": [
+                    0.06666666666666667,
+                    0.0,
+                    0.0
+                  ],
+                  "handle_mode": "independent",
+                  "segment": "cubic"
+                }
+              ]
+            },
+            {
+              "id": "path-3",
+              "name": "Light route",
+              "points": [
+                {
+                  "id": "point-1",
+                  "position": [
+                    0.82,
+                    -0.92,
+                    0.34
+                  ],
+                  "incoming": [
+                    -0.13333333333333333,
+                    0.0,
+                    0.0
+                  ],
+                  "outgoing": [
+                    0.13333333333333333,
+                    0.0,
+                    0.0
+                  ],
+                  "handle_mode": "independent",
+                  "segment": "cubic"
+                },
+                {
+                  "id": "point-2",
+                  "position": [
+                    1.22,
+                    -0.92,
+                    0.34
+                  ],
+                  "incoming": [
+                    -0.13333333333333333,
+                    0.0,
+                    0.0
+                  ],
+                  "outgoing": [
+                    0.13333333333333333,
+                    0.0,
+                    0.0
+                  ],
+                  "handle_mode": "independent",
+                  "segment": "cubic"
+                }
+              ]
+            }
+          ],
+          "bindings": [
+            {
+              "object_id": "surface",
+              "path_id": "path-1",
+              "enabled": true,
+              "placement": "on_path",
+              "follow_direction": false,
+              "forward_axis": 0,
+              "rotation_offset": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "orientation_frame": {
+                "start_up": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "start_roll": 0.0,
+                "end_roll": 0.0,
+                "end_enabled": false,
+                "camera_mode": 0,
+                "producer_frame": "keep"
+              },
+              "restore_xyz_tracks": [
+                "position-x",
+                "position-y",
+                "position-z"
+              ],
+              "producer_binding": {
+                "keep": "surface"
+              }
+            },
+            {
+              "target_id": "camera/main",
+              "path_id": "path-2",
+              "enabled": true,
+              "placement": "on_path",
+              "use_focus_target": false,
+              "orientation_frame": {
+                "start_up": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "start_roll": 0.0,
+                "end_roll": 0.0,
+                "end_enabled": false,
+                "camera_mode": 0,
+                "producer_frame": "keep"
+              },
+              "restore_position_tracks": [],
+              "producer_binding": {
+                "keep": "camera/main"
+              }
+            },
+            {
+              "target_id": "light/mirror_key_light",
+              "path_id": "path-3",
+              "enabled": true,
+              "placement": "on_path",
+              "orientation_frame": {
+                "start_up": [
+                  0.0,
+                  0.0,
+                  0.0
+                ],
+                "start_roll": 0.0,
+                "end_roll": 0.0,
+                "end_enabled": false,
+                "camera_mode": 0,
+                "producer_frame": "keep"
+              },
+              "restore_position_tracks": [
+                "light-progress"
+              ],
+              "producer_binding": {
+                "keep": "light/mirror_key_light"
+              }
+            }
+          ]
+        },
+        "atmosphere_attachment": {
+          "schema_version": "ray_atmosphere_attachment_v1",
+          "id": "preserved-volume",
+          "source_path": "attached.vf3d",
+          "source_kind": "vf3d",
+          "enabled": false,
+          "visible": false,
+          "affects_lighting": false
+        },
+        "camera_focus_target": {
+          "x": 0.5,
+          "y": 0,
+          "z": 0
+        }
+      }
+    }
+  }
+}

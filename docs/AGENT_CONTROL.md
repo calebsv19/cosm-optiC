@@ -6,6 +6,41 @@ release, and worker system.
 
 ## Supported Local Surface
 
+The live editor MCP also provides revision-guarded materials and presets through
+the shared Materials inspector commands. See [materials MCP](materials_mcp.md)
+for stable-ID inspection, typed edits, presets, shared history and persistence.
+The bridge supports [live catalog updates](mcp_catalog_updates.md) that preserve
+its connection and attached scene. Clients that cache tool definitions can use
+`editor_catalog` and `editor_command` to discover and invoke current commands
+through the same connection. See that guide for the initial-connection requirement.
+
+Object inventory, base transforms, names, flags, box/plane creation, duplication
+and removal use the same retained UI commands. See [object MCP](objects_mcp.md)
+for revision guards, legacy preservation and save/reopen verification.
+
+Static render-camera XYZ/yaw/pitch edits use the camera Inspector command. See
+[camera MCP](camera_mcp.md) for world-unit conversion, animation refusals and
+shared persistence.
+
+Primary-light XYZ/intensity/radius and environment lighting/background edits
+share the light Inspector, sliders and menu commands. See [lighting MCP](lighting_mcp.md)
+for static/animation boundaries and legacy/attachment preservation.
+
+The Render workspace and MCP also share local single-frame start, progress,
+cancel and verified result controls. See [render MCP](render_mcp.md) for exclusive
+context, job identity, unsaved-scene capture and result integrity semantics.
+
+The File menu and MCP share guarded Open, Create and Save As commands. See
+[scene lifecycle MCP](scene_lifecycle_mcp.md) for dirty-scene protection, new-file
+publication, attachment continuity and the contained cross-directory dependency-copy boundaries.
+
+Animation setup, camera/light and object channels, scalar keys, retiming,
+interpolation, tangents and handles share the retained UI timeline commands. See
+[animation MCP](animation_mcp.md) for units, guards and render-frame sampling.
+
+For the end-to-end create/edit/render/Save As/reopen sequence, see
+[complete MCP scene workflow](mcp_scene_workflow.md).
+
 The initial supported agent surface is:
 
 - build the headless render CLI
@@ -189,3 +224,43 @@ For project-owned STL intake, per-instance shading, safe rebuilds and relocation
 proof, use [Managed mesh assets](managed_mesh_assets.md). Keep the complete
 project for source rebuildability; a runtime-only render export is a different
 guarantee. Existing loose scenes keep their current behavior.
+
+Spatial object/camera/primary-light route authoring is documented in
+[Spatial paths MCP](spatial_paths_mcp.md), including authored units, source restoration
+and cached catalog dispatch.
+
+[Motion plans and follower orientation MCP](motion_orientation_mcp.md) describes
+shared movement intent, preview/restore, direction/axis/focus and up/roll controls.
+
+Managed STL intake and inspection: [MCP workflow](managed_stl_mcp.md).
+
+Optical material transport editing: [shared UI/MCP workflow](optical_response_mcp.md).
+
+## October 12 — repeatable optical comparison matrices
+
+The local MCP runner creates portable comparison projects with a sealed baseline,
+saved cells, fixed-sequence native renders, verified hashes and a self-contained
+labeled contact sheet. IOR, transmission, absorption distance and uniform
+graph-backed frosted roughness use existing shared authoring commands. The
+original clean scene and supported attachments are preserved and restored;
+partial runs retain completed cells and refuse overwrites. Saved-cell verification
+reopens and repeats renders with exact same-build image hashes. Legacy rendering
+keeps automatic sampling. See [optical comparisons](optical_comparison_mcp.md).
+The catalog adds `render_start_seeded`: 78 named commands plus two fixed tools,
+80 total. App 0.18.0 and worker 0.11.0 remain unchanged. Resume of partial matrices,
+measured optical calibration and production image-quality acceptance remain
+separate. Stop at the bounded verified Main Edit checkpoint.
+
+## October 12 — optical matrix partial-run recovery
+
+New matrix runs use a v2 cell journal with sealed recipe, baseline, copied
+resources and native executable identity. `--resume` uses existing MCP commands
+to adopt completed unjournaled results, wait for an owned active render or retry
+terminal attempts under fresh IDs. Completed cells and uncertain saved scenes
+are preserved; source/build drift, unrelated active work and concurrent runners
+refuse. Original scene/attachment restoration and explicit saved-cell verification
+use the existing owner. Old v1 matrices remain verifiable. See
+[optical comparisons](optical_comparison_mcp.md) for the sealed-baseline boundary.
+No new native command/schema, renderer kernel or catalog change: 80 tools remain.
+App/worker versions remain 0.18.0/0.11.0. Stop at the bounded recovery checkpoint;
+partial sample accumulation, remote resume and measured calibration are separate.

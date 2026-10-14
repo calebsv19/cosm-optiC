@@ -6,4 +6,5 @@
 bool SceneEditorTimelineCurveEvent(SDL_Event* event,SDL_Rect graph,const TimelineView* view);
 void SceneEditorTimelineCurveRender(SDL_Renderer* renderer,SDL_Rect graph,const TimelineView* view);
 void SceneEditorTimelineCurveCancel(void);
+bool SceneEditorTimelineCurveActive(void);
 #endif

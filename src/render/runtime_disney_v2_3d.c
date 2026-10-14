@@ -1,3 +1,4 @@
+#include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_disney_v2_internal_3d.h"
 
 static bool runtime_disney_v2_3d_shade_hit_with_payload(
@@ -188,6 +189,9 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
                                                    &reflected_b);
     }
 
+    RuntimeDisneyV2Atmosphere3D_Compose(scene,&reflection.ray,
+        reflection.emitterWins ? reflection.emitterHitInfo.t : reflection.geometryHit ? reflection.hitInfo.t : HUGE_VAL,
+        sampling,&reflected_r,&reflected_g,&reflected_b);
     reflected_r *= reflection.weight * reflection.tintR;
     reflected_g *= reflection.weight * reflection.tintG;
     reflected_b *= reflection.weight * reflection.tintB;
@@ -494,11 +498,14 @@ bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(
         result.tracePixelWidth = width;
         result.tracePixelHeight = height;
     }
-    runtime_disney_v2_3d_apply_transmittance(&primary_hit->primaryTransmittance, &result);
+    if(!RuntimeDisneyV2Atmosphere3D_Active(scene))
+        runtime_disney_v2_3d_apply_transmittance(&primary_hit->primaryTransmittance, &result);
     (void)RuntimeDisneyV2_3D_ApplyPrimaryTransmissionContinuation(scene,
                                                                   primary_hit,
                                                                   sampling,
                                                                   &result);
+    if(RuntimeDisneyV2Atmosphere3D_Active(scene))
+        runtime_disney_v2_3d_apply_transmittance(&primary_hit->primaryTransmittance, &result);
     runtime_disney_v2_3d_refresh_peaks(&result);
     *out_result = result;
     return true;

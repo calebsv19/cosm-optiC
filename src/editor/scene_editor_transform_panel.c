@@ -1,3 +1,6 @@
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
+#include "editor/scene_editor_managed_import.h"
 #include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_surface_mapping_panel.h"
 #include "editor/object_editor_selection_tracker.h"
@@ -75,6 +78,7 @@ static TransformPanelJobKind s_job_kind = TRANSFORM_PANEL_JOB_NONE;
 static unsigned long long s_job_document_revision = 0u;
 static bool s_controls_active = false;
 static char s_candidate_path[PATH_MAX];
+static char s_job_scene_path[PATH_MAX];
 static char s_job_object_id[65];
 static char s_pending_frame_import_id[65];
 static double s_import_scale = 1.0;
@@ -136,28 +140,7 @@ bool SceneEditorTransformPanelHistory(bool redo) {
     return ok;
 }
 
-static void panel_draw_button(SDL_Renderer* renderer,
-                              SDL_Rect rect,
-                              const char* label,
-                              bool enabled,
-                              bool active) {
-    RayTracingThemePalette palette = SceneEditorChromeShellResolvePalette();
-    SDL_Color fill = active ? palette.button_active_fill : palette.button_fill;
-    SDL_Color text = ray_tracing_theme_choose_button_text(fill, palette);
-    if (!enabled) {
-        fill = (SDL_Color){92, 92, 100, 255};
-        text = (SDL_Color){155, 155, 162, 255};
-    }
-    SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-    SDL_RenderFillRect(renderer, &rect);
-    SDL_SetRenderDrawColor(renderer,
-                           palette.panel_border.r,
-                           palette.panel_border.g,
-                           palette.panel_border.b,
-                           palette.panel_border.a);
-    SDL_RenderDrawRect(renderer, &rect);
-    SceneEditorButtonText(renderer, rect, label, text);
-}
+
 
 static const char* panel_field_label(int index) {
     static const char* labels[TRANSFORM_FIELD_COUNT] = {
@@ -226,7 +209,7 @@ static bool panel_commit_edit(void) {
     s_edit_field = -1;
     s_edit_name = false;
     s_edit_buffer[0] = '\0';
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(s_edit_buffer);SDL_StopTextInput();}while(0);
     return true;
 }
 
@@ -234,7 +217,7 @@ static void panel_cancel_edit(void) {
     s_edit_field = -1;
     s_edit_name = false;
     s_edit_buffer[0] = '\0';
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(s_edit_buffer);SDL_StopTextInput();}while(0);
 }
 
 static bool panel_program_tools(char* script,
@@ -327,6 +310,7 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
         if (kind == TRANSFORM_PANEL_JOB_IMPORT) {
             execlp("python3",
                    "python3",
+                   "-B",
                    script,
                    "apply",
                    "--scene",
@@ -349,6 +333,7 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
         } else {
             execlp("python3",
                    "python3",
+                   "-B",
                    script,
                    "apply",
                    "--scene",
@@ -367,9 +352,11 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
         }
         _exit(127);
     }
+    snprintf(s_job_scene_path,sizeof(s_job_scene_path),"%s",scene);
     s_job_pid = child;
     s_job_started_ticks = SDL_GetTicks();
     s_job_kind = kind;
+    if(kind==TRANSFORM_PANEL_JOB_IMPORT) SceneEditorManagedImportStarted(generated_id,scene);
     s_job_document_revision = SceneEditorDocumentRevision();
     snprintf(s_job_object_id,sizeof(s_job_object_id),"%s",
              kind == TRANSFORM_PANEL_JOB_IMPORT ? generated_id : "");
@@ -450,11 +437,11 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
             if (!has_transform) {
                 snprintf(line, sizeof(line), "%s —", panel_field_label(index));
             } else if (s_edit_field == index) {
-                snprintf(line, sizeof(line), "%s %s", panel_field_label(index), s_edit_buffer);
+                snprintf(line, sizeof(line), "%s: %s", panel_field_label(index), s_edit_buffer);
             } else {
                 snprintf(line, sizeof(line), "%s %.3g", panel_field_label(index), value);
             }
-            panel_draw_button(renderer, s_fields[index], line, editable, s_edit_field == index);
+            SceneEditorSharedUiPanelButton(renderer,500,128+(index),s_fields[index],line,s_edit_field == index,editable);
         }
         y += field_h + gap;
     }
@@ -464,7 +451,8 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     if (selected >= 0) SceneEditorDocumentObjectLabel(selected, object_label, sizeof(object_label));
     else snprintf(object_label, sizeof(object_label), "Select an object or import STL");
     snprintf(line, sizeof(line), "Name: %.115s", s_edit_name ? s_edit_buffer : object_label);
-    panel_draw_button(renderer, s_name_field, line, editable, s_edit_name);
+    SceneEditorSharedUiPanelButton(renderer,500,256,s_name_field,line,s_edit_name,editable);
+    if(s_edit_name)scene_editor_shared_field_draw(renderer,s_edit_buffer,sizeof(s_edit_buffer),s_name_field,"Name:");
     y += field_h + gap;
     } else {
         SceneEditorLabelLeft(renderer, (SDL_Rect){bounds.x, y, bounds.w, 24},
@@ -479,8 +467,8 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
                                  y,
                                  bounds.w - s_duplicate_button.w - gap,
                                  field_h};
-    panel_draw_button(renderer, s_duplicate_button, delete_pending ? "Cancel" : "Duplicate", editable, false);
-    panel_draw_button(renderer, s_remove_button, delete_pending ? "Confirm delete" : "Delete...", editable, delete_pending);
+    SceneEditorSharedUiPanelButton(renderer,500,384,s_duplicate_button,delete_pending ? "Cancel" : "Duplicate",false,editable);
+    SceneEditorSharedUiPanelButton(renderer,500,512,s_remove_button,delete_pending ? "Confirm delete" : "Delete...",delete_pending,editable);
     y += field_h + gap;
     if (delete_pending) {
         SceneEditorLabelLeft(renderer,(SDL_Rect){bounds.x,y,bounds.w,20},
@@ -498,25 +486,25 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
         const char* name=material_id>=0 && material_id<6 ? names[material_id] : "Custom";
         s_material_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
         snprintf(line,sizeof(line),"Material: %s  %s",name,s_material_open ? "-" : "+");
-        panel_draw_button(renderer,s_material_expand,line,true,s_material_open);
+        SceneEditorSharedUiPanelButton(renderer,500,640,s_material_expand,line,s_material_open,true);
         y+=field_h+gap;
         if (s_material_open) {
             for (int i=0;i<MaterialManagerCount() && i<MAX_MATERIALS;++i) {
                 s_material_choices[i]=(SDL_Rect){bounds.x,y,bounds.w,field_h};
                 snprintf(line,sizeof(line),"%s%s",i==material_id ? "Assigned: " : "Assign: ",i<6 ? names[i] : "Custom");
                 if (i>=6) snprintf(line,sizeof(line),"%s material %d",i==material_id ? "Assigned:" : "Assign",i);
-                panel_draw_button(renderer,s_material_choices[i],line,editable,i==material_id);
+                SceneEditorSharedUiPanelButton(renderer,500,768+(i),s_material_choices[i],line,i==material_id,editable);
                 y+=field_h+gap;
             }
         }
         s_material_edit=(SDL_Rect){bounds.x,y,bounds.w,field_h};
-        panel_draw_button(renderer,s_material_edit,"Edit material / preview >",true,false);
+        SceneEditorSharedUiPanelButton(renderer,500,896,s_material_edit,"Edit material / preview >",false,true);
         y+=field_h+gap;
     }
 
     if (has_transform) {
     s_surface_expand=(SDL_Rect){bounds.x,y,bounds.w,field_h};
-    panel_draw_button(renderer,s_surface_expand,s_surface_open ? "Geometry / Surface -" : "Geometry / Surface +",true,false);
+    SceneEditorSharedUiPanelButton(renderer,500,1024,s_surface_expand,s_surface_open ? "Geometry / Surface -" : "Geometry / Surface +",false,true);
     y+=field_h+gap;
     }
     if (has_transform && s_surface_open) {
@@ -528,17 +516,13 @@ int SceneEditorTransformPanelRender(SDL_Renderer* renderer,
     if (s_edit_field != PANEL_EDIT_CREASE_ANGLE) {
         snprintf(line, sizeof(line), "Crease angle: %.3g deg", s_crease_angle_degrees);
     }
-    panel_draw_button(renderer,
-                      s_crease_angle_field,
-                      line,
-                      editable,
-                      s_edit_field == PANEL_EDIT_CREASE_ANGLE);
+    SceneEditorSharedUiPanelButton(renderer,500,1152,s_crease_angle_field,line,s_edit_field == PANEL_EDIT_CREASE_ANGLE,editable);
     y += field_h + gap;
 
     for (int i = 0; i < 4; ++i) {
         int button_w = (bounds.w - gap * 3) / 4;
         s_shading_buttons[i] = (SDL_Rect){bounds.x + i * (button_w + gap), y, button_w, field_h};
-        panel_draw_button(renderer, s_shading_buttons[i], shading_labels[i], editable, false);
+        SceneEditorSharedUiPanelButton(renderer,500,1280+(i),s_shading_buttons[i],shading_labels[i],false,editable);
     }
     y += field_h + gap;
     }
@@ -621,7 +605,8 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
         }
     }
     if (s_edit_field >= 0 || s_edit_name) {
-        if (event->type == SDL_TEXTINPUT) {
+        if((s_edit_field>=0 || s_edit_name) && scene_editor_shared_field_event(s_edit_buffer,sizeof(s_edit_buffer),event))return true;
+    if (event->type == SDL_TEXTINPUT) {
             size_t used = strlen(s_edit_buffer);
             size_t incoming = strlen(event->text.text);
             if (used + incoming < sizeof(s_edit_buffer)) {
@@ -682,7 +667,7 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
                      sizeof(s_edit_buffer),
                      "%.9g",
                      *panel_transform_component(&transform, i));
-            SDL_StartTextInput();
+            do{scene_editor_shared_field_begin(s_edit_buffer,sizeof(s_edit_buffer),0);SDL_StartTextInput();}while(0);
             return true;
         }
     }
@@ -756,7 +741,7 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
         s_edit_field = PANEL_EDIT_CREASE_ANGLE;
         s_edit_name = false;
         snprintf(s_edit_buffer, sizeof(s_edit_buffer), "%.9g", s_crease_angle_degrees);
-        SDL_StartTextInput();
+        do{scene_editor_shared_field_begin(s_edit_buffer,sizeof(s_edit_buffer),0);SDL_StartTextInput();}while(0);
         return true;
     }
     for (int i = 0; i < 4; ++i) {
@@ -768,13 +753,22 @@ bool SceneEditorTransformPanelHandleEvent(SceneEditor* editor, const SDL_Event* 
     return false;
 }
 
-bool SceneEditorTransformPanelImportSTL(const char* path) {
-    const char* extension = path ? strrchr(path, '.') : NULL;
-    if (!extension || strcasecmp(extension, ".stl") != 0) {
-        panel_status("Select an STL file", true); return false;
+bool SceneEditorManagedImportBegin(const char *path,double scale,unsigned long long revision,char *message,size_t size) {
+    const char *extension=path?strrchr(path,'.'):NULL;
+    if(revision!=SceneEditorDocumentRevision()) {
+        snprintf(message,size,"Scene changed; supply current expected_revision.");return false;
     }
-    return panel_spawn_managed_job(TRANSFORM_PANEL_JOB_IMPORT, path, NULL, NULL,
-        s_import_scale, s_crease_angle_degrees);
+    if(!path || path[0]!='/' || strlen(path)>=PATH_MAX || !extension || strcasecmp(extension,".stl") || access(path,R_OK)!=0 || !isfinite(scale) || scale<=0 || scale>1e12) {
+        snprintf(message,size,"Import requires a readable absolute STL path and positive finite source-to-meter scale (at most 1e12).");return false;
+    }
+    bool ok=panel_spawn_managed_job(TRANSFORM_PANEL_JOB_IMPORT,path,NULL,NULL,scale,s_crease_angle_degrees);
+    snprintf(message,size,"%s",s_status);return ok;
+}
+bool SceneEditorTransformPanelImportSTL(const char* path) {
+    char diagnostic[512];
+    bool ok=SceneEditorManagedImportBegin(path,s_import_scale,SceneEditorDocumentRevision(),diagnostic,sizeof(diagnostic));
+    if(!ok) panel_status(diagnostic,true);
+    return ok;
 }
 
 bool SceneEditorTransformPanelStageImportSTL(const char* path) {
@@ -802,6 +796,7 @@ static void panel_cancel_import(void) {
         s_job_kind=TRANSFORM_PANEL_JOB_NONE;
         s_job_document_revision=0u;
     }
+    SceneEditorManagedImportCanceled();
     s_import_open=false;
     s_import_source[0]='\0';
     panel_status("Import cancelled; scene unchanged",false);
@@ -826,8 +821,7 @@ void SceneEditorTransformPanelRenderImportOverlay(SDL_Renderer* renderer, SDL_Re
     SceneEditorLabelLeft(renderer,row,"1. Choose an STL file",palette.text_muted);
     row.y+=25;
     s_import_button=(SDL_Rect){row.x,row.y,row.w,30};
-    panel_draw_button(renderer,s_import_button,s_picker.active ? "Waiting for file chooser..." : "Choose STL file...",
-        !s_picker.active && s_job_pid<=0,false);
+    SceneEditorSharedUiPanelButton(renderer,500,1408,s_import_button,s_picker.active ? "Waiting for file chooser..." : "Choose STL file...",false,!s_picker.active && s_job_pid<=0);
     row.y+=36;
     char line[160];
     const char* basename=strrchr(s_import_source,'/');
@@ -838,8 +832,8 @@ void SceneEditorTransformPanelRenderImportOverlay(SDL_Renderer* renderer, SDL_Re
     row.y+=24;
     s_import_unit_buttons[0]=(SDL_Rect){row.x,row.y,(row.w-6)/2,30};
     s_import_unit_buttons[1]=(SDL_Rect){row.x+(row.w-6)/2+6,row.y,row.w-(row.w-6)/2-6,30};
-    panel_draw_button(renderer,s_import_unit_buttons[0],"Meters",s_job_pid<=0,s_import_scale==1.0);
-    panel_draw_button(renderer,s_import_unit_buttons[1],"Millimeters",s_job_pid<=0,s_import_scale==0.001);
+    SceneEditorSharedUiPanelButton(renderer,500,1536+(0),s_import_unit_buttons[0],"Meters",s_import_scale==1.0,s_job_pid<=0);
+    SceneEditorSharedUiPanelButton(renderer,500,1664+(1),s_import_unit_buttons[1],"Millimeters",s_import_scale==0.001,s_job_pid<=0);
     row.y+=38;
     snprintf(line,sizeof(line),"Destination: current scene (%s)",SceneEditorDocumentUnitLabel());
     SceneEditorLabelLeft(renderer,row,line,palette.text_primary);
@@ -847,9 +841,8 @@ void SceneEditorTransformPanelRenderImportOverlay(SDL_Renderer* renderer, SDL_Re
     s_import_apply_button=(SDL_Rect){row.x,row.y,(row.w-6)*2/3,32};
     s_import_cancel_button=(SDL_Rect){s_import_apply_button.x+s_import_apply_button.w+6,row.y,
         row.w-s_import_apply_button.w-6,32};
-    panel_draw_button(renderer,s_import_apply_button,s_job_pid>0 ? "Importing..." : "Import mesh",
-        s_import_source[0] && !s_picker.active && s_job_pid<=0,false);
-    panel_draw_button(renderer,s_import_cancel_button,"Cancel",true,false);
+    SceneEditorSharedUiPanelButton(renderer,500,1792,s_import_apply_button,s_job_pid>0 ? "Importing..." : "Import mesh",false,s_import_source[0] && !s_picker.active && s_job_pid<=0);
+    SceneEditorSharedUiPanelButton(renderer,500,1920,s_import_cancel_button,"Cancel",false,true);
     if(s_status[0]) {
         row.y+=39;
         if(s_job_pid>0) {
@@ -956,7 +949,7 @@ bool SceneEditorTransformPanelPoll(void) {
         if (result == s_job_pid) {
             char diagnostics[256] = {0};
             bool success = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-            if (success && SceneEditorDocumentRevision() != s_job_document_revision) {
+            if (success && (SceneEditorDocumentRevision() != s_job_document_revision || strcmp(s_job_scene_path,SceneEditorDocumentPath()))) {
                 snprintf(diagnostics,
                          sizeof(diagnostics),
                          "document changed while managed mesh was compiling; retry");
@@ -981,6 +974,7 @@ bool SceneEditorTransformPanelPoll(void) {
                 (void)unlink(s_candidate_path);
                 s_candidate_path[0] = '\0';
             }
+            if(s_job_kind==TRANSFORM_PANEL_JOB_IMPORT) SceneEditorManagedImportFinished(success,success?"Managed STL imported":(diagnostics[0]?diagnostics:"Managed mesh compilation failed"));
             panel_status(success ? (s_job_kind == TRANSFORM_PANEL_JOB_IMPORT
                                         ? "Managed STL imported"
                                         : "Shading variant rebuilt")
@@ -1017,7 +1011,7 @@ void SceneEditorTransformPanelFrameReadyImport(void) {
 
 bool SceneEditorTransformPanelInteractionActive(void) {
     if(SceneEditorSurfaceMappingPanelActive()) return true;
-    return s_edit_field >= 0 || s_edit_name || s_picker.active || s_job_pid > 0;
+    return s_import_open || s_edit_field >= 0 || s_edit_name || s_picker.active || s_job_pid > 0;
 }
 
 void SceneEditorTransformPanelReset(void) {
@@ -1030,6 +1024,7 @@ void SceneEditorTransformPanelReset(void) {
         RayTracing_FolderPicker_Cancel(&s_picker);
     }
     if (s_job_pid > 0) {
+        SceneEditorManagedImportCanceled();
         (void)kill(s_job_pid, SIGTERM);
         (void)waitpid(s_job_pid, NULL, 0);
     }

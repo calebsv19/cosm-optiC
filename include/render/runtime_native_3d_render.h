@@ -529,6 +529,7 @@ typedef struct {
     bool directLightVisibilityAttributionEnabled;
     bool causticSidecarProbeValid;
     bool causticPhotonRenderPrepReadbackBuilt;
+    bool physicalAtmosphere; /* Direct Light only until transport/frame qualification. */
     bool evaluatedSceneBound;
     RayEvaluatedSceneSnapshot evaluatedScene;
     bool valid;

@@ -231,6 +231,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                 (strcmp(json_object_get_string(layout),"cell_centered") && strcmp(json_object_get_string(layout),"legacy_node"))) {
                 json_object_put(root); agent_render_request_set_diagf(out_diagnostics,out_diagnostics_size,"invalid volume.sampling_layout"); return false;
             }
+            request.has_volume_sampling_layout = true;
             request.volume_cell_centered = !strcmp(json_object_get_string(layout),"cell_centered");
         }
         RayTracingJsonGetBool(volume, "enabled", &request.volume_enabled);

@@ -1,5 +1,6 @@
 #include "editor/scene_editor_motion_paths.h"
 #include "scene_editor_motion_paths_internal.h"
+#include "scene_editor_motion_path_preserve.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_document_timeline.h"
 #include "editor/scene_editor_timeline.h"
@@ -57,14 +58,22 @@ bool SceneEditorMotionPathsCommit(const MotionPaths *paths, const TimelineDocume
     document_rollback_command();
     return false;
   }
-  json_object_object_add(root, "motion_paths", encoded);
+  MotionPaths prior;json_object *old=NULL;
+  if(MotionPathsParse(root,&prior,NULL,0)) old=MotionPathsToJson(&prior);
+  json_object *retained=SceneEditorMotionRetain(member(root,"motion_paths",false),old,encoded);
+  json_object_put(old);json_object_put(encoded);
+  json_object_object_add(root, "motion_paths", retained);
   if (timeline) {
     json_object *encoded_timeline = SceneTimelineDocumentToJson(timeline);
     if (!encoded_timeline) {
       document_rollback_command();
       return fail(m, n, "Invalid timeline.");
     }
-    json_object_object_add(root, "scene_timeline", encoded_timeline);
+    static TimelineDocument prior_timeline;json_object *old_timeline=NULL;
+    if(SceneEditorDocumentGetTimeline(&prior_timeline)==TIMELINE_STATUS_OK) old_timeline=SceneTimelineDocumentToJson(&prior_timeline);
+    json_object *retained_timeline=SceneEditorMotionRetain(member(root,"scene_timeline",false),old_timeline,encoded_timeline);
+    json_object_put(old_timeline);json_object_put(encoded_timeline);
+    json_object_object_add(root, "scene_timeline", retained_timeline);
   }
   return document_finish_command(m, n);
 }
@@ -119,9 +128,9 @@ bool SceneEditorMotionPathBind(const char *object_id, const char *path_id,
   static TimelineDocument doc;
   if (!SceneEditorMotionPathsRead(&paths))
     return false;
-  if (SceneEditorDocumentGetTimeline(&doc) != TIMELINE_STATUS_OK) {
-    TimelineDocumentInit(&doc, (TimelineRate){24, 1}, (TimelineRange){0, 120});
-  }
+  TimelineStatus status=SceneEditorDocumentGetTimeline(&doc);
+  if (status==TIMELINE_STATUS_TARGET_NOT_FOUND) TimelineDocumentInit(&doc,(TimelineRate){24,1},(TimelineRange){0,120});
+  else if(status!=TIMELINE_STATUS_OK) return fail(m,n,"Invalid scene timeline.");
   size_t b = 0;
   for (; b < paths.binding_count; ++b)
     if (!strcmp(paths.bindings[b].object_id, object_id))

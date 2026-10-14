@@ -9,53 +9,8 @@ import socket
 import stat
 import sys
 
-def number(low,high):return {'type':'number','minimum':low,'maximum':high}
-def triple(low,high):return {'type':'array','minItems':3,'maxItems':3,'items':number(low,high)}
-ATTACHMENT_SCHEMA={
-    'type':'object','required':['schema_version','source_path'],
-    'properties':{
-        'schema_version':{'const':'ray_atmosphere_attachment_v1'},
-        'id':{'type':'string','minLength':1,'maxLength':63},
-        'source_path':{'type':'string','description':'Contained project-relative VF3D, pack, cache manifest or bundle path; use atmosphere_import for external inputs.'},
-        'source_kind':{'enum':['vf3d','pack','manifest','scene_bundle']},
-        **{key:{'type':'boolean'} for key in ('enabled','visible','affects_lighting')},
-        'appearance':{'type':'object','properties':{
-            'density_scale':number(0,1000),'density_gamma':number(.01,100),
-            'absorption_gain':number(0,1000),'scatter_gain':number(0,1000),
-            'step_scale':number(.01,100),'tint':triple(0,100)}},
-        'placement':{'type':'object','description':'Volume only, relative to cache origin; water sidecars retain their authored coordinates. Volume caustic caches require identity placement in this slice.',
-            'properties':{'translation':triple(-1e9,1e9),'rotation_degrees':triple(-36000,36000),'scale':triple(1e-6,1e6)}},
-        'playback':{'type':'object','description':'Actual sorted cache IDs. Animated: floor(source_start + (scene_frame - timeline_start) * source_fps / scene_fps). Single-file inputs are static.',
-            'properties':{'animated':{'type':'boolean'},'rate_numerator':{'type':'integer','minimum':1,'maximum':1000000},
-                'rate_denominator':{'type':'integer','minimum':1,'maximum':1000000},
-                'timeline_start':{'type':'integer','minimum':-1000000000,'maximum':1000000000},
-                'source_start':{'type':'integer','minimum':0,'maximum':1000000000},'missing':{'enum':['hold','error']}}}
-    }
-}
-
-METHODS={
-    'scene_connect':('scene.connect','Connect to an existing live optiC document by its absolute scene path. Refuses closed documents; does not open or overwrite files.',{'scene_path':{'type':'string'}}),
-    'scene_read':('scene.read','Read scene revision, dirty state, playhead and retained atmosphere.',{}),
-    'atmosphere_set':('atmosphere.set','Set the complete retained atmosphere using the shared editor validator.',{'attachment':ATTACHMENT_SCHEMA}),
-    'atmosphere_import':('atmosphere.import','Import VF3D, pack, manifest or scene bundle with contained dependencies.',{'source':{'type':'string'}}),
-    'atmosphere_generate':('atmosphere.generate','Create a static preset without running PhysicsSim. Presets: room_haze_v1, low_floor_fog_v1, cloud_bank_v1, mist_patch_v1, plume_column_v1.',{'preset':{'type':'string'}}),
-    'atmosphere_remove':('atmosphere.remove','Remove the retained atmosphere; use scene_undo to restore it.',{}),
-    'scene_undo':('scene.undo','Undo one shared editor command.',{}),
-    'scene_redo':('scene.redo','Redo one shared editor command.',{}),
-    'scene_save':('scene.save','Save using the same authoring save operation as File Save.',{}),
-    'scene_seek':('scene.seek','Seek the shared timeline to an absolute frame.',{'frame':{'type':'integer'}}),
-}
-
-
-def tool_list():
-    result=[]
-    for name,(method,description,fields) in METHODS.items():
-        properties=dict(fields)
-        if method not in ('scene.read','scene.connect'):properties['expected_revision']={'type':'integer','minimum':0}
-        result.append({'name':name,'description':description,'inputSchema':{
-            'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}})
-    return result
-
+from scene_editor_mcp_reload import Catalog, requests
+from scene_editor_mcp_compat import CATALOG_TOOL, COMMAND_TOOL, fixed_tools, read_catalog, unwrap, validate
 
 def command(scene: Path, method: str, params: dict) -> dict:
     scene=scene.resolve(strict=True)
@@ -73,7 +28,7 @@ def command(scene: Path, method: str, params: dict) -> dict:
     with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as client:
         client.settimeout(30)
         client.connect(str(path))
-        data=json.dumps({'method':method,'params':params}).encode()+b'\n'
+        data=json.dumps({'method':method,'params':params,'scene_path':str(scene)}).encode()+b'\n'
         if len(data)>65535:raise ValueError('command exceeds editor capacity')
         client.sendall(data);response=b''
         while b'\n' not in response:
@@ -85,35 +40,55 @@ def command(scene: Path, method: str, params: dict) -> dict:
 
 
 def serve(scene: Path | None):
-    for line in sys.stdin:
+    catalog=Catalog(Path(__file__).with_name("scene_editor_mcp_catalog.py"))
+    initialized=False
+    pending_catalog_change=False
+    for line in requests(sys.stdin):
+        changed=catalog.refresh()
+        pending_catalog_change=pending_catalog_change or changed
+        if pending_catalog_change and initialized:
+            print(json.dumps({"jsonrpc":"2.0","method":"notifications/tools/list_changed"}),flush=True)
+            pending_catalog_change=False
+        if line is None:continue
         request=None
         try:
             if len(line)>131072:raise ValueError('MCP message exceeds capacity')
             request=json.loads(line)
             if not isinstance(request,dict):raise ValueError('MCP request must be an object')
-            if 'id' not in request:continue
+            if 'id' not in request:
+                if request.get('method')=='notifications/initialized':initialized=True
+                continue
             method=request.get('method');params=request.get('params',{})
             if method=='initialize':
                 version=params.get('protocolVersion','2024-11-05')
                 if version not in ('2024-11-05','2025-03-26','2025-06-18'):version='2025-06-18'
-                result={'protocolVersion':version,'capabilities':{'tools':{'listChanged':False}},
-                        'serverInfo':{'name':'optic-scene-editor','version':'1.0.0'},
-                        'instructions':'Open the scene in optiC, then use scene_connect with its absolute path. Read scene revision before each mutation. All operations share editor Undo and File Save; no solver execution.'}
+                result={'protocolVersion':version,'capabilities':{'tools':{'listChanged':True}},
+                        'serverInfo':{'name':'optic-scene-editor','version':'1.3.0'},
+                        'instructions':'Open the scene in optiC, then use scene_connect with its absolute path. For cached catalogs call editor_catalog, then editor_command with the current catalog_id, listed tool and exact arguments. Read scene revision before each mutation. Edits share editor Undo and File Save. Open/Create require saved edits; Save As copies contained dependencies when changing directories. Render tools run the existing local native renderer and verify results.'}
             elif method=='ping':result={}
-            elif method=='tools/list':result={'tools':tool_list()}
+            elif method=='tools/list':result={'tools':catalog.tools+fixed_tools()}
             elif method=='tools/call':
                 name=params.get('name');arguments=params.get('arguments',{})
-                if name not in METHODS or not isinstance(arguments,dict):raise ValueError('unknown tool or invalid arguments')
-                schema=next(t['inputSchema'] for t in tool_list() if t['name']==name)
-                if set(arguments)!=set(schema['required']):raise ValueError('tool arguments do not match the input schema')
+                if name==CATALOG_TOOL:
+                    validate(fixed_tools()[0]['inputSchema'],arguments)
+                    value=read_catalog(catalog,scene)
+                    result={'content':[{'type':'text','text':json.dumps(value)}],'isError':False}
+                    print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':result}),flush=True)
+                    continue
+                if name==COMMAND_TOOL:name,arguments=unwrap(catalog,arguments)
+                if name not in catalog.methods or not isinstance(arguments,dict):raise ValueError('unknown tool or invalid arguments')
+                schema=next(t['inputSchema'] for t in catalog.tools if t['name']==name)
+                validate(schema,arguments)
                 if name=='scene_connect':
                     candidate=Path(arguments['scene_path'])
                     if not candidate.is_absolute():raise ValueError('scene_connect requires an absolute path')
                     value=command(candidate,'scene.read',{})
+                    if value.get('ok') and Path(value.get('scene_path','')).resolve()!=candidate.resolve(strict=True):raise ValueError('Scene belongs to this editor session but is no longer the active document')
                     if value.get('ok'):scene=candidate.resolve(strict=True)
                 else:
                     if scene is None:raise ValueError('Use scene_connect with the path of a live optiC document first')
-                    value=command(scene,METHODS[name][0],arguments)
+                    value=command(scene,catalog.methods[name][0],arguments)
+                if value.get('ok') and value.get('scene_path'):scene=Path(value['scene_path']).resolve(strict=True)
                 result={'content':[{'type':'text','text':json.dumps(value)}],'isError':not value.get('ok',False)}
             else:
                 print(json.dumps({'jsonrpc':'2.0','id':request['id'],'error':{'code':-32601,'message':'Method not found'}}),flush=True)

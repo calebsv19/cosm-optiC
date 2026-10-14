@@ -1,4 +1,6 @@
 #include "ui/menu_environment_settings.h"
+#include "editor/scene_editor_document.h"
+#include "editor/scene_editor_lighting.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -38,6 +40,7 @@ static const char* menu_environment_mode_label(int mode) {
 }
 
 bool menu_environment_settings_set_light_mode(int mode) {
+    if(SceneEditorDocumentIsOpen()) return SceneEditorLightingEnvironmentValue("light_mode",mode);
     const int clamped = animation_config_environment_light_mode_clamp(mode);
     const bool changed = animSettings.environmentLightMode != clamped;
     animSettings.environmentLightMode = (EnvironmentLightMode)clamped;
@@ -45,6 +48,7 @@ bool menu_environment_settings_set_light_mode(int mode) {
 }
 
 bool menu_environment_settings_set_ambient_brightness(double byte_brightness) {
+    if(SceneEditorDocumentIsOpen()) return SceneEditorLightingEnvironmentValue("ambient_strength",byte_brightness/255.);
     const double clamped = menu_environment_clamp(byte_brightness, 0.0, 255.0);
     const bool changed =
         menu_environment_changed_double(animSettings.environmentBrightness, clamped);
@@ -53,6 +57,7 @@ bool menu_environment_settings_set_ambient_brightness(double byte_brightness) {
 }
 
 bool menu_environment_settings_set_top_fill_strength(double strength) {
+    if(SceneEditorDocumentIsOpen()) return SceneEditorLightingEnvironmentValue("top_fill_strength",strength);
     const double clamped = menu_environment_clamp(strength, 0.0, 20.0);
     const bool changed =
         menu_environment_changed_double(animSettings.topFillStrength, clamped);
@@ -61,6 +66,7 @@ bool menu_environment_settings_set_top_fill_strength(double strength) {
 }
 
 bool menu_environment_settings_set_preset(int preset) {
+    if(SceneEditorDocumentIsOpen()) return SceneEditorLightingEnvironmentValue("environment_preset",preset);
     const int clamped = animation_config_environment_preset_clamp(preset);
     const bool changed = animSettings.environmentPreset != clamped ||
                          !animSettings.environmentBackgroundLightingAuthored;
@@ -71,6 +77,7 @@ bool menu_environment_settings_set_preset(int preset) {
 
 bool menu_environment_settings_set_background_auto(bool automatic,
                                                    double manual_brightness) {
+    if(SceneEditorDocumentIsOpen()) return SceneEditorLightingEnvironmentValue("background_brightness_auto",automatic);
     bool changed = !animSettings.environmentBackgroundLightingAuthored ||
                    animSettings.environmentBackgroundBrightnessAuto != automatic;
     (void)manual_brightness;
@@ -80,6 +87,7 @@ bool menu_environment_settings_set_background_auto(bool automatic,
 }
 
 bool menu_environment_settings_set_background_brightness(double brightness) {
+    if(SceneEditorDocumentIsOpen()) return SceneEditorLightingEnvironmentValue("background_brightness",brightness);
     const double clamped = menu_environment_clamp(brightness, 0.0, 4.0);
     const bool changed = !animSettings.environmentBackgroundLightingAuthored ||
                          animSettings.environmentBackgroundBrightnessAuto ||
@@ -95,6 +103,7 @@ bool menu_environment_settings_set_background_brightness(double brightness) {
 bool menu_environment_settings_set_background_color(double red,
                                                     double green,
                                                     double blue) {
+    if(SceneEditorDocumentIsOpen()) return SceneEditorLightingEnvironmentColor(red,green,blue);
     const double clamped_red = menu_environment_clamp(red, 0.0, 1.0);
     const double clamped_green = menu_environment_clamp(green, 0.0, 1.0);
     const double clamped_blue = menu_environment_clamp(blue, 0.0, 1.0);

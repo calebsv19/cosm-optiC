@@ -10,6 +10,8 @@
 #include "editor/scene_editor_material_stack.h"
 #include "editor/object_editor_motion.h"
 #include "editor/scene_editor_document.h"
+#include "scene_editor_retained_light_save.h"
+#include "scene_editor_retained_material_save.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_scene_light_timeline_io.h"
@@ -580,6 +582,11 @@ static json_object* scene_editor_runtime_scene_build_object_materials_json(void)
     return object_materials;
 }
 
+void SceneEditorRuntimeSceneCaptureMaterialBaseline(void) {
+    json_object *encoded=scene_editor_runtime_scene_build_object_materials_json();
+    SceneEditorRetainedMaterialBaseline(encoded);json_object_put(encoded);
+}
+
 static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
                                                            long long logical_clock,
                                                            char* out_diagnostics,
@@ -633,7 +640,8 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
     light_settings = json_object_new_object();
     camera_path = config_scene_path_to_json_object(&saved_camera_path);
     camera_path_depth = CameraPath3D_ToJsonObject(&saved_camera_path3d, &saved_camera_path);
-    object_materials = scene_editor_runtime_scene_build_object_materials_json();
+    {json_object *encoded=scene_editor_runtime_scene_build_object_materials_json();
+     object_materials=encoded?SceneEditorRetainedMaterialsForSave(encoded):NULL;json_object_put(encoded);}
     object_motion_tracks = ObjectEditorMotionBuildAuthoringTracksJson(authored_to_runtime);
     {
         RuntimeSceneLightTimelineDocument timeline_document;
@@ -643,6 +651,9 @@ static char* scene_editor_runtime_scene_build_overlay_json(double world_scale,
             (void)RuntimeSceneLightTimelineSetLast(&timeline_document);
             light_timeline = RuntimeSceneLightTimelineToJsonObject(&timeline_document,
                                                                    world_scale);
+            json_object* preserved=SceneEditorRetainedLightForSave(light_timeline,world_scale);
+            if(light_timeline) json_object_put(light_timeline);
+            light_timeline=preserved;
         }
     }
 

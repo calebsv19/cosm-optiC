@@ -278,13 +278,14 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     double camera_transmittance = 1.0;
     double zero_length = runtime_volume_3d_scatter_zero_length();
     double epsilon = runtime_volume_3d_scatter_length_epsilon();
-    const RuntimeVolume3DMaterialTuning optics = RuntimeVolume3DMaterial_GetTuning();
+    const RuntimeVolume3DMaterialTuning optics = RuntimeVolume3DMaterial_ForAttachment(scene?&scene->volume:NULL);
+    const RuntimeVolume3DScatterTuning scatter_tuning=RuntimeVolume3DScatter_ForAttachment(scene?&scene->volume:NULL);
     const bool sky = optics.physical_smoke && optics.sky_illumination;
-    const double strength = optics.physical_smoke ? 1.0 : kRuntimeVolume3DScatterStrength * gRuntimeVolume3DScatterStrengthGain;
+    const double strength = optics.physical_smoke ? 1.0 : kRuntimeVolume3DScatterStrength * scatter_tuning.strength;
     const double anisotropy = optics.physical_smoke ? optics.anisotropy : kRuntimeVolume3DScatterAnisotropy;
-    const double tint_r = optics.physical_smoke ? 1.0 : gRuntimeVolume3DScatterTintR;
-    const double tint_g = optics.physical_smoke ? 1.0 : gRuntimeVolume3DScatterTintG;
-    const double tint_b = optics.physical_smoke ? 1.0 : gRuntimeVolume3DScatterTintB;
+    const double tint_r = optics.physical_smoke ? 1.0 : scatter_tuning.tint[0];
+    const double tint_g = optics.physical_smoke ? 1.0 : scatter_tuning.tint[1];
+    const double tint_b = optics.physical_smoke ? 1.0 : scatter_tuning.tint[2];
     /* Fixed icosahedral directions. Normalize discrete HG weights so a uniform
      * unoccluded sky integrates to its radiance for every view and anisotropy.
      * This is bounded single-scattering quadrature, not multiple scattering. */
@@ -328,7 +329,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
     }
 
     step = runtime_volume_3d_scatter_clamp(RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 0.5 *
-                                               gRuntimeVolume3DScatterStepScale,
+                                               scatter_tuning.step_scale,
                                            runtime_volume_3d_scatter_minimum_step(),
                                            t_exit - t_enter);
     if (!(step > zero_length)) {
@@ -354,8 +355,8 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
             vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));
         const double raw_density =
             (double)RuntimeVolume3D_SampleDensityAtPosition(&scene->volume, sample_position);
-        const double density = RuntimeVolume3DMaterial_RemapDensity(raw_density);
-        const double extinction_density = RuntimeVolume3DMaterial_ExtinctionDensity(raw_density);
+        const double density = RuntimeVolume3DMaterial_RemapDensityWithTuning(raw_density,&optics);
+        const double extinction_density = RuntimeVolume3DMaterial_ExtinctionDensityWithTuning(raw_density,&optics);
 
         if (density > 0.0) {
             const double scatter_probability = (optics.physical_smoke ? optics.scattering_albedo : 1.0) * (1.0 - exp(-density * segment_length));
@@ -512,10 +513,10 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                             (double)RuntimeVolume3D_SampleDensityAtPosition(
                                 &scene->volume, beam_sample_position);
                         const double beam_density =
-                            RuntimeVolume3DMaterial_RemapDensity(beam_raw_density);
+                            RuntimeVolume3DMaterial_RemapDensityWithTuning(beam_raw_density,&optics);
                         const double beam_extinction_density =
-                            RuntimeVolume3DMaterial_ExtinctionDensity(
-                                beam_raw_density);
+                            RuntimeVolume3DMaterial_ExtinctionDensityWithTuning(
+                                beam_raw_density,&optics);
                         const double beam_camera_transmittance =
                             camera_transmittance * exp(
                                 -beam_extinction_density *
@@ -593,10 +594,10 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                     result.causticSampleCount += 1;
                     if (caustic_peak > 0.0) {
                         const double caustic_term = physical_beam
-                            ? gRuntimeVolume3DCausticScatterStrengthGain
+                            ? scatter_tuning.caustic_strength
                             : camera_transmittance * scatter_probability *
                                   kRuntimeVolume3DCausticScatterStrength *
-                                  gRuntimeVolume3DCausticScatterStrengthGain;
+                                  scatter_tuning.caustic_strength;
                         const double caustic_visibility_term = physical_beam
                             ? beam_estimator.integrationWeight
                             : caustic_term;
@@ -607,11 +608,11 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateSingleScatterAlongRayWith
                             ? beam_estimator.cameraTransmittance
                             : camera_transmittance;
                         const double caustic_r = caustic_radiance.x * caustic_term *
-                                                 gRuntimeVolume3DScatterTintR;
+                                                 scatter_tuning.tint[0];
                         const double caustic_g = caustic_radiance.y * caustic_term *
-                                                 gRuntimeVolume3DScatterTintG;
+                                                 scatter_tuning.tint[1];
                         const double caustic_b = caustic_radiance.z * caustic_term *
-                                                 gRuntimeVolume3DScatterTintB;
+                                                 scatter_tuning.tint[2];
                         result.radianceR += caustic_r;
                         result.radianceG += caustic_g;
                         result.radianceB += caustic_b;
@@ -691,6 +692,8 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
     double t_min FISICS_DIM(length) FISICS_UNIT(meter),
     double t_max FISICS_DIM(length) FISICS_UNIT(meter)) {
     RuntimeVolume3DScatterResult result = {0};
+    const RuntimeVolume3DMaterialTuning optics=RuntimeVolume3DMaterial_ForAttachment(scene?&scene->volume:NULL);
+    const RuntimeVolume3DScatterTuning scatter_tuning=RuntimeVolume3DScatter_ForAttachment(scene?&scene->volume:NULL);
     double t_enter FISICS_DIM(length) FISICS_UNIT(meter) = t_min;
     double t_exit FISICS_DIM(length) FISICS_UNIT(meter) = t_max;
     double step FISICS_DIM(length) FISICS_UNIT(meter) =
@@ -711,7 +714,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
     }
 
     step = runtime_volume_3d_scatter_clamp(RuntimeVolume3D_WorldVoxelSize(&scene->volume) * 0.5 *
-                                               gRuntimeVolume3DScatterStepScale,
+                                               scatter_tuning.step_scale,
                                            runtime_volume_3d_scatter_minimum_step(),
                                            t_exit - t_enter);
     if (!(step > zero_length)) {
@@ -731,7 +734,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
             vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));
         const double raw_density =
             (double)RuntimeVolume3D_SampleDensityAtPosition(&scene->volume, sample_position);
-        const double density = RuntimeVolume3DMaterial_RemapDensity(raw_density);
+        const double density = RuntimeVolume3DMaterial_RemapDensityWithTuning(raw_density,&optics);
 
         if (density > 0.0) {
             density_integral += density * segment_length;
@@ -739,10 +742,10 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
         }
     }
 
-    result.radiance = 1.0 - exp(-density_integral * gRuntimeVolume3DScatterStrengthGain);
-    result.radianceR = result.radiance * gRuntimeVolume3DScatterTintR;
-    result.radianceG = result.radiance * gRuntimeVolume3DScatterTintG;
-    result.radianceB = result.radiance * gRuntimeVolume3DScatterTintB;
+    result.radiance = 1.0 - exp(-density_integral * scatter_tuning.strength);
+    result.radianceR = result.radiance * scatter_tuning.tint[0];
+    result.radianceG = result.radiance * scatter_tuning.tint[1];
+    result.radianceB = result.radiance * scatter_tuning.tint[2];
     result.radiance = runtime_volume_3d_scatter_peak(result.radianceR,
                                                      result.radianceG,
                                                      result.radianceB);

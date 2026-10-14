@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_fields.h"
+#include "editor/scene_editor_follower_orientation.h"
 #include "scene_editor_motion_orientation_panel.h"
 /* Independent path library and geometry authoring. Document commands own
  * history; this module retains only UI selection, text drafts and an
@@ -72,13 +74,13 @@ static void select_follower_track(const MotionPaths *paths,const MotionPath *pat
 static void cancel_field_edit(void) {
   ui.editing = -1;
   ui.draft[0] = 0;
-  SDL_StopTextInput();
+  do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
 }
 void SceneEditorMotionPathPanelReset(void) {
   MotionOrientationPanelReset();
   SceneEditorMotionPlanPanelReset();
   if (ui.editing >= 0)
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
   memset(&ui, 0, sizeof(ui));
   ui.editing = -1;
   ui.hover_point=-1;
@@ -92,7 +94,7 @@ void SceneEditorMotionPathPanelSelect(bool selected) {
   ui.active = selected;
   ui.dragging = false;
   ui.editing = -1;
-  SDL_StopTextInput();
+  do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
   SceneEditorTimelinePause();
   if (selected) {
     SceneEditorCameraGestureCancel();
@@ -123,6 +125,7 @@ void SceneEditorMotionPathPanelSelect(bool selected) {
       snprintf(ui.path_id, sizeof(ui.path_id), "%s", paths.paths[0].id);
   }
 }
+bool SceneEditorMotionPathPanelInteractionActive(void) {return ui.active && (ui.dragging || ui.editing>=0);}
 const char *SceneEditorMotionPathPanelStatus(void) { return ui.message; }
 bool SceneEditorMotionPathPanelActive(void) {
   return ui.active &&
@@ -165,51 +168,6 @@ static void pick_point(const MotionPath *p,int x,int y,int *picked,int *kind) {
     }
     *picked=point;*kind=handle;
 }
-static void add_point(MotionPath *p) {
-  int at = ui.point;
-  MotionPathPoint next = {0};
-  unsigned serial = 1;
-  bool used;
-  do {
-    snprintf(next.id, sizeof(next.id), "point-%u", serial++);
-    used = false;
-    for (size_t i = 0; i < p->count; ++i)
-      if (!strcmp(next.id, p->points[i].id))
-        used = true;
-  } while (used);
-  MotionPathPoint *a = &p->points[at];
-  next.linear = a->linear;
-  if (at == (int)p->count - 1) {
-    for (int k = 0; k < 3; ++k) {
-      double delta = a->position[k] - p->points[at - 1].position[k];
-      next.position[k] = a->position[k] + delta;
-      next.incoming[k] = -delta / 3;
-      next.outgoing[k] = delta / 3;
-    }
-  } else {
-    MotionPathPoint *b = &p->points[at + 1];
-    for (int k = 0; k < 3; ++k) {
-      double x = a->position[k], y = x + a->outgoing[k],
-             z = b->position[k] + b->incoming[k], w = b->position[k];
-      if (a->linear) {
-        y = x + (w - x) / 3;
-        z = x + 2 * (w - x) / 3;
-      }
-      double xy = (x + y) / 2, yz = (y + z) / 2, zw = (z + w) / 2,
-             left = (xy + yz) / 2, right = (yz + zw) / 2,
-             mid = (left + right) / 2;
-      next.position[k] = mid;
-      next.incoming[k] = left - mid;
-      next.outgoing[k] = right - mid;
-      if(!a->linear) {a->outgoing[k] = xy - x; b->incoming[k] = zw - w;}
-    }
-  }
-  memmove(&p->points[at + 2], &p->points[at + 1],
-          (p->count - at - 1) * sizeof(next));
-  p->points[at + 1] = next;
-  ++p->count;
-  ui.point = at + 1;
-}
 static bool motion_path_event(SceneEditor *e, SDL_Event *event,
                               const SceneEditorPaneLayout *l) {
   (void)e;
@@ -246,6 +204,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
   }
   if (ui.editing >= 0 &&
       (event->type == SDL_TEXTINPUT || event->type == SDL_KEYDOWN)) {
+    if((ui.editing>=0) && scene_editor_shared_field_event(ui.draft,sizeof(ui.draft),event))return true;
     if (event->type == SDL_TEXTINPUT) {
       if (strlen(ui.draft) + strlen(event->text.text) < sizeof(ui.draft))
         strcat(ui.draft, event->text.text);
@@ -253,7 +212,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
     }
     if (event->key.keysym.sym == SDLK_ESCAPE) {
       ui.editing = -1;
-      SDL_StopTextInput();
+      do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
       return true;
     }
     if (event->key.keysym.sym == SDLK_BACKSPACE) {
@@ -269,7 +228,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         if (end != ui.draft && !*end && isfinite(v) && fabs(v) <= 1e12) {
           ui.plane_z = v;
           ui.editing = -1;
-          SDL_StopTextInput();
+          do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
         } else
           snprintf(ui.message, sizeof(ui.message),
                    "Enter a finite drawing height.");
@@ -281,7 +240,8 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         if(end!=ui.draft && !*end && isfinite(value) && fabs(value)<=36000) {
           for(size_t j=0;j<d.binding_count;++j) if(!d.bindings[j].target_id[0] && !strcmp(d.bindings[j].object_id,ui.object_id)) {
             d.bindings[j].rotation_offset[ui.editing-11]=value;
-            if(SceneEditorMotionPathsSet(&d,ui.revision,ui.message,sizeof(ui.message)))cancel_field_edit();
+            char target[TIMELINE_ID_CAPACITY];snprintf(target,sizeof(target),"object/%s",ui.object_id);
+            if(SceneEditorFollowerOrientationSet(target,&d.bindings[j],ui.revision,ui.message,sizeof(ui.message)))cancel_field_edit();
             return true;
           }
         }
@@ -308,7 +268,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       if (valid && SceneEditorMotionPathsSet(&d, ui.revision, ui.message,
                                              sizeof(ui.message))) {
         ui.editing = -1;
-        SDL_StopTextInput();
+        do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
         snprintf(ui.message, sizeof(ui.message),
                  "Path updated. Undo is available.");
       } else if (!valid)
@@ -433,7 +393,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       ui.editing = i;
       ui.draft[0] = 0;
       ui.revision = SceneEditorDocumentRevision();
-      SDL_StartTextInput();
+      do{scene_editor_shared_field_begin(ui.draft,sizeof(ui.draft),0);SDL_StartTextInput();}while(0);
       return true;
     }
   for (int i = 0; i < CONTROL_COUNT; ++i)
@@ -444,24 +404,25 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         for(size_t j=0;j<d.binding_count;++j) {
           MotionPathBinding *b=&d.bindings[j];
           if(b->target_id[0] || strcmp(b->object_id,ui.object_id))continue;
+          char target[TIMELINE_ID_CAPACITY];snprintf(target,sizeof(target),"object/%s",ui.object_id);
           if(i==ROTATION_FROM_BASE) {
             SceneEditorDocumentObjectInfo object;SceneEditorDocumentTransform transform;
             if(SceneEditorDocumentObjectById(ui.object_id,&object) && SceneEditorDocumentGetTransformForSceneIndex(object.runtime_index,&transform,ui.message,sizeof(ui.message))) {
               memcpy(b->rotation_offset,transform.rotation_degrees,sizeof(b->rotation_offset));
-              SceneEditorMotionPathsSet(&d,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));
+              SceneEditorFollowerOrientationSet(target,b,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));
             }
             cancel_field_edit();return true;
           }
-          if(i>=ROTATION_X) {ui.editing=11+i-ROTATION_X;ui.draft[0]=0;ui.revision=SceneEditorDocumentRevision();SDL_StartTextInput();return true;}
+          if(i>=ROTATION_X) {ui.editing=11+i-ROTATION_X;ui.draft[0]=0;ui.revision=SceneEditorDocumentRevision();do{scene_editor_shared_field_begin(ui.draft,sizeof(ui.draft),0);SDL_StartTextInput();}while(0);return true;}
           cancel_field_edit();
           if(i==FOLLOW_DIRECTION)b->follow_direction=!b->follow_direction;else b->forward_axis=(b->forward_axis+1)%6;
-          SceneEditorMotionPathsSet(&d,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));return true;
+          SceneEditorFollowerOrientationSet(target,b,SceneEditorDocumentRevision(),ui.message,sizeof(ui.message));return true;
         }
         return true;
       }
       if (i == SELECT_TOOL || i == PLACE_TOOL) {
         ui.editing = -1;
-        SDL_StopTextInput();
+        do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
         ui.placing = i == PLACE_TOOL;
         ui.message[0] = 0;
         return true;
@@ -514,7 +475,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       if (i == DEPTH) {
         ui.editing = 10;
         ui.draft[0] = 0;
-        SDL_StartTextInput();
+        do{scene_editor_shared_field_begin(ui.draft,sizeof(ui.draft),0);SDL_StartTextInput();}while(0);
         return true;
       }
       unsigned long long rev = SceneEditorDocumentRevision();
@@ -565,7 +526,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
           ui.editing = 9;
           ui.draft[0] = 0;
           ui.revision = SceneEditorDocumentRevision();
-          SDL_StartTextInput();
+          do{scene_editor_shared_field_begin(ui.draft,sizeof(ui.draft),0);SDL_StartTextInput();}while(0);
         }
         return true;
       }
@@ -588,7 +549,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
         ui.editing = 9;
         ui.draft[0] = 0;
         ui.revision = rev;
-        SDL_StartTextInput();
+        do{scene_editor_shared_field_begin(ui.draft,sizeof(ui.draft),0);SDL_StartTextInput();}while(0);
         return true;
       }
       if (i == PREV || i == NEXT) {
@@ -598,8 +559,8 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
       }
       if (i == ADD) {
         cancel_field_edit();
-        add_point(p);
-        changed = true;
+        changed=SceneEditorMotionPathInsertPoint(p,ui.point,NULL,0);
+        if(changed) ++ui.point;
       }
       if (i == REMOVE || i == DELETE_TOOL) {
         cancel_field_edit();
@@ -676,7 +637,7 @@ static bool motion_path_event(SceneEditor *e, SDL_Event *event,
     if (SDL_GetModState() & KMOD_SHIFT) {
       double position[3];
       ui.editing = -1;
-      SDL_StopTextInput();
+      do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
       if (MotionPathViewportPlacement(&ui.projector, x, y, ui.plane_z,
                                       position) &&
           MotionPathViewportAppend(p, position)) {

@@ -24,9 +24,10 @@ parent. Invalid paths or settings-save failures stay visible and block Start
 until corrected. Relative paths and parent traversal are refused.
 
 **Responsive render: Auto** selects the existing asynchronous route when Start
-is pressed for a supported native, tiled 3D deep render. Static retained
-atmospheres are supported; animated caches and enabled legacy external volumes
-retain the existing synchronous fallback. Escape requests cancellation and a
+is pressed for a supported native, tiled 3D deep render. Static legacy retained
+atmospheres, including saved physical profiles, are supported through immutable
+prepared optical snapshots; animated caches and enabled legacy external volumes
+use synchronous selection. Escape requests cancellation and a
 canceled frame is not published as a completed frame. This does not extend
 asynchronous rendering to dynamic cache selection.
 
@@ -77,6 +78,12 @@ The selected appearance is highlighted; manually edited settings read **Custom**
 New static cloud banks start with Light cloud, plumes with Smoke, and other static
 shapes with Soft mist. Existing attachments keep their saved appearance, including
 when their field shape is replaced.
+
+The **Optics** selector switches between legacy artistic appearance and saved
+physical smoke. The physical controls and MCP contract are documented in
+[physical smoke settings](physical_smoke_volume.md). Saved physical profiles use
+Direct Light or Disney V2 with caustics off; existing scenes without an optical block retain
+their legacy appearance. Appearance presets below apply to legacy mode.
 
 Expand **Appearance** to edit:
 

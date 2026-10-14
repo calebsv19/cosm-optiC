@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+void SceneEditorRuntimeSceneCaptureMaterialBaseline(void);
 bool SceneEditorRuntimeScenePersistAuthoring(char* out_diagnostics, size_t out_diagnostics_size);
 
 #endif

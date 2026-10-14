@@ -1,3 +1,6 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
 /* UI drafts only. Retained commands, validation and history remain shared. */
 #include "scene_editor_motion_plan_panel.h"
 #include "editor/scene_editor_chrome_shell.h"
@@ -52,9 +55,10 @@ static struct {
   bool enabled[COUNT];
   char labels[COUNT][160], draft[64], message[300], readback[4][180];
 } ui = {.editing = -1};
+bool SceneEditorMotionPlanPanelInteractionActive(void) {return ui.editing>=0 || (ui.open && ui.dirty);}
 void SceneEditorMotionPlanPanelReset(void) {
   if (ui.editing >= 0)
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
   memset(&ui, 0, sizeof(ui));
   ui.editing = -1;
 }
@@ -62,7 +66,7 @@ bool SceneEditorMotionPlanPanelOpen(void) { return ui.open; }
 static void load(void) {
   ui.dirty = false;
   ui.editing = -1;
-  SDL_StopTextInput();
+  do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
   ui.point = 0;
   ui.revision = SceneEditorDocumentRevision();
   ui.message[0] = 0;
@@ -89,17 +93,14 @@ bool SceneEditorMotionPlanPanelOpenTarget(const char *path,const char *target) {
 }
 const char *SceneEditorMotionPlanPanelTarget(void) { return ui.target; }
 static void label(SDL_Renderer *r, const char *s, int x, int y) {
-  ray_tracing_text_draw_utf8_at(
-      r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9), s, x, y,
-      SceneEditorChromeShellResolvePalette().text_primary);
+  scene_editor_shared_label_at(r,s,x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
 }
 static int button(SDL_Renderer *r, int id, const char *s, SDL_Rect clip, int x,
                   int y, int w, bool enabled) {
   snprintf(ui.labels[id], sizeof(ui.labels[id]), "%s", s);
   ui.controls[id] = (SDL_Rect){x, y, w, 28};
   ui.enabled[id] = enabled;
-  SceneEditorRenderButton(r, ui.controls[id], ui.labels[id], ui.editing == id,
-                          enabled);
+  SceneEditorSharedUiPanelButton(r,138,128+(id),ui.controls[id],ui.labels[id],ui.editing == id,enabled);
   if (y < clip.y || y + 28 > clip.y + clip.h)
     ui.controls[id] = (SDL_Rect){0};
   return y + 34;
@@ -269,7 +270,8 @@ static void preview(void) {
   }
 }
 bool SceneEditorMotionPlanPanelEvent(SDL_Event *e) {
-  if (ui.editing >= 0 && (e->type == SDL_TEXTINPUT || e->type == SDL_KEYDOWN)) {
+  if((ui.editing>=0) && scene_editor_shared_field_event(ui.draft,sizeof(ui.draft),e))return true;
+    if (ui.editing >= 0 && (e->type == SDL_TEXTINPUT || e->type == SDL_KEYDOWN)) {
     if (e->type == SDL_TEXTINPUT) {
       if (strlen(ui.draft) + strlen(e->text.text) < sizeof(ui.draft))
         strcat(ui.draft, e->text.text);
@@ -278,7 +280,7 @@ bool SceneEditorMotionPlanPanelEvent(SDL_Event *e) {
     SDL_Keycode k = e->key.keysym.sym;
     if (k == SDLK_ESCAPE) {
       ui.editing = -1;
-      SDL_StopTextInput();
+      do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
     } else if (k == SDLK_BACKSPACE) {
       size_t n = strlen(ui.draft);
       if (n)
@@ -290,7 +292,7 @@ bool SceneEditorMotionPlanPanelEvent(SDL_Event *e) {
         *field(ui.editing) = v;
         ui.dirty = true;
         ui.editing = -1;
-        SDL_StopTextInput();
+        do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
         memset(ui.readback, 0, sizeof(ui.readback));
         snprintf(ui.message, sizeof(ui.message),
                  "Draft changed. Preview or Apply to validate.");
@@ -308,7 +310,7 @@ bool SceneEditorMotionPlanPanelEvent(SDL_Event *e) {
     if (!ui.enabled[id])
       return true;
     ui.editing = -1;
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
     if (id == PREV || id == NEXT || id == FIXED || id == ADD || id == REMOVE ||
         id == STOPS) {
       memset(ui.readback, 0, sizeof(ui.readback));
@@ -384,7 +386,7 @@ bool SceneEditorMotionPlanPanelEvent(SDL_Event *e) {
     } else if (id >= START) {
       ui.editing = id;
       ui.draft[0] = 0;
-      SDL_StartTextInput();
+      do{scene_editor_shared_field_begin(ui.draft,sizeof(ui.draft),0);SDL_StartTextInput();}while(0);
     }
     return true;
   }

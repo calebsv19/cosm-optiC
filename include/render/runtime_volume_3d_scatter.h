@@ -69,7 +69,7 @@ RuntimeVolume3DScatterResult RuntimeVolume3D_AccumulateDensityDebugAlongRayRGB(
     double t_max FISICS_DIM(length) FISICS_UNIT(meter));
 
 void RuntimeVolume3DScatter_ResetTuning(void);
-typedef struct {double strength,caustic_strength,step_scale,tint[3];} RuntimeVolume3DScatterTuning;
+RuntimeVolume3DScatterTuning RuntimeVolume3DScatter_ForAttachment(const RuntimeVolumeAttachment3D* attachment);
 RuntimeVolume3DScatterTuning RuntimeVolume3DScatter_GetTuning(void);
 void RuntimeVolume3DScatter_RestoreTuning(RuntimeVolume3DScatterTuning tuning);
 void RuntimeVolume3DScatter_SetStrengthGain(double gain);

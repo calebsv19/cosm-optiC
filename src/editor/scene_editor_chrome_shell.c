@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_surfaces.h"
 #include "editor/scene_editor_mesh_preview_render.h"
@@ -328,6 +329,7 @@ static void scene_editor_chrome_shell_render_button(SDL_Renderer* renderer,
     SDL_Color resolvedText = {0};
 
     if (!renderer) return;
+    if(SceneEditorSharedUiButton(renderer,rect,label,enabled,base_fill,palette)) return;
     resolvedFill = scene_editor_chrome_shell_resolve_button_fill(base_fill,
                                                                  disabled_fill,
                                                                  enabled,
@@ -416,8 +418,8 @@ void SceneEditorChromeShellRender(SDL_Renderer* renderer,
                  filename ? filename+1 : "Scene",
                  SceneEditorDocumentIsDirty() ? "  • Unsaved" : "");
         SceneEditorLabelLeft(renderer,chrome.document_identity,document_label,palette.text_primary);
-        for(int i=0;i<3;++i) SceneEditorLabel(renderer,chrome.menus[i],
-            (const char*[]){"File","Edit","View"}[i],palette.text_primary);
+        for(int i=0;i<3;++i) SceneEditorSharedUiButton(renderer,chrome.menus[i],
+            (const char*[]){"File","Edit","View"}[i],true,palette.panel_fill,palette);
         static char workspace_label[64];
         snprintf(workspace_label,sizeof(workspace_label),"%s  v",SceneEditorWorkspaceProfileLabel(SceneEditorWorkspaceProfileGet()));
         scene_editor_chrome_shell_render_button(renderer,chrome.workspace,workspace_label,true,

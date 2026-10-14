@@ -5,5 +5,6 @@
 void SceneEditorTimelineKeyInspectorDraw(SDL_Renderer* renderer,SDL_Rect rect);
 bool SceneEditorTimelineKeyInspectorEvent(SDL_Event* event);
 void SceneEditorTimelineKeyInspectorReset(void);
+bool SceneEditorTimelineKeyInspectorActive(void);
 bool SceneEditorTimelineKeyInspectorControl(const char* name,SDL_Rect* out);
 #endif

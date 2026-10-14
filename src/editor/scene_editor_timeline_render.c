@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_ui.h"
 #include "motion/scene_motion_plans.h"
 #include "scene_editor_timeline_ui.h"
 #include "scene_editor_timeline_curve.h"
@@ -42,7 +43,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     SDL_Color ink=p.text_primary,muted=p.text_muted,accent={105,196,239,255},gold={245,180,80,255};
     fill(r,l->panel,(SDL_Color){23,27,34,255});
     if(!d) {
-        SceneEditorRenderButton(r,(SDL_Rect){l->panel.x+4,l->panel.y+3,230,32},"Set up scene animation",false,true);
+        SceneEditorSharedUiPanelButton(r,180,128,(SDL_Rect){l->panel.x+4,l->panel.y+3,230,32},"Set up scene animation",false,true);
         text(r,"Preserves camera and light paths. Undo is available.",l->panel.x+12,l->panel.y+48,ink);
         text(r,SceneEditorTimelineStatus(),l->panel.x+12,l->panel.y+72,gold);goto done;
     }
@@ -53,9 +54,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     snprintf(frame,sizeof(frame),"Frame %lld",(long long)s->transport.sample.absolute_frame);
     if(u->numeric==1) snprintf(frame,sizeof(frame),"Frame %s_",u->draft);
     const char* labels[]={"|<","<",s->transport.playing?"Pause":"Play",">",">|",frame,"Add key","Keys","Curves","Fit","Fit channel","-","+"};
-    for(int i=0;i<=TL_ZOOM_IN;++i) SceneEditorRenderButton(r,l->controls[i],labels[i],
-        (i==TL_PLAY && s->transport.playing) || (i==TL_KEYS && !u->curves) || (i==TL_CURVES && u->curves),
-        (i!=TL_ADD && i!=TL_FIT_CHANNEL) || selected<d->track_count);
+    for(int i=0;i<=TL_ZOOM_IN;++i) SceneEditorSharedUiPanelButton(r,180,256+(i),l->controls[i],labels[i],(i==TL_PLAY && s->transport.playing) || (i==TL_KEYS && !u->curves) || (i==TL_CURVES && u->curves),(i!=TL_ADD && i!=TL_FIT_CHANNEL) || selected<d->track_count);
     SDL_SetRenderDrawColor(r,66,73,85,255);
     int separators[]={l->controls[TL_KEYS].x-8,l->controls[TL_FIT].x-8};
     for(int i=0;i<2;++i) SDL_RenderDrawLine(r,separators[i],l->toolbar.y+8,separators[i],l->toolbar.y+26);
@@ -134,10 +133,10 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     static char key_frame[64];
     snprintf(key_frame,sizeof(key_frame),have_keys?"Key F %lld":"Select a key",have_keys?(long long)keys.primary.frame:0);
     if(u->numeric==3) snprintf(key_frame,sizeof(key_frame),"Key F %s_",u->draft);
-    SceneEditorRenderButton(r,l->controls[TL_KEY_FRAME],key_frame,u->numeric==3,have_keys);
+    SceneEditorSharedUiPanelButton(r,180,384+(TL_KEY_FRAME),l->controls[TL_KEY_FRAME],key_frame,u->numeric==3,have_keys);
     snprintf(value,sizeof(value),have_keys?"Value %.5g":"Value",have_keys?keys.primary.value.as.scalar:0);
     if(u->numeric==2) snprintf(value,sizeof(value),"Value %s_",u->draft);
-    SceneEditorRenderButton(r,l->controls[TL_VALUE],value,u->numeric==2,have_keys);
+    SceneEditorSharedUiPanelButton(r,180,512+(TL_VALUE),l->controls[TL_VALUE],value,u->numeric==2,have_keys);
     const char* mode="Interpolation";
     if(have_keys) {TimelineInterpolation m=keys.primary.interpolation_to_next;mode=m==TIMELINE_INTERPOLATION_STEP?"Hold / jump v":m==TIMELINE_INTERPOLATION_LINEAR?"Linear v":"Bezier ease v";}
     if(have_keys && keys.primary.interpolation_to_next==TIMELINE_INTERPOLATION_CUBIC_BEZIER && keys.primary.tangent_mode!=TIMELINE_TANGENT_BROKEN)
@@ -146,8 +145,8 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
         const TimelineKeyframe* k=&d->tracks[selected].keys[i];
         if(SceneEditorTimelineKeySelected(d->tracks[selected].track_id,k->frame) && k->interpolation_to_next!=keys.primary.interpolation_to_next) mode="Mixed v";
     }
-    SceneEditorRenderButton(r,l->controls[TL_INTERPOLATION],mode,u->menu,have_keys);
-    SceneEditorRenderButton(r,l->controls[TL_DELETE],"Delete",false,have_keys && keys.count<d->tracks[selected].key_count);
+    SceneEditorSharedUiPanelButton(r,180,640+(TL_INTERPOLATION),l->controls[TL_INTERPOLATION],mode,u->menu,have_keys);
+    SceneEditorSharedUiPanelButton(r,180,768+(TL_DELETE),l->controls[TL_DELETE],"Delete",false,have_keys && keys.count<d->tracks[selected].key_count);
     if(have_keys) snprintf(context,sizeof(context),"%zu selected | Shift-click: extend selection | Arrows: scrub",keys.count);
     else snprintf(context,sizeof(context),"Right-click lane: create key. Click diamond: select. Ruler: scrub.");
     SceneEditorMotionFeedback(d,selected,s->transport.sample,context,sizeof(context));
@@ -157,7 +156,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     if(u->menu) {
         const char* modes[]={"Hold then jump","Linear","Bezier ease","Auto Smooth","Auto Clamped","Flat / stop","Broken handles"};
         SDL_Rect box=l->controls[TL_INTERPOLATION];box.y-=168;box.h=24;
-        for(int i=0;i<7;++i) {SceneEditorRenderButton(r,box,modes[i],false,true);box.y+=24;}
+        for(int i=0;i<7;++i) {SceneEditorSharedUiPanelButton(r,180,896+i,box,modes[i],false,true);box.y+=24;}
     }
     /* Hover help keeps the toolbar compact without making symbols ambiguous. */
     const char* help[]={"First frame (Home)","Previous frame (Left)","Play / pause (Space)","Next frame (Right)","Last frame (End)","Type frame, Enter applies","Key evaluated value at playhead","Keyframe view: drag diamonds to retime","Curve view: drag keys or Bezier handles","Fit animation range (F)","Fit selected channel's keys","Zoom out; Ctrl+wheel zooms at pointer","Zoom in; middle-drag or Shift+wheel pans","Edit selected values; the playhead stays put","Interpolation from selected keys to the next key","Delete selected keys; Undo restores the group","Retime selection; other selected keys keep their spacing"};

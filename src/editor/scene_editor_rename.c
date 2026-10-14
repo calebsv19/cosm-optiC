@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_object_commands.h"
 #include "editor/object_editor_selection_tracker.h"
@@ -18,6 +20,7 @@
 
 static struct {
     bool active, dragging, owns_input;
+    SceneEditorSharedText draft;
     char id[128], text[128], error[256];
     size_t cursor, anchor;
     unsigned long long revision;
@@ -43,6 +46,7 @@ bool SceneEditorRenameBegin(void) {
     }
     memset(&edit,0,sizeof(edit));edit.active=true;
     snprintf(edit.id,sizeof(edit.id),"%s",info.id);snprintf(edit.text,sizeof(edit.text),"%s",info.name);
+    scene_editor_shared_text_bind(&edit.draft,edit.text,97,KIT_UI_TEXT_SINGLE_LINE);
     edit.cursor=strlen(edit.text);edit.revision=SceneEditorDocumentRevision();
     edit.owns_input=!SDL_IsTextInputActive();SDL_StartTextInput();return true;
 }
@@ -51,12 +55,14 @@ static void replace_selection(const char* text) {
     size_t n=strlen(text), old=strlen(edit.text);
     if(old-(hi-lo)+n>96) {snprintf(edit.error,sizeof(edit.error),"Name must fit within 96 UTF-8 bytes");return;}
     for(size_t i=0;i<n;++i) if((unsigned char)text[i]<32 || text[i]==127) {snprintf(edit.error,sizeof(edit.error),"Use a single-line name");return;}
-    memmove(edit.text+lo+n,edit.text+hi,old-hi+1);memcpy(edit.text+lo,text,n);
-    edit.cursor=edit.anchor=lo+n;edit.error[0]=0;
+    (void)kit_ui_text_position(&edit.draft.edit,edit.cursor,edit.anchor);
+    CoreResult result=n ? kit_ui_text_insert(&edit.draft.edit,text) :
+        (lo!=hi ? kit_ui_text_command(&edit.draft.edit,KIT_UI_TEXT_DELETE,0) : core_result_ok());
+    if(result.code!=CORE_OK) {
+        snprintf(edit.error,sizeof(edit.error),"Use valid UTF-8 within 96 bytes");return;
+    }
+    edit.cursor=edit.draft.edit.cursor;edit.anchor=edit.draft.edit.anchor;edit.error[0]=0;
 }
-static TTF_Font* font(void) { return ray_tracing_font_runtime_get_ui_regular(edit.renderer,13,13); }
-static int width(size_t n) {char prefix[128];int w=0;snprintf(prefix,sizeof(prefix),"%.*s",(int)n,edit.text);ray_tracing_text_measure_utf8(edit.renderer,font(),prefix,&w,NULL);return w;}
-static size_t position(int x) {size_t p=0;while(edit.text[p]) {size_t q=next(p);if(x-edit.origin<(width(p)+width(q))/2) break;p=q;}return p;}
 static void apply(void) {
     bool nonspace=false;for(size_t p=0;edit.text[p];p=next(p)) if(!space_at(p)) nonspace=true;
     if(!nonspace) {snprintf(edit.error,sizeof(edit.error),"Enter a name before applying");return;}
@@ -78,23 +84,35 @@ bool SceneEditorRenameHandleEvent(SDL_Event* e) {
         return false;
     }
     if(e->type==SDL_QUIT || (e->type==SDL_WINDOWEVENT && e->window.event==SDL_WINDOWEVENT_CLOSE)) {SceneEditorRenameCancel();return false;}
-    if(e->type==SDL_WINDOWEVENT && e->window.event==SDL_WINDOWEVENT_FOCUS_LOST) {edit.dragging=false;return false;}
+    if(e->type==SDL_WINDOWEVENT) {
+        (void)scene_editor_shared_text_event(&edit.draft,e);edit.dragging=false;return false;
+    }
     if(e->type==SDL_TEXTINPUT) {replace_selection(e->text.text);return true;}
     if(e->type==SDL_MOUSEBUTTONDOWN) {
         SDL_Point p={e->button.x,e->button.y};
         if(e->button.button==SDL_BUTTON_LEFT) {
-            if(SDL_PointInRect(&p,&edit.field) && edit.renderer) {edit.cursor=position(p.x);if(!(SDL_GetModState()&KMOD_SHIFT)) edit.anchor=edit.cursor;edit.dragging=true;}
+            if(SDL_PointInRect(&p,&edit.field) && edit.renderer) {
+                (void)kit_ui_text_position(&edit.draft.edit,edit.cursor,edit.anchor);
+                (void)scene_editor_shared_text_event(&edit.draft,e);
+                edit.cursor=edit.draft.edit.cursor;edit.anchor=edit.draft.edit.anchor;
+            }
             else if(SDL_PointInRect(&p,&edit.apply)) apply();
             else if(SDL_PointInRect(&p,&edit.cancel)) SceneEditorRenameCancel();
         }return true;
     }
-    if(e->type==SDL_MOUSEMOTION) {if(edit.dragging) edit.cursor=position(e->motion.x);return true;}
-    if(e->type==SDL_MOUSEBUTTONUP) {edit.dragging=false;return true;}
+    if(e->type==SDL_MOUSEMOTION || e->type==SDL_MOUSEBUTTONUP || e->type==SDL_TEXTEDITING) {
+        (void)kit_ui_text_position(&edit.draft.edit,edit.cursor,edit.anchor);
+        (void)scene_editor_shared_text_event(&edit.draft,e);
+        edit.cursor=edit.draft.edit.cursor;edit.anchor=edit.draft.edit.anchor;return true;
+    }
     if(e->type!=SDL_KEYDOWN) return e->type==SDL_KEYUP || e->type==SDL_MOUSEWHEEL || e->type==SDL_TEXTEDITING;
     SDL_Keycode k=e->key.keysym.sym;SDL_Keymod mod=e->key.keysym.mod;
     bool command=(mod&(KMOD_CTRL|KMOD_GUI))!=0, shift=(mod&KMOD_SHIFT)!=0, word=(mod&(KMOD_CTRL|KMOD_ALT))!=0;
-    if(k==SDLK_ESCAPE) {SceneEditorRenameCancel();return true;}
-    if(k==SDLK_RETURN || k==SDLK_KP_ENTER) {apply();return true;}
+    if(edit.draft.edit.composition[0]) {
+        (void)scene_editor_shared_text_event(&edit.draft,e);return true;
+    }
+    if(k==SDLK_ESCAPE) {if(!e->key.repeat)SceneEditorRenameCancel();return true;}
+    if(k==SDLK_RETURN || k==SDLK_KP_ENTER) {if(!e->key.repeat)apply();return true;}
     if(command && k==SDLK_a) {edit.anchor=0;edit.cursor=strlen(edit.text);return true;}
     if(command && (k==SDLK_c || k==SDLK_x)) {
         size_t lo=edit.cursor<edit.anchor?edit.cursor:edit.anchor,hi=edit.cursor>edit.anchor?edit.cursor:edit.anchor;
@@ -125,16 +143,11 @@ void SceneEditorRenameRender(SDL_Renderer* r) {
     RenderFixedSizedText(r,(SDL_Rect){box.x+12,box.y+10,w-24,24},"Rename object",palette.text_primary,13,false,false);
     edit.field=(SDL_Rect){box.x+12,box.y+42,w-24,34};SDL_SetTextInputRect(&edit.field);
     SceneEditorSurfaceFill(r,edit.field,palette.background_fill);SDL_SetRenderDrawColor(r,palette.accent_primary.r,palette.accent_primary.g,palette.accent_primary.b,255);SDL_RenderDrawRect(r,&edit.field);
-    int overflow=width(edit.cursor)-(edit.field.w-16);edit.origin=edit.field.x+6-(overflow>0?overflow:0);
-    int height=16;ray_tracing_text_line_height(r,font(),&height);edit.text_y=edit.field.y+(edit.field.h-height)/2;
-    SDL_Rect old,clip={edit.field.x+2,edit.field.y+1,edit.field.w-4,edit.field.h-2};bool clipped=SDL_RenderIsClipEnabled(r);SDL_RenderGetClipRect(r,&old);SDL_RenderSetClipRect(r,&clip);
-    size_t lo=edit.cursor<edit.anchor?edit.cursor:edit.anchor,hi=edit.cursor>edit.anchor?edit.cursor:edit.anchor;
-    SceneEditorSurfaceFill(r,(SDL_Rect){edit.origin+width(lo),edit.field.y+3,width(hi)-width(lo),edit.field.h-6},SceneEditorSurfaceBlend(palette.button_fill,palette.accent_primary,28));
-    ray_tracing_text_draw_utf8_at(r,font(),edit.text,edit.origin,edit.text_y,palette.text_primary);
-    SDL_SetRenderDrawColor(r,palette.text_primary.r,palette.text_primary.g,palette.text_primary.b,255);int x=edit.origin+width(edit.cursor);SDL_RenderDrawLine(r,x,edit.field.y+5,x,edit.field.y+edit.field.h-6);
-    SDL_RenderSetClipRect(r,clipped?&old:NULL);
+    if(edit.draft.edit.cursor!=edit.cursor || edit.draft.edit.anchor!=edit.anchor)
+        (void)kit_ui_text_position(&edit.draft.edit,edit.cursor,edit.anchor);
+    scene_editor_shared_text_draw(&edit.draft,r,edit.field,palette.text_primary);
     RenderFixedSizedText(r,(SDL_Rect){box.x+12,box.y+84,w-24,32},edit.error[0]?edit.error:"Enter to apply · Escape to cancel",palette.text_muted,12,true,false);
     edit.cancel=(SDL_Rect){box.x+w-180,box.y+130,76,28};edit.apply=(SDL_Rect){box.x+w-96,box.y+130,84,28};
-    SceneEditorSurfaceFill(r,edit.cancel,palette.button_fill);SceneEditorSurfaceFill(r,edit.apply,palette.button_fill);
-    RenderFixedSizedText(r,edit.cancel,"Cancel",palette.text_primary,13,false,true);RenderFixedSizedText(r,edit.apply,"Rename",palette.text_primary,13,false,true);
+    SceneEditorSharedUiModalButton(r,4,1,edit.cancel,"Cancel",true,palette.button_fill,palette);
+    SceneEditorSharedUiModalButton(r,4,2,edit.apply,"Rename",true,palette.button_fill,palette);
 }

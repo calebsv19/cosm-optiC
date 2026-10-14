@@ -21,6 +21,8 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
     if (!frame || !frame->valid) {
         return false;
     }
+    if(frame->physicalAtmosphere && integrator_id!=RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT &&
+       integrator_id!=RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) return false;
     scene = frame->traceScene ? frame->traceScene : &frame->scene;
     caustic_cache = (RuntimeCausticVolumeCache3D*)&frame->causticVolumeCache;
     surface_cache = (RuntimeCausticSurfaceCache3D*)&frame->causticSurfaceCache;

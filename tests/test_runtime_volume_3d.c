@@ -937,7 +937,10 @@ static void test_runtime_volume_3d_physical_smoke(void) {
     RuntimeScene3D_Free(&scene);RuntimeVolume3DMaterial_ResetTuning();RuntimeVolume3DScatter_ResetTuning();
 }
 
+#include "test_runtime_volume_optics_snapshot.h"
+
 int run_test_runtime_volume_3d_tests(void) {
+    test_runtime_volume_optics_snapshot();
     int before = test_support_failures();
     test_runtime_volume_3d_physical_smoke();
 

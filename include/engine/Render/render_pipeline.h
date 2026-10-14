@@ -31,6 +31,8 @@ void render_set_clear_color(SDL_Renderer* renderer,
                             Uint8 b,
                             Uint8 a);
 bool render_begin_frame(void);
+/* Explicit synchronous capture/export may render a hidden positive-size surface. */
+bool render_begin_export_frame(void);
 bool render_end_frame(void);
 bool render_device_lost(void);
 

@@ -29,19 +29,26 @@ def contained(root: Path, value: str) -> Path:
     return path
 
 
-def collect(source: Path) -> dict[str, bytes]:
+def collect(source: Path, max_bytes=None, max_files=None) -> dict[str, bytes]:
     if source.is_symlink():
         raise ValueError('source cannot be a symlink')
     root = source.parent.resolve()
     result: dict[str, bytes] = {}
     visiting: set[str] = set()
 
+    total_bytes=0
     def visit(rel: str, depth: int = 0):
+        nonlocal total_bytes
         if rel in visiting or depth > 4:
             raise ValueError('cyclic or excessively nested cache manifest')
         if rel in result:
             return
         path = contained(root, rel)
+        total_bytes+=path.stat().st_size
+        if (max_bytes is not None and total_bytes>max_bytes) or (max_files is not None and len(result)>=max_files):
+            raise ValueError("atmosphere dependency copy budget exceeded")
+        if max_bytes is not None and path.suffix.lower()==".json" and path.stat().st_size>16*1024*1024:
+            raise ValueError("atmosphere dependency JSON exceeds copy budget")
         data = path.read_bytes()
         if path.stat().st_size != len(data):
             raise ValueError('source changed during import')
@@ -84,13 +91,13 @@ def collect(source: Path) -> dict[str, bytes]:
     return result
 
 
-def scene_dependencies(scene: dict, project: Path) -> list[str]:
+def scene_dependencies(scene: dict, project: Path, max_bytes=None, max_files=None) -> list[str]:
     value=scene.get('extensions',{}).get('ray_tracing',{}).get('authoring',{}).get('atmosphere_attachment')
     if value is None:return []
     if not isinstance(value,dict) or value.get('schema_version')!='ray_atmosphere_attachment_v1':
         raise ValueError('unsupported retained atmosphere attachment')
     source=contained(project,value['source_path'])
-    files=collect(source)
+    files=collect(source,max_bytes=max_bytes,max_files=max_files)
     prefix=source.parent.relative_to(project)
     return [(prefix/rel).as_posix() for rel in files]
 

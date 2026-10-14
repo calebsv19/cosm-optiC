@@ -1,3 +1,4 @@
+#include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_camera_dielectric_3d.h"
 #include "render/runtime_disney_v2_transmission_internal_3d.h"
 
@@ -9,6 +10,8 @@
 #include "render/runtime_disney_v2_transmitted_caustic_3d.h"
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_surface_sampling.h"
+#include "render/runtime_disney_v2_receiver_3d.h"
+#include "render/runtime_disney_v2_transmission_reuse_3d.h"
 #include "render/runtime_render_trace_cost_ledger_3d.h"
 
 static double runtime_disney_v2_3d_direction_delta_degrees(Vec3 a, Vec3 b) {
@@ -182,6 +185,7 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
     Vec3 direction,
     const RuntimeDielectricTransport3D* footprint_interface,
     bool footprint_straight,
+    bool sampled_footprint,
     RuntimeRenderTraceCostTransmissionSource3D ledger_source,
     int path_depth,
     HitInfo3D* out_hit,
@@ -204,10 +208,19 @@ static bool runtime_disney_v2_3d_trace_transmission_next_hit(
                                   direction,
                                   kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon);
     if (footprint_interface) {
-        (void)RuntimeRay3D_TransportIdealFootprint(
-            source_hit, footprint_interface->orientedNormal,
-            footprint_straight ? RUNTIME_RAY_IDEAL_STRAIGHT : RUNTIME_RAY_IDEAL_REFRACTION,
-            footprint_interface->etaFrom, footprint_interface->etaTo, &ray);
+        RuntimeRay3DIdealFootprintEvent event=footprint_straight
+            ? RUNTIME_RAY_IDEAL_STRAIGHT : RUNTIME_RAY_IDEAL_REFRACTION;
+        if(sampled_footprint) {
+            Vec3 ideal=footprint_straight ? source_hit->incidentDirection
+                                        : footprint_interface->refractionDir;
+            (void)RuntimeRay3D_TransportSampledFootprint(source_hit,
+                footprint_interface->orientedNormal,event,footprint_interface->etaFrom,
+                footprint_interface->etaTo,ideal,&ray);
+        } else {
+            (void)RuntimeRay3D_TransportIdealFootprint(source_hit,
+                footprint_interface->orientedNormal,event,footprint_interface->etaFrom,
+                footprint_interface->etaTo,&ray);
+        }
     }
     for (int skip_count = 0;
          skip_count <= RUNTIME_DISNEY_V2_3D_PRIMARY_TRANSMISSION_SKIP_CAP &&
@@ -317,7 +330,8 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
     /* This flag describes the selected deterministic event, not merely authored
      * roughness. Rough-cone samples and unknown normal derivatives stay broad. */
     RuntimeDielectricTransport3D footprint_interface = initial_sample->dielectric;
-    bool footprint_eligible = ideal_sample && !io_result->payload.hasMicrodetailNormal &&
+    bool sampled_footprint = !ideal_sample && io_result->payload.hasGlassTransportOverride;
+    bool footprint_eligible = (ideal_sample || sampled_footprint) && !io_result->payload.hasMicrodetailNormal &&
                               !RuntimeSurfaceSamplingNormalResponseActive(source_hit.sceneObjectIndex);
     bool footprint_straight = io_result->payload.thinWalled;
     runtime_disney_v2_3d_medium_stack_init(&medium_stack);
@@ -348,17 +362,34 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
             termination = RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_DEPTH_LIMIT;
             break;
         }
-        if (!runtime_disney_v2_3d_trace_transmission_next_hit(scene,
+        bool atmosphere_segment_hit=runtime_disney_v2_3d_trace_transmission_next_hit(scene,
                                                               &source_hit,
                                                               direction,
                                                               footprint_eligible ? &footprint_interface : NULL,
                                                               footprint_straight,
+                                                              sampled_footprint,
                                                               ledger_source,
                                                               depth,
                                                               &hit,
                                                               &ray,
                                                               &ray_count,
-                                                              &trace_termination)) {
+                                                              &trace_termination);
+        if(RuntimeDisneyV2Atmosphere3D_Active(scene)) {
+            const Ray3D atmosphere_ray=RuntimeRay3D_MakeOffset(source_hit.position,HitInfo3D_OffsetNormal(&source_hit),direction,kRuntimeDisneyV2_3DPrimaryTransmissionEpsilon);
+            Vec3 path_weight=vec3(throughput_r,throughput_g,throughput_b),incident=vec3(0,0,0);
+            RuntimeDisneyV2Atmosphere3D_Advance(scene,&atmosphere_ray,
+                atmosphere_segment_hit ? vec3_length(vec3_sub(hit.position,atmosphere_ray.origin)) : HUGE_VAL,
+                sampling,&path_weight,&incident);
+            throughput_r=path_weight.x;throughput_g=path_weight.y;throughput_b=path_weight.z;
+            if(!atmosphere_segment_hit && trace_termination==RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_NO_HIT) {
+                Vec3 background=vec3(0,0,0);
+                RuntimeEnvironment3D_EvaluateBackgroundRGB(&scene->environment,direction,&background.x,&background.y,&background.z);
+                incident=vec3_add(incident,vec3(background.x*path_weight.x,background.y*path_weight.y,background.z*path_weight.z));
+            }
+            accum_r+=incident.x*blend_weight;accum_g+=incident.y*blend_weight;accum_b+=incident.z*blend_weight;
+            contributed |= runtime_disney_v2_transmission_3d_peak(accum_r,accum_g,accum_b)>1e-9;
+        }
+        if(!atmosphere_segment_hit) {
             io_result->primaryTransmissionRayCount += ray_count;
             sample_ray_total += ray_count;
             termination = trace_termination;
@@ -401,14 +432,9 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
                 RUNTIME_RENDER_TRACE_COST_TRANSMISSION_SURFACE_OPAQUE_RECEIVER,
                 &hit);
             if (allow_recursive_receiver_shade &&
-                RuntimeDisneyV2_3D_ShadeHitWithTraceContext(scene,
-                                                            &hit,
-                                                            sampling,
-                                                            io_result->tracePixelX,
-                                                            io_result->tracePixelY,
-                                                            io_result->tracePixelWidth,
-                                                            io_result->tracePixelHeight,
-                                                            &receiver_result) &&
+                runtime_disney_v2_shade_receiver_3d(scene, &hit, &ray, &payload,
+                                                  sampling, io_result,
+                                                  &receiver_result) &&
                 receiver_result.visible &&
                 runtime_disney_v2_transmission_3d_peak(receiver_result.radianceR,
                                                        receiver_result.radianceG,
@@ -605,6 +631,7 @@ static bool runtime_disney_v2_3d_trace_primary_transmission_receiver(
         }
         source_hit = hit;
         footprint_interface = interface_transport;
+        sampled_footprint = false;
         footprint_straight = transparent_policy.thinWalled;
         footprint_eligible = interface_transport_resolved &&
                              interface_transport.hasRefraction &&
@@ -801,12 +828,28 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                      sample.dielectric.refractionDir) > 1.0e-5);
     bool reflected_first_subpass_no_hit_reuse = false;
 
+    /* Principled GGX keeps its numerical roughness floor. Explicit glass
+       transmission instead uses the authored optical roughness, including zero. */
+    double optical_roughness = io_result->payload.hasGlassTransportOverride
+        ? io_result->payload.bsdf.roughness : io_result->principled.roughness;
+    /* An index-matched interface has no refraction event to roughen. */
+    if(io_result->payload.hasGlassTransportOverride &&
+       fabs(sample.dielectric.etaFrom-sample.dielectric.etaTo)<=1e-12)
+        optical_roughness=0;
+    /* Only the explicit, deterministic ideal interface opts in. Preserve the
+     * existing sample order and accumulation, including its rounding. */
+    const bool reuse_ideal_trace = io_result->payload.hasGlassTransportOverride &&
+        optical_roughness <= 1e-6 && !io_result->payload.hasMicrodetailNormal &&
+        !RuntimeSurfaceSamplingNormalResponseActive(primary_hit->hitInfo.sceneObjectIndex) &&
+        !RuntimeDisneyV2Atmosphere3D_Active(scene) &&
+        animSettings.causticSampleBudget3D <= 0 && animSettings.causticMaxPathDepth3D <= 0;
+    RuntimeDisneyV2TransmissionTraceReuse trace_reuse = {0};
     for (int sample_index = 0; sample_index < sample_count; ++sample_index) {
         RuntimeRenderTraceCostTransmissionTermination3D sample_termination =
             RUNTIME_RENDER_TRACE_COST_TRANSMISSION_TERMINATION_UNKNOWN;
         Vec3 sample_direction = runtime_disney_v2_3d_roughen_transmission_direction(
             sample.direction,
-            io_result->principled.roughness,
+            optical_roughness,
             sampling,
             sample_seed,
             sample_count,
@@ -840,12 +883,25 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                 0.0);
             continue;
         }
-        if (!runtime_disney_v2_3d_trace_primary_transmission_receiver(scene,
+        bool trace_contributed;
+        if (reuse_ideal_trace && trace_reuse.valid) {
+            continuation_direct = trace_reuse.direct;
+            continuation_hit = trace_reuse.hit;
+            continuation_ray = trace_reuse.ray;
+            path_throughput_r = trace_reuse.throughput_r;
+            path_throughput_g = trace_reuse.throughput_g;
+            path_throughput_b = trace_reuse.throughput_b;
+            receiver_depth = trace_reuse.depth;
+            receiver_found = trace_reuse.receiver_found;
+            sample_termination = trace_reuse.termination;
+            trace_contributed = trace_reuse.contributed;
+        } else {
+        trace_contributed = runtime_disney_v2_3d_trace_primary_transmission_receiver(scene,
                                                                       primary_hit,
                                                                       sampling,
                                                                       &sample_path,
                                                                       sample_direction,
-                                                                      sample_count <= 1 || io_result->principled.roughness <= 1e-6,
+                                                                      sample_count <= 1 || optical_roughness <= 1e-6,
                                                                       blend_weight,
                                                                       io_result,
                                                                       &continuation_direct,
@@ -862,7 +918,17 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
                                                                       ledger_screen_region,
                                                                       ledger_pixel_stability,
                                                                       &sample_termination,
-                                                                      continuation_mode)) {
+                                                                      continuation_mode);
+            if (reuse_ideal_trace) {
+                trace_reuse = (RuntimeDisneyV2TransmissionTraceReuse){
+                    .valid=true, .contributed=trace_contributed,
+                    .direct=continuation_direct, .hit=continuation_hit, .ray=continuation_ray,
+                    .throughput_r=path_throughput_r, .throughput_g=path_throughput_g,
+                    .throughput_b=path_throughput_b, .depth=receiver_depth,
+                    .receiver_found=receiver_found, .termination=sample_termination};
+            }
+        }
+        if (!trace_contributed) {
             if (runtime_disney_v2_3d_can_reuse_reflected_first_subpass_no_hit(
                     ledger_source,
                     ledger_pixel_stability,

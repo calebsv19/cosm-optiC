@@ -1,3 +1,4 @@
+#include "render/runtime_native_3d_progress_hud_paint.h"
 #include "render/runtime_native_3d_progress_hud.h"
 
 #include "engine/Render/render_font.h"
@@ -398,29 +399,6 @@ static void runtime_native_3d_progress_hud_note_subpass_progress(
     state->eta.lastTimedCompletedSubpasses = state->completedSubpasses;
 }
 
-static bool runtime_native_3d_progress_hud_measure_line(SDL_Renderer* renderer,
-                                                        TTF_Font* font,
-                                                        const char* text,
-                                                        int* out_w,
-                                                        int* out_h) {
-    if (!renderer || !font || !text) {
-        return false;
-    }
-    return ray_tracing_text_measure_utf8(renderer, font, text, out_w, out_h) != 0;
-}
-
-static void runtime_native_3d_progress_hud_draw_line(SDL_Renderer* renderer,
-                                                     TTF_Font* font,
-                                                     const char* text,
-                                                     int x,
-                                                     int y,
-                                                     SDL_Color color) {
-    SDL_Rect rect = {x, y, 0, 0};
-    if (!renderer || !font || !text) {
-        return;
-    }
-    (void)ray_tracing_text_draw_utf8(renderer, font, text, color, &rect);
-}
 
 void RuntimeNative3DProgressHUD_Reset(void) {
     memset(&g_runtime_native_3d_progress_hud, 0, sizeof(g_runtime_native_3d_progress_hud));
@@ -580,12 +558,6 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     RuntimeNative3DProgressHUDState* state = &g_runtime_native_3d_progress_hud;
     RenderContext* ctx = getRenderContext();
     TTF_Font* font = getActiveFont();
-    SDL_Rect panel = {0};
-    SDL_Rect bar_bg = {0};
-    SDL_Rect bar_fill = {0};
-    SDL_Color title_color = {236, 239, 244, 255};
-    SDL_Color detail_color = {164, 175, 192, 255};
-    SDL_Color accent_color = {113, 214, 182, 255};
     char title[64] = {0};
     char frame_line[64] = {0};
     char subpass_line[64] = {0};
@@ -595,34 +567,8 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
     char batch_estimate_value[32] = {0};
     char elapsed_line[64] = {0};
     char estimate_line[64] = {0};
-    int title_w = 0;
-    int title_h = 0;
-    int frame_w = 0;
-    int frame_h = 0;
-    int subpass_w = 0;
-    int subpass_h = 0;
-    int tile_w = 0;
-    int tile_h = 0;
-    int elapsed_w = 0;
-    int elapsed_h = 0;
-    int estimate_w = 0;
-    int estimate_h = 0;
-    int left_col_w = 0;
-    int right_col_w = 0;
-    int column_gap = 18;
-    int title_row_gap = 18;
-    int title_row_w = 0;
-    int frame_x = 0;
-    int right_col_x = 0;
-    int max_text_w = 0;
-    int panel_w = 0;
-    int panel_h = 0;
     int screen_w = 0;
     int screen_h = 0;
-    int line_gap = 4;
-    int padding = 10;
-    int bar_h = 8;
-    int bar_gap = 8;
     double progress01 = 0.0;
     double elapsed_seconds = 0.0;
     double estimated_frame_remaining_seconds = -1.0;
@@ -709,114 +655,5 @@ void RuntimeNative3DProgressHUD_Draw(SDL_Renderer* renderer) {
                    "run=%s",
                    batch_estimate_value);
 
-    if (!runtime_native_3d_progress_hud_measure_line(renderer, font, title, &title_w, &title_h) ||
-        (frame_line[0] != '\0' &&
-         !runtime_native_3d_progress_hud_measure_line(renderer,
-                                                      font,
-                                                      frame_line,
-                                                      &frame_w,
-                                                      &frame_h)) ||
-        !runtime_native_3d_progress_hud_measure_line(renderer,
-                                                     font,
-                                                     subpass_line,
-                                                     &subpass_w,
-                                                     &subpass_h) ||
-        !runtime_native_3d_progress_hud_measure_line(renderer, font, tile_line, &tile_w, &tile_h) ||
-        !runtime_native_3d_progress_hud_measure_line(renderer,
-                                                     font,
-                                                     elapsed_line,
-                                                     &elapsed_w,
-                                                     &elapsed_h) ||
-        !runtime_native_3d_progress_hud_measure_line(renderer,
-                                                     font,
-                                                     estimate_line,
-                                                     &estimate_w,
-                                                     &estimate_h)) {
-        return;
-    }
-
-    left_col_w = subpass_w > tile_w ? subpass_w : tile_w;
-    right_col_w = elapsed_w > estimate_w ? elapsed_w : estimate_w;
-    title_row_w = title_w;
-    if (frame_line[0] != '\0') {
-        title_row_w += title_row_gap + frame_w;
-    }
-    max_text_w = title_row_w;
-    if (left_col_w + column_gap + right_col_w > max_text_w) {
-        max_text_w = left_col_w + column_gap + right_col_w;
-    }
-
-    panel_w = max_text_w + (padding * 2);
-    if (panel_w < 270) panel_w = 270;
-    panel_h = padding + title_h + line_gap + bar_h + bar_gap + subpass_h + line_gap + tile_h + padding;
-    panel.x = screen_w - panel_w - 12;
-    panel.y = screen_h - panel_h - 12;
-    panel.w = panel_w;
-    panel.h = panel_h;
-
-#if !USE_VULKAN
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-#endif
-    SDL_SetRenderDrawColor(renderer, 10, 14, 18, 190);
-    SDL_RenderFillRect(renderer, &panel);
-    SDL_SetRenderDrawColor(renderer, 84, 95, 112, 220);
-    SDL_RenderDrawRect(renderer, &panel);
-
-    bar_bg.x = panel.x + padding;
-    bar_bg.y = panel.y + padding + title_h + line_gap;
-    bar_bg.w = panel_w - (padding * 2);
-    bar_bg.h = bar_h;
-    SDL_SetRenderDrawColor(renderer, 34, 40, 48, 255);
-    SDL_RenderFillRect(renderer, &bar_bg);
-
-    bar_fill = bar_bg;
-    bar_fill.w = (int)(progress01 * (double)bar_bg.w);
-    if (bar_fill.w > 0) {
-        SDL_SetRenderDrawColor(renderer, accent_color.r, accent_color.g, accent_color.b, 255);
-        SDL_RenderFillRect(renderer, &bar_fill);
-    }
-
-    runtime_native_3d_progress_hud_draw_line(renderer,
-                                             font,
-                                             title,
-                                             panel.x + padding,
-                                             panel.y + padding,
-                                             title_color);
-    if (frame_line[0] != '\0') {
-        frame_x = panel.x + panel_w - padding - frame_w;
-        if (frame_x < panel.x + padding + title_w + title_row_gap) {
-            frame_x = panel.x + padding + title_w + title_row_gap;
-        }
-        runtime_native_3d_progress_hud_draw_line(renderer,
-                                                 font,
-                                                 frame_line,
-                                                 frame_x,
-                                                 panel.y + padding,
-                                                 detail_color);
-    }
-    runtime_native_3d_progress_hud_draw_line(renderer,
-                                             font,
-                                             subpass_line,
-                                             panel.x + padding,
-                                             bar_bg.y + bar_h + bar_gap,
-                                             detail_color);
-    right_col_x = panel.x + panel_w - padding - right_col_w;
-    runtime_native_3d_progress_hud_draw_line(renderer,
-                                             font,
-                                             elapsed_line,
-                                             right_col_x,
-                                             bar_bg.y + bar_h + bar_gap,
-                                             detail_color);
-    runtime_native_3d_progress_hud_draw_line(renderer,
-                                             font,
-                                             tile_line,
-                                             panel.x + padding,
-                                             bar_bg.y + bar_h + bar_gap + subpass_h + line_gap,
-                                             detail_color);
-    runtime_native_3d_progress_hud_draw_line(renderer,
-                                             font,
-                                             estimate_line,
-                                             right_col_x,
-                                             bar_bg.y + bar_h + bar_gap + subpass_h + line_gap,
-                                             detail_color);
+    RuntimeNative3DProgressHUDPaint(renderer,font,screen_w,screen_h,title,frame_line,subpass_line,tile_line,elapsed_line,estimate_line,progress01);
 }

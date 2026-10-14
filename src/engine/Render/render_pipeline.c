@@ -1,6 +1,7 @@
 #include "engine/Render/render_pipeline.h"
 
 #include <stdio.h>
+#include "kit_ui_window_sdl.h"
 
 #if USE_VULKAN
 #include <SDL2/SDL_vulkan.h>
@@ -90,9 +91,14 @@ void render_set_clear_color(SDL_Renderer* renderer,
 #endif
 }
 
-bool render_begin_frame(void) {
+static bool render_begin_frame_internal(bool export_frame) {
     RenderContext* ctx = getRenderContext();
     if (!ctx || !ctx->renderer || !ctx->window) return false;
+    KitUiWindowState observed = {0};
+    uint32_t changes = 0;
+    if (kit_ui_window_refresh_sdl(&observed, ctx->window, &changes).code != CORE_OK) return false;
+    if (observed.drawable_width <= 0 || observed.drawable_height <= 0) return false;
+    if (!export_frame && !observed.presentable) return false;
 
     int winW = 0;
     int winH = 0;
@@ -193,6 +199,14 @@ bool render_begin_frame(void) {
 #endif
 
     return true;
+}
+
+bool render_begin_frame(void) {
+    return render_begin_frame_internal(false);
+}
+
+bool render_begin_export_frame(void) {
+    return render_begin_frame_internal(true);
 }
 
 bool render_end_frame(void) {

@@ -170,15 +170,16 @@ bool SceneEditorMaterialFaceMetricsResolve(int primitive_index,
                                            int scene_object_index,
                                            int face_group_index,
                                            SceneEditorMaterialFaceMetrics* out_metrics) {
-    RuntimeSceneBridge3DPrimitiveSeedState seed_state = {0};
+    RuntimeSceneBridgePrimitiveSeed seed_value;
+    int seed_count = runtime_scene_bridge_last_3d_primitive_seed_count();
 
     if (!out_metrics) return false;
     memset(out_metrics, 0, sizeof(*out_metrics));
-    runtime_scene_bridge_get_last_3d_primitive_seed_state(&seed_state);
-    if (!seed_state.valid || face_group_index < 0) return false;
+    if (seed_count <= 0 || face_group_index < 0) return false;
 
-    if (primitive_index >= 0 && primitive_index < seed_state.primitive_count) {
-        const RuntimeSceneBridgePrimitiveSeed* seed = &seed_state.primitives[primitive_index];
+    if (primitive_index >= 0 && primitive_index < seed_count) {
+        if (!runtime_scene_bridge_get_last_3d_primitive_seed(primitive_index, &seed_value)) return false;
+        const RuntimeSceneBridgePrimitiveSeed* seed = &seed_value;
         if ((scene_object_index < 0 || seed->scene_object_index == scene_object_index) &&
             scene_editor_material_face_metrics_resolve_seed_dims(seed,
                                                                  face_group_index,
@@ -187,8 +188,9 @@ bool SceneEditorMaterialFaceMetricsResolve(int primitive_index,
         }
     }
 
-    for (int i = 0; i < seed_state.primitive_count; ++i) {
-        const RuntimeSceneBridgePrimitiveSeed* seed = &seed_state.primitives[i];
+    for (int i = 0; i < seed_count; ++i) {
+        if (!runtime_scene_bridge_get_last_3d_primitive_seed(i, &seed_value)) return false;
+        const RuntimeSceneBridgePrimitiveSeed* seed = &seed_value;
         if (scene_object_index >= 0 && seed->scene_object_index != scene_object_index) {
             continue;
         }

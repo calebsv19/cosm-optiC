@@ -14,6 +14,7 @@
 #include "ui/menu_workspace.h"
 #include "ui/menu_numeric_model.h"
 #include "ui/menu_scroll.h"
+#include "ui/menu_shared_controls.h"
 
 #define SDL_MENU_MAX_MANIFEST_OPTIONS 128
 #define SDL_MENU_MANIFEST_ITEM_HEIGHT 26
@@ -63,7 +64,8 @@ typedef enum {
     MENU_FOLDER_PICKER_VIDEO_ROOT
 } MenuFolderPickerTarget;
 
-typedef struct {
+typedef struct MenuRuntimeState {
+    MenuSharedControls sharedControls;
     bool draggingSlider;
     int *selectedSlider;
     int selectedSliderMin;

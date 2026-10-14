@@ -1,3 +1,4 @@
+#include "editor/scene_editor_optical_response.h"
 #include "render/runtime_surface_graph.h"
 #include "editor/scene_editor_document.h"
 #include "render/runtime_surface_mapping.h"
@@ -593,6 +594,17 @@ bool MaterialEditorApplyLayerInfluenceStepToFocused(MaterialEditorLayerInfluence
 }
 
 bool MaterialEditorApplyResponseValueToFocused(MaterialEditorResponseField field, double value) {
+    const char *optical_key=field==MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION?"transmission":
+        field==MATERIAL_EDITOR_RESPONSE_FIELD_IOR?"ior":field==MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION?"absorption_distance":
+        field==MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED?"thin_walled":NULL;
+    if(optical_key && SceneEditorDocumentIsOpen() && animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE && !strcmp(animSettings.runtimeScenePath,SceneEditorDocumentPath()) && material_editor_focused_material_is_glass(material_editor_focused_object())) {
+        json_object *settings=json_object_new_object();char message[512];
+        json_object_object_add(settings,optical_key,field==MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED?
+            json_object_new_boolean(value>=.5):json_object_new_double(field==MATERIAL_EDITOR_RESPONSE_FIELD_IOR?material_editor_clamp_ior(value):
+                field==MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION?material_editor_clamp_absorption_distance(value):material_editor_clamp01(value)));
+        bool ok=SceneEditorOpticalResponseSet(MaterialEditorResolveFocusedObjectIndex(),settings,SceneEditorDocumentRevision(),message,sizeof(message));
+        json_object_put(settings);MaterialEditorFacePreviewInvalidate();return ok;
+    }
     if (RuntimeSurfaceMappingActive(MaterialEditorResolveFocusedObjectIndex()) ||
         RuntimeSurfaceGraphActive(MaterialEditorResolveFocusedObjectIndex())) return false;
     if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
@@ -706,8 +718,8 @@ bool MaterialEditorApplyResponseTintToFocused(int packed_color) {
 }
 
 bool MaterialEditorApplyResponseStepToFocused(MaterialEditorResponseField field, double delta) {
-    if (RuntimeSurfaceMappingActive(MaterialEditorResolveFocusedObjectIndex()) ||
-        RuntimeSurfaceGraphActive(MaterialEditorResolveFocusedObjectIndex())) return false;
+    if ((RuntimeSurfaceMappingActive(MaterialEditorResolveFocusedObjectIndex()) ||
+        RuntimeSurfaceGraphActive(MaterialEditorResolveFocusedObjectIndex())) && field!=MATERIAL_EDITOR_RESPONSE_FIELD_TRANSMISSION && field!=MATERIAL_EDITOR_RESPONSE_FIELD_IOR && field!=MATERIAL_EDITOR_RESPONSE_FIELD_ABSORPTION && field!=MATERIAL_EDITOR_RESPONSE_FIELD_THIN_WALLED) return false;
     if (!SceneEditorDocumentRequireEditable(MaterialEditorResolveFocusedObjectIndex())) return false;
     SceneObject* obj = material_editor_focused_object();
     int focused_object_index = MaterialEditorResolveFocusedObjectIndex();

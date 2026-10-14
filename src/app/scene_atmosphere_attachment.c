@@ -33,11 +33,15 @@ void SceneAtmosphereAttachmentDefaults(SceneAtmosphereAttachment* v) {
     v->density_scale=v->density_gamma=v->scatter_gain=v->step_scale=1;
     v->absorption_gain=0.1;
     v->opacity=1;
+    SceneAtmosphereOpticsDefaults(&v->optics);
     for(int i=0;i<3;++i) v->tint[i]=v->scale[i]=1;
 }
 bool SceneAtmosphereAttachmentValidate(const SceneAtmosphereAttachment* v,char* d,size_t n) {
     if (!v) return fail(d,n,"attachment is missing");
     if (!v->present) return true;
+    if(!SceneAtmosphereOpticsValidate(&v->optics,d,n)) return false;
+    if(v->optics.present && v->optics.physical && !v->affects_lighting)
+        return fail(d,n,"Physical atmosphere requires Affects lighting On.");
     if (!memchr(v->id,0,sizeof(v->id)) || !v->id[0] || strlen(v->id)>=TIMELINE_ID_CAPACITY ||
         !memchr(v->source_path,0,sizeof(v->source_path)) || !relative_path(v->source_path) ||
         !memchr(v->source_kind,0,sizeof(v->source_kind))) return fail(d,n,"attachment needs an ID and project-relative source path");
@@ -123,6 +127,9 @@ bool SceneAtmosphereAttachmentParse(json_object* author,SceneAtmosphereAttachmen
         !number(appearance,"step_scale",&v.step_scale) || !number(appearance,"opacity",&v.opacity) || !vector(appearance,"tint",v.tint) ||
         !vector(placement,"translation",v.translation) || !vector(placement,"rotation_degrees",v.rotation_degrees) || !vector(placement,"scale",v.scale))
         return fail(d,n,"invalid atmosphere attachment field type or value");
+    json_object* optics=NULL;
+    if(json_object_object_get_ex(o,"optics",&optics) && !optics) return fail(d,n,"Atmosphere optics cannot be null.");
+    if(!SceneAtmosphereOpticsParse(optics,&v.optics,d,n)) return false;
     v.source_rate=(TimelineRate){(uint32_t)rn,(uint32_t)rd};v.missing_is_error=!strcmp(missing,"error");
     if(!SceneAtmosphereAttachmentValidate(&v,d,n)) return false;
     *out=v;return true;
@@ -159,6 +166,7 @@ json_object* SceneAtmosphereAttachmentToJson(const SceneAtmosphereAttachment* v)
     json_object_object_add(t,"translation",array(v->translation));
     json_object_object_add(t,"rotation_degrees",array(v->rotation_degrees));
     json_object_object_add(t,"scale",array(v->scale));json_object_object_add(o,"placement",t);
+    if(v->optics.present) json_object_object_add(o,"optics",SceneAtmosphereOpticsToJson(&v->optics));
     return o;
 }
 bool SceneAtmosphereAttachmentRequestedFrame(const SceneAtmosphereAttachment* v,const TimelineEvaluationContext* f,int64_t* out,char* d,size_t n) {

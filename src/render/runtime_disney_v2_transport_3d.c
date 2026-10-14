@@ -1,3 +1,5 @@
+#include "render/runtime_disney_v2_atmosphere_3d.h"
+#include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_transport_weight_probe_3d.h"
 #include "render/runtime_surface_sampling.h"
 #include "render/runtime_mirror_composition_3d.h"
@@ -375,11 +377,23 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
             RUNTIME_RENDER_TRACE_COST_RAY_DISNEY_RECURSIVE,
             depth);
-        if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
+        bool segment_hit=RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                    &state.ray,
                                                    kRuntimeDisneyV2Transport3DEpsilon,
                                                    RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE,
-                                                   &trace)) {
+                                                   &trace);
+        Vec3 segment_throughput=vec3(state.throughputR,state.throughputG,state.throughputB);
+        Vec3 segment_radiance=vec3(io_result->recursiveBsdfRadianceR,io_result->recursiveBsdfRadianceG,io_result->recursiveBsdfRadianceB);
+        contributed |= RuntimeDisneyV2Atmosphere3D_Advance(scene,&state.ray,
+            trace.emitterWins ? trace.emitterHitInfo.t : trace.geometryHit ? trace.geometryHitInfo.t : HUGE_VAL,
+            sampling,&segment_throughput,&segment_radiance);
+        state.throughputR=throughput_r=segment_throughput.x;
+        state.throughputG=throughput_g=segment_throughput.y;
+        state.throughputB=throughput_b=segment_throughput.z;
+        io_result->recursiveBsdfRadianceR=segment_radiance.x;
+        io_result->recursiveBsdfRadianceG=segment_radiance.y;
+        io_result->recursiveBsdfRadianceB=segment_radiance.z;
+        if(!segment_hit) {
             contributed |= runtime_disney_v2_transport_3d_accumulate_environment_miss(
                 scene,
                 &state,
@@ -806,6 +820,10 @@ static bool runtime_disney_v2_transport_3d_apply_reflection_loop(
         return false;
     }
 
+    if(RuntimeDisneyV2Atmosphere3D_Active(scene)) {
+        const RuntimeVisibility3DTransmittance t=RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,&selected->ray,0,selected->hitInfo.t);
+        parent_r*=t.r;parent_g*=t.g;parent_b*=t.b;
+    }
     loop_result.pathPolicy = io_result->pathPolicy;
     loop_result.pathPolicyResolved = io_result->pathPolicyResolved;
     loop_result.pathState.valid = true;

@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
 /* Image resources are prepared by document commands, never by the drawing path. */
 #include "editor/material_editor.h"
 #include "platform/ray_tracing_folder_picker.h"
@@ -30,7 +32,7 @@ static void resource_invalidate(void) {
 }
 static void resource_cancel_edit(void) {
     if (resource_edit >= 0)
-        SDL_StopTextInput();
+        do{scene_editor_shared_field_end(resource_draft);SDL_StopTextInput();}while(0);
     resource_edit = -1;
     resource_draft_selected = false;
 }
@@ -88,7 +90,7 @@ static void resource_row(SDL_Renderer *r, SDL_Rect b, int line, SDL_Rect *contro
     *control = (SDL_Rect){0};
     if (line >= resource_scroll && y + 24 <= b.y + b.h) {
         *control = (SDL_Rect){b.x, y, b.w, 24};
-        draw(r, *control, text, active);
+        SceneEditorSharedUiPanelButton(r,402,128+(unsigned)line,*control,text,active,true);
     }
 }
 static int resource_render(SDL_Renderer *r, SDL_Rect b, int index) {
@@ -285,7 +287,8 @@ static bool resource_event(const SDL_Event *event, int index) {
             snprintf(status, sizeof(status), "Document changed; edit cancelled");
             return true;
         }
-        if (event->type == SDL_TEXTINPUT) {
+        if((resource_edit>=0) && scene_editor_shared_field_event(resource_draft,sizeof(resource_draft),event))return true;
+    if (event->type == SDL_TEXTINPUT) {
             if (resource_draft_selected) {
                 resource_draft[0] = 0;
                 resource_draft_selected = false;
@@ -401,7 +404,7 @@ static bool resource_event(const SDL_Event *event, int index) {
             resource_edit_revision = SceneEditorDocumentRevision();
             resource_draft_selected = true;
             snprintf(resource_draft, sizeof(resource_draft), "%.9g", resource_values[i]);
-            SDL_StartTextInput();
+            do{scene_editor_shared_field_begin(resource_draft,sizeof(resource_draft),1);SDL_StartTextInput();}while(0);
             return true;
         }
     if (inside(resource_disable, x, y)) {

@@ -1275,6 +1275,16 @@ static bool runtime_native_3d_prepare_frame_internal(
     if(!SceneAtmosphereRuntimeSnapshotMatches(animSettings.runtimeScenePath,evaluated_scene,cache_diagnostics,sizeof(cache_diagnostics))) {
         runtime_native_3d_prepare_frame_set_diag(cache_diagnostics);RuntimeScene3D_Free(&frame.scene);return false;
     }
+    RuntimeVolume3D_CaptureOptics(&frame.scene.volume);
+    frame.physicalAtmosphere=frame.scene.volume.enabled && frame.scene.volume.affectsLighting &&
+        frame.scene.volume.optics.material.physical_smoke;
+    if(frame.physicalAtmosphere &&
+       (RuntimeCausticBootstrap3D_RequestState().mode!=RUNTIME_CAUSTIC_MODE_OFF ||
+        RuntimeCausticTransport3D_RequestState().mode!=RUNTIME_CAUSTIC_MODE_OFF ||
+        runtime_native_3d_prepare_photon_volume_requested())) {
+        runtime_native_3d_prepare_frame_set_diag("Saved physical atmosphere requires caustics off.");
+        RuntimeNative3DPreparedFrame_Free(&frame);return false;
+    }
     if(frame.scene.volume.enabled && !RuntimeVolume3D_PlacementIsIdentity(&frame.scene.volume) &&
        runtime_native_3d_prepare_photon_volume_requested()) {
         runtime_native_3d_prepare_frame_set_diag("Moved/scaled atmosphere supports regular volume rendering and bootstrap/lens-transport caches; photon-volume caches require identity placement. Disable photon-volume caustics or restore volume placement.");

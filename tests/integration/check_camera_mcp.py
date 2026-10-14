@@ -1,0 +1,47 @@
+"""Real MCP static camera editing over the native UI document owner."""
+import json,math,subprocess,sys
+from pathlib import Path
+ROOT=Path(__file__).resolve().parents[2];scene=Path(sys.argv[1]).resolve()
+sys.path.insert(0,str(ROOT/'tools'));import scene_editor_mcp_catalog as catalog_module
+with subprocess.Popen([sys.executable,'-B',str(ROOT/'tools/scene_editor_mcp.py'),'--scene',str(scene)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True) as bridge:
+    sequence=0
+    def rpc(method,params=None):
+        global sequence
+        sequence+=1;bridge.stdin.write(json.dumps(dict(jsonrpc='2.0',id=sequence,method=method,params=params or {}))+'\n');bridge.stdin.flush()
+        while True:
+            result=json.loads(bridge.stdout.readline())
+            if result.get('id')==sequence:break
+        assert 'error' not in result,result;return result['result']
+    def call(tool,args=None,ok=True):
+        result=rpc('tools/call',dict(name=tool,arguments=args or {}));assert result['isError'] is not ok,result
+        return json.loads(result['content'][0]['text']) if ok else result
+    def state():return call('scene_read')
+    def camera():return call('camera_read')['camera']
+    def mutate(tool,**args):return call(tool,dict(expected_revision=state()['revision'],**args))
+    def near(a,b):assert math.isclose(a,b,rel_tol=1e-9,abs_tol=1e-9),(a,b)
+    rpc('initialize',dict(protocolVersion='2025-06-18',capabilities={},clientInfo=dict(name='static-camera-proof',version='1')))
+    listed=rpc('tools/list')['tools'];assert len(listed)==len(catalog_module.tool_list())+2
+    assert 'expected_revision' not in next(t for t in listed if t['name']=='camera_read')['inputSchema']['required']
+    initial=camera();assert initial==json.loads((scene.parent/'camera-ui-expected.json').read_text())
+    attached=state()['attachment'];assert attached is not None
+    disk=scene.read_bytes();revision=state()['revision'];assert camera()==initial and scene.read_bytes()==disk and state()['revision']==revision
+    catalog=call('editor_catalog');assert len(catalog['tools'])==len(catalog_module.tool_list()) and catalog['scene_path']==str(scene)
+    assert call('editor_command',dict(catalog_id=catalog['catalog_id'],tool='camera_read',arguments={}))['camera']==initial
+    pose=dict(position_m=[1.25,-2.5,3.75],yaw_degrees=180.,pitch_degrees=-45.)
+    changed=call('editor_command',dict(catalog_id=catalog['catalog_id'],tool='camera_set_pose',arguments=dict(expected_revision=revision,**pose)))
+    edited=camera();assert edited['static_editable']
+    for a,b in zip(edited['position_m'],pose['position_m']):near(a,b)
+    near(edited['yaw_degrees'],180.);near(edited['pitch_degrees'],-45.)
+    retained=edited['retained'];scale=edited['world_scale'];near(retained['camera_path']['points'][0]['x'],1.25/scale);near(retained['camera_path']['points'][0]['y'],-2.5/scale);near(retained['camera_path_depth']['points'][0]['z'],3.75/scale)
+    near(retained['camera_path_depth']['points'][0]['lookPitch'],math.radians(-45.))
+    call('camera_set_pose',dict(expected_revision=revision,**pose),False)
+    for bad in (dict(pose,position_m=[True,0,0]),dict(pose,position_m=[0,0]),dict(pose,position_m=[float('nan'),0,0]),dict(pose,yaw_degrees=True),dict(pose,pitch_degrees=90.1),dict(pose,pitch_degrees=-90.1),dict(pose,extra=1)):
+        call('camera_set_pose',dict(expected_revision=state()['revision'],**bad),False)
+        assert camera()==edited and state()['revision']==changed['revision']
+    mutate('scene_undo');assert camera()==initial;mutate('scene_redo');assert camera()==edited;mutate('scene_undo');assert camera()==initial
+    mutate('camera_set_pose',**pose);assert not mutate('scene_save')['dirty'];assert state()['attachment']==attached
+    expected=camera();saved=json.loads(scene.read_text())['extensions']['ray_tracing']['authoring'];assert saved['camera_path']==expected['retained']['camera_path'] and saved['camera_path_depth']==expected['retained']['camera_path_depth']
+    (scene.parent/'camera-mcp-expected.json').write_text(json.dumps(expected,indent=2)+'\n')
+    (scene.parent/'camera-mcp-receipt.json').write_text(json.dumps(dict(ui_to_mcp=True,compatibility_read_and_pose=True,unit_conversion=True,typed_stale_refusals=True,shared_history=True,attachment_preserved=True,save_disk_parity=True),indent=2)+'\n')
+    bridge.stdin.close();bridge.wait(timeout=5);assert bridge.returncode==0
+print('Camera MCP PASS: shared static pose, UI parity, metre/degree semantics, refusals, history and save')

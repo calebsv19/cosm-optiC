@@ -1,3 +1,4 @@
+#include "import/runtime_scene_lighting_writeback.h"
 #include <fisics/extensions.h>
 
 #include "import/runtime_scene_bridge.h"
@@ -988,6 +989,7 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
             }
         }
     }
+    RuntimeSceneLightingPreserveOverlay(runtime_root,overlay_root);
     /* Mapped materials are edited through retained document commands. Exported
        runtime stacks are derived caches and must never replace their graphs,
        region bindings or producer fields when the workspace saves its overlay. */
@@ -1077,6 +1079,18 @@ void runtime_scene_bridge_get_last_3d_primitive_seed_state(
     RuntimeSceneBridge3DPrimitiveSeedState *out_state) {
     if (!out_state) return;
     *out_state = g_last_3d_primitive_seeds;
+}
+
+int runtime_scene_bridge_last_3d_primitive_seed_count(void) {
+    return g_last_3d_primitive_seeds.valid ? g_last_3d_primitive_seeds.primitive_count : 0;
+}
+
+bool runtime_scene_bridge_get_last_3d_primitive_seed(
+    int index, RuntimeSceneBridgePrimitiveSeed *out_seed) {
+    if (!out_seed || index < 0 || index >= runtime_scene_bridge_last_3d_primitive_seed_count())
+        return false;
+    *out_seed = g_last_3d_primitive_seeds.primitives[index];
+    return true;
 }
 
 void runtime_scene_bridge_get_last_3d_light_seed_state(

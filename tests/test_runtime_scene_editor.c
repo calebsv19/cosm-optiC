@@ -1,3 +1,4 @@
+#include "test_runtime_primitive_seed_queries.h"
 #include "editor/scene_editor_camera_inspector.h"
 #include "editor/scene_editor_camera_authoring.h"
 #include "editor/camera_editor.h"
@@ -928,7 +929,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("timeline_key_mouse_up", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         assert_true("timeline_drag_one_command", SceneEditorDocumentRevision()==key_revision+2 &&
             SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK && loaded.tracks[0].keys[1].frame==117);
-        timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_DELETE;timeline_event.key.keysym.mod=KMOD_NONE;
+        timeline_event.type=SDL_KEYDOWN; timeline_event.key.repeat=0;timeline_event.key.keysym.sym=SDLK_DELETE;timeline_event.key.keysym.mod=KMOD_NONE;
         assert_true("timeline_delete_event", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
             SceneEditorDocumentGetTimeline(&loaded)==TIMELINE_STATUS_OK && loaded.tracks[0].key_count==2);
         assert_true("timeline_delete_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
@@ -948,7 +949,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("timeline_frame_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         timeline_event.type=SDL_TEXTINPUT;snprintf(timeline_event.text.text,sizeof(timeline_event.text.text),"118");
         assert_true("timeline_frame_entry_text", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
-        timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
+        timeline_event.type=SDL_KEYDOWN; timeline_event.key.repeat=0;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
         assert_true("timeline_frame_entry_submit", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
             SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.frame.sample.absolute_frame==118);
         SceneEditorTimelineControl("add_key",&control_rect);
@@ -959,7 +960,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("timeline_value_entry_click", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
         timeline_event.type=SDL_TEXTINPUT;snprintf(timeline_event.text.text,sizeof(timeline_event.text.text),"77.125");
         assert_true("timeline_value_entry_text", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout));
-        timeline_event.type=SDL_KEYDOWN;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
+        timeline_event.type=SDL_KEYDOWN; timeline_event.key.repeat=0;timeline_event.key.keysym.sym=SDLK_RETURN;timeline_event.key.keysym.mod=KMOD_NONE;
         assert_true("timeline_value_entry_submit", SceneEditorTimelineHandleEvent(&timeline_event,&timeline_layout) &&
             SceneEditorTimelineCopyEvaluated(&ui_frame) && ui_frame.camera.fov_y_degrees==77.125);
         assert_true("scene_timeline_workspace_save", SceneEditorRuntimeScenePersistAuthoring(diagnostics,sizeof(diagnostics)));
@@ -1013,7 +1014,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
         assert_true("camera_inspector_depth_click", SceneEditorCameraInspectorEvent(&inspector_event,&inspector_layout));
         inspector_event.type=SDL_TEXTINPUT;snprintf(inspector_event.text.text,sizeof(inspector_event.text.text),"14.5");
         assert_true("camera_inspector_depth_text", SceneEditorCameraInspectorEvent(&inspector_event,&inspector_layout));
-        inspector_event.type=SDL_KEYDOWN;inspector_event.key.keysym.sym=SDLK_RETURN;
+        inspector_event.type=SDL_KEYDOWN; inspector_event.key.repeat=0;inspector_event.key.keysym.sym=SDLK_RETURN;
         assert_true("camera_inspector_depth_commit", SceneEditorCameraInspectorEvent(&inspector_event,&inspector_layout) &&
             fabs(sceneSettings.cameraPath3D.point_z[0]-14.5)<1e-9);
         assert_true("camera_inspector_depth_undo", SceneEditorDocumentUndo(diagnostics,sizeof(diagnostics)) &&
@@ -5990,6 +5991,7 @@ static int test_material_editor_face_metrics_ground_uv_scales_with_dimensions(vo
     assert_true("material_face_metrics_runtime_apply_ok",
                 runtime_scene_bridge_apply_json(runtime_json, &summary));
 
+    test_runtime_primitive_seed_queries();
     assert_true("material_face_metrics_plane_small_resolve",
                 SceneEditorMaterialFaceMetricsResolve(0, 0, 0, &metrics));
     assert_close("material_face_metrics_plane_small_width", metrics.width, 2.0, 1e-12);

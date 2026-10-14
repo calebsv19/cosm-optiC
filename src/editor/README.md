@@ -389,3 +389,30 @@ picking and preview/cancel/commit gestures over existing object transform handle
 `scene_editor_atmosphere_inspector.c` owns numeric centre/rotation/scale/size fields.
 Commands remain in the retained attachment adapter and are shared with live MCP.
 Native preview is manual; normal Environment editing uses the geometric viewport.
+
+Scene lifecycle commands live in `scene_editor_scene_commands.c`, shared by the
+File menu path dialog and native MCP router. The document swap preserves prior
+state until runtime application succeeds; Save As retains history. The control
+server keeps the native socket and bounded scene aliases for older bridge
+connections. See `docs/scene_lifecycle_mcp.md` for the dependency boundary.
+
+Cross-directory Save As uses `scene_editor_save_as_assets.c` to adapt the existing
+Python reference/atmosphere/storage helpers. The private document snapshot includes
+working/Undo/Redo dependencies. The copy transaction preserves path layouts, pins
+source/destination hashes, refuses collisions/unsafe references and rolls back
+only newly published resources whose ownership remains proven.
+
+`scene_editor_agent_paths.c` adapts spatial path commands for MCP. Shared point
+insertion lives in `scene_editor_motion_path_points.c`; retained semantic overlays
+in `scene_editor_motion_path_preserve.c` preserve producer fields and omitted
+defaults. Runtime material exports keep a document-load baseline so unchanged
+legacy rows and rowless omissions survive Save; genuine runtime edits still export.
+
+`scene_editor_agent_motion.c` adapts retained motion-plan preview/apply/restore
+and follower-orientation reads/patches to MCP. UI and MCP orientation writes use
+`scene_editor_follower_orientation.c`; plan writes reuse the existing native owner.
+Dirty native plan drafts block incoming agent mutations until Apply or Reload.
+
+- `scene_editor_agent_mesh.c` adapts stable-ID MCP inspection and asynchronous STL import to the existing UI compile/candidate owner; `scene_editor_managed_import.c` retains the latest scene-scoped completion receipt. No new mesh compiler or geometry semantics.
+
+- `scene_editor_optical_response.c` owns retained dielectric response patches and immutable readback; `scene_editor_optical_response_panel.c` shares these commands in graph/mapped Appearance controls. Existing legacy glass transport uses the owner for a matching runtime-scene document and preserves runtime-only workflows.

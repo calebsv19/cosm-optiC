@@ -25,6 +25,9 @@ RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
     const RuntimeCameraProjector3D* projector,
     double pixel_x,
     double pixel_y);
+RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary_disney_v2(
+    const RuntimeScene3D* scene,const RuntimeCameraProjector3D* projector,
+    double pixel_x,double pixel_y);
 void runtime_native_3d_render_record_disney_v2_emissive_area_stats(
     RuntimeNative3DRenderStats* stats,
     const RuntimeDisneyV2_3DResult* result);

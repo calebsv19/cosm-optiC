@@ -1,3 +1,4 @@
+#include "kit_ui_text_edit.h"
 #include "ui/menu_numeric_model.h"
 
 #include <ctype.h>
@@ -53,14 +54,15 @@ void menu_numeric_begin(MenuNumericEdit *edit, int *target, MenuNumericSpec spec
     edit->cursor = strlen(edit->text);
 }
 
-/* Cursor/anchor selection follows BehaviorSim's existing text-edit model.
- * This adapter stays menu-local until a shared text-field contract is adopted. */
-void menu_numeric_move(MenuNumericEdit *edit, int position, bool extend) {
-    const int length = (int)strlen(edit->text);
-    if (position < 0) position = 0;
-    if (position > length) position = length;
-    edit->cursor = (size_t)position;
-    if (!extend) edit->anchor = edit->cursor;
+/* Shared scalar-boundary editing; numeric syntax/ranges remain app policy. */
+static KitUiTextEdit shared_edit(MenuNumericEdit *edit) {
+    KitUiTextEdit text={0};(void)kit_ui_text_bind(&text,edit->text,sizeof(edit->text),KIT_UI_TEXT_SINGLE_LINE);
+    (void)kit_ui_text_position(&text,edit->cursor,edit->anchor);return text;
+}
+void menu_numeric_move(MenuNumericEdit *edit,int position,bool extend) {
+    KitUiTextEdit text=shared_edit(edit);if(position<0)position=0;
+    (void)kit_ui_text_position(&text,(size_t)position,extend?text.anchor:(size_t)position);
+    edit->cursor=text.cursor;edit->anchor=text.anchor;
 }
 
 bool menu_numeric_insert(MenuNumericEdit *edit, const char *text) {
@@ -73,9 +75,11 @@ bool menu_numeric_insert(MenuNumericEdit *edit, const char *text) {
     for (size_t i = 0; i < incoming; ++i) {
         if (!strchr("0123456789.+-eE ", text[i])) return false;
     }
-    memmove(edit->text + start + incoming, edit->text + end, length - end + 1);
-    memcpy(edit->text + start, text, incoming);
-    edit->cursor = edit->anchor = start + incoming;
+    KitUiTextEdit shared=shared_edit(edit);
+    CoreResult result=incoming?kit_ui_text_insert(&shared,text):
+        (start!=end?kit_ui_text_command(&shared,KIT_UI_TEXT_DELETE,0):core_result_ok());
+    if(result.code!=CORE_OK)return false;
+    edit->cursor=shared.cursor;edit->anchor=shared.anchor;
     edit->invalid = false;
     return true;
 }

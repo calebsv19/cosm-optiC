@@ -536,28 +536,14 @@ bool RayTracingDeepRenderDesktopHost_SubmitFrame(SDL_Window* window,
         }
     }
 
-    if (timer_hud) {
-        ts_session_frame_start(timer_hud);
-        ts_session_start_timer(timer_hud, "Render Scene Frame");
-    }
-    render_set_clear_color(renderer, 0, 0, 0, 255);
-    if (!render_begin_frame()) {
-        if (render_device_lost()) *running = false;
-        if (timer_hud) {
-            ts_session_stop_timer(timer_hud, "Render Scene Frame");
-            ts_session_frame_end(timer_hud);
-        }
-        return true;
-    }
-
     if (state->session.state == RAY_TRACING_DEEP_RENDER_SESSION_RENDERING ||
         state->session.state == RAY_TRACING_DEEP_RENDER_SESSION_CANCELING) {
         if (!RayTracingDeepRenderListener_Poll(&state->listener,
                                                &state->session,
                                                state->renderUnit.progress,
                                                state->job,
-                                               deep_render_desktop_present,
-                                               &present,
+                                               NULL,
+                                               NULL,
                                                &poll)) {
             deep_render_desktop_mark_failed(
                 state,
@@ -583,6 +569,24 @@ bool RayTracingDeepRenderDesktopHost_SubmitFrame(SDL_Window* window,
                 RuntimeNative3DProgressHUD_UpdateTileProgress(&hud_progress);
             }
         }
+    }
+    if (timer_hud) {
+        ts_session_frame_start(timer_hud);
+        ts_session_start_timer(timer_hud, "Render Scene Frame");
+    }
+    render_set_clear_color(renderer, 0, 0, 0, 255);
+    if (!render_begin_frame()) {
+        if (render_device_lost()) *running = false;
+        if (timer_hud) {
+            ts_session_stop_timer(timer_hud, "Render Scene Frame");
+            ts_session_frame_end(timer_hud);
+        }
+        return true;
+    }
+
+    RayTracingDeepRenderPresentationView view = RayTracingDeepRenderListener_GetView(&state->listener);
+    if (view.valid && !deep_render_desktop_present(&view, &present)) {
+        deep_render_desktop_mark_failed(state, "presentation failed", running);
     }
     if (timer_hud) {
         ts_session_stop_timer(timer_hud, "Render Scene Frame");

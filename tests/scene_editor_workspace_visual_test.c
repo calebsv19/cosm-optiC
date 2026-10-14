@@ -58,6 +58,8 @@ static void click(SceneEditor* editor, SDL_Rect rect) {
 }
 
 static void choose_menu(SceneEditor* editor,int menu,int row) {
+    /* Direct command calls may change document/modal ownership between clicks. */
+    SceneEditorSessionRuntimeRender(editor);
     SceneEditorPaneLayout layout; SceneEditorWorkspaceChrome chrome;
     assert(SceneEditorGetPaneLayout(&layout));
     SceneEditorWorkspaceLayoutChrome(&layout,&chrome);
@@ -320,7 +322,7 @@ static void verify_geometry_selection(SceneEditor* editor) {
     SceneEditorSessionRuntimeRender(editor);
 }
 
-static void verify_viewport_gestures(SceneEditor* editor) {
+static void verify_viewport_gestures_for_fixture(SceneEditor* editor,bool pick_fixture_spheres) {
     SceneEditorPaneLayout layout;
     assert(SceneEditorGetPaneLayout(&layout));
     int x=layout.viewport_rect.x+layout.viewport_rect.w/2;
@@ -381,6 +383,7 @@ static void verify_viewport_gestures(SceneEditor* editor) {
     assert(SceneEditorDigestOverlayResolve(&digest));
     assert(SceneEditorDigestOverlayBuildProjector(&digest,&layout.viewport_rect,
         SceneEditorGetViewportNavState(),&projector));
+    if(!pick_fixture_spheres)return; /* Navigation also qualifies simple primitive fixtures. */
     /* The fixture contains three visible mesh spheres above a primitive floor.
        Pick their projected centers through ordinary session input. */
     for (int i=3;i<=5;++i) {
@@ -397,6 +400,8 @@ static void verify_viewport_gestures(SceneEditor* editor) {
     ObjectEditorSetSelectedObjectIndex(selected);
     SceneEditorSessionRuntimeRender(editor);
 }
+
+static void verify_viewport_gestures(SceneEditor *editor) {verify_viewport_gestures_for_fixture(editor,true);}
 
 #include "scene_editor_move_acceptance.h"
 #include "scene_editor_transform_acceptance.h"
@@ -452,6 +457,28 @@ static void verify_viewport_gestures(SceneEditor* editor) {
 #include "scene_editor_atmosphere_acceptance.h"
 #include "scene_editor_atmosphere_usability.h"
 #include "scene_editor_atmosphere_water_acceptance.h"
+#include "scene_editor_atmosphere_optics_acceptance.h"
+#include "scene_editor_atmosphere_snapshot_acceptance.h"
+#include "scene_editor_material_mcp_acceptance.h"
+#include "scene_editor_object_mcp_acceptance.h"
+#include "scene_editor_managed_stl_mcp_acceptance.h"
+#include "editor/scene_editor_camera_inspector.h"
+#include "app/preview_camera_sample.h"
+#include "motion/scene_motion_paths.h"
+#include "scene_editor_camera_mcp_acceptance.h"
+#include "scene_editor_animation_mcp_acceptance.h"
+#include "scene_editor_timeline_controls_acceptance.h"
+#include "scene_editor_spatial_paths_acceptance.h"
+#include "scene_editor_motion_orientation_acceptance.h"
+#include "scene_editor_optical_response_acceptance.h"
+#include "scene_editor_optical_matrices_acceptance.h"
+#include "scene_editor_lighting_mcp_acceptance.h"
+#include "scene_editor_render_mcp_acceptance.h"
+#include "scene_editor_scene_lifecycle_acceptance.h"
+#include "scene_editor_cross_save_as_acceptance.h"
+#include "editor/scene_editor_shared_ui.h"
+#include "scene_editor_shared_ui_acceptance.h"
+#include "scene_editor_shared_fields_hud_acceptance.h"
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
@@ -467,12 +494,68 @@ int main(int argc, char** argv) {
     if(argc==4 && !strcmp(argv[3],"--dm2"))dm2_sampler_contract();
     assert(InitializeSceneEditor(&editor));
     active_editor = &editor;
+    if(getenv("OPTIC_UI_REQUIRE_VALIDATION")) {
+        VkRenderer *v=(VkRenderer*)editor.renderer;
+        assert(v->context.device && v->context.device->validation_enabled && v->context.device->debug_messenger);
+        fprintf(stderr,"Vulkan validation enabled with active debug messenger: PASS\n");
+    }
     SDL_SetWindowTitle(editor.window, "optiC E0/E1 isolated source proof");
     SDL_SetWindowSize(editor.window, 1280, 800);
     /* Test the entry state itself. A corrective Scene selection hid regressions. */
-    SDL_PumpEvents();
-    SceneEditorSessionRuntimeRender(&editor);
+    /* Resize/swapchain recreation may skip the first present. Qualify controls
+     * only after the actual native window has settled and painted. */
+    for(int i=0;i<3;i++) {SDL_Delay(40);SDL_PumpEvents();SceneEditorSessionRuntimeRender(&editor);}
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && !strcmp(argv[3],"--shared-fields-hud")) {shared_fields_hud_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--shared-ui")) {shared_editor_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--material-mcp-legacy-save")) {
+        assert(SceneEditorChromeActionsSaveAuthoring());DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--material-mcp") || !strcmp(argv[3],"--material-mcp-reopen"))) {
+        material_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--material-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--mesh-mcp") || !strcmp(argv[3],"--mesh-mcp-reopen"))) {
+        mesh_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--mesh-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--optical-mcp") || !strcmp(argv[3],"--optical-mcp-reopen"))) {
+        optical_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--optical-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--optical-matrices")) {
+        optical_matrices_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--object-mcp") || !strcmp(argv[3],"--object-mcp-reopen"))) {
+        object_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--object-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--cross-save-as")) {cross_save_as_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--cross-save-as-reopen")) {assert(RuntimeSurfaceSamplingActive(0));assert(SceneEditorDocumentObjectCount()==4);assert(!SceneEditorDocumentIsDirty());DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--scene-lifecycle-reopen")) {
+        assert(SceneEditorDocumentObjectCount()==1);assert(!SceneEditorDocumentIsDirty());
+        char message[512];assert(SceneEditorDocumentStaticCameraEditable(message,sizeof(message)));
+        assert(SceneEditorLightingPrimaryEditable(message,sizeof(message)));
+        DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--scene-lifecycle")) {scene_lifecycle_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && (!strcmp(argv[3],"--render-mcp") || !strcmp(argv[3],"--render-mcp-reopen"))) {
+        render_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--render-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--lighting-mcp") || !strcmp(argv[3],"--lighting-mcp-reopen"))) {
+        lighting_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--lighting-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--timeline-controls-mcp") || !strcmp(argv[3],"--timeline-controls-mcp-reopen"))) {
+        timeline_controls_acceptance(&editor,argv[2],!strcmp(argv[3],"--timeline-controls-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--animation-mcp") || !strcmp(argv[3],"--animation-mcp-reopen"))) {
+        animation_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--animation-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--camera-mcp") || !strcmp(argv[3],"--camera-mcp-reopen"))) {
+        camera_mcp_acceptance(&editor,argv[2],!strcmp(argv[3],"--camera-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && !strcmp(argv[3],"--atmosphere-snapshot")) {
+        atmosphere_snapshot_native(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
+    if(argc==4 && (!strcmp(argv[3],"--atmosphere-optics") || !strcmp(argv[3],"--atmosphere-optics-reopen"))) {
+        atmosphere_optics_native(&editor,argv[2],!strcmp(argv[3],"--atmosphere-optics-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if(argc==4 && (!strcmp(argv[3],"--atmosphere-usability") || !strcmp(argv[3],"--atmosphere-usability-reopen"))) {
         atmosphere_usability(&editor,argv[2],!strcmp(argv[3],"--atmosphere-usability-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }
@@ -485,6 +568,9 @@ int main(int argc, char** argv) {
     if(argc==4 && (!strcmp(argv[3],"--atmosphere") || !strcmp(argv[3],"--atmosphere-reopen"))) {
         atmosphere_native(&editor,argv[2],!strcmp(argv[3],"--atmosphere-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }
+    if(argc==4 && (!strcmp(argv[3],"--motion-orientation-mcp")||!strcmp(argv[3],"--motion-orientation-mcp-reopen"))){motion_orientation_acceptance(&editor,argv[2],!strcmp(argv[3],"--motion-orientation-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--spatial-paths-legacy")){spatial_paths_legacy_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && (!strcmp(argv[3],"--spatial-paths-mcp") || !strcmp(argv[3],"--spatial-paths-mcp-reopen"))) {spatial_paths_acceptance(&editor,argv[2],!strcmp(argv[3],"--spatial-paths-mcp-reopen"));DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-smoothing")) {path_smoothing_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-gizmo")) {path_gizmo_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--path-light-setup")) {path_light_setup_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}

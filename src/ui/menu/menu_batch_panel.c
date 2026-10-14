@@ -1,3 +1,4 @@
+#include "ui/menu_shared_controls.h"
 #include "ui/menu_batch_panel.h"
 
 #include <limits.h>
@@ -481,9 +482,9 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
                               "Render Frames Root",
                               state->editingFrameDir ? state->pathInputBuffer : animSettings.frameDir,
                               state->editingFrameDir);
-    menu_render_draw_button_rect(renderer, font, &layout->frameDirEditRect, "Edit", state->editingFrameDir);
-    menu_render_draw_button_rect(renderer, font, &layout->frameDirFolderRect, "Folder", false);
-    menu_render_draw_button_rect(renderer, font, &layout->frameDirApplyRect, "Apply", false);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_frameDirEditRect, renderer, font, &layout->frameDirEditRect, "Edit", state->editingFrameDir);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_frameDirFolderRect, renderer, font, &layout->frameDirFolderRect, "Folder", false);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_frameDirApplyRect, renderer, font, &layout->frameDirApplyRect, "Apply", false);
 
     menu_render_draw_root_row(renderer,
                               font,
@@ -491,9 +492,9 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
                               "Video Output Root",
                               state->editingVideoOutputRoot ? state->pathInputBuffer : animSettings.videoOutputRoot,
                               state->editingVideoOutputRoot);
-    menu_render_draw_button_rect(renderer, font, &layout->videoRootEditRect, "Edit", state->editingVideoOutputRoot);
-    menu_render_draw_button_rect(renderer, font, &layout->videoRootFolderRect, "Folder", false);
-    menu_render_draw_button_rect(renderer, font, &layout->videoRootApplyRect, "Apply", false);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_videoRootEditRect, renderer, font, &layout->videoRootEditRect, "Edit", state->editingVideoOutputRoot);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_videoRootFolderRect, renderer, font, &layout->videoRootFolderRect, "Folder", false);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_videoRootApplyRect, renderer, font, &layout->videoRootApplyRect, "Apply", false);
 
     memset(&scene_project_summary, 0, sizeof(scene_project_summary));
     (void)ray_tracing_menu_scene_project_summary_current(&scene_project_summary);
@@ -510,7 +511,7 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
                               "Worker Package",
                               "Scene-only",
                               false);
-    menu_render_draw_button_rect(renderer, font, &layout->workerExportRect, "Export Queue", true);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_workerExportRect, renderer, font, &layout->workerExportRect, "Export Queue", true);
 
     menu_batch_panel_build_frame_count_label(state, frame_count, sizeof(frame_count));
     menu_render_draw_root_row(renderer,
@@ -520,7 +521,7 @@ void menu_batch_panel_render(SDL_Renderer* renderer,
                               frame_count + strlen("Frames: "),
                               false);
     snprintf(fps_label, sizeof(fps_label), "FPS: %d", animSettings.fps);
-    menu_render_draw_button_rect(renderer, font, &layout->fpsValueRect, fps_label, false);
-    menu_render_draw_button_rect(renderer, font, &layout->clearFramesRect, "Clear Frames", false);
-    menu_render_draw_button_rect(renderer, font, &layout->makeVideoRect, "Make Video", true);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_fpsValueRect, renderer, font, &layout->fpsValueRect, fps_label, false);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_clearFramesRect, renderer, font, &layout->clearFramesRect, "Clear Frames", false);
+    menu_shared_controls_button(state, MENU_CONTROL_batch_makeVideoRect, renderer, font, &layout->makeVideoRect, "Make Video", true);
 }

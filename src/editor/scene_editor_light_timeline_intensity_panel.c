@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_text.h"
 #include "scene_editor_light_timeline_intensity_panel.h"
 
 #include "render/font_runtime.h"
@@ -37,8 +38,7 @@ static RayTracingThemePalette palette(void) {
 static void text(SDL_Renderer* renderer, TTF_Font* font,
                  const char* value, int x, int y, SDL_Color color) {
     if (renderer && font && value && value[0]) {
-        ray_tracing_text_draw_utf8_at(
-            renderer, font, value, x, y, color);
+        scene_editor_shared_label_at(renderer,value,x,y,color,12);
     }
 }
 

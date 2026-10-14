@@ -1,6 +1,8 @@
+#include "editor/scene_editor_shared_fields.h"
 #include "motion/scene_motion_plans.h"
 #include "scene_editor_timeline_ui.h"
 #include "scene_editor_timeline_curve.h"
+#include "scene_editor_timeline_key_inspector.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_timeline_selection.h"
 #include "editor/scene_editor_document.h"
@@ -12,10 +14,11 @@
 #include <stdlib.h>
 #include <errno.h>
 static TimelineUI ui;
+bool SceneEditorTimelineInteractionActive(void) {return ui.numeric || ui.dragging || ui.scrubbing || ui.panning || SceneEditorTimelineCurveActive() || SceneEditorTimelineKeyInspectorActive();}
 void SceneEditorTimelineUIFocus(void) {ui.focused=true;}
 static bool hit(SDL_Rect r,int x,int y) {return r.w>0 && r.h>0 && x>=r.x && y>=r.y && x<r.x+r.w && y<r.y+r.h;}
 void SceneEditorTimelineUIReleaseFocus(void) {
-    if(ui.numeric) SDL_StopTextInput();
+    if(ui.numeric) do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);
     ui.numeric=0;ui.focused=ui.dragging=ui.scrubbing=ui.panning=ui.menu=false;
     SceneEditorTimelineCurveCancel();
 }
@@ -83,24 +86,25 @@ static void begin_numeric(int mode) {
         ui.numeric_count=keys.count;ui.drag_origin=keys.primary.frame;
         snprintf(ui.drag_track,sizeof(ui.drag_track),"%s",keys.track_id);
     }
-    SDL_StartTextInput();
+    do{scene_editor_shared_field_begin(ui.draft,sizeof(ui.draft),0);SDL_StartTextInput();}while(0);
 }
 static bool numeric_event(SDL_Event* e) {
     SceneEditorTimelineKeySelection keys;
     if(ui.numeric!=1 && (!SceneEditorTimelineSelectionRead(&keys) || ui.revision!=keys.revision ||
        ui.numeric_count!=keys.count || ui.drag_origin!=keys.primary.frame || strcmp(ui.drag_track,keys.track_id))) {
-        ui.numeric=0;SDL_StopTextInput();snprintf(ui.feedback,sizeof(ui.feedback),"Selection changed; value entry cancelled.");return false;
+        ui.numeric=0;do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);snprintf(ui.feedback,sizeof(ui.feedback),"Selection changed; value entry cancelled.");return false;
     }
+    if((ui.numeric!=0) && scene_editor_shared_field_event(ui.draft,sizeof(ui.draft),e))return true;
     if(e->type==SDL_TEXTINPUT) {if(strlen(ui.draft)+strlen(e->text.text)<sizeof(ui.draft)) strcat(ui.draft,e->text.text);return true;}
     if(e->type!=SDL_KEYDOWN) return false;
     SDL_Keycode k=e->key.keysym.sym;
-    if(k==SDLK_ESCAPE) {ui.numeric=0;SDL_StopTextInput();return true;}
+    if(k==SDLK_ESCAPE) {ui.numeric=0;do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);return true;}
     if(k==SDLK_BACKSPACE) {size_t n=strlen(ui.draft);if(n) ui.draft[n-1]=0;return true;}
     if(k==SDLK_RETURN || k==SDLK_KP_ENTER) {
         char* end;bool ok=false;errno=0;
         if(ui.numeric==1 || ui.numeric==3) {long long f=strtoll(ui.draft,&end,10);if(!errno && end!=ui.draft && !*end) ok=ui.numeric==1?SceneEditorTimelineSeek(f):SceneEditorTimelineMoveSelectedKeys(f);}
         else {double v=strtod(ui.draft,&end);if(!errno && end!=ui.draft && !*end && isfinite(v)) ok=SceneEditorTimelineSetSelectedValue(v);}
-        if(ok) {ui.numeric=0;SDL_StopTextInput();ui.feedback[0]=0;}
+        if(ok) {ui.numeric=0;do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);ui.feedback[0]=0;}
         else snprintf(ui.feedback,sizeof(ui.feedback),"Invalid frame or value; Enter applies, Esc cancels.");
     }
     return true;
@@ -150,7 +154,7 @@ bool SceneEditorTimelineUIEvent(SDL_Event* e,const SceneEditorPaneLayout* pane,c
         if(e->button.button==SDL_BUTTON_RIGHT && !ui.curves && hit(l->body,x,y) && x>=l->ruler.x) {
             size_t row=ui.row_offset+(size_t)((y-l->body.y)/l->row_height);
             if(row>=ui.row_count || ui.rows[row].group) return true;
-            if(ui.numeric) {ui.numeric=0;SDL_StopTextInput();}
+            if(ui.numeric) {ui.numeric=0;do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);}
             size_t track=ui.rows[row].track;
             const TimelineTrack* t=&d->tracks[track];
             size_t existing=TimelineUIKeyAt(t,&ui.view,l->grid,x);
@@ -171,7 +175,7 @@ bool SceneEditorTimelineUIEvent(SDL_Event* e,const SceneEditorPaneLayout* pane,c
             return true;
         }
         if(e->button.button!=SDL_BUTTON_LEFT) return true;
-        if(ui.numeric) {ui.numeric=0;SDL_StopTextInput();}
+        if(ui.numeric) {ui.numeric=0;do{scene_editor_shared_field_end(ui.draft);SDL_StopTextInput();}while(0);}
         if(ui.menu) {
             SDL_Rect menu=l->controls[TL_INTERPOLATION];menu.y-=168;menu.h=168;
             ui.menu=false;
@@ -258,6 +262,10 @@ bool SceneEditorTimelineUIEvent(SDL_Event* e,const SceneEditorPaneLayout* pane,c
 }
 void SceneEditorTimelineUIDraw(SDL_Renderer* r,const SceneEditorPaneLayout* l,const TimelineDocument* d,const SceneTimelineSession* s,size_t selected) {
     if(!r || !l || !l->timeline_visible) return;prepare(l,d,selected);SceneEditorTimelineDrawDock(r,&ui,d,s,selected);
+    if(ui.numeric) {
+        int control=ui.numeric==1?TL_FRAME:ui.numeric==3?TL_KEY_FRAME:TL_VALUE;
+        scene_editor_shared_field_draw(r,ui.draft,sizeof(ui.draft),ui.layout.controls[control],NULL);
+    }
 }
 bool SceneEditorTimelineControl(const char* name,SDL_Rect* out) {
     static const char* names[]={"start","previous","play","next","end","frame","add_key","keys","curves","fit","fit_channel","zoom_out","zoom_in","value","interpolation","delete","key_frame"};

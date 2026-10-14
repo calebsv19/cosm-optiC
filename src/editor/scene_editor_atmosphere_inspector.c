@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
 #include "editor/scene_editor_atmosphere_inspector.h"
 #include "editor/scene_editor_atmosphere_geometry.h"
 #include "editor/scene_editor_atmosphere_viewport.h"
@@ -24,7 +26,7 @@ static struct {
     SceneAtmosphereAttachment original;RuntimeVolumeAttachment3D geometry;Vec3 centre;
 } panel={.editing=-1};
 void SceneEditorAtmosphereInspectorReset(void) {
-    if(panel.editing>=0) SDL_StopTextInput();panel.editing=-1;panel.visible=false;memset(panel.rects,0,sizeof(panel.rects));
+    if(panel.editing>=0) do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);panel.editing=-1;panel.visible=false;memset(panel.rects,0,sizeof(panel.rects));
 }
 bool SceneEditorAtmosphereInspectorActive(void) {return panel.editing>=0;}
 void SceneEditorAtmosphereInspectorBeginFrame(void) {
@@ -34,7 +36,7 @@ void SceneEditorAtmosphereInspectorBeginFrame(void) {
 static void button(SDL_Renderer* r,SDL_Rect bounds,int id,int* y,const char* text,bool enabled) {
     snprintf(panel.labels[id],sizeof(panel.labels[id]),"%s",text);
     SDL_Rect rect={bounds.x+8,*y,bounds.w-16,28};
-    SceneEditorRenderButton(r,rect,panel.labels[id],false,enabled);
+    SceneEditorSharedUiPanelButton(r,69,128+id,rect,panel.labels[id],false,enabled);
     if(enabled && rect.y>=bounds.y && rect.y+rect.h<=bounds.y+bounds.h) panel.rects[id]=rect;
     *y+=32;
 }
@@ -65,7 +67,7 @@ int SceneEditorAtmosphereInspectorDraw(SDL_Renderer* r,SDL_Rect bounds) {
     for(int i=0;i<3;++i) {
         snprintf(panel.labels[i],sizeof(panel.labels[i]),"%s%s",tools[i],(int)SceneEditorObjectTransformModeGet()==i?"  *":"");
         SDL_Rect rect={bounds.x+8+i*(bounds.w-16)/3,y,(bounds.w-16)/3-4,28};
-        SceneEditorRenderButton(r,rect,panel.labels[i],(int)SceneEditorObjectTransformModeGet()==i,true);
+        SceneEditorSharedUiPanelButton(r,69,256+i,rect,panel.labels[i],(int)SceneEditorObjectTransformModeGet()==i,true);
         if(rect.y+rect.h<=bounds.y+bounds.h) panel.rects[i]=rect;
     }y+=40;
     double w=SceneEditorDocumentWorldScale(),centre[]={panel.centre.x/w,panel.centre.y/w,panel.centre.z/w};
@@ -114,7 +116,8 @@ bool SceneEditorAtmosphereInspectorEvent(SDL_Event* e) {
     if(e->type==SDL_WINDOWEVENT && (e->window.event==SDL_WINDOWEVENT_FOCUS_LOST || e->window.event==SDL_WINDOWEVENT_SIZE_CHANGED)) {SceneEditorAtmosphereInspectorReset();return false;}
     if(panel.editing>=0 && panel.revision!=SceneEditorDocumentRevision()) {SceneEditorAtmosphereInspectorReset();return false;}
     if(panel.editing>=0) {
-        if(e->type==SDL_TEXTINPUT) {if(strlen(panel.draft)+strlen(e->text.text)<sizeof(panel.draft)) strcat(panel.draft,e->text.text);return true;}
+        if((panel.editing>=0) && scene_editor_shared_field_event(panel.draft,sizeof(panel.draft),e))return true;
+    if(e->type==SDL_TEXTINPUT) {if(strlen(panel.draft)+strlen(e->text.text)<sizeof(panel.draft)) strcat(panel.draft,e->text.text);return true;}
         if(e->type==SDL_KEYDOWN) {
             if(e->key.keysym.sym==SDLK_ESCAPE) SceneEditorAtmosphereInspectorReset();
             else if(e->key.keysym.sym==SDLK_BACKSPACE) {size_t n=strlen(panel.draft);if(n)panel.draft[n-1]=0;}
@@ -139,7 +142,7 @@ bool SceneEditorAtmosphereInspectorEvent(SDL_Event* e) {
         }
         else if(i==PROXY) SceneEditorAtmosphereDensityProxyToggle();
         else if(i==SNAP) SceneEditorTransformSnapToggle();
-        else {SceneEditorTimelinePause();panel.editing=i;panel.draft[0]=0;SDL_StartTextInput();}
+        else {SceneEditorTimelinePause();panel.editing=i;panel.draft[0]=0;do{scene_editor_shared_field_begin(panel.draft,sizeof(panel.draft),0);SDL_StartTextInput();}while(0);}
         return true;
     }return false;
 }

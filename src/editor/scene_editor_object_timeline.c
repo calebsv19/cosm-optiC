@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_timeline_selection.h"
 #include "motion/scene_motion_paths.h"
 #include "editor/scene_editor_object_timeline.h"
@@ -83,10 +84,10 @@ void SceneEditorObjectTimelineDraw(SDL_Renderer* renderer,SDL_Rect pane,int* y) 
     SceneEditorObjectReadback selected;SceneEditorObjectInspect(&selected);
     snprintf(label,sizeof(label),"Animate object: %s",selected.has_selection?selected.selection.name:"select in Scene");
     button=(SDL_Rect){pane.x+10,*y,pane.w-20,32};
-    SceneEditorRenderButton(renderer,button,label,false,selected.has_selection);*y+=38;
+    SceneEditorSharedUiPanelButton(renderer,145,128,button,label,false,selected.has_selection);*y+=38;
     if(button.y<pane.y || button.y+button.h>pane.y+pane.h) button=(SDL_Rect){0};
     frame_button=(SDL_Rect){pane.x+10,*y,pane.w-20,30};
-    SceneEditorRenderButton(renderer,frame_button,"Frame selected object",false,selected.has_selection);*y+=36;
+    SceneEditorSharedUiPanelButton(renderer,145,256,frame_button,"Frame selected object",false,selected.has_selection);*y+=36;
     if(frame_button.y<pane.y || frame_button.y+frame_button.h>pane.y+pane.h) frame_button=(SDL_Rect){0};
     if(feedback[0]) {ray_tracing_text_draw_utf8_at(renderer,ray_tracing_font_runtime_get_ui_regular(renderer,11,8),feedback,pane.x+10,*y,(SDL_Color){210,215,225,255});*y+=26;}
 }

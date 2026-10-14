@@ -28,7 +28,8 @@ void ray_tracing_headless_apply_inspection_overrides(
     RuntimeVolume3DScatter_ResetTuning();
     RuntimeVolume3DMaterial_ResetTuning();
     SceneAtmosphereRuntimeApplyTuning();
-    RuntimeVolume3DMaterial_SetCellCentered(request->volume_cell_centered);
+    if(!SceneAtmosphereRuntimeRead()->optics.present)
+        RuntimeVolume3DMaterial_SetCellCentered(request->volume_cell_centered);
     RuntimeRay3D_SetTraceRoute(request->trace_route);
     if (request->has_camera_zoom_override) {
         sceneSettings.camera.zoom = request->camera_zoom_override;

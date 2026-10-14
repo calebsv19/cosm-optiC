@@ -49,6 +49,17 @@ const SceneAtmosphereAttachment* SceneAtmosphereRuntimeRead(void) {return &activ
 double SceneAtmosphereRuntimeWorldScale(void) {return active_world_scale;}
 void SceneAtmosphereRuntimeApplyTuning(void) {
     if(!active.present || !active.enabled) return;
+    /* Clear the previous retained profile without changing legacy clamp policy. */
+    RuntimeVolume3DMaterialTuning material=RuntimeVolume3DMaterial_GetTuning();
+    material.physical_smoke=false;material.sky_error_budget=0;
+    if(active.optics.present) material.cell_centered=active.optics.physical && active.optics.cell_centered;
+    RuntimeVolume3DMaterial_RestoreTuning(material);
+    if(active.optics.present && active.optics.physical) {
+        RuntimeVolume3DMaterial_SetSmokeOptics(active.optics.reference_concentration_kg_m3,
+            active.optics.mass_extinction_m2_kg,active.optics.scattering_albedo,
+            active.optics.anisotropy,active.optics.sky_illumination);
+        RuntimeVolume3DMaterial_SetSkyErrorBudget(active.optics.sky_error_budget);
+    }
     RuntimeVolume3DMaterial_SetDensityScale(active.density_scale);
     RuntimeVolume3DMaterial_SetDensityGamma(active.density_gamma);
     RuntimeVolume3DMaterial_SetAbsorptionGain(active.absorption_gain);

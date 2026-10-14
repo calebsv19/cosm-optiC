@@ -11,4 +11,5 @@ void MotionOrientationHandlesDraw(
     SDL_Renderer *r, const SceneEditorDigestOverlayProjector *projector,
     SDL_Rect viewport);
 bool MotionOrientationPanelControl(const char *name, SDL_Rect *out);
+bool MotionOrientationPanelInteractionActive(void);
 #endif

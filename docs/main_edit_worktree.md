@@ -1,3 +1,87 @@
+## October 14 — combined optical, atmosphere, MCP and shared UI checkpoint
+
+The operator approved one coherent source checkpoint containing the retained
+optical repairs, physical atmosphere transport, document and 80-tool MCP work,
+and the shared UI rollout. The nine-prefix shared import at pin `1bf262d` is
+checkpointed separately from application integration. Fresh Clang application,
+headless and native builds, 11 focused gates including atmosphere sanitizers,
+aggregate regression, 18 validation-enabled native groups, managed STL import,
+MCP catalog reload and strict smoke-request checks pass. Optical snapshot isolation,
+exact legacy pixels, UI/MCP history, File Save and fresh reopen retain their contracts.
+
+The verified checkpoint is adopted into local canonical `main`; persistent Main
+Edit stays available as the clean development lane. App VERSION 0.18.0 and worker
+VERSION 0.11.0 remain unchanged. Committed-source development packaging is a distinct
+verification gate; no public release or worker deployment is implied.
+
+The main menu/settings, editor controls and fields, specialized panels and runtime
+progress/timer HUD use the shared integration. Embedded timeline preview transport
+buttons and diagnostic readouts still use local painting helpers; a small shared
+presentation/control pass remains there. Canvas tools, scientific geometry and
+simulation ownership remain intentional application responsibilities. Operator and
+other-platform acceptance remain separate from local macOS qualification.
+
+## October 13 — explicit glass receiver and null-interface repair
+
+Transmitted opaque receivers in Disney V2 now use the arriving ray's view direction and the resolved material payload. Legacy receiver shading retains its previous estimator. Smooth, fully transmitting explicit IOR 1 glass with white interface tint and absorption is treated as a neutral boundary on Disney V2 camera and reflected/emitter queries when no volume is active. The trace keeps the original ray and differentials, preserving the receiver's filtering and stochastic inputs. Legacy glass, non-unit IOR, frost, partial transmission, tint, absorption, emission and authored normal response remain geometric hits.
+
+The fixed-seed no-sphere/index-matched comparison is exact at 96x96, including a second seed with 16 temporal passes. This bounded result does not certify all glass, caustic or nested-medium transport. Saved comparison matrices retain their original renderer receipts and images; repaired proof is separate. Program and worker versions remain unchanged; Main Edit is uncommitted and canonical adoption/public release remain separate boundaries.
+
+## October 12 — bounded glass performance repair
+
+Main Edit reuses per-call deterministic explicit-glass transmission queries and reads one primitive seed for face metrics instead of copying the full fixed-capacity scene seed table at every hit. Legacy and rough/normal/atmosphere/caustic transport remain on the existing path. Sample accumulation retains its order. A paused matrix can explicitly qualify a changed renderer by full-settings exact completed-cell replay before resume; default renderer-drift refusal remains. Source/package/live parity and resumed-run completion are recorded separately in the private glass performance checkpoint. No analytic sphere scene primitive was added; the existing analytic sphere-lens intersection provides the geometry-cost control.
+
+## October 11 — prepared optical snapshots and Disney V2 slice 2
+
+The existing Main Edit now captures complete volume material/scattering tuning by
+value in each prepared frame. Direct Light and Disney V2 queries read that
+snapshot, including cell layout and sky budget. Static saved physical atmospheres
+can use responsive asynchronous rendering; animated caches retain synchronous
+selection. Disney V2 integrates existing extinction and single scattering along
+camera, reflection, diffuse continuation, transmission and environment paths.
+Physical profiles require caustics off and refuse unsupported integrators.
+Omitted metadata and explicit legacy profiles preserve existing appearance.
+
+The uncommitted source checkpoint remains on base `2a7a29f`; app `0.18.0` and
+worker `0.11.0` are unchanged. Nine C groups, isolated native snapshot/global-edit
+and concurrent-frame checks, exact legacy lookup pixels for both integrators,
+analytic reflection/transmission path checks, final native UI/MCP/history and
+save/fresh-reopen parity, typed request validation, headless
+preflight and two-frame export pass. Saved/inspection physical-policy parity and
+coefficient effects pass for both integrators. Direct Light BMP bytes exactly
+match slice 1. Portable inputs are sealed and reverified after relocation/render.
+See [physical smoke settings](physical_smoke_volume.md) for the supported contract.
+
+Stop at this verified local source checkpoint. Canonical adoption, committing,
+installed-app refresh, packages, workers and publication remain separate lanes.
+Combined caustics, multiple scattering, measured calibration and production visual
+acceptance remain open. This entry supersedes slice 1's synchronous/Direct-only
+qualification boundary; the historical slice 1 evidence below remains retained.
+
+## October 10 — saved physical atmosphere slice 1
+
+Main Edit adds optional retained physical-smoke coefficients and sampling policy,
+with Environment controls and the same MCP atmosphere commands, revision checks,
+Undo/Redo and File Save. Missing optical metadata preserves legacy behavior;
+explicit legacy selection keeps dormant coefficients. Field replacement preserves
+placement and optics. See [saved physical settings](physical_smoke_volume.md).
+
+Contained app/headless/native builds, codec plus ASan/UBSan, nine relevant C groups,
+strict smoke-request validation, preflight and two-frame export passed. Isolated
+native UI/real MCP/fresh reopen acceptance proves shared state and active-edit,
+stale and typed refusals. Native Direct Light pixels match an independent prepared
+frame exactly; headless saved settings match the existing inspection kernel and
+legacy profiles match absent metadata exactly. Rendered coefficient effects,
+unsupported/conflicting requests and sealed portable relocation are covered.
+
+This is a verified **uncommitted Main Edit source checkpoint** on base `2a7a29f`.
+VERSION remains 0.18.0; current source WORKER_VERSION remains 0.11.0. Canonical,
+installed desktop and worker packages are separate. Physical saved atmospheres
+use synchronous selection and require Direct Light with caustics off. Immutable
+prepared optical snapshots, Disney V2 transport and visual/calibration acceptance
+remain future work. A minor public release is recommended; approval is required
+before any version bump or package/release action.
+
 ## October 10 — denoise and dielectric transport source checkpoint
 
 Implementation checkpoint `ee9ace0` preserves qualified denoise uncertainty
@@ -847,3 +931,113 @@ cancellation, all five direct workspace segments, view-only revision invariants,
 pane expand/restore, Save/fresh reopen and headless render. U2.2 must begin as a
 new bounded transform-ergonomics slice from this committed checkpoint; canonical
 adoption, VERSION changes and release remain separate.
+
+## October 11 — retained lighting MCP slice
+
+Three lighting tools share the retained native light inspector, brightness/radius
+sliders and environment menu commands. Static existing primary point/sphere
+position, intensity and radius use world-unit conversion and one document command;
+environment patches preserve omitted settings. Reads do not synthesize legacy
+fields. Static edits refuse animated paths/timelines/motion bindings and
+unsupported/ambiguous primary sources. Save writeback preserves unknown environment
+and light-settings properties. Other lights, cameras, objects and volume attachments
+remain intact. See [lighting MCP](lighting_mcp.md). Catalog is now 32 named commands
+plus two fixed discovery/dispatch tools, 34 total. Normal Direct Light prepared
+values/pixel effects, exact legacy Undo restoration, UI/real-MCP shared history and
+fresh save/reopen are qualified. App 0.18.0/worker 0.11.0 remain unchanged.
+Stop at this bounded lighting checkpoint; render job/result control and broader
+light inventory/animation authoring remain separate.
+
+## October 11 — editor render control and results MCP slice
+
+Five render tools share the new Render frame panel command and reuse the native
+async desktop renderer/listener/cancellation/durable BMP completion path. Jobs
+capture the current working scene without Save or history mutation, serialize an
+exclusive render context, and preserve legacy scenes, metadata and attachments.
+Unique contained request IDs cannot overwrite or resubmit. Status/result reads
+include source/settings, committed passes, prepared-scene provenance and independently
+verified BMP hashes. Direct Light and Disney V2 single-frame workflows, unsaved
+edit/render/Undo, UI/MCP output parity, cancellation/shutdown, publication failure
+and fresh-process results pass. Existing camera/object/material/lighting native
+acceptance and twelve focused editor/async render C groups pass. See
+[render MCP](render_mcp.md). Catalog now has 37 named commands plus two fixed tools
+(39 total). App 0.18.0/worker 0.11.0 unchanged; batch/resume/remote rendering and
+additional render controls remain separate. Stop at this bounded checkpoint.
+
+## October 11 — shared scene lifecycle MCP slice
+
+Open, Create and Save As use one shared File-menu/native command owner. Open
+validates before switching; Open/Create refuse dirty scenes. New-file publication
+never overwrites; Save As retains working edits and Undo/Redo in the same project
+directory, preserving relative dependencies and the original saved scene. New
+empty scenes include a static camera and primary point light. Revisions remain
+monotonic across transitions, with native path guards for updated bridges. The
+control socket and attached bridge processes survive switches; aliases support
+older running bridge code. Catalog is 40 named commands plus two fixed tools,
+42 total. Actual UI/real MCP, legacy metadata/physical-volume preservation,
+creation/edit/save/reopen and both supported render workflows are qualified.
+See [scene lifecycle MCP](scene_lifecycle_mcp.md). App 0.18.0/worker 0.11.0 remain
+unchanged. Stop at this bounded checkpoint; project relocation/export, document
+close/delete, batch/resume/remote rendering and wider light authoring are separate.
+
+## October 11 — cross-directory Save As checkpoint
+
+The shared File/MCP Save As owner now copies contained scene dependencies into
+another existing directory. Working/Undo/Redo roots retain relative layouts and
+legacy declarations. Explicit resources, implicit native mesh runtime/preview
+files, pinned PNGs and physical atmosphere manifest/frame dependencies are
+verified and copied independently; identical destination assets may be reused.
+No scene or conflicting asset is overwritten. Copy/publication/native-application
+failures preserve the original document and attachment and roll back only
+proven new assets. Changed external files retain a recovery receipt. Native actual
+UI/MCP, history, fresh destination reopen with source assets offline and exact
+Direct Light output parity pass. See [scene lifecycle MCP](scene_lifecycle_mcp.md)
+for copy budgets and unsupported-reference boundaries. Catalog stays42 tools;
+app0.18.0/worker0.11.0 unchanged. Stop at this bounded checkpoint; whole simulation
+project export and unsupported asset producer lanes remain separate.
+
+## October 12 — repeatable optical comparison matrices
+
+The local MCP runner creates portable comparison projects with a sealed baseline,
+saved cells, fixed-sequence native renders, verified hashes and a self-contained
+labeled contact sheet. IOR, transmission, absorption distance and uniform
+graph-backed frosted roughness use existing shared authoring commands. The
+original clean scene and supported attachments are preserved and restored;
+partial runs retain completed cells and refuse overwrites. Saved-cell verification
+reopens and repeats renders with exact same-build image hashes. Legacy rendering
+keeps automatic sampling. See [optical comparisons](optical_comparison_mcp.md).
+The catalog adds `render_start_seeded`: 78 named commands plus two fixed tools,
+80 total. App 0.18.0 and worker 0.11.0 remain unchanged. Resume of partial matrices,
+measured optical calibration and production image-quality acceptance remain
+separate. Stop at the bounded verified Main Edit checkpoint.
+
+## October 12 — optical matrix partial-run recovery
+
+New matrix runs use a v2 cell journal with sealed recipe, baseline, copied
+resources and native executable identity. `--resume` uses existing MCP commands
+to adopt completed unjournaled results, wait for an owned active render or retry
+terminal attempts under fresh IDs. Completed cells and uncertain saved scenes
+are preserved; source/build drift, unrelated active work and concurrent runners
+refuse. Original scene/attachment restoration and explicit saved-cell verification
+use the existing owner. Old v1 matrices remain verifiable. See
+[optical comparisons](optical_comparison_mcp.md) for the sealed-baseline boundary.
+No new native command/schema, renderer kernel or catalog change: 80 tools remain.
+App/worker versions remain 0.18.0/0.11.0. Stop at the bounded recovery checkpoint;
+partial sample accumulation, remote resume and measured calibration are separate.
+
+## October 12 — dynamic MCP scene attachments
+
+Scene endpoint bindings now use dynamically owned storage instead of a fixed
+32-alias array. The listener and previously attached clients survive repeated
+scene switches; failed reservations roll back only their new endpoint. Existing
+scene formats and the 80-tool catalog are unchanged. This bounded local repair
+uses the existing Main Edit lane and leaves release/canonical adoption separate.
+
+## October 12 — explicit glass optical response repair
+
+Native explicit glass transmission consumes authored optical roughness separately
+from GGX regularization and uses IOR for its interface reflection floor. Eligible
+rough-cone samples carry coherent camera texture footprints; unsupported cases
+keep their conservative fallback. Legacy material paths and scene formats stay
+unchanged. The glass-orb scene and full detailed matrix proof are retained in the
+private scene delivery lane; no canonical or public release action is implied.

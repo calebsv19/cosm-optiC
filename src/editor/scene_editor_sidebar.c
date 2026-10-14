@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_fields.h"
 #include "editor/scene_editor_chrome_shell.h"
 #include "editor/scene_editor_surfaces.h"
 #include "editor/material_editor.h"
@@ -33,7 +34,7 @@ bool SceneEditorSidebarTextActive(void) { return search_active; }
 static bool contains(SDL_Rect r, int x, int y) {
     return r.w > 0 && r.h > 0 && x >= r.x && y >= r.y && x < r.x+r.w && y < r.y+r.h;
 }
-void SceneEditorSidebarReset(void) { memset(panes, 0, sizeof(panes)); last_mode = -1; search_active = false; }
+void SceneEditorSidebarReset(void) { if(search_active){scene_editor_shared_field_end(search_text);SDL_StopTextInput();} memset(panes, 0, sizeof(panes)); last_mode = -1; search_active = false; }
 void SceneEditorSidebarRestoreDefaults(void) {
     SceneEditorSidebarReset(); library_active=false; search_text[0]=0;
     diagnostics_visible=false;
@@ -72,13 +73,16 @@ bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
         panes[1].offset=0;
         return true;
     }
+    if(search_active && scene_editor_shared_field_event(search_text,sizeof(search_text),event)) {
+        SceneEditorObjectListSetFilter(search_text);return true;
+    }
     if (search_active && event->type == SDL_TEXTINPUT) {
         size_t used = strlen(search_text), added = strlen(event->text.text);
         if (used+added < sizeof(search_text)) memcpy(search_text+used,event->text.text,added+1);
         SceneEditorObjectListSetFilter(search_text); return true;
     }
     if (search_active && event->type == SDL_KEYDOWN) {
-        if (event->key.keysym.sym == SDLK_ESCAPE || event->key.keysym.sym == SDLK_RETURN) search_active=false;
+        if (event->key.keysym.sym == SDLK_ESCAPE || event->key.keysym.sym == SDLK_RETURN) {search_active=false;do{scene_editor_shared_field_end(search_text);SDL_StopTextInput();}while(0);}
         else if (event->key.keysym.sym == SDLK_BACKSPACE) {
             size_t length=strlen(search_text);
             if (length) { --length; while (length && ((unsigned char)search_text[length] & 0xc0) == 0x80) --length; search_text[length]=0; }
@@ -86,6 +90,7 @@ bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
         SceneEditorObjectListSetFilter(search_text); return true;
     }
     if (event->type == SDL_MOUSEBUTTONDOWN && event->button.button == SDL_BUTTON_LEFT) {
+        if(search_active){scene_editor_shared_field_end(search_text);SDL_StopTextInput();}
         search_active = false;
         if (SceneEditorWorkspaceProfileGet() == SCENE_WORKSPACE_SCENE &&
             !SceneEditorGetPaneHost()->viewport_expanded) {
@@ -93,7 +98,7 @@ bool SceneEditorSidebarHandleEvent(const SDL_Event* event) {
                 library_active=i != 0; panes[0].offset=0; return true;
             }
             if (!library_active && contains(search_box,event->button.x,event->button.y)) {
-                search_active=true; SDL_StartTextInput(); return true;
+                search_active=true;scene_editor_shared_field_begin(search_text,sizeof(search_text),0); SDL_StartTextInput(); return true;
             }
         }
     }
@@ -177,7 +182,8 @@ void SceneEditorSidebarRender(SDL_Renderer* renderer, const SceneEditorPaneLayou
                 SDL_RenderDrawRect(renderer,&search_box);
                 char label[128]; snprintf(label,sizeof(label),"%s%s",search_active ? "> " : "",
                     search_text[0] ? search_text : "Search name, ID or type");
-                SceneEditorLabelLeft(renderer,search_box,label,title);
+                if(search_active)scene_editor_shared_field_draw(renderer,search_text,sizeof(search_text),search_box,NULL);
+                else SceneEditorLabelLeft(renderer,search_box,label,title);
                 pane->viewport.y+=row_height+6; pane->viewport.h-=row_height+6;
             }
         }

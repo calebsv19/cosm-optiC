@@ -1,3 +1,7 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
+#include "editor/scene_editor_follower_orientation.h"
 #include "app/evaluated_camera_orientation.h"
 #include "editor/scene_editor_render_authoring.h"
 /* Follower-local up/roll controls. Drag previews the handle; release is one
@@ -24,6 +28,7 @@ static struct {
   double cx[2], cy[2], ux[2], uy[2], rx[2], ry[2], last, delta;
   bool projected[2];
 } panel = {.editing = -1};
+bool MotionOrientationPanelInteractionActive(void) {return panel.editing>=0 || panel.dragging;}
 void MotionOrientationPanelBeginFrame(void) {
   memset(panel.controls, 0, sizeof(panel.controls));
   panel.visible = false;
@@ -41,7 +46,7 @@ static MotionPathBinding *binding(MotionPaths *p) {
 }
 void MotionOrientationPanelReset(void) {
   if (panel.editing >= 0)
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);
   if (panel.dragging)
     SDL_CaptureMouse(SDL_FALSE);
   memset(&panel, 0, sizeof(panel));
@@ -51,7 +56,7 @@ static void button(SDL_Renderer *r, int i, SDL_Rect clip, int x, int *y, int w,
                    const char *text) {
   snprintf(panel.labels[i], sizeof(panel.labels[i]), "%s", text);
   panel.controls[i] = (SDL_Rect){x, *y, w, 26};
-  SceneEditorRenderButton(r, panel.controls[i], panel.labels[i], false, true);
+  SceneEditorSharedUiPanelButton(r,130,128+(i),panel.controls[i],panel.labels[i],false,true);
   if (*y < clip.y || *y + 26 > clip.y + clip.h)
     panel.controls[i] = (SDL_Rect){0};
   *y += 30;
@@ -91,12 +96,9 @@ int MotionOrientationPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     bool fallback = SceneEditorTimelineCopyEvaluated(&evaluated) &&
                     evaluated.camera.orientation_fallback;
     if (!scaffold.has_camera_focus_target || fallback) {
-      ray_tracing_text_draw_utf8_at(
-          r, ray_tracing_font_runtime_get_ui_regular(r, 11, 8),
-          scaffold.has_camera_focus_target
+      scene_editor_shared_label_at(r,scaffold.has_camera_focus_target
               ? "Aim undefined here: retained stable heading."
-              : "No focus target: using route direction.",
-          x, y, (SDL_Color){255, 200, 120, 255});
+              : "No focus target: using route direction.",x,y,(SDL_Color){255, 200, 120, 255},11);
       y += 24;
     }
   }
@@ -131,7 +133,7 @@ static bool apply(double value, int field, char *message, size_t size) {
     b->end_roll = value;
     b->end_roll_enabled = true;
   }
-  return SceneEditorMotionPathsSet(&paths, panel.revision, message, size);
+  return SceneEditorFollowerOrientationSet(panel.target,b,panel.revision,message,size);
 }
 static bool angle(int k, int x, int y, double *out) {
   double a = panel.ux[k], b = panel.rx[k], c = panel.uy[k], d = panel.ry[k],
@@ -157,10 +159,11 @@ bool MotionOrientationPanelEvent(SDL_Event *e, char *message, size_t size) {
   if (e->type == SDL_KEYDOWN && e->key.keysym.sym == SDLK_ESCAPE &&
       (panel.dragging || panel.editing >= 0)) {
     MotionOrientationPanelReset();
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);
     return true;
   }
   if (panel.editing >= 0) {
+    if((panel.editing>=0) && scene_editor_shared_field_event(panel.draft,sizeof(panel.draft),e))return true;
     if (e->type == SDL_TEXTINPUT) {
       if (strlen(panel.draft) + strlen(e->text.text) < sizeof(panel.draft))
         strcat(panel.draft, e->text.text);
@@ -179,7 +182,7 @@ bool MotionOrientationPanelEvent(SDL_Event *e, char *message, size_t size) {
             fabs(value) <= 36000 &&
             apply(value, panel.editing, message, size)) {
           panel.editing = -1;
-          SDL_StopTextInput();
+          do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);
         } else
           snprintf(message, size,
                    "Enter roll degrees between -36000 and 36000.");
@@ -224,7 +227,7 @@ bool MotionOrientationPanelEvent(SDL_Event *e, char *message, size_t size) {
       if (i == START || i == END) {
         panel.editing = i;
         panel.draft[0] = 0;
-        SDL_StartTextInput();
+        do{scene_editor_shared_field_begin(panel.draft,sizeof(panel.draft),0);SDL_StartTextInput();}while(0);
         return true;
       }
       MotionPaths paths;
@@ -245,7 +248,7 @@ bool MotionOrientationPanelEvent(SDL_Event *e, char *message, size_t size) {
       }
       if (i == CAMERA_MODE)
         b->camera_orientation = (b->camera_orientation + 1) % 3;
-      SceneEditorMotionPathsSet(&paths, panel.revision, message, size);
+      SceneEditorFollowerOrientationSet(panel.target,b,panel.revision,message,size);
       return true;
     }
   if (panel.visible && SDL_PointInRect(&mouse, &panel.viewport))
@@ -324,10 +327,7 @@ void MotionOrientationHandlesDraw(SDL_Renderer *r,
     SDL_RenderDrawLine(r, x, y, ex, ey);
     SDL_Rect handle = {ex - 4, ey - 4, 8, 8};
     SDL_RenderDrawRect(r, &handle);
-    ray_tracing_text_draw_utf8_at(
-        r, ray_tracing_font_runtime_get_ui_regular(r, 11, 8),
-        k ? "End roll" : "Start up", ex + 7, ey,
-        (SDL_Color){160, 240, 200, 255});
+    scene_editor_shared_label_at(r,k ? "End roll" : "Start up",ex + 7,ey,(SDL_Color){160, 240, 200, 255},11);
   }
 }
 bool MotionOrientationPanelControl(const char *name, SDL_Rect *out) {

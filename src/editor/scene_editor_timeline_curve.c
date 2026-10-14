@@ -20,6 +20,7 @@ static struct {
     double minimum,maximum;
 } drag;
 void SceneEditorTimelineCurveCancel(void) {drag.active=false;}
+bool SceneEditorTimelineCurveActive(void) {return drag.active;}
 static bool inside(SDL_Rect r,int x,int y) {return x>=r.x && y>=r.y && x<r.x+r.w && y<r.y+r.h;}
 static void limits(const TimelineTrack* track,double* minimum,double* maximum) {
     if(MotionPlansRuntimeActive(track->target_id) && (!strcmp(track->property_id,MOTION_PROGRESS_PROPERTY)||!strcmp(track->property_id,MOTION_CAMERA_PROGRESS_PROPERTY)||!strcmp(track->property_id,MOTION_LIGHT_PROGRESS_PROPERTY))) {*minimum=-.05;*maximum=1.05;return;}

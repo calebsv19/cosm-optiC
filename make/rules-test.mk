@@ -2716,6 +2716,7 @@ SCENE_EDITOR_PANE_HOST_TEST_SRCS := \
 	$(CORE_PANE_DIR)/src/core_pane.c \
 	$(KIT_PANE_DIR)/src/kit_pane.c \
 	$(KIT_RENDER_DIR)/src/kit_render.c \
+	$(KIT_RENDER_DIR)/src/kit_render_command_validation.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
 	$(CORE_THEME_DIR)/src/core_theme.c \
 	$(CORE_FONT_DIR)/src/core_font.c \
@@ -2777,6 +2778,7 @@ MENU_PANE_HOST_TEST_SRCS := \
 	$(CORE_PANE_DIR)/src/core_pane.c \
 	$(KIT_PANE_DIR)/src/kit_pane.c \
 	$(KIT_RENDER_DIR)/src/kit_render.c \
+	$(KIT_RENDER_DIR)/src/kit_render_command_validation.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
 	$(CORE_THEME_DIR)/src/core_theme.c \
 	$(CORE_FONT_DIR)/src/core_font.c \
@@ -3491,3 +3493,30 @@ test-scene-editor-timeline-view: $(BUILD_DIR)/tests/scene_editor_timeline_view_t
 $(BUILD_DIR)/tests/scene_editor_timeline_view_test: tests/scene_editor_timeline_view_test.c $(BUILD_DIR)/editor/scene_editor_timeline_view.o
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+RAY_TRACING_WINDOW_LIFECYCLE_TEST_BIN := $(BUILD_DIR)/tests/ray_tracing_window_lifecycle_contract_test
+RAY_TRACING_WINDOW_LIFECYCLE_TEST_SRCS := \
+	$(TEST_DIR)/ray_tracing_window_lifecycle_contract_test.c \
+	$(SRC_DIR)/app/ray_tracing_window_lifecycle.c \
+	$(SRC_DIR)/render/pipeline/ray_tracing2_buffers.c \
+	$(KIT_UI_DIR)/src/kit_ui_window_sdl.c
+$(RAY_TRACING_WINDOW_LIFECYCLE_TEST_BIN): $(RAY_TRACING_WINDOW_LIFECYCLE_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(filter-out -include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h,$(CFLAGS)) -Werror -o $@ $^ -lm
+.PHONY: test-ray-tracing-window-lifecycle-contract
+test-ray-tracing-window-lifecycle-contract: $(RAY_TRACING_WINDOW_LIFECYCLE_TEST_BIN)
+	@$<
+
+MENU_SHARED_CONTROLS_TEST_BIN := $(BUILD_DIR)/tests/menu_shared_controls_contract_test
+MENU_SHARED_CONTROLS_TEST_SRCS := $(TEST_DIR)/menu_shared_controls_contract_test.c \
+	$(SRC_DIR)/ui/menu/menu_shared_controls.c \
+	$(KIT_UI_DIR)/src/kit_ui_interaction.c \
+	$(KIT_UI_DIR)/src/kit_ui_interaction_sdl.c \
+	$(KIT_UI_DIR)/src/kit_ui_surface.c \
+	$(KIT_UI_DIR)/src/kit_ui_window_sdl.c
+$(MENU_SHARED_CONTROLS_TEST_BIN): $(MENU_SHARED_CONTROLS_TEST_SRCS)
+	@mkdir -p $(dir $@)
+	$(CC) $(filter-out -include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h,$(CFLAGS)) -Werror -o $@ $^ $(SDL_LIBS) -lm
+.PHONY: test-menu-shared-controls-contract
+test-menu-shared-controls-contract: $(MENU_SHARED_CONTROLS_TEST_BIN)
+	@$<

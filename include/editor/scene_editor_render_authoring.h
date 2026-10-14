@@ -5,6 +5,7 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor, SDL_Event* event);
 void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLayout* layout);
 void SceneEditorRenderAuthoringSelect(SceneEditor* editor,bool camera);
 bool SceneEditorRenderAuthoringTiming(void);
+bool SceneEditorRenderAuthoringDraftActive(void);
 void SceneEditorRenderAuthoringReset(void);
 void SceneEditorRenderButton(SDL_Renderer* renderer,SDL_Rect rect,const char* label,bool selected,bool enabled);
 bool SceneEditorRenderAuthoringControl(const char* name,SDL_Rect* out);

@@ -388,7 +388,7 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
         }
     }
 
-    sampling = deep_render_desktop_next_sampling();
+    sampling = desc->fixedSampleSequence ? (RuntimeNative3DSamplingContext){.sampleSequence=desc->fixedSampleSequence} : deep_render_desktop_next_sampling();
     if (!RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
             &prepared,
             unit->renderWidth,
@@ -424,6 +424,8 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     snapshot_desc.tlasInstanceCount = accel.tlasInstanceCount;
     snapshot_desc.tlasNodeCount = accel.tlasNodeCount;
     snapshot_desc.traceContextCallbackBound = true;
+    snapshot_desc.lightSnapshotBound = true;
+    snapshot_desc.enabledLightCount = RuntimeLightSet3D_EnabledCount(&prepared.scene.lightSet);
     snapshot_desc.volumeEnabled = prepared.scene.volume.enabled;
     snapshot_desc.volumeAttached = prepared.scene.volume.hasData;
     snapshot_desc.volumeFrameSelectionDynamic = false;

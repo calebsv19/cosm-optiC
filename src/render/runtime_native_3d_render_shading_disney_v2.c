@@ -1,3 +1,5 @@
+#include "render/runtime_disney_v2_atmosphere_3d.h"
+#include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_transport_weight_probe_3d.h"
 #include "render/runtime_native_3d_render_shading_internal.h"
 #include "render/runtime_native_3d_pixel_probe.h"
@@ -66,7 +68,7 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
-            primary_trace = runtime_native_3d_render_trace_primary(scene,
+            primary_trace = runtime_native_3d_render_trace_primary_disney_v2(scene,
                                                                    projector,
                                                                    (double)x,
                                                                    (double)y);
@@ -157,6 +159,13 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                                                                     &result.radianceB,
                                                                     &result.radiance,
                                                                     &result.visible);
+            }
+            if(RuntimeDisneyV2Atmosphere3D_Active(scene)) {
+                const RuntimeVisibility3DTransmittance t=RuntimeVolume3D_TransmittanceAlongRayRGB(&scene->volume,&primary_trace.primary.primaryRay,0,result.hitInfo.t);
+                result.radianceR=pre_ambient_r+(result.radianceR-pre_ambient_r)*t.r;
+                result.radianceG=pre_ambient_g+(result.radianceG-pre_ambient_g)*t.g;
+                result.radianceB=pre_ambient_b+(result.radianceB-pre_ambient_b)*t.b;
+                result.radiance=fmax(fmax(result.radianceR,result.radianceG),result.radianceB);
             }
             ambient_r = result.radianceR - pre_ambient_r;
             ambient_g = result.radianceG - pre_ambient_g;

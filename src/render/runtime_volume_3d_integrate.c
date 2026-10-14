@@ -120,28 +120,37 @@ void RuntimeVolume3DMaterial_SetOpacity(double opacity) {
     gRuntimeVolume3DOpacity = isfinite(opacity) && opacity >= 0 && opacity <= 1 ? opacity : 1;
 }
 
-double RuntimeVolume3DMaterial_RemapDensity(double density) {
+double RuntimeVolume3DMaterial_RemapDensityWithTuning(double density, const RuntimeVolume3DMaterialTuning* tuning) {
     double remapped = 0.0;
 
     if (!(density > 0.0) || !isfinite(density)) {
         return 0.0;
     }
-    if (gSmokeOptics.physical_smoke) return density * gSmokeOptics.reference_concentration_kg_m3 * gSmokeOptics.mass_extinction_m2_kg;
-    remapped = density * gRuntimeVolume3DDensityScale;
+    if (tuning->physical_smoke) return density * tuning->reference_concentration_kg_m3 * tuning->mass_extinction_m2_kg;
+    remapped = density * tuning->density_scale;
     if (!(remapped > 0.0)) {
         return 0.0;
     }
-    if (gRuntimeVolume3DDensityGamma != 1.0) {
-        remapped = pow(remapped, gRuntimeVolume3DDensityGamma);
+    if (tuning->density_gamma != 1.0) {
+        remapped = pow(remapped, tuning->density_gamma);
     }
     return runtime_volume_3d_integrate_clamp(remapped,
                                              0.0,
-                                             gRuntimeVolume3DOpacityClamp) * gRuntimeVolume3DOpacity;
+                                             tuning->opacity_clamp) * tuning->opacity;
 }
 
+double RuntimeVolume3DMaterial_ExtinctionDensityWithTuning(double density, const RuntimeVolume3DMaterialTuning* tuning) {
+    return RuntimeVolume3DMaterial_RemapDensityWithTuning(density,tuning) *
+           (tuning->physical_smoke ? 1.0 : tuning->absorption_gain);
+}
+
+double RuntimeVolume3DMaterial_RemapDensity(double density) {
+    const RuntimeVolume3DMaterialTuning tuning=RuntimeVolume3DMaterial_GetTuning();
+    return RuntimeVolume3DMaterial_RemapDensityWithTuning(density,&tuning);
+}
 double RuntimeVolume3DMaterial_ExtinctionDensity(double density) {
-    return RuntimeVolume3DMaterial_RemapDensity(density) *
-           (gSmokeOptics.physical_smoke ? 1.0 : gRuntimeVolume3DAbsorptionGain);
+    const RuntimeVolume3DMaterialTuning tuning=RuntimeVolume3DMaterial_GetTuning();
+    return RuntimeVolume3DMaterial_ExtinctionDensityWithTuning(density,&tuning);
 }
 
 RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
@@ -153,6 +162,7 @@ RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
     double t_enter FISICS_DIM(length) FISICS_UNIT(meter) = t_min;
     double t_exit FISICS_DIM(length) FISICS_UNIT(meter) = t_max;
     double step FISICS_DIM(length) FISICS_UNIT(meter) = runtime_volume_3d_integrate_zero_length();
+    const RuntimeVolume3DMaterialTuning optics=RuntimeVolume3DMaterial_ForAttachment(attachment);
     double optical_depth = 0.0;
     double zero_length = runtime_volume_3d_integrate_zero_length();
 
@@ -178,8 +188,8 @@ RuntimeVisibility3DTransmittance RuntimeVolume3D_TransmittanceAlongRayRGB(
             0.5 * (t + next_t);
         const Vec3 sample_position =
             vec3_add(ray->origin, vec3_scale(ray->direction, sample_t));
-        const double density = RuntimeVolume3DMaterial_ExtinctionDensity(
-            (double)RuntimeVolume3D_SampleDensityAtPosition(attachment, sample_position));
+        const double density = RuntimeVolume3DMaterial_ExtinctionDensityWithTuning(
+            (double)RuntimeVolume3D_SampleDensityAtPosition(attachment, sample_position),&optics);
 
         optical_depth += density * (next_t - t) * kRuntimeVolume3DExtinctionScale;
     }

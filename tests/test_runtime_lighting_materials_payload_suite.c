@@ -9,6 +9,7 @@
 #include "config/config_manager.h"
 #include "config/scene/config_scene_material_persistence.h"
 #include "editor/scene_editor_material_graph.h"
+#include "editor/scene_editor_document.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "editor/material_preview_surface_eval.h"
 #include "editor/scene_editor_material_face_placement.h"
@@ -3353,13 +3354,15 @@ static int test_runtime_material_graph_runtime_scene_round_trip_stack_fallback(v
     SceneEditorMaterialGraphResetAll();
     assert_true("runtime_material_graph_runtime_apply",
                 runtime_scene_bridge_apply_file(runtime_path, &summary));
-    assert_true("runtime_material_graph_runtime_set_graph",
-                SceneEditorMaterialGraphSetObjectGraph(0, &graph, &compile_result));
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     snprintf(animSettings.runtimeScenePath,
              sizeof(animSettings.runtimeScenePath),
              "%s",
              runtime_path);
+    assert_true("runtime_material_graph_runtime_open_document",
+                SceneEditorDocumentOpenActive(diagnostics, sizeof(diagnostics)));
+    assert_true("runtime_material_graph_runtime_set_graph",
+                SceneEditorMaterialGraphSetObjectGraph(0, &graph, &compile_result));
     assert_true("runtime_material_graph_runtime_persist",
                 SceneEditorRuntimeScenePersistAuthoring(diagnostics, sizeof(diagnostics)));
 
@@ -3381,6 +3384,7 @@ static int test_runtime_material_graph_runtime_scene_round_trip_stack_fallback(v
                     strcmp(loaded_stack.layers[1].layerId, "graph_oil_overlay") == 0);
 
     unlink(runtime_path);
+    SceneEditorDocumentClose();
     SceneEditorMaterialGraphResetAll();
     SceneEditorMaterialStackResetAll();
     sceneSettings = saved_scene;
@@ -4924,7 +4928,12 @@ static int test_procedural_solid_microdetail_normal_is_bounded_and_shading_only(
     return 0;
 }
 
+#include "test_runtime_explicit_glass_roughness.h"
+#include "test_runtime_sampled_footprint.h"
+
 int run_test_runtime_lighting_materials_payload_suite(void) {
+    test_runtime_explicit_glass_optical_roughness();
+    test_runtime_sampled_footprint();
     test_runtime_material_payload_3d_scene_object_resolution_contract();
     test_runtime_material_payload_3d_authoring_object_values_override_preset();
     test_runtime_material_payload_3d_object_multipliers_contract();

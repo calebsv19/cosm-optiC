@@ -9,4 +9,5 @@ int SceneEditorMotionPlanPanelDraw(SDL_Renderer *, const MotionPaths *,
                                    const MotionPath *, SDL_Rect, int, int, int);
 bool SceneEditorMotionPlanPanelEvent(SDL_Event *);
 bool SceneEditorMotionPlanPanelControl(const char *, SDL_Rect *);
+bool SceneEditorMotionPlanPanelInteractionActive(void);
 #endif

@@ -9,11 +9,6 @@
 #include "render/runtime_volume_3d.h"
 
 bool RuntimeVolume3D_HasActiveExtinction(const RuntimeVolumeAttachment3D* attachment);
-typedef struct {
-    double density_scale,density_gamma,absorption_gain,opacity_clamp,opacity;
-    bool physical_smoke, sky_illumination, cell_centered;
-    double reference_concentration_kg_m3, mass_extinction_m2_kg, scattering_albedo, anisotropy, sky_error_budget;
-} RuntimeVolume3DMaterialTuning;
 bool RuntimeVolume3DMaterial_SetSmokeOptics(double reference, double extinction, double albedo, double anisotropy, bool sky);
 void RuntimeVolume3DMaterial_SetCellCentered(bool enabled);
 bool RuntimeVolume3DMaterial_SetSkyErrorBudget(double budget);
@@ -25,6 +20,9 @@ void RuntimeVolume3DMaterial_SetDensityGamma(double gamma);
 void RuntimeVolume3DMaterial_SetAbsorptionGain(double gain);
 void RuntimeVolume3DMaterial_SetOpacityClamp(double clamp_value);
 void RuntimeVolume3DMaterial_SetOpacity(double opacity);
+RuntimeVolume3DMaterialTuning RuntimeVolume3DMaterial_ForAttachment(const RuntimeVolumeAttachment3D* attachment);
+double RuntimeVolume3DMaterial_RemapDensityWithTuning(double density, const RuntimeVolume3DMaterialTuning* tuning);
+double RuntimeVolume3DMaterial_ExtinctionDensityWithTuning(double density, const RuntimeVolume3DMaterialTuning* tuning);
 double RuntimeVolume3DMaterial_RemapDensity(double density);
 double RuntimeVolume3DMaterial_ExtinctionDensity(double density);
 

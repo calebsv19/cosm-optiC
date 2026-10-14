@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_text.h"
 #include "ui/menu_numeric_controls.h"
 
 #include <math.h>
@@ -210,21 +211,12 @@ void menu_numeric_draw(SDL_Renderer *renderer, TTF_Font *font, MenuRuntimeState 
     SDL_RenderSetClipRect(renderer, &clip);
     const char *text = active ? edit->text : formatted;
     int x = slider->valueX;
-    if (active) {
-        int caret_width = prefix_width(renderer, font, text, edit->cursor);
-        x = text_origin(renderer, font, slider, edit);
-        const size_t start = edit->cursor < edit->anchor ? edit->cursor : edit->anchor;
-        const size_t end = edit->cursor > edit->anchor ? edit->cursor : edit->anchor;
-        SDL_Rect selection = {x + prefix_width(renderer, font, text, start), slider->valueY,
-            prefix_width(renderer, font, text, end) - prefix_width(renderer, font, text, start), slider->valueRect.h - 4};
-        SDL_SetRenderDrawColor(renderer, 45,85,125,255);
-        SDL_RenderFillRect(renderer, &selection);
-        if (((SDL_GetTicks() - edit->blinkEpoch) / 500) % 2 == 0) {
-            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-            SDL_RenderDrawLine(renderer, x + caret_width, slider->valueY, x + caret_width, slider->valueY + slider->valueRect.h - 5);
-        }
-    }
-    menu_render_draw_text_color(renderer, font, x, slider->valueY, color, text);
+    if(active) {
+        SceneEditorSharedText presentation;
+        scene_editor_shared_text_bind(&presentation,edit->text,sizeof(edit->text),KIT_UI_TEXT_SINGLE_LINE);
+        (void)kit_ui_text_position(&presentation.edit,edit->cursor,edit->anchor);
+        scene_editor_shared_text_draw(&presentation,renderer,slider->valueRect,color);
+    } else menu_render_draw_text_color(renderer,font,x,slider->valueY,color,text);
     SDL_RenderSetClipRect(renderer, clipped ? &old_clip : NULL);
     for (int direction = 0; direction < 2; ++direction) {
         SDL_Rect rect = direction ? slider->decreaseRect : slider->increaseRect;

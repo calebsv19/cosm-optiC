@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
 #include "scene_editor_camera_path_panel.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_document_timeline.h"
@@ -21,12 +23,11 @@ int SceneEditorCameraPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
   focus = binding && binding->use_focus_target;
   bool bound = path && binding && !strcmp(binding->path_id, path->id);
   snprintf(relationship, sizeof(relationship), "Camera: %s", binding ? binding->path_id : "legacy position source");
-  ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-      relationship, x, y, SceneEditorChromeShellResolvePalette().text_primary);
+  scene_editor_shared_label_at(r,relationship,x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
   y += 26;
   if (binding && binding->restore_known) {
     snprintf(predecessor,sizeof(predecessor),"Inactive source: %s",binding->restore_count?binding->restore_xyz_tracks[0]:"static placement");
-    ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),predecessor,x,y,SceneEditorChromeShellResolvePalette().text_primary);
+    scene_editor_shared_label_at(r,predecessor,x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
     y += 26;
   }
   const char *labels[] = {bound ? "Camera attached to this route" : "Attach camera on this route",
@@ -36,12 +37,11 @@ int SceneEditorCameraPathPanelDraw(SDL_Renderer *r, const MotionPaths *paths,
     if(i==4 && binding && binding->camera_orientation){controls[i]=(SDL_Rect){0};continue;}
     if(i==2) {controls[i]=(SDL_Rect){0};continue;} /* shared follower header owns timing */
     controls[i] = (SDL_Rect){x, y, width, 28};
-    SceneEditorRenderButton(r, controls[i], labels[i], false, enabled[i]);
+    SceneEditorSharedUiPanelButton(r,76,128+(i),controls[i],labels[i],false,enabled[i]);
     if (y < clip.y || y + 28 > clip.y + clip.h) controls[i] = (SDL_Rect){0};
     y += 34;
   }
-  ray_tracing_text_draw_utf8_at(r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-      binding && binding->camera_orientation ? "Stable frame owns aim/roll; FOV independent." : focus ? "Legacy focus owns yaw/pitch; FOV independent." : "Authored yaw/pitch; FOV independent.", x, y, SceneEditorChromeShellResolvePalette().text_primary);
+  scene_editor_shared_label_at(r,binding && binding->camera_orientation ? "Stable frame owns aim/roll; FOV independent." : focus ? "Legacy focus owns yaw/pitch; FOV independent." : "Authored yaw/pitch; FOV independent.",x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
   return y + 30;
 }
 bool SceneEditorCameraPathPanelEvent(SDL_Event *e, const MotionPath *path,

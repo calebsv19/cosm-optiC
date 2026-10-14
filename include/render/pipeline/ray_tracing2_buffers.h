@@ -16,6 +16,8 @@ bool RayTracing2BuffersEnsureFrameBuffers(Uint8** pixel_buffer,
                                           Uint8** tile_preview_buffer,
                                           float** energy_buffer,
                                           size_t pixel_count);
+bool RayTracing2BuffersEnsureFrameCapacity(Uint8** pixels, Uint8** preview,
+    float** energy, float** direct_energy, float** reflection_energy, size_t* capacity, size_t pixel_count);
 void RayTracing2BuffersClearFrameBuffers(Uint8* pixel_buffer,
                                          Uint8* tile_preview_buffer,
                                          float* energy_buffer,

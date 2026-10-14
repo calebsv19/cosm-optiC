@@ -1,3 +1,4 @@
+#include "ui/menu_shared_controls.h"
 #include "ui/sdl_menu_render.h"
 #include "ui/menu/sdl_menu_render_internal.h"
 
@@ -79,25 +80,6 @@
 #define ROOT_ROW_HEIGHT 34
 #define ROOT_ROW_SPACING 8
 #define ROOT_CTRL_BUTTON_W 56
-
-static void render_centered_text_color(SDL_Renderer *renderer,
-                                       TTF_Font *font,
-                                       const SDL_Rect *rect,
-                                       SDL_Color color,
-                                       const char *text) {
-    SDL_Rect textRect;
-    int text_w = 0;
-    int text_h = 0;
-    if (!font || !rect || !text || !text[0]) return;
-    if (!ray_tracing_text_measure_utf8(renderer, font, text, &text_w, &text_h)) return;
-    textRect = (SDL_Rect){
-        rect->x + (rect->w - text_w) / 2,
-        rect->y + (rect->h - text_h) / 2,
-        text_w,
-        text_h
-    };
-    (void)ray_tracing_text_draw_utf8(renderer, font, text, color, &textRect);
-}
 
 static const char* menu_upscale_mode_button_label(void) {
     switch ((Runtime3DUpscaleMode)animSettings.upscaleMode3D) {
@@ -333,6 +315,7 @@ void menu_render_frame(SDL_Renderer* renderer,
         return;
     }
 
+    menu_shared_controls_begin(state);
     menu_panel_chrome_draw(renderer, font, &screenLayout.leftPanelRect, "Scene + Mode", true);
     menu_panel_chrome_draw(renderer, font, &screenLayout.workspace.frame_rect, NULL, false);
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
@@ -370,38 +353,32 @@ void menu_render_frame(SDL_Renderer* renderer,
         }
     }
 
-    menu_render_draw_button_rect(renderer, font, &buttons.interactiveRect, "Interactive Mode", animSettings.interactiveMode);
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &buttons.deepRenderRect,
+    menu_shared_controls_button(state, MENU_CONTROL_interactiveRect, renderer, font, &buttons.interactiveRect, "Interactive Mode", animSettings.interactiveMode);
+    menu_shared_controls_button(state, MENU_CONTROL_deepRenderRect, renderer, font, &buttons.deepRenderRect,
                                  animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D
                                      ? "3D Render"
                                      : "Deep Render",
                                  animSettings.deepRenderMode);
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &buttons.asyncDeepRenderRect,
+    menu_shared_controls_button(state, MENU_CONTROL_asyncDeepRenderRect, renderer, font, &buttons.asyncDeepRenderRect,
                                  animation_config_space_mode_clamp(animSettings.spaceMode)==SPACE_MODE_3D ? "Responsive render: Auto" : "Async Render",
                                  animation_config_space_mode_clamp(animSettings.spaceMode)==SPACE_MODE_3D || animSettings.asyncDeepRender);
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &buttons.bounceRect,
+    menu_shared_controls_button(state, MENU_CONTROL_bounceRect, renderer, font, &buttons.bounceRect,
                                  animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D
                                      ? "Bounce"
                                      : "Bounce Mode",
                                  animSettings.bounceMode);
-    menu_render_draw_button_rect(renderer, font, &buttons.autoMp4Rect, "Auto MP4", animSettings.autoMP4);
+    menu_shared_controls_button(state, MENU_CONTROL_autoMp4Rect, renderer, font, &buttons.autoMp4Rect, "Auto MP4", animSettings.autoMP4);
 
     const RayTracingIntegratorMenuState integrator_menu =
         RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
-    menu_render_draw_button_rect(renderer, font, &buttons.integratorRect, integrator_menu.buttonLabel, true);
+    menu_shared_controls_button(state, MENU_CONTROL_integratorRect, renderer, font, &buttons.integratorRect, integrator_menu.buttonLabel, true);
 
     if (buttons.showPathToggles) {
-        menu_render_draw_button_rect(renderer, font, &buttons.pathRouletteRect,
+        menu_shared_controls_button(state, MENU_CONTROL_pathRouletteRect, renderer, font, &buttons.pathRouletteRect,
                                      animSettings.pathRussianRoulette ? "Roulette: ON" : "Roulette: OFF",
                                      animSettings.pathRussianRoulette);
         const char* bsdfLabel = (animSettings.bsdfModel == 0) ? "BSDF: Lambert" : "BSDF: GGX";
-        menu_render_draw_button_rect(renderer, font, &buttons.pathBsdfRect, bsdfLabel, animSettings.bsdfModel != 0);
+        menu_shared_controls_button(state, MENU_CONTROL_pathBsdfRect, renderer, font, &buttons.pathBsdfRect, bsdfLabel, animSettings.bsdfModel != 0);
     }
 
     char manifestLabel[160];
@@ -409,7 +386,7 @@ void menu_render_frame(SDL_Renderer* renderer,
         state->manifestDropdownOpen ||
         animation_config_space_mode_clamp(animSettings.spaceMode) == SPACE_MODE_3D;
     menu_render_format_manifest_button_label(state, manifestLabel, sizeof(manifestLabel));
-    menu_render_draw_button_rect(renderer, font, &buttons.loadSceneRect, manifestLabel, sceneListVisible);
+    menu_shared_controls_button(state, MENU_CONTROL_loadSceneRect, renderer, font, &buttons.loadSceneRect, manifestLabel, sceneListVisible);
     if (sceneListVisible) {
         menu_render_draw_manifest_dropdown(renderer, font, state, &buttons, &screenLayout);
     } else {
@@ -424,24 +401,22 @@ void menu_render_frame(SDL_Renderer* renderer,
                               "Input Root",
                               state->editingInputRoot ? state->pathInputBuffer : animSettings.inputRoot,
                               state->editingInputRoot);
-    menu_render_draw_button_rect(renderer, font, &buttons.inputRootEditRect, "Edit", state->editingInputRoot);
-    menu_render_draw_button_rect(renderer, font, &buttons.inputRootFolderRect, "Folder", false);
-    menu_render_draw_button_rect(renderer, font, &buttons.inputRootApplyRect, "Apply", false);
+    menu_shared_controls_button(state, MENU_CONTROL_inputRootEditRect, renderer, font, &buttons.inputRootEditRect, "Edit", state->editingInputRoot);
+    menu_shared_controls_button(state, MENU_CONTROL_inputRootFolderRect, renderer, font, &buttons.inputRootFolderRect, "Folder", false);
+    menu_shared_controls_button(state, MENU_CONTROL_inputRootApplyRect, renderer, font, &buttons.inputRootApplyRect, "Apply", false);
     menu_render_draw_root_row(renderer, font, &buttons.meshAssetRootValueRect,
                               "Mesh Root",
                               state->editingMeshAssetRoot ? state->pathInputBuffer : animSettings.meshAssetRoot,
                               state->editingMeshAssetRoot);
-    menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootEditRect, "Edit", state->editingMeshAssetRoot);
-    menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootFolderRect, "Folder", false);
-    menu_render_draw_button_rect(renderer, font, &buttons.meshAssetRootApplyRect, "Apply", false);
+    menu_shared_controls_button(state, MENU_CONTROL_meshAssetRootEditRect, renderer, font, &buttons.meshAssetRootEditRect, "Edit", state->editingMeshAssetRoot);
+    menu_shared_controls_button(state, MENU_CONTROL_meshAssetRootFolderRect, renderer, font, &buttons.meshAssetRootFolderRect, "Folder", false);
+    menu_shared_controls_button(state, MENU_CONTROL_meshAssetRootApplyRect, renderer, font, &buttons.meshAssetRootApplyRect, "Apply", false);
     {
         char mesh_policy_label[96];
         ray_tracing_mesh_import_policy_format_label(&animSettings,
                                                     mesh_policy_label,
                                                     sizeof(mesh_policy_label));
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.meshImportNormalPolicyRect,
+        menu_shared_controls_button(state, MENU_CONTROL_meshImportNormalPolicyRect, renderer, font, &buttons.meshImportNormalPolicyRect,
                                      mesh_policy_label,
                                      animSettings.meshImportNormalMode ==
                                          RAY_TRACING_MESH_IMPORT_NORMAL_MODE_CREASE_AWARE);
@@ -451,7 +426,7 @@ void menu_render_frame(SDL_Renderer* renderer,
         bool scene_atmosphere = volume_source_ui_read_scene_attachment(&saved_atmosphere);
         char volumeLabel[160];
         menu_render_format_volume_button_label(state, volumeLabel, sizeof(volumeLabel));
-        menu_render_draw_button_rect(renderer, font, &buttons.attachVolumeRect, volumeLabel, state->volumeDropdownOpen);
+        menu_shared_controls_button(state, MENU_CONTROL_attachVolumeRect, renderer, font, &buttons.attachVolumeRect, volumeLabel, state->volumeDropdownOpen);
         if (state->volumeDropdownOpen) {
             menu_render_draw_volume_dropdown(renderer, font, state, &buttons, &screenLayout);
         } else {
@@ -462,13 +437,11 @@ void menu_render_frame(SDL_Renderer* renderer,
             state->volumeThumbHeight = 0.0f;
             state->volumeTrackHeight = 0.0f;
         }
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.volumeToggleRect,
+        menu_shared_controls_button(state, MENU_CONTROL_volumeToggleRect, renderer, font, &buttons.volumeToggleRect,
                                      scene_atmosphere ? (saved_atmosphere.enabled ? "Scene atmosphere: ON" : "Scene atmosphere: OFF") : animSettings.volumeInteractionEnabled ? "External volume: ON"
                                                                           : "External volume: OFF",
                                      scene_atmosphere ? saved_atmosphere.enabled : animSettings.volumeInteractionEnabled);
-        menu_render_draw_button_rect(renderer, font, &buttons.volumeClearRect, scene_atmosphere ? "Edit in Environment" : "Clear Volume", false);
+        menu_shared_controls_button(state, MENU_CONTROL_volumeClearRect, renderer, font, &buttons.volumeClearRect, scene_atmosphere ? "Edit in Environment" : "Clear Volume", false);
         if (scene_atmosphere) {
             snprintf(state->volumeSummaryLine1,sizeof(state->volumeSummaryLine1),"Saved scene atmosphere: %s",saved_atmosphere.enabled?"enabled":"disabled");
             snprintf(state->volumeSummaryLine2,sizeof(state->volumeSummaryLine2),"Placement and appearance: Scene Editor > Environment");
@@ -515,7 +488,7 @@ void menu_render_frame(SDL_Renderer* renderer,
         for (module_index = 0;
              module_index < MENU_WORKSPACE_MODULE_COUNT;
              ++module_index) {
-            menu_render_draw_button_rect(
+            menu_shared_controls_button(state, MENU_CONTROL_WORKSPACE + (unsigned)module_index,
                 renderer,
                 font,
                 &screenLayout.workspace.tab_rects[module_index],
@@ -525,19 +498,13 @@ void menu_render_frame(SDL_Renderer* renderer,
         }
     }
     if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.rendererLightingTabRect,
+        menu_shared_controls_button(state, MENU_CONTROL_rendererLightingTabRect, renderer, font, &buttons.rendererLightingTabRect,
                                      "Lighting",
                                      state->rendererControlsTab == MENU_RENDERER_CONTROLS_LIGHTING);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.rendererPerformanceTabRect,
+        menu_shared_controls_button(state, MENU_CONTROL_rendererPerformanceTabRect, renderer, font, &buttons.rendererPerformanceTabRect,
                                      "Performance",
                                      state->rendererControlsTab == MENU_RENDERER_CONTROLS_PERFORMANCE);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.rendererCausticsTabRect,
+        menu_shared_controls_button(state, MENU_CONTROL_rendererCausticsTabRect, renderer, font, &buttons.rendererCausticsTabRect,
                                      "Caustic / Photon",
                                      state->rendererControlsTab == MENU_RENDERER_CONTROLS_CAUSTICS);
     }
@@ -555,29 +522,29 @@ void menu_render_frame(SDL_Renderer* renderer,
                        "Transport: %s",
                        RuntimeCausticTransportEngine3D_Label(
                            state->causticSettings.transportEngine));
-        menu_render_draw_button_rect(renderer, font, &buttons.causticModeRect,
+        menu_shared_controls_button(state, MENU_CONTROL_causticModeRect, renderer, font, &buttons.causticModeRect,
                                      mode_label,
                                      state->causticSettings.mode != RUNTIME_CAUSTIC_MODE_OFF);
-        menu_render_draw_button_rect(renderer, font, &buttons.causticEngineRect,
+        menu_shared_controls_button(state, MENU_CONTROL_causticEngineRect, renderer, font, &buttons.causticEngineRect,
                                      engine_label,
                                      state->causticSettings.transportEngine ==
                                          RUNTIME_CAUSTIC_TRANSPORT_ENGINE_PHOTON_MAP);
-        menu_render_draw_button_rect(renderer, font, &buttons.causticSurfaceRect,
+        menu_shared_controls_button(state, MENU_CONTROL_causticSurfaceRect, renderer, font, &buttons.causticSurfaceRect,
                                      state->causticSettings.surfaceCacheEnabled
                                          ? "Surface Cache: ON"
                                          : "Surface Cache: OFF",
                                      state->causticSettings.surfaceCacheEnabled);
-        menu_render_draw_button_rect(renderer, font, &buttons.causticVolumeRect,
+        menu_shared_controls_button(state, MENU_CONTROL_causticVolumeRect, renderer, font, &buttons.causticVolumeRect,
                                      state->causticSettings.volumeCacheEnabled
                                          ? "Volume Cache: ON"
                                          : "Volume Cache: OFF",
                                      state->causticSettings.volumeCacheEnabled);
-        menu_render_draw_button_rect(renderer, font, &buttons.causticDebugSummaryRect,
+        menu_shared_controls_button(state, MENU_CONTROL_causticDebugSummaryRect, renderer, font, &buttons.causticDebugSummaryRect,
                                      state->causticSettings.debugSummaryEnabled
                                          ? "Summary: ON"
                                          : "Summary: OFF",
                                      state->causticSettings.debugSummaryEnabled);
-        menu_render_draw_button_rect(renderer, font, &buttons.causticDebugExportRect,
+        menu_shared_controls_button(state, MENU_CONTROL_causticDebugExportRect, renderer, font, &buttons.causticDebugExportRect,
                                      state->causticSettings.debugExportEnabled
                                          ? "Debug Export: ON"
                                          : "Debug Export: OFF",
@@ -591,45 +558,29 @@ void menu_render_frame(SDL_Renderer* renderer,
         const char* denoiseLabel = animSettings.disneyDenoiseEnabled
                                        ? "Disney Denoise: ON"
                                        : "Disney Denoise: OFF";
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.tileRect,
+        menu_shared_controls_button(state, MENU_CONTROL_tileRect, renderer, font, &buttons.tileRect,
                                      tileButtonLabel,
                                      animSettings.useTiledRenderer);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.tilePreviewRect,
+        menu_shared_controls_button(state, MENU_CONTROL_tilePreviewRect, renderer, font, &buttons.tilePreviewRect,
                                      previewLabel,
                                      animSettings.tilePreviewEnabled);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.denoiseRect,
+        menu_shared_controls_button(state, MENU_CONTROL_denoiseRect, renderer, font, &buttons.denoiseRect,
                                      denoiseLabel,
                                      animSettings.disneyDenoiseEnabled);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.upscaleModeRect,
+        menu_shared_controls_button(state, MENU_CONTROL_upscaleModeRect, renderer, font, &buttons.upscaleModeRect,
                                      menu_upscale_mode_button_label(),
                                      animSettings.upscaleMode3D != RUNTIME_3D_UPSCALE_MODE_OFF);
     } else if (state->menuWorkspaceHost.active_module == MENU_WORKSPACE_RENDER) {
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.topFillRect,
+        menu_shared_controls_button(state, MENU_CONTROL_topFillRect, renderer, font, &buttons.topFillRect,
                                      menu_environment_light_button_label(),
                                      animSettings.environmentLightMode != ENVIRONMENT_LIGHT_MODE_OFF);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.environmentPresetRect,
+        menu_shared_controls_button(state, MENU_CONTROL_environmentPresetRect, renderer, font, &buttons.environmentPresetRect,
                                      menu_environment_preset_button_label(),
                                      animSettings.environmentPreset != ENVIRONMENT_PRESET_NEUTRAL);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.falloffRect,
+        menu_shared_controls_button(state, MENU_CONTROL_falloffRect, renderer, font, &buttons.falloffRect,
                                      menu_forward_falloff_button_label(),
                                      animSettings.forwardFalloffMode != FORWARD_FALLOFF_MODE_QUADRATIC);
-        menu_render_draw_button_rect(renderer,
-                                     font,
-                                     &buttons.environmentBackgroundModeRect,
+        menu_shared_controls_button(state, MENU_CONTROL_environmentBackgroundModeRect, renderer, font, &buttons.environmentBackgroundModeRect,
                                      animSettings.environmentBackgroundBrightnessAuto
                                          ? "BG: Auto"
                                          : "BG: Custom",
@@ -688,46 +639,18 @@ void menu_render_frame(SDL_Renderer* renderer,
         menu_resume_panel_render(renderer, font, state, &resumePanel);
     }
 
-    menu_render_draw_button_rect(renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
-    menu_render_draw_button_rect(renderer, font, &buttons.spaceModeRect,
+    menu_shared_controls_button(state, MENU_CONTROL_sceneEditorRect, renderer, font, &buttons.sceneEditorRect, "Scene Editor", false);
+    menu_shared_controls_button(state, MENU_CONTROL_spaceModeRect, renderer, font, &buttons.spaceModeRect,
                                  menu_space_mode_button_label(),
                                  animSettings.spaceMode == SPACE_MODE_3D);
 
-    menu_render_draw_button_rect(renderer, font, &buttons.saveRect, "Save", false);
-    menu_render_draw_button_rect(renderer, font, &buttons.restoreRect, "Restore Defaults", false);
-    menu_render_draw_button_rect(renderer, font, &buttons.previewRect, "Preview", animSettings.previewMode);
-    menu_render_draw_button_rect(renderer, font, &buttons.exitRect, "Close", false);
+    menu_shared_controls_button(state, MENU_CONTROL_saveRect, renderer, font, &buttons.saveRect, "Save", false);
+    menu_shared_controls_button(state, MENU_CONTROL_restoreRect, renderer, font, &buttons.restoreRect, "Restore Defaults", false);
+    menu_shared_controls_button(state, MENU_CONTROL_previewRect, renderer, font, &buttons.previewRect, "Preview", animSettings.previewMode);
+    menu_shared_controls_button(state, MENU_CONTROL_exitRect, renderer, font, &buttons.exitRect, "Close", false);
 
-    if (buttons.startRect.w > 0 && buttons.startRect.h > 0) {
-        if (has_shared_palette) {
-            SDL_Color startFill = menu_render_ensure_highlight_fill_contrast(palette.accent_primary,
-                                                                             palette.button_text,
-                                                                             palette.panel_fill);
-            SDL_SetRenderDrawColor(renderer,
-                                   startFill.r, startFill.g,
-                                   startFill.b, startFill.a);
-        } else {
-            SDL_SetRenderDrawColor(renderer, 90, 220, 110, 255);
-        }
-        SDL_RenderFillRect(renderer, &buttons.startRect);
-        if (has_shared_palette) {
-            SDL_SetRenderDrawColor(renderer,
-                                   palette.panel_border.r, palette.panel_border.g,
-                                   palette.panel_border.b, palette.panel_border.a);
-        } else {
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-        }
-        SDL_RenderDrawRect(renderer, &buttons.startRect);
-        if (has_shared_palette) {
-            SDL_Color startFill = menu_render_ensure_highlight_fill_contrast(palette.accent_primary,
-                                                                             palette.button_text,
-                                                                             palette.panel_fill);
-            SDL_Color startText = menu_render_choose_readable_text(startFill, palette.button_text);
-            render_centered_text_color(renderer, font, &buttons.startRect, startText, "Start");
-        } else {
-            RenderButtonText(renderer, buttons.startRect, "Start");
-        }
-    }
+    menu_shared_controls_button(state, MENU_CONTROL_startRect, renderer, font,
+        &buttons.startRect, "Start", false);
 
     Uint32 now = SDL_GetTicks();
     if (state->statusExpireMs > now) {
@@ -753,5 +676,6 @@ void menu_render_frame(SDL_Renderer* renderer,
                                                  menu_width,
                                                  menu_height,
                                                  NULL);
+    menu_shared_controls_end(state);
     render_end_frame();
 }

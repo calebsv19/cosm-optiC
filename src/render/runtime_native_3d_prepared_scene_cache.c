@@ -9,6 +9,7 @@
 #include "render/runtime_frame_dataflow_ledger_3d.h"
 #include "render/runtime_scene_3d_builder.h"
 #include "render/runtime_scene_accel_3d.h"
+#include "render/runtime_ray_3d.h"
 #include "render/runtime_triangle_bvh_3d.h"
 
 static RuntimeScene3D gRuntimeNative3DPreparedSceneCache;
@@ -435,7 +436,11 @@ bool runtime_native_3d_prepared_scene_build_or_copy_for_frame(
         gRuntimeNative3DPreparedSceneCachedGeneration ==
             gRuntimeNative3DPreparedSceneDirtyGeneration &&
         (gRuntimeNative3DPreparedSceneCacheStaticGeometry ||
-         fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) <= 1e-12)) {
+         fabs(gRuntimeNative3DPreparedSceneCacheNormalizedT - normalized_t) <= 1e-12) &&
+        /* Another prepared frame may have rebound the process-wide accelerator.
+         * Rebuild through the normal owner rather than reuse mismatched geometry. */
+        (RuntimeRay3D_CurrentTraceRoute() == RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH ||
+         RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(&gRuntimeNative3DPreparedSceneCache))) {
         gRuntimeNative3DPreparedSceneCacheHits += 1u;
         if (dataflow_enabled) {
             gRuntimeNative3DPreparedSceneDataflowStats.cacheHitPrepareCalls += 1u;

@@ -129,6 +129,12 @@ typedef enum {
  * unbounded. Caller must exclude stochastic/rough events and material microdetail. */
 bool RuntimeRay3D_TransportIdealFootprint(const HitInfo3D* hit, Vec3 normal,
     RuntimeRay3DIdealFootprintEvent event, double eta_from, double eta_to, Ray3D* io_ray);
+/* Coherent per-sample footprint for the existing bounded rough-direction cone.
+   Constant-normal ideal eligibility is retained; unsupported samples fail broad. */
+bool RuntimeRay3D_TransportSampledFootprint(const HitInfo3D* hit, Vec3 normal,
+    RuntimeRay3DIdealFootprintEvent event, double eta_from, double eta_to,
+    Vec3 ideal_direction, Ray3D* sampled_ray);
+
 void HitInfo3D_Reset(HitInfo3D* hit);
 Vec3 HitInfo3D_OffsetNormal(const HitInfo3D* hit);
 Vec3 HitInfo3D_BoundaryNormal(const HitInfo3D* hit);

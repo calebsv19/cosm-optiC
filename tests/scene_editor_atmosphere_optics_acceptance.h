@@ -1,0 +1,71 @@
+/* Native UI and real MCP proof in disposable copies only. */
+static void atmosphere_optics_native(SceneEditor* editor,const char* scene,bool reopen) {
+    SceneEditorWorkspaceProfileSelect(editor,SCENE_WORKSPACE_ENVIRONMENT);
+    SceneAtmosphereAttachment v,legacy;char diagnostic[512];
+    if(reopen) {
+        assert(SceneEditorAtmosphereRead(&v) && v.optics.present && v.optics.physical);
+        assert(v.optics.reference_concentration_kg_m3==.001 && v.optics.mass_extinction_m2_kg==900);
+        assert(v.optics.scattering_albedo==.8 && v.optics.anisotropy==.4 && !v.optics.sky_illumination);
+        assert(v.optics.cell_centered && v.optics.sky_error_budget==.00001 && v.step_scale==.5);
+        assert(!SceneEditorDocumentIsDirty());
+        fprintf(stderr,"Physical atmosphere fresh-process reopen PASS\n");return;
+    }
+    assert(SceneEditorAtmosphereRead(&v));
+    if(v.present) assert(SceneEditorAtmosphereRemove(SceneEditorDocumentRevision(),diagnostic,sizeof(diagnostic)));
+    static TimelineDocument timeline;
+    assert(TimelineDocumentInit(&timeline,(TimelineRate){24,1},(TimelineRange){0,8})==TIMELINE_STATUS_OK);
+    assert(SceneEditorDocumentSetTimeline(&timeline,SceneEditorDocumentRevision(),diagnostic,sizeof(diagnostic)));
+    atmosphere_control(editor,"generate");assert(SceneEditorAtmosphereRead(&legacy) && legacy.present && !legacy.optics.present);
+    static unsigned char before[160*100*4],physical[160*100*4],restored[160*100*4],exact[160*100*4];
+    atmosphere_preview_pixels(editor,before);
+    atmosphere_control(editor,"optical_profile");
+    assert(SceneEditorAtmosphereRead(&v) && v.optics.physical && v.affects_lighting);
+    atmosphere_control(editor,"appearance");
+    unsigned long long draft_revision=SceneEditorDocumentRevision();
+    atmosphere_control(editor,"concentration");
+    json_object* request=json_tokener_parse("{\"method\":\"scene.undo\",\"params\":{\"expected_revision\":0}}");
+    json_object* response=SceneEditorAgentControlDispatch(request),*ok=NULL,*message=NULL;
+    assert(json_object_object_get_ex(response,"ok",&ok) && !json_object_get_boolean(ok));
+    assert(json_object_object_get_ex(response,"message",&message) && strstr(json_object_get_string(message),"active editor operation"));
+    json_object_put(response);json_object_put(request);key(editor,SDLK_ESCAPE);
+    assert(SceneEditorDocumentRevision()==draft_revision);
+    atmosphere_appearance_number(editor,"concentration","0.001");
+    atmosphere_appearance_number(editor,"mass_extinction","900");
+    atmosphere_appearance_number(editor,"scattering_albedo","0.8");
+    atmosphere_appearance_number(editor,"anisotropy","0.4");
+    atmosphere_control(editor,"sky_illumination");
+    atmosphere_control(editor,"sampling_layout");atmosphere_control(editor,"sampling_layout");
+    atmosphere_appearance_number(editor,"sky_error_budget","0.00001");
+    unsigned long long revision=SceneEditorDocumentRevision();
+    atmosphere_appearance_number(editor,"scattering_albedo","1.01");
+    assert(SceneEditorDocumentRevision()==revision);
+    atmosphere_appearance_number(editor,"step","0.5");
+    assert(SceneEditorAtmosphereRead(&v) && v.optics.physical && v.optics.scattering_albedo==.8);
+    assert(v.density_scale==legacy.density_scale && v.opacity==legacy.opacity && v.absorption_gain==legacy.absorption_gain);
+    assert(!SceneAtmosphereRuntimeRequiresSynchronousSelection(false));
+    capture(editor,"physical_atmosphere_coefficients.ppm");
+    atmosphere_preview_pixels(editor,physical);assert(memcmp(before,physical,sizeof(before)));
+    RayEvaluatedSceneSnapshot evaluated;assert(SceneEditorTimelineCopyEvaluated(&evaluated));
+    RuntimeNative3DPreparedFrame* frame=calloc(1,sizeof(*frame));assert(frame);
+    assert(RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(frame,160,100,&evaluated,NULL));
+    assert(frame->physicalAtmosphere && frame->scene.volume.grid.cellCentered);
+    assert(RuntimeNative3DRenderPreparedRegion(exact,RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,frame,0,0,160,100,NULL));
+    assert(!memcmp(exact,physical,sizeof(exact)));
+    assert(RuntimeNative3DRenderPreparedRegion(exact,RAY_TRACING_3D_INTEGRATOR_DISNEY_V2,frame,0,0,160,100,NULL));
+    RuntimeNative3DPreparedFrame_Free(frame);free(frame);
+    atmosphere_control(editor,"optical_profile");assert(SceneEditorAtmosphereRead(&v) && !v.optics.physical);
+    assert(!RuntimeVolume3DMaterial_GetTuning().physical_smoke && !RuntimeVolume3DMaterial_GetTuning().cell_centered);
+    /* Integration step is numerical and was explicitly edited; restore it for exact legacy parity. */
+    v.step_scale=legacy.step_scale;assert(SceneEditorAtmosphereSet(&v,SceneEditorDocumentRevision(),diagnostic,sizeof(diagnostic)));
+    atmosphere_preview_pixels(editor,restored);assert(!memcmp(before,restored,sizeof(before)));
+    assert(SceneEditorDocumentUndo(diagnostic,sizeof(diagnostic)));
+    assert(SceneEditorDocumentUndo(diagnostic,sizeof(diagnostic)));
+    atmosphere_preview_pixels(editor,restored);assert(!memcmp(physical,restored,sizeof(physical)));
+    assert(SceneEditorDocumentRedo(diagnostic,sizeof(diagnostic)));assert(SceneEditorDocumentRedo(diagnostic,sizeof(diagnostic)));
+    assert(SceneEditorDocumentUndo(diagnostic,sizeof(diagnostic)));assert(SceneEditorDocumentUndo(diagnostic,sizeof(diagnostic)));
+    atmosphere_control(editor,"appearance");capture(editor,"physical_atmosphere_ui.ppm");
+    choose_menu(editor,0,0);assert(!SceneEditorDocumentIsDirty());
+    assert(SceneEditorDocumentOpen(scene,diagnostic,sizeof(diagnostic)));
+    assert(SceneEditorAtmosphereRead(&v) && v.optics.physical && v.optics.mass_extinction_m2_kg==900);
+    fprintf(stderr,"Physical atmosphere UI PASS: coefficients/toggles, validation, shared history, exact Direct Light pixels, legacy parity, Disney dispatch and File Save/reopen\n");
+}

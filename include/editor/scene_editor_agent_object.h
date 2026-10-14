@@ -1,0 +1,9 @@
+#ifndef SCENE_EDITOR_AGENT_OBJECT_H
+#define SCENE_EDITOR_AGENT_OBJECT_H
+#include <stdbool.h>
+#include <stddef.h>
+#include <json-c/json.h>
+bool SceneEditorAgentObjectReadOnly(const char *name);
+bool SceneEditorAgentObjectDispatch(const char *name,json_object *params,
+    json_object *response,char *message,size_t size);
+#endif

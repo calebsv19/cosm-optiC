@@ -192,6 +192,7 @@ if [ -f "$TOOLS_DIR/managed_mesh_assets.py" ] && [ -x "$TOOLS_DIR/compile_runtim
     export RAY_TRACING_MANAGED_MESH_COMPILER="$TOOLS_DIR/compile_runtime_fixture"
 fi
 if [ -f "$TOOLS_DIR/scene_atmosphere_assets.py" ]; then
+    export RAY_TRACING_SAVE_AS_HELPER="$TOOLS_DIR/scene_editor_save_as_assets.py"
     export RAY_TRACING_ATMOSPHERE_HELPER="$TOOLS_DIR/scene_atmosphere_assets.py"
 fi
 if [ -x "$TOOLS_DIR/ffmpeg" ] && [ -z "${RAY_TRACING_FFMPEG_BIN:-}" ]; then

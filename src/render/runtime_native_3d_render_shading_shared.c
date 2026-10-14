@@ -1,5 +1,7 @@
 #include "render/runtime_native_3d_render_shading_internal.h"
 
+#include "render/runtime_glass_null_interface_3d.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -8,11 +10,11 @@
 #include "render/integrators/hybrid/integrator_tonemap.h"
 #include "render/runtime_volume_3d_integrate.h"
 
-RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
+static RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary_impl(
     const RuntimeScene3D* scene,
     const RuntimeCameraProjector3D* projector,
     double pixel_x,
-    double pixel_y) {
+    double pixel_y, bool null_interfaces) {
     RuntimeNative3DPrimaryTrace trace = {0};
     RuntimeLightEmitterHit3DResult emitter_hit = {0};
 
@@ -23,6 +25,16 @@ RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
                                          pixel_x,
                                          pixel_y,
                                          &trace.primary);
+    if (null_interfaces && trace.primary.hit) {
+        RuntimeMaterialPayload3D first = {0};
+        if (!scene->volume.enabled &&
+            RuntimeMaterialPayload3D_ResolveFromHit(&trace.primary.hitInfo,&first) &&
+            RuntimeGlassNullInterface3D_IsNeutral(&first)) {
+            trace.primary.hit = RuntimeGlassNullInterface3D_Trace(scene,
+                &trace.primary.primaryRay,projector->nearPlane,HUGE_VAL,
+                &trace.primary.hitInfo);
+        }
+    }
     if (trace.primary.hit) {
         trace.payloadResolved =
             RuntimeMaterialPayload3D_ResolveFromHit(&trace.primary.hitInfo, &trace.payload);
@@ -48,6 +60,17 @@ RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
     }
 
     return trace;
+}
+
+RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary(
+    const RuntimeScene3D* scene,const RuntimeCameraProjector3D* projector,
+    double x,double y) {
+    return runtime_native_3d_render_trace_primary_impl(scene,projector,x,y,false);
+}
+RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary_disney_v2(
+    const RuntimeScene3D* scene,const RuntimeCameraProjector3D* projector,
+    double x,double y) {
+    return runtime_native_3d_render_trace_primary_impl(scene,projector,x,y,true);
 }
 
 void runtime_native_3d_render_record_disney_v2_emissive_area_stats(

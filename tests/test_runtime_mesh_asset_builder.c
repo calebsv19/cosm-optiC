@@ -66,6 +66,11 @@ void runtime_scene_bridge_get_last_3d_primitive_seed_state(
     out_state->valid = true;
 }
 
+int runtime_scene_bridge_last_3d_primitive_seed_count(void) { return 0; }
+bool runtime_scene_bridge_get_last_3d_primitive_seed(int index, RuntimeSceneBridgePrimitiveSeed *out_seed) {
+    (void)index; (void)out_seed; return false;
+}
+
 void runtime_scene_bridge_get_last_3d_scaffold_state(
     RuntimeSceneBridge3DScaffoldState* out_state) {
     if (!out_state) return;

@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
 #include "scene_editor_motion_orientation_panel.h"
 /* Presentation for the reusable path library and contextual inspectors. */
 #include "editor/scene_editor_camera_authoring.h"
@@ -29,9 +31,7 @@
 static void label(SDL_Renderer *r, const char *s, int x, int y) {
   char *b = ui.labels[ui.label_count++ % 128];
   snprintf(b, 200, "%s", s);
-  ray_tracing_text_draw_utf8_at(
-      r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9), b, x, y,
-      SceneEditorChromeShellResolvePalette().text_primary);
+  scene_editor_shared_label_at(r,b,x,y,SceneEditorChromeShellResolvePalette().text_primary,12);
 }
 static void scrollbar(SDL_Renderer *r, SDL_Rect pane, int maximum, int offset) {
   if (maximum <= 0)
@@ -49,7 +49,7 @@ static void button(SDL_Renderer *r, int index, SDL_Rect rect, const char *s,
   snprintf(b, 200, "%s", s);
   bool selected = (index == SELECT_TOOL && !ui.placing) ||
                   (index == PLACE_TOOL && ui.placing);
-  SceneEditorRenderButton(r, rect, b, selected, enabled);
+  SceneEditorSharedUiPanelButton(r,132,128+index,rect,b,selected,enabled);
 }
 static bool projector(const SceneEditorPaneLayout *l) {
   RuntimeSceneBridge3DDigestState d;
@@ -99,9 +99,7 @@ static void overlay(SDL_Renderer *r, const MotionPath *p) {
       SDL_SetRenderDrawColor(r,255,255,255,255);SDL_Rect halo={x-8,y-8,16,16};SDL_RenderDrawRect(r,&halo);
     }
     snprintf(ui.point_labels[i], sizeof(ui.point_labels[i]), "%zu", i + 1);
-    ray_tracing_text_draw_utf8_at(
-        r, ray_tracing_font_runtime_get_ui_regular(r, 12, 9),
-        ui.point_labels[i], x + 9, y - 14, (SDL_Color){230, 250, 255, 255});
+    scene_editor_shared_label_at(r,ui.point_labels[i],x + 9,y - 14,(SDL_Color){230, 250, 255, 255},12);
     if (ui.show_followers || i != (size_t)ui.point)
       continue;
     for (int h = 0; h < 2; ++h) {
@@ -114,8 +112,7 @@ static void overlay(SDL_Renderer *r, const MotionPath *p) {
         SDL_Color color=h?(SDL_Color){235,155,90,255}:(SDL_Color){160,180,255,255};
         SDL_SetRenderDrawColor(r,color.r,color.g,color.b,255);
         SDL_RenderDrawLine(r, x, y, hx, hy);
-        ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,12,9),
-            h?"Out":"In",hx+8,hy+5,color);
+        scene_editor_shared_label_at(r,h?"Out":"In",hx+8,hy+5,color,12);
         SDL_Rect handle = {hx - 4, hy - 4, 8, 8};
         SDL_RenderFillRect(r, &handle);
         if(ui.hover_point==(int)i && ui.hover_handle==h+1 && !ui.dragging) {
@@ -174,8 +171,7 @@ static int point_fields(SDL_Renderer *r,const MotionPath *p,int g,int x,int y,in
         else
           snprintf(b, 200, "%c: %.5g", 'X' + k, v[k]);
         ui.fields[index] = (SDL_Rect){x + k * (w + 6) / 3, y, (w - 12) / 3, 24};
-        SceneEditorRenderButton(r, ui.fields[index], b, ui.editing == index,
-                                true);
+        SceneEditorSharedUiPanelButton(r,132,256+(index),ui.fields[index],b,ui.editing == index,true);
       }
       y += 28;
   return y;
@@ -235,7 +231,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     ui.rows[i] = (SDL_Rect){x, y, w, 22};
     char *b = ui.labels[ui.label_count++ % 128];
     snprintf(b, 200, "%s", d.paths[i].name);
-    SceneEditorRenderButton(r, ui.rows[i], b, p == &d.paths[i], true);
+    SceneEditorSharedUiPanelButton(r,132,384+(i),ui.rows[i],b,p == &d.paths[i],true);
     y += 24;
   }
   if (d.count > 4) {
@@ -279,7 +275,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     char *b=ui.labels[ui.label_count++ % 128];
     snprintf(b,200,"%s >",name);
     ui.follower_rows[i]=(SDL_Rect){x,y,w,22};
-    SceneEditorRenderButton(r,ui.follower_rows[i],b,false,true); y+=24;
+    SceneEditorSharedUiPanelButton(r,132,512+(i),ui.follower_rows[i],b,false,true); y+=24;
     if (ui.follower_rows[i].y < pane.y || ui.follower_rows[i].y+ui.follower_rows[i].h > pane.y+pane.h) ui.follower_rows[i]=(SDL_Rect){0};
   }
   if(ui.show_actions) {
@@ -315,7 +311,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     for(int i=0;i<3;++i) {
       SDL_Rect rect={x+i*(w+6)/3,y,(w-12)/3,26};
       button(r,FOLLOWER_OBJECT+i,rect,types[i],true);
-      SceneEditorRenderButton(r,rect,types[i],ui.follower_type==i,true);
+      SceneEditorSharedUiPanelButton(r,132,640+i,rect,types[i],ui.follower_type==i,true);
     }
     y+=34;
     char target[TIMELINE_ID_CAPACITY];
@@ -353,7 +349,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
           snprintf(ui.picker_ids[j],sizeof(ui.picker_ids[j]),"%s",candidate.id);
           char *b=ui.labels[ui.label_count++ % 128];snprintf(b,200,"%s",candidate.name);
           ui.object_rows[j]=(SDL_Rect){x,y,w,26};
-          SceneEditorRenderButton(r,ui.object_rows[j],b,!strcmp(candidate.id,ui.object_id),true);y+=30;
+          SceneEditorSharedUiPanelButton(r,132,768+(j),ui.object_rows[j],b,!strcmp(candidate.id,ui.object_id),true);y+=30;
         }
         if(count>6) {
           button(r,OBJECT_PREV,(SDL_Rect){x,y,(w-6)/2,24},"< Objects",first>0);
@@ -448,7 +444,7 @@ void SceneEditorMotionPathPanelDraw(SceneEditor *e,
     for(int k=0;k<3;++k) {
       SDL_Rect rect={x+k*(w+6)/3,y,(w-12)/3,24};
       button(r,ids[k],rect,modes[k],true);
-      SceneEditorRenderButton(r,rect,modes[k],p->points[ui.point].handle_mode==values[k],true);
+      SceneEditorSharedUiPanelButton(r,132,896+k,rect,modes[k],p->points[ui.point].handle_mode==values[k],true);
     }
     y += 28;
     button(r,POINT_DETAILS,(SDL_Rect){x,y,w,24},ui.point_details?"Hide point details":"Tangent offsets / draw plane >",true);y+=28;

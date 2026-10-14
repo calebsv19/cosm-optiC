@@ -62,6 +62,7 @@
 static Circle light = {100, 100, 10};  // Default position (updated dynamically)
 Uint8* pixelBuffer = NULL;  // Global but uninitialized
 static Uint8* tilePreviewBuffer = NULL;
+static size_t frameBufferCapacity = 0;
 static Uint8* native3DRenderBuffer = NULL;
 static Uint8* native3DPreviewBuffer = NULL;
 static size_t native3DRenderBufferCapacity = 0u;
@@ -178,10 +179,9 @@ void InitRayTracingScene(void) {
 
     size_t pixelCount = (size_t)WIDTH * (size_t)HEIGHT;
 
-    if (!RayTracing2BuffersEnsureFrameBuffers(&pixelBuffer,
-                                              &tilePreviewBuffer,
-                                              &energyBuffer,
-                                              pixelCount)) {
+    if (!RayTracing2BuffersEnsureFrameCapacity(&pixelBuffer, &tilePreviewBuffer,
+                                              &energyBuffer, &directEnergyBufferCPU, &reflectionForwardBuffer,
+                                              &frameBufferCapacity, pixelCount)) {
         printf("ERROR: Failed to allocate core frame buffers!\n");
         exit(1);
     }
@@ -207,6 +207,7 @@ void InitRayTracingScene(void) {
 }
 
 void CleanupRayTracing(void) {
+    frameBufferCapacity = 0;
     RayTracing2BuffersResetFrameBuffers(&pixelBuffer,
                                         &tilePreviewBuffer,
                                         &energyBuffer,
@@ -257,6 +258,12 @@ void RenderRayTracingScene(SDL_Renderer* renderer) {
 
     // Clamp camera to grid if fluid bounds are known.
     RayTracing2Fluid_ClampCameraToGrid();
+
+    if (!RayTracing2BuffersEnsureFrameCapacity(&pixelBuffer, &tilePreviewBuffer,
+            &energyBuffer, &directEnergyBufferCPU, &reflectionForwardBuffer, &frameBufferCapacity, pixelCount)) {
+        fprintf(stderr, "ERROR: Failed to resize frame buffers.\n");
+        return;
+    }
 
     // Ensure pixelBuffer is allocated
     if (pixelBuffer == NULL) {

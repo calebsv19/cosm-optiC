@@ -15,6 +15,17 @@ static json_object* document_object_by_id(const char* id) {
     }
     return NULL;
 }
+size_t SceneEditorDocumentObjectJSONSize(const char* id) {
+    json_object* object=document_object_by_id(id);
+    return object ? strlen(json_object_to_json_string_ext(object,JSON_C_TO_STRING_PLAIN))+1 : 0;
+}
+bool SceneEditorDocumentGetObjectJSON(const char* id,char* out,size_t size) {
+    json_object* object=document_object_by_id(id);
+    if(!object || !out || !size) return false;
+    const char* text=json_object_to_json_string_ext(object,JSON_C_TO_STRING_PLAIN);
+    size_t length=strlen(text)+1;if(length>size) return false;
+    memcpy(out,text,length);return true;
+}
 static bool document_object_flag(json_object* object,const char* key,bool fallback) {
     json_object *flags=NULL,*value=NULL;
     if (object && json_object_object_get_ex(object,"flags",&flags) &&

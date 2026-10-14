@@ -1,3 +1,7 @@
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_runtime_scene_persistence.h"
+#include "editor/scene_editor_scene_commands.h"
+#include "editor/scene_editor_render_control.h"
 #include "editor/scene_editor_atmosphere_preview.h"
 #include "editor/scene_editor_atmosphere_viewport.h"
 #include "editor/scene_editor_atmosphere_inspector.h"
@@ -470,6 +474,7 @@ static bool SceneEditorInputRouterResolveChrome(void* context,
 }
 
 static void SceneEditorInputRouterApplyChrome(void* context, const SceneEditorChromeAction* action) {
+    if(SceneEditorRenderActive() || SceneEditorSceneDialogActive()) return;
     SceneEditorChromeActionsEnvironment env = SceneEditorBuildChromeActionsEnvironment();
     SceneEditorChromeActionsApply((SceneEditor*)context, action, &env);
 }
@@ -477,12 +482,14 @@ static void SceneEditorInputRouterApplyChrome(void* context, const SceneEditorCh
 static void SceneEditorInputRouterRoutePane(void* context,
                                             const SceneEditorPaneCommand* command,
                                             SceneEditorInputRoutingResult* result) {
+    if(SceneEditorRenderActive() || SceneEditorSceneDialogActive()) return;
     SceneEditorChromeActionsEnvironment env = SceneEditorBuildChromeActionsEnvironment();
     SceneEditorChromeActionsRoutePaneEvent((SceneEditor*)context, &env, command, result);
 }
 
 static void SceneEditorInputRouterApplyInvalidation(void* context,
                                                     const SceneEditorInputRoutingResult* result) {
+    if(SceneEditorRenderActive() || SceneEditorSceneDialogActive()) return;
     SceneEditorApplyInputInvalidation((SceneEditor*)context, result);
 }
 
@@ -697,7 +704,7 @@ bool SceneEditorSessionBegin(SceneEditor* editor, SDL_Renderer* renderer, SDL_Wi
             fprintf(stderr,
                     "[editor] runtime document unavailable: %s\n",
                     document_diagnostics);
-        }
+        } else SceneEditorRuntimeSceneCaptureMaterialBaseline();
     } else {
         SceneEditorDocumentClose();
     }
@@ -783,7 +790,7 @@ bool InitializeSceneEditor(SceneEditor* editor) {
             fprintf(stderr,
                     "[editor] runtime document unavailable: %s\n",
                     document_diagnostics);
-        }
+        } else SceneEditorRuntimeSceneCaptureMaterialBaseline();
     } else {
         SceneEditorDocumentClose();
     }
@@ -972,6 +979,8 @@ void SceneEditorSessionRequestPreviewOnBegin(void) {
 }
 
 void SceneEditorSessionEnd(SceneEditor* editor) {
+    SceneEditorSharedUiReset();
+    SceneEditorRenderShutdown();
     if (!editor) {
         return;
     }
@@ -1068,6 +1077,8 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 
 void DestroySceneEditor(SceneEditor* editor) {
+    SceneEditorSharedUiReset();
+    SceneEditorRenderShutdown();
     SceneEditorAtmosphereViewportReset();
     SceneEditorAtmosphereInspectorReset();
     SceneEditorAtmospherePreviewReset();

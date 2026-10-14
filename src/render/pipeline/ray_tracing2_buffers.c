@@ -1,6 +1,7 @@
 #include "render/pipeline/ray_tracing2_buffers.h"
 
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "render/runtime_native_3d_render.h"
@@ -43,6 +44,21 @@ bool RayTracing2BuffersEnsureFrameBuffers(Uint8** pixel_buffer,
         *energy_buffer = (float*)malloc(pixel_count * sizeof(float));
     }
     return *pixel_buffer && *tile_preview_buffer && *energy_buffer;
+}
+
+bool RayTracing2BuffersEnsureFrameCapacity(Uint8** pixels, Uint8** preview,
+    float** energy, float** direct_energy, float** reflection_energy, size_t* capacity, size_t pixel_count) {
+    if (!pixels || !preview || !energy || !direct_energy || !reflection_energy || !capacity ||
+        !pixel_count || pixel_count > SIZE_MAX / sizeof(float)) return false;
+    if (*capacity < pixel_count) {
+        RayTracing2BuffersResetFrameBuffers(pixels, preview, energy, direct_energy);
+        free(*reflection_energy);
+        *reflection_energy = NULL;
+        *capacity = 0;
+    }
+    if (!RayTracing2BuffersEnsureFrameBuffers(pixels, preview, energy, pixel_count)) return false;
+    if (*capacity < pixel_count) *capacity = pixel_count;
+    return true;
 }
 
 void RayTracing2BuffersClearFrameBuffers(Uint8* pixel_buffer,

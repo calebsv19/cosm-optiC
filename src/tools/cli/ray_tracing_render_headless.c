@@ -320,6 +320,25 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   job_id,
                                   request_path,
                                   -1);
+    const SceneAtmosphereAttachment* saved_atmosphere=SceneAtmosphereRuntimeRead();
+    if(saved_atmosphere->present && saved_atmosphere->optics.present &&
+       (request->has_smoke_optics || request->has_volume_sampling_layout ||
+        request->has_volume_density_scale_override || request->has_volume_density_gamma_override ||
+        request->has_volume_absorption_gain_override || request->has_volume_opacity_clamp_override ||
+        request->has_volume_scatter_gain_override || request->has_volume_tint_override || request->has_volume_albedo_override ||
+        request->has_volume_step_scale_override)) {
+        snprintf(preflight.diagnostics,sizeof(preflight.diagnostics),"Saved atmosphere optics own sampling and appearance; remove request optical overrides.");
+        *out_preflight=preflight;return 4;
+    }
+    if(saved_atmosphere->present && saved_atmosphere->enabled && saved_atmosphere->visible &&
+       saved_atmosphere->optics.present && saved_atmosphere->optics.physical &&
+       ((request->integrator_3d!=RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT &&
+         request->integrator_3d!=RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) ||
+        request->caustic_settings.mode!=RUNTIME_CAUSTIC_MODE_OFF || request->caustic_sidecar_enabled ||
+        request->caustic_photon_integration_settings.renderContributionEnabled)) {
+        snprintf(preflight.diagnostics,sizeof(preflight.diagnostics),"Saved physical atmosphere requires direct_light or disney_v2 and caustics off.");
+        *out_preflight=preflight;return 4;
+    }
     ray_tracing_headless_apply_inspection_overrides(request);
 
     if (request->volume_enabled) {

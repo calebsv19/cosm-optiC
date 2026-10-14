@@ -1,3 +1,5 @@
+#include "editor/scene_editor_shared_fields.h"
+#include "editor/scene_editor_shared_ui.h"
 /* Typed graph controls edit the retained document through validated commands. */
 static int graph_node_index, graph_scroll, graph_picker, graph_page, graph_input;
 static bool graph_search_active;
@@ -97,7 +99,7 @@ static const char *graph_port_label(json_object *node, int input) {
 static void graph_picker_close(void) {
     graph_picker = 0;
     graph_search_active = false;
-    SDL_StopTextInput();
+    do{scene_editor_shared_field_end(graph_search);SDL_StopTextInput();}while(0);
 }
 static void graph_picker_open(int mode) {
     cancel();
@@ -106,7 +108,7 @@ static void graph_picker_open(int mode) {
     graph_search[0] = 0;
     graph_picker_revision = SceneEditorDocumentRevision();
     graph_search_active = true;
-    SDL_StartTextInput();
+    do{scene_editor_shared_field_begin(graph_search,sizeof(graph_search),0);SDL_StartTextInput();}while(0);
 }
 /* A single logical row helper omits offscreen hit targets as well as drawing. */
 static void graph_row(SDL_Renderer *r, SDL_Rect b, int row, SDL_Rect *control, const char *text,
@@ -115,7 +117,7 @@ static void graph_row(SDL_Renderer *r, SDL_Rect b, int row, SDL_Rect *control, c
     *control = (SDL_Rect){0};
     if (row >= graph_scroll && y + 25 <= b.y + b.h) {
         *control = (SDL_Rect){b.x, y, b.w, 25};
-        draw(r, *control, text, active);
+        SceneEditorSharedUiPanelButton(r,401,128+(unsigned)row,*control,text,active,true);
     }
 }
 static bool graph_candidate_valid(json_object *row, const char *id) {
@@ -150,8 +152,9 @@ static int graph_picker_render(SDL_Renderer *r, SDL_Rect b, json_object *row) {
     graph_search_rect = (SDL_Rect){b.x, y, b.w - 65, 25};
     graph_cancel_rect = (SDL_Rect){b.x + b.w - 61, y, 61, 25};
     snprintf(text, sizeof(text), "Search: %s", graph_search);
-    draw(r, graph_search_rect, text, graph_search_active);
-    draw(r, graph_cancel_rect, "Cancel", false);
+    if(graph_search_active)scene_editor_shared_field_draw(r,graph_search,sizeof(graph_search),graph_search_rect,"Search:");
+    else SceneEditorSharedUiPanelButton(r,401,256,graph_search_rect,text,false,true);
+    SceneEditorSharedUiPanelButton(r,401,384,graph_cancel_rect,"Cancel",false,true);
     y += 29;
     json_object *nodes = get(get(row, "surface_graph"), "nodes"), *node = graph_node(row);
     const char *ids[33];
@@ -204,7 +207,7 @@ static int graph_picker_render(SDL_Renderer *r, SDL_Rect b, json_object *row) {
         graph_choices[slot] = (SDL_Rect){b.x, y, b.w, 25};
         snprintf(text, sizeof(text), "%s%s", ids[i][0] ? ids[i] : (graph_scope?"Inherit object output":"Use base roughness"),
                  valid[i] ? "" : " (cycle: unavailable)");
-        draw(r, graph_choices[slot], text, false);
+        SceneEditorSharedUiPanelButton(r,401,512+(slot),graph_choices[slot],text,false,true);
         y += 29;
     }
     if (!count) {
@@ -221,8 +224,8 @@ static int graph_picker_render(SDL_Renderer *r, SDL_Rect b, json_object *row) {
         graph_prev = (SDL_Rect){b.x, y, b.w / 2 - 2, 25};
         graph_next = (SDL_Rect){b.x + b.w / 2, y, b.w / 2, 25};
         snprintf(text, sizeof(text), "Previous (%d/%d)", graph_page + 1, pages);
-        draw(r, graph_prev, text, false);
-        draw(r, graph_next, "Next", false);
+        SceneEditorSharedUiPanelButton(r,401,640,graph_prev,text,false,true);
+        SceneEditorSharedUiPanelButton(r,401,768,graph_next,"Next",false,true);
         y += 29;
     }
     return y;
@@ -268,7 +271,7 @@ static int graph_panel_render(SDL_Renderer *r, SDL_Rect b, int index, json_objec
     if (graph_list.w > 40) {
         graph_list.w -= 34;
         layer_rect = (SDL_Rect){graph_list.x + graph_list.w + 4, graph_list.y, 30, 25};
-        draw(r, layer_rect, ">", false);
+        SceneEditorSharedUiPanelButton(r,401,896,layer_rect,">",false,true);
     }
     int count = 0;
     if (!strcmp(kind, "scalar")) {
@@ -561,6 +564,7 @@ static bool graph_panel_event(const SDL_Event *e, int index) {
         }
         return true;
     }
+    if(graph_search_active && scene_editor_shared_field_event(graph_search,sizeof(graph_search),e)){graph_page=0;return true;}
     if (e->type == SDL_TEXTINPUT && graph_search_active) {
         if (strlen(graph_search) + strlen(e->text.text) < sizeof(graph_search))
             strcat(graph_search, e->text.text);
@@ -576,7 +580,7 @@ static bool graph_panel_event(const SDL_Event *e, int index) {
     }
     if (inside(graph_search_rect, x, y)) {
         graph_search_active = true;
-        SDL_StartTextInput();
+        do{scene_editor_shared_field_begin(graph_search,sizeof(graph_search),0);SDL_StartTextInput();}while(0);
         return true;
     }
     if (inside(graph_prev, x, y)) {

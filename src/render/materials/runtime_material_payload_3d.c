@@ -605,10 +605,19 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
             if (object_copy.hasGlassTransportOverride) {
                 glass_alpha = 1.0;
                 payload.hasGlassTransportOverride = true;
+                /* Explicit native glass owns its optical roughness, including
+                   a polished zero. Keep the legacy/common BSDF floor intact. */
+                payload.bsdf.roughness = runtime_material_payload_3d_clamp01(object_copy.roughness);
             }
             payload.transparency =
                 runtime_material_payload_3d_clamp01(glass_transmission * glass_alpha);
             payload.opticalIor = glass_ior;
+            if (object_copy.hasGlassTransportOverride) {
+                /* Physical IOR owns the dielectric interface. Imported legacy
+                   reflectivity must not impose a stronger unrelated F0 floor. */
+                double ratio=(glass_ior-1.0)/(glass_ior+1.0);
+                payload.bsdf.reflectivity=runtime_material_payload_3d_clamp01(ratio*ratio);
+            }
             payload.absorptionDistance =
                 runtime_material_payload_3d_clamp_positive(glass_absorption_distance, 1.0);
             payload.thinWalled = glass_thin_walled;

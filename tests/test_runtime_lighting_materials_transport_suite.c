@@ -5345,7 +5345,12 @@ static void test_specular_sampler_energy_and_normals(void) {
     assert_true("mirror_blue_F0_is_bounded", tinted.specularF0R == 0 && tinted.specularF0G == 0 && tinted.specularF0B > 0 && tinted.specularF0B <= 1);
 }
 
+#include "test_runtime_disney_atmosphere_paths.h"
+
+#include "test_runtime_glass_receiver_direction.h"
 int run_test_runtime_lighting_materials_transport_suite(void) {
+    test_runtime_glass_receiver_direction();
+    test_runtime_disney_atmosphere_paths();
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
 
     test_runtime_dielectric_transport_water_ior_fresnel_contract();

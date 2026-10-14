@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_lifecycle.h"
 #include "editor/scene_editor_chrome_actions.h"
 #include "editor/scene_editor_chrome_shell.h"
@@ -94,7 +95,7 @@ void SceneEditorLifecycleRender(SDL_Renderer* renderer) {
         choices[i]=(SDL_Rect){box.x+12+i*(w+8),box.y+128,w,42};
         SDL_Color fill=i==focus ? p.button_active_fill : p.button_fill;
         SDL_SetRenderDrawColor(renderer,fill.r,fill.g,fill.b,255); SDL_RenderFillRect(renderer,&choices[i]);
-        SceneEditorButtonText(renderer,choices[i],labels[i],ray_tracing_theme_choose_button_text(fill,p));
+        SceneEditorSharedUiModalButton(renderer,3,(unsigned)i+1,choices[i],labels[i],true,fill,p);
     }
     SDL_RenderSetClipRect(renderer,clipped ? &prior : NULL);
 }

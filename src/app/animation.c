@@ -10,6 +10,7 @@
 #include "app/animation_output.h"
 #include "app/data_paths.h"
 #include "app/ray_tracing_runtime_host.h"
+#include "app/ray_tracing_window_lifecycle.h"
 #include "app/ray_tracing_core_sim_runtime_frame.h"
 #include "app/ray_tracing_deep_render_desktop_host.h"
 #include "app/ray_tracing_desktop_async_bridge.h"
@@ -193,6 +194,8 @@ int AnimationInit(void) {
         return -1;
     }
 
+    ray_tracing_window_lifecycle_bind(window);
+
     // Native 3D runtime-scene starts may seed a single static light point.
     // The runtime path already treats 1 point as a valid stationary light.
     if (sceneSettings.bezierPath.numPoints < 1) {
@@ -213,6 +216,7 @@ void AnimationCleanup(void) {
     RayTracingDeepRenderDesktopHost_Shutdown();
     RayTracingDesktopAsyncBridge_Shutdown();
     CleanupRayTracing();
+    ray_tracing_window_lifecycle_bind(NULL);
     ray_tracing_runtime_host_shutdown();
 }
 
@@ -258,12 +262,12 @@ static void InputFrame_Intake(RayTracingInputFrame *frame, KitRuntimeDiagInputFr
         return;
     }
     while (SDL_PollEvent(&event)) {
+        if (out_diag) out_diag->raw_event_count += 1u;
+        if (ray_tracing_window_lifecycle_filter(&event)) continue;
         if (frame->raw_count < (uint16_t)(sizeof(frame->raw_events) / sizeof(frame->raw_events[0]))) {
             frame->raw_events[frame->raw_count++] = event;
         }
-        if (out_diag) {
-            out_diag->raw_event_count += 1u;
-        }
+
     }
 }
 
@@ -277,7 +281,8 @@ static void InputFrame_Normalize(RayTracingInputFrame *frame) {
         RayTracingInputActionType action_type;
         bool supported = true;
 
-        if (raw->type == SDL_QUIT) {
+        if (raw->type == SDL_QUIT ||
+            (raw->type == SDL_WINDOWEVENT && raw->window.event == SDL_WINDOWEVENT_CLOSE)) {
             action_type = RAY_TRACING_INPUT_ACTION_QUIT;
         } else if (raw->type == SDL_KEYDOWN) {
             action_type = RAY_TRACING_INPUT_ACTION_KEYDOWN;
@@ -526,7 +531,8 @@ void RenderFrame(double lightX, double lightY, int* frameCounter, bool* running)
     AnimationSyncWindowSize();
     setRenderContext(renderer, window, sceneSettings.windowWidth, sceneSettings.windowHeight);
     render_set_clear_color(renderer, 0, 0, 0, 255);
-    if (!render_begin_frame()) {
+    /* Synchronous exports need a GPU readback even while the window is hidden. */
+    if (!(animSettings.deepRenderMode ? render_begin_export_frame() : render_begin_frame())) {
         if (render_device_lost()) {
             *running = false;
         }

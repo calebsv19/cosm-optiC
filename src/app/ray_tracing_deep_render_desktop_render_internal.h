@@ -18,6 +18,7 @@ typedef enum RayTracingDeepRenderDesktopStartStatus {
 
 typedef struct RayTracingDeepRenderDesktopStartDesc {
     uint64_t generation;
+    uint32_t fixedSampleSequence; /* Zero retains automatic sampling. */
     int localFrameIndex;
     int absoluteFrameIndex;
     int frameCount;

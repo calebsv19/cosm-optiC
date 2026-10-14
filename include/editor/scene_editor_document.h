@@ -11,6 +11,7 @@ typedef struct SceneEditorDocumentTransform {
 } SceneEditorDocumentTransform;
 
 bool SceneEditorDocumentOpen(const char* path, char* diagnostics, size_t diagnostics_size);
+bool SceneEditorDocumentSwitch(const char* path, bool retain_history, char* diagnostics, size_t size);
 bool SceneEditorDocumentOpenActive(char* diagnostics, size_t diagnostics_size);
 void SceneEditorDocumentClose(void);
 bool SceneEditorDocumentIsOpen(void);
@@ -64,6 +65,9 @@ typedef struct SceneEditorDocumentObjectInfo {
 const char* SceneEditorDocumentTypeLabel(const char* type);
 int SceneEditorDocumentObjectCount(void);
 bool SceneEditorDocumentObjectAt(int ordinal, SceneEditorDocumentObjectInfo* out);
+/* Exact retained object readback; never normalizes legacy fields. */
+size_t SceneEditorDocumentObjectJSONSize(const char* id);
+bool SceneEditorDocumentGetObjectJSON(const char* id,char* out,size_t size);
 bool SceneEditorDocumentObjectById(const char* id, SceneEditorDocumentObjectInfo* out);
 bool SceneEditorDocumentRenameById(const char* id,const char* name,unsigned long long revision,char* diagnostics,size_t size);
 bool SceneEditorDocumentSetFlag(const char* id, const char* flag, bool value,
@@ -90,6 +94,7 @@ bool SceneEditorDocumentAdoptCandidateAsCommand(const char* candidate_path,
 
 
 bool SceneEditorDocumentGetSurfaceMappingJSON(int index,char* out,size_t size);
+size_t SceneEditorDocumentSurfaceMappingJSONSize(int index);
 bool SceneEditorDocumentGetSurfaceMaterialJSON(int index,char* out,size_t size);
 /* Serialized retained material bytes including NUL; zero when no row is available. */
 size_t SceneEditorDocumentSurfaceMaterialJSONSize(int index);
@@ -136,7 +141,8 @@ bool SceneEditorDocumentSurfaceGraphSetOutput(int index, const char* output,
 typedef enum SceneEditorDocumentFailure {
     SCENE_DOCUMENT_FAIL_NONE, SCENE_DOCUMENT_FAIL_SNAPSHOT,
     SCENE_DOCUMENT_FAIL_HISTORY, SCENE_DOCUMENT_FAIL_RESTORE,
-    SCENE_DOCUMENT_FAIL_SAVE_SYNC, SCENE_DOCUMENT_FAIL_DIRECTORY_SYNC
+    SCENE_DOCUMENT_FAIL_SAVE_SYNC, SCENE_DOCUMENT_FAIL_DIRECTORY_SYNC,
+    SCENE_DOCUMENT_FAIL_SWITCH_APPLY
 } SceneEditorDocumentFailure;
 void SceneEditorDocumentFailNextForTests(SceneEditorDocumentFailure failure);
 

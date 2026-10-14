@@ -1,3 +1,4 @@
+#include "editor/scene_editor_follower_orientation.h"
 /* Camera translation ownership. Legacy spatial data and lens/orientation tracks
  * stay authored; the runtime adapter retains their orientation semantics. */
 #include "editor/scene_editor_motion_paths.h"
@@ -116,7 +117,7 @@ bool SceneEditorMotionPathCameraFocus(bool enabled, unsigned long long revision,
     MotionPathBinding *b=&paths.bindings[i];
     if (!b->enabled || strcmp(b->target_id,"camera/main")) continue;
     b->use_focus_target=enabled;
-    if (!SceneEditorMotionPathsCommit(&paths,NULL,revision,message,size)) return false;
+    if (!SceneEditorFollowerOrientationSet("camera/main",b,revision,message,size)) return false;
     if(message && size)snprintf(message,size,"%s",enabled?"Scene focus target owns orientation; yaw/pitch retained inactive.":"Authored orientation restored.");
     return true;
   }

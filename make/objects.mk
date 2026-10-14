@@ -1,6 +1,7 @@
 NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/scene_atmosphere_assets.o \
 	$(BUILD_DIR)/app/scene_atmosphere_attachment.o \
+	$(BUILD_DIR)/app/scene_atmosphere_optics.o \
 	$(BUILD_DIR)/app/scene_atmosphere_runtime.o \
 	$(BUILD_DIR)/app/scene_atmosphere_prepare.o \
 	$(BUILD_DIR)/app/scene_atmosphere_water.o \
@@ -199,6 +200,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_ray_3d_sampled_footprint.o \
 	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
@@ -212,6 +214,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_transform.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_optics.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_atmosphere_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
@@ -254,6 +258,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/import/runtime_scene_lighting_writeback.o \
 	$(BUILD_DIR)/path/path_system.o \
 	$(BUILD_DIR)/path/path_arc_length.o \
 	$(BUILD_DIR)/camera/camera.o \
@@ -631,6 +636,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d_instances.o \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
+	$(BUILD_DIR)/render/runtime_ray_3d_sampled_footprint.o \
 	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
@@ -642,6 +648,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_volume_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_transform.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_integrate.o \
+	$(BUILD_DIR)/render/runtime_volume_3d_optics.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_atmosphere_3d.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_scatter.o \
 	$(BUILD_DIR)/render/runtime_volume_3d_debug.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_samples.o \
@@ -767,6 +775,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_cache.o \
 	$(BUILD_DIR)/import/runtime_mesh_asset_loader_utils.o \
 	$(BUILD_DIR)/import/runtime_scene_bridge.o \
+	$(BUILD_DIR)/import/runtime_scene_lighting_writeback.o \
 	$(BUILD_DIR)/motion/runtime_motion_track_3d.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render.o \
 	$(BUILD_DIR)/ui/menu/sdl_menu_render_controls.o \
@@ -872,14 +881,24 @@ CORE_FONT_SRCS := $(CORE_FONT_DIR)/src/core_font.c
 CORE_HEADLESS_JOB_SRCS := $(CORE_HEADLESS_JOB_DIR)/src/core_headless_job.c
 KIT_RENDER_SRCS := \
 	$(KIT_RENDER_DIR)/src/kit_render.c \
+	$(KIT_RENDER_DIR)/src/kit_render_command_validation.c \
 	$(KIT_RENDER_DIR)/src/kit_render_external_text.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_null.c \
+	$(KIT_RENDER_DIR)/src/kit_render_backend_vk_commands.c \
+	$(KIT_RENDER_DIR)/src/kit_render_native_font.c \
 	$(KIT_RENDER_DIR)/src/kit_render_backend_vk.c
 KIT_UI_SRCS := \
 	$(KIT_UI_DIR)/src/kit_ui.c \
 	$(KIT_UI_DIR)/src/kit_ui_button.c \
 	$(KIT_UI_DIR)/src/kit_ui_hud.c \
-	$(KIT_UI_DIR)/src/kit_ui_sdl.c
+	$(KIT_UI_DIR)/src/kit_ui_sdl.c \
+	$(KIT_UI_DIR)/src/kit_ui_window_sdl.c \
+	$(KIT_UI_DIR)/src/kit_ui_interaction.c \
+	$(KIT_UI_DIR)/src/kit_ui_interaction_sdl.c \
+	$(KIT_UI_DIR)/src/kit_ui_surface.c \
+	$(KIT_UI_DIR)/src/kit_ui_text_edit.c \
+	$(KIT_UI_DIR)/src/kit_ui_text_edit_sdl.c \
+	$(KIT_UI_DIR)/src/kit_ui_text_presentation.c
 KIT_PANE_SRCS := $(KIT_PANE_DIR)/src/kit_pane.c
 KIT_VIZ_SRCS := $(KIT_VIZ_DIR)/src/kit_viz.c
 KIT_RUNTIME_DIAG_SRCS := $(KIT_RUNTIME_DIAG_DIR)/src/kit_runtime_diag.c

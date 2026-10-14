@@ -1,3 +1,4 @@
+#include "ui/menu_shared_controls.h"
 #include "ui/menu_resume_panel.h"
 
 #include <stdio.h>
@@ -177,15 +178,11 @@ void menu_resume_panel_render(SDL_Renderer* renderer,
              "Use Next Existing: %d",
              state->exportBatchStatus.next_frame_index);
 
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &layout->resumeToggleRect,
+    menu_shared_controls_button(state, MENU_CONTROL_resume_resumeToggleRect, renderer, font, &layout->resumeToggleRect,
                                  resume_label,
                                  animSettings.resumeFromExistingFrames);
-    menu_render_draw_button_rect(renderer,
-                                 font,
-                                 &layout->startFrameRect,
+    menu_shared_controls_button(state, MENU_CONTROL_resume_startFrameRect, renderer, font, &layout->startFrameRect,
                                  start_label,
                                  state->editingStartFrame || !animSettings.resumeFromExistingFrames);
-    menu_render_draw_button_rect(renderer, font, &layout->nextExistingRect, next_label, false);
+    menu_shared_controls_button(state, MENU_CONTROL_resume_nextExistingRect, renderer, font, &layout->nextExistingRect, next_label, false);
 }

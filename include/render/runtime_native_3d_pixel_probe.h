@@ -6,6 +6,8 @@
 /* Opt-in stderr records for at most16 native coordinates. No frame storage. */
 bool RuntimeNative3DPixelProbe_IsSelected(int x, int y);
 bool RuntimeNative3DPixelProbe_ShouldShade(int x, int y);
+void RuntimeNative3DPixelProbe_Receiver(int x, int y, const HitInfo3D* hit,
+    const RuntimeMaterialPayload3D* payload, const Ray3D* ray);
 void RuntimeNative3DPixelProbe_Shade(int x, int y,
     const RuntimeNative3DSamplingContext* sampling,
     const RuntimeDisneyV2_3DResult* result,

@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include "math/vec3.h"
+#include "render/runtime_volume_3d_optics.h"
 
 typedef enum {
     RUNTIME_VOLUME_3D_SOURCE_NONE = 0,
@@ -62,6 +63,8 @@ typedef struct {
     bool hasPlacement;
     Vec3 placementTranslation, placementScale;
     Vec3 placementBasis[3];
+    bool opticsCaptured;
+    RuntimeVolume3DOpticalSnapshot optics;
     RuntimeVolumeGrid3D grid;
     RuntimeVolumeChannels3D channels;
 } RuntimeVolumeAttachment3D;
@@ -86,6 +89,7 @@ bool RuntimeVolumeChannels3D_HasMask(const RuntimeVolumeChannels3D* channels,
                                      uint32_t channel_mask);
 void RuntimeVolumeChannels3D_Reset(RuntimeVolumeChannels3D* channels);
 
+void RuntimeVolume3D_CaptureOptics(RuntimeVolumeAttachment3D* attachment);
 void RuntimeVolumeAttachment3D_Init(RuntimeVolumeAttachment3D* attachment);
 void RuntimeVolumeAttachment3D_ClearOwnedChannels(RuntimeVolumeAttachment3D* attachment);
 bool RuntimeVolumeAttachment3D_AllocateOwnedChannels(RuntimeVolumeAttachment3D* attachment,

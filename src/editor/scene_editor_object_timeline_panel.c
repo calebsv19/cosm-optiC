@@ -1,3 +1,6 @@
+#include "editor/scene_editor_shared_text.h"
+#include "editor/scene_editor_shared_ui.h"
+#include "editor/scene_editor_shared_fields.h"
 #include "editor/scene_editor_workspace_profile.h"
 #include "editor/scene_editor_document.h"
 #include "scene_editor_object_timeline_panel.h"
@@ -29,7 +32,7 @@ static struct {
 
 bool SceneEditorObjectTimelinePanelPending(void) {return SceneEditorWorkspaceProfileGet()==SCENE_WORKSPACE_RENDER && panel.valid && (panel.changed || panel.editing>=0);}
 void SceneEditorObjectTimelinePanelReset(void) {
-    if(panel.editing>=0) SDL_StopTextInput();
+    if(panel.editing>=0) do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);
     memset(&panel,0,sizeof(panel));panel.editing=-1;
 }
 static bool sync_panel(void) {
@@ -64,7 +67,7 @@ static bool finish_field(void) {
         snprintf(panel.message,sizeof(panel.message),"Enter a finite number; Escape cancels.");return false;
     }
     panel.position[panel.editing]=value;panel.changed=true;panel.editing=-1;
-    panel.message[0]=0;SDL_StopTextInput();return true;
+    panel.message[0]=0;do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);return true;
 }
 static bool set_position_key(void) {
     int64_t frame=panel.frame;
@@ -75,13 +78,14 @@ static bool set_position_key(void) {
 bool SceneEditorObjectTimelinePanelEvent(SDL_Event* e) {
     if(!sync_panel()) return false;
     if(e->type==SDL_WINDOWEVENT && e->window.event==SDL_WINDOWEVENT_FOCUS_LOST) {SceneEditorObjectTimelinePanelReset();return false;}
+    if((panel.editing>=0) && scene_editor_shared_field_event(panel.draft,sizeof(panel.draft),e))return true;
     if(e->type==SDL_TEXTINPUT && panel.editing>=0) {
         if(strlen(panel.draft)+strlen(e->text.text)<sizeof(panel.draft)) strcat(panel.draft,e->text.text);return true;
     }
     if(e->type==SDL_KEYDOWN && e->key.keysym.sym==SDLK_ESCAPE && panel.changed && panel.editing<0) {SceneEditorObjectTimelinePanelReset();return true;}
     if(e->type==SDL_KEYDOWN && panel.editing>=0) {
         SDL_Keycode key=e->key.keysym.sym;
-        if(key==SDLK_ESCAPE) {panel.editing=-1;SDL_StopTextInput();}
+        if(key==SDLK_ESCAPE) {panel.editing=-1;do{scene_editor_shared_field_end(panel.draft);SDL_StopTextInput();}while(0);}
         else if(key==SDLK_BACKSPACE) {size_t n=strlen(panel.draft);if(n) panel.draft[n-1]=0;}
         else if(key==SDLK_RETURN || key==SDLK_KP_ENTER || key==SDLK_TAB) finish_field();
         return true;
@@ -90,7 +94,7 @@ bool SceneEditorObjectTimelinePanelEvent(SDL_Event* e) {
     SDL_Point point={e->button.x,e->button.y};
     for(int i=0;i<3;++i) if(panel.axes[i].w>0 && SDL_PointInRect(&point,&panel.axes[i])) {
         if(!finish_field()) return true;
-        SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();panel.editing=i;panel.draft[0]=0;SDL_StartTextInput();return true;
+        SceneEditorTimelineReleaseFocus();SceneEditorTimelinePause();panel.editing=i;panel.draft[0]=0;do{scene_editor_shared_field_begin(panel.draft,sizeof(panel.draft),0);SDL_StartTextInput();}while(0);return true;
     }
     if(panel.apply.w>0 && SDL_PointInRect(&point,&panel.apply)) {
         if(finish_field()) set_position_key();return true;
@@ -102,17 +106,17 @@ int SceneEditorObjectTimelinePanelDraw(SDL_Renderer* r,SDL_Rect rect) {
     if(!sync_panel()) return rect.y;
     int y=rect.y;
     snprintf(panel.labels[0],sizeof(panel.labels[0]),"Position (%s) at playhead%s",SceneEditorDocumentUnitLabel(),panel.changed?" — draft":"");
-    ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,11,8),panel.labels[0],rect.x,y,SceneEditorChromeShellResolvePalette().text_primary);y+=22;
+    scene_editor_shared_label_at(r,panel.labels[0],rect.x,y,SceneEditorChromeShellResolvePalette().text_primary,11);y+=22;
     for(int i=0;i<3;++i) {
         if(panel.editing==i) snprintf(panel.labels[i+1],sizeof(panel.labels[i+1]),"%c: %s_",'X'+i,panel.draft);
         else snprintf(panel.labels[i+1],sizeof(panel.labels[i+1]),"%c: %.8g",'X'+i,panel.position[i]);
         panel.axes[i]=(SDL_Rect){rect.x,y,rect.w,26};
-        SceneEditorRenderButton(r,panel.axes[i],panel.labels[i+1],panel.editing==i,true);y+=29;
+        SceneEditorSharedUiPanelButton(r,146,128+(i),panel.axes[i],panel.labels[i+1],panel.editing==i,true);y+=29;
     }
     snprintf(panel.labels[4],sizeof(panel.labels[4]),"%s position key at frame %lld",panel.changed?"Apply":"Set",(long long)panel.frame);
-    panel.apply=(SDL_Rect){rect.x,y,rect.w,28};SceneEditorRenderButton(r,panel.apply,panel.labels[4],panel.changed,true);y+=32;
+    panel.apply=(SDL_Rect){rect.x,y,rect.w,28};SceneEditorSharedUiPanelButton(r,146,256,panel.apply,panel.labels[4],panel.changed,true);y+=32;
     snprintf(panel.labels[5],sizeof(panel.labels[5]),"%s",panel.message[0]?panel.message:panel.changed?"Draft ready — click Apply above. Escape cancels.":"Click XYZ; Enter stages edits; Set key applies.");
-    ray_tracing_text_draw_utf8_at(r,ray_tracing_font_runtime_get_ui_regular(r,10,8),panel.labels[5],rect.x,y,SceneEditorChromeShellResolvePalette().text_primary);y+=24;
+    scene_editor_shared_label_at(r,panel.labels[5],rect.x,y,SceneEditorChromeShellResolvePalette().text_primary,10);y+=24;
     for(int i=0;i<3;++i) if(panel.axes[i].y+panel.axes[i].h>rect.y+rect.h) panel.axes[i]=(SDL_Rect){0};
     if(panel.apply.y+panel.apply.h>rect.y+rect.h) panel.apply=(SDL_Rect){0};
     return y;

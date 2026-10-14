@@ -1,3 +1,4 @@
+#include "editor/scene_editor_shared_text.h"
 #include "scene_editor_light_timeline_panel.h"
 
 #include "animation/timeline_document.h"
@@ -48,7 +49,7 @@ static RayTracingThemePalette panel_palette(void) {
 static void panel_text(SDL_Renderer* renderer, TTF_Font* font,
                        const char* text, int x, int y, SDL_Color color) {
     if (renderer && font && text && text[0]) {
-        ray_tracing_text_draw_utf8_at(renderer, font, text, x, y, color);
+        scene_editor_shared_label_at(renderer,text,x,y,color,12);
     }
 }
 
