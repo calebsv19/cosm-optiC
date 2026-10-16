@@ -8,7 +8,7 @@
 
 static pthread_once_t init_once = PTHREAD_ONCE_INIT;
 static pthread_mutex_t output_lock = PTHREAD_MUTEX_INITIALIZER;
-static int coordinates[16][2];
+static int coordinates[64][2];
 static int coordinate_count;
 static bool selected_only;
 
@@ -16,7 +16,7 @@ static void initialize(void) {
     const char* value = getenv("RAY_TRACING_NATIVE_3D_PIXEL_PROBE");
     if (!value || !*value) return;
     const char* cursor = value;
-    while (*cursor && coordinate_count < 16) {
+    while (*cursor && coordinate_count < 64) {
         char* end = NULL;
         errno = 0;
         long x = strtol(cursor,&end,10);

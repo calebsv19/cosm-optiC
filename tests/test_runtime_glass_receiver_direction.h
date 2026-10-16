@@ -1,6 +1,5 @@
 #pragma once
 #include "render/runtime_disney_v2_receiver_3d.h"
-#include "render/runtime_glass_null_interface_3d.h"
 
 static void test_runtime_glass_receiver_direction(void) {
     SceneConfig saved_scene = sceneSettings;
@@ -32,30 +31,5 @@ static void test_runtime_glass_receiver_direction(void) {
     assert_true("legacy_receiver_direction",runtime_disney_v2_shade_receiver_3d(
         &scene,&hit,&ray,&payload,NULL,&parent,&actual));
     assert_close("legacy_receiver_view_unchanged",actual.ndotv,1,1e-12);
-    RuntimeMaterialPayload3D neutral={0};
-    neutral.valid=neutral.hasGlassTransportOverride=true;
-    neutral.sceneObjectIndex=-1;
-    neutral.opticalIor=neutral.transparency=1;
-    neutral.hasGlassInterfaceTintOverride=neutral.hasGlassAbsorptionColorOverride=true;
-    neutral.glassInterfaceTintR=neutral.glassInterfaceTintG=neutral.glassInterfaceTintB=1;
-    neutral.glassAbsorptionColorR=neutral.glassAbsorptionColorG=neutral.glassAbsorptionColorB=1;
-    assert_true("neutral_glass_null_interface",RuntimeGlassNullInterface3D_IsNeutral(&neutral));
-    RuntimeMaterialPayload3D changed=neutral;
-    changed.hasGlassTransportOverride=false;
-    assert_true("legacy_glass_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
-    changed=neutral;changed.opticalIor=1.52;
-    assert_true("refractive_glass_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
-    changed=neutral;changed.bsdf.roughness=.3;
-    assert_true("frost_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
-    changed=neutral;changed.transparency=.5;
-    assert_true("partial_transmission_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
-    changed=neutral;changed.glassInterfaceTintR=.99;
-    assert_true("tinted_glass_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
-    changed=neutral;changed.glassAbsorptionColorB=.99;
-    assert_true("absorbing_glass_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
-    changed=neutral;changed.emissive=.1;
-    assert_true("emitting_glass_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
-    changed=neutral;changed.hasMicrodetailNormal=true;
-    assert_true("normal_response_kept",!RuntimeGlassNullInterface3D_IsNeutral(&changed));
     RuntimeScene3D_Free(&scene);sceneSettings=saved_scene;animSettings=saved_anim;
 }

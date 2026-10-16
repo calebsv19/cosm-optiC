@@ -1,3 +1,4 @@
+#include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_disney_v2_internal_3d.h"
 
@@ -154,12 +155,17 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
             io_result->specularReflectionProbeHasVertexNormals =
                 scene->triangleMesh.triangles[reflection.hitInfo.triangleIndex].hasVertexNormals;
         }
+        RuntimePhysicalGlass3DContext optical_context={reflection.opticalMedium,reflection.opticalDepth};
+        const RuntimePhysicalGlass3DContext* saved_context=NULL;
+        if(reflection.opticalSegmentResolved)saved_context=RuntimePhysicalGlass3D_SetContext(&optical_context);
+        if(!RuntimeMaterialPayload3D_ResolveFromHit(&reflection.hitInfo,&reflected_payload) ||
+           !reflected_payload.hasGlassTransportOverride)
         (void)RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(scene,
                                                                   hit,
                                                                   &reflection,
                                                                   sampling,
                                                                   io_result);
-        if (RuntimeMaterialPayload3D_ResolveFromHit(&reflection.hitInfo, &reflected_payload) &&
+        if ((reflection.hasResolvedPayload ? (reflected_payload=reflection.resolvedPayload,true) : RuntimeMaterialPayload3D_ResolveFromHit(&reflection.hitInfo, &reflected_payload)) &&
             reflected_payload.valid) {
             io_result->specularReflectionProbePayload = reflected_payload;
             if (runtime_disney_v2_3d_shade_hit_with_payload(
@@ -180,6 +186,7 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
                 reflected_b = reflected_vertex.radianceB;
             }
         }
+        if(reflection.opticalSegmentResolved)RuntimePhysicalGlass3D_SetContext(saved_context);
     } else if (reflection.traced) {
         io_result->specularReflectionNoHitCount += 1;
         RuntimeEnvironment3D_EvaluateBackgroundRGB(&scene->environment,
@@ -189,12 +196,13 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
                                                    &reflected_b);
     }
 
-    RuntimeDisneyV2Atmosphere3D_Compose(scene,&reflection.ray,
-        reflection.emitterWins ? reflection.emitterHitInfo.t : reflection.geometryHit ? reflection.hitInfo.t : HUGE_VAL,
+    RuntimeDisneyV2Atmosphere3D_Compose(scene,reflection.opticalSegmentResolved?&reflection.opticalInitialRay:&reflection.ray,
+        reflection.opticalSegmentResolved?reflection.opticalInitialDistance:reflection.emitterWins ? reflection.emitterHitInfo.t : reflection.geometryHit ? reflection.hitInfo.t : HUGE_VAL,
         sampling,&reflected_r,&reflected_g,&reflected_b);
     reflected_r *= reflection.weight * reflection.tintR;
     reflected_g *= reflection.weight * reflection.tintG;
     reflected_b *= reflection.weight * reflection.tintB;
+    reflected_r+=reflection.segmentRadiance.x;reflected_g+=reflection.segmentRadiance.y;reflected_b+=reflection.segmentRadiance.z;
     if (io_result->specularReflectionLocalPathVertexEvaluated) {
         io_result->specularReflectionLocalPathVertexRadianceR = reflected_r;
         io_result->specularReflectionLocalPathVertexRadianceG = reflected_g;
@@ -261,6 +269,12 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
     if (!result.payloadResolved) {
         *out_result = result;
         return false;
+    }
+    if(result.payload.hasGlassTransportOverride) {
+        Ray3D incoming=RuntimeRay3D_Make(vec3_sub(hit->position,
+            vec3_scale(vec3_scale(view_dir,-1),hit->t)),vec3_scale(view_dir,-1));
+        return RuntimePhysicalGlass3D_Shade(scene,&incoming,hit,&result.payload,
+            sampling,trace_pixel_x,trace_pixel_y,trace_pixel_width,trace_pixel_height,out_result);
     }
     hair_scattering_requested = RuntimeHairScattering3D_ShouldApply(
         hit->hasCurveTangent, &result.payload.hairOptics);
@@ -474,6 +488,12 @@ bool RuntimeDisneyV2_3D_ShadePrimaryHitWithPayloadAndTraceContext(
         return false;
     }
 
+    RuntimeMaterialPayload3D physical={0};
+    if(payload)physical=*payload;
+    else RuntimeMaterialPayload3D_ResolveFromHit(&primary_hit->hitInfo,&physical);
+    if(physical.hasGlassTransportOverride)
+        return RuntimePhysicalGlass3D_Shade(scene,&primary_hit->primaryRay,&primary_hit->hitInfo,
+            &physical,sampling,pixel_x,pixel_y,width,height,out_result);
     view_dir = vec3_scale(primary_hit->primaryRay.direction, -1.0);
     if (!runtime_disney_v2_3d_shade_hit_with_payload(scene,
                                                      &primary_hit->hitInfo,

@@ -1,3 +1,69 @@
+## October 16 — rough-glass repair qualification closed
+
+The operator accepted the 512×512 fixed-roughness still quality and authorized a
+local Main Edit source checkpoint of the unified glass, deeper-path and compensated
+termination work. All retained functional source matches the qualified installed
+renderer input. At 32 passes and 32 transmission samples, 16/16/32 versus 32/32/64
+changes selected interior/rim raw linear means by at most 0.112%. Use 16/16/32 as
+the working orb preset; animation temporal acceptance remains open. Existing
+videos, scenes, UI, MCP and installed app bytes are preserved. See
+[qualification and remaining limits](rough_glass_qualification.md).
+
+This is a source freeze in the persistent Main Edit branch. App 0.18.0 and worker
+0.11.0 are unchanged. Installed build metadata retains its original dirty-source
+build identity; checkpointing does not rebuild or relabel that package. Canonical
+adoption and public release are separate. The next proposed slice is polished
+mirror detail and controlled one/two/three-reflection qualification, beginning
+with existing mirror fidelity fixtures. No mirror estimator change is included.
+
+## October 15 — compensated long glass paths
+
+Explicit Disney V2 glass reflection/transmission now treats positive depth values
+as roulette-free prefixes. Surviving tail samples receive reciprocal probability
+weight; net refraction eta-squared scaling is excluded from survival importance.
+A separate full-range stream avoids reusing fixed interface-sampling strata.
+Scattering paths no longer stop at 128 boundaries; 128 consecutive straight/null
+boundaries and integer overflow remain diagnostic safety failures. Zero lobe
+values still disable them; opaque/diffuse, legacy, and general continuation retain
+their existing policies. Defaults, saved values, UI and MCP schemas stay unchanged.
+See [physical glass transport](physical_glass_transport.md) for scope and limits.
+
+## October 15 — explicit deeper-path qualification support
+
+Runtime diffuse/specular/transmission depth ranges extend to 64 while defaults
+remain 3/3/8. Limits retain total-depth, next-lobe semantics. Explicitly deeper
+profiles separate general continuation execution from the eight-entry diagnostic
+history; historical profiles retain their execution guard. A fixed-size,
+thread-local, opt-in termination observer distinguishes glass exits, lobe limits,
+sample/medium failures, safety guards and observed general roulette outcomes at
+up to 64 selected native pixels. It adds no RNG draws or material compensation.
+Glass boundary and legacy primary-transmission safety policies remain distinct.
+
+Fresh Clang application/test builds and fourteen selected regression groups pass,
+including deep-limit boundaries, observer scope/thread isolation, physical glass,
+roulette, configuration, native render bridge and UI menu contracts. Matched
+native depth/seed convergence and local package proof are recorded separately;
+support for deeper paths alone does not establish infinite-depth convergence.
+See [physical glass transport](physical_glass_transport.md). Existing versions,
+saved values, UI/MCP commands and canonical source remain unchanged.
+
+## October 14 — unified physical glass transport
+
+Explicit optical-response glass now uses one medium-aware Fresnel/GGX/Snell
+boundary path for Disney V2 camera, reflection and sampled BSDF continuations.
+The former smooth-only geometry bypass is removed. Equal indices are the analytic
+straight-transmission limit for every roughness, while actual intersections,
+medium transitions and absorption remain active. A transformed BLAS interval repair
+prevents rejected entry candidates from hiding exit surfaces. New UI and MCP source
+are unchanged; legacy material representation remains supported.
+
+Focused physics and geometry tests, including a failing-before/passing-after mesh
+exit regression, pass. Small native no-sphere/IOR 1 comparisons are exact at
+roughness 0, 0.08, 0.3 and 1. Large matrices are deliberately outside this checkpoint.
+See [physical glass transport](physical_glass_transport.md) for equations, estimator
+ownership and the bounded verification scope. Packaging/runtime replay evidence is
+recorded separately in the private checkpoint; no version or release change.
+
 ## October 14 — preview and catalog UI follow-ups
 
 Preview Play/Pause, Loop/Bounce and Close use a dedicated shared control surface,
@@ -2804,3 +2870,22 @@ use the existing owner. Old v1 matrices remain verifiable. See
 No new native command/schema, renderer kernel or catalog change: 80 tools remain.
 App/worker versions remain 0.18.0/0.11.0. Stop at the bounded recovery checkpoint;
 partial sample accumulation, remote resume and measured calibration are separate.
+
+## October 14 — solid rough-glass multiple scattering (Main Edit)
+
+The physical solid-glass sampler now follows a Smith GGX microsurface random
+walk with exact dielectric Fresnel/refraction, CDF-space free flights and
+compensated roulette for rare long walks. It replaces the missing microscopic
+bounces without renormalizing the single-scatter lobe. Smooth/equal-index paths
+and the existing thin-sheet approximation are preserved. The sampled estimator
+explicitly reports that no marginal directional PDF is available.
+
+The local verification packet covers 72 two-sided white-furnace cases,
+independent author-reference angular distributions, two-sided equilibrium,
+analytic slab/sphere transport, focused renderer regressions and ASan/UBSan.
+Matched native orb renders use the same saved scenes/settings/seed; rough-glass
+save/reopen is pixel-exact, as are before/after smooth, legacy and Direct Light
+controls. UI/editor/tool sources and original scene artifacts are unchanged.
+See [physical glass transport](physical_glass_transport.md) for the model and
+limitations. This is uncommitted Main Edit source validation, not a package
+refresh, release, measured-material calibration or human visual acceptance.

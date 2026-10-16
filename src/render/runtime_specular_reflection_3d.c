@@ -1,3 +1,4 @@
+#include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_principled_bsdf_3d.h"
 #include "render/runtime_specular_reflection_3d.h"
 
@@ -87,6 +88,23 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
         RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&trace.geometryHitInfo);
     }
 
+    RuntimeMaterialPayload3D encountered={0};
+    if(trace.geometryHit && !trace.emitterWins && RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo,&encountered) && encountered.hasGlassTransportOverride) {
+        RuntimePhysicalGlass3DContinuation optical;
+        if(!RuntimePhysicalGlass3D_Advance(scene,&result.ray,&trace.geometryHitInfo,&encountered,sampling,NULL,0,&optical))return false;
+        result.opticalInitialTint=vec3(result.tintR,result.tintG,result.tintB);
+        result.opticalInitialRay=result.ray;result.opticalInitialDistance=trace.geometryHitInfo.t;
+        result.opticalSegmentResolved=true;result.opticalMedium=optical.medium;result.opticalDepth=optical.depth;
+        result.segmentRadiance=vec3(optical.radiance.x*result.weight*result.tintR,
+            optical.radiance.y*result.weight*result.tintG,optical.radiance.z*result.weight*result.tintB);
+        if(!optical.hit){result.geometryHit=false;result.ray=optical.ray;
+            result.emitterHit=result.emitterWins=optical.emitterWins;result.emitterHitInfo=optical.emitter;
+            result.tintR*=optical.throughput.x;result.tintG*=optical.throughput.y;result.tintB*=optical.throughput.z;
+            *out_result=result;return true;}
+        result.ray=optical.ray;trace.geometryHitInfo=optical.hitInfo;trace.geometryHit=true;trace.emitterHit=trace.emitterWins=false;
+        result.tintR*=optical.throughput.x;result.tintG*=optical.throughput.y;result.tintB*=optical.throughput.z;
+        result.hasResolvedPayload=true;result.resolvedPayload=optical.payload;
+    }
     result.geometryHit = trace.geometryHit;
     result.emitterHit = trace.emitterHit;
     result.emitterWins = trace.emitterWins;

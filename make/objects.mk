@@ -57,6 +57,10 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_direct_light_source_3d.o \
 	$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 	$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_physical_glass_bsdf_3d.o \
+	$(BUILD_DIR)/render/runtime_glass_microsurface_3d.o \
+	$(BUILD_DIR)/render/runtime_physical_glass_3d.o \
+	$(BUILD_DIR)/render/runtime_glass_path_termination_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_dielectric_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_transmission_sample_3d.o \
 	$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
@@ -140,6 +144,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d_support.o \
 	$(BUILD_DIR)/render/runtime_emission_transparency_3d_sampling.o \
 	$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
+	$(BUILD_DIR)/render/runtime_path_termination_probe_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise_guidance.o \
@@ -529,6 +534,10 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_direct_light_source_3d.o \
 		$(BUILD_DIR)/render/runtime_diffuse_bounce_3d.o \
 		$(BUILD_DIR)/render/runtime_dielectric_transport_3d.o \
+	$(BUILD_DIR)/render/runtime_physical_glass_bsdf_3d.o \
+	$(BUILD_DIR)/render/runtime_glass_microsurface_3d.o \
+	$(BUILD_DIR)/render/runtime_physical_glass_3d.o \
+	$(BUILD_DIR)/render/runtime_glass_path_termination_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_dielectric_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_transmission_sample_3d.o \
 		$(BUILD_DIR)/render/runtime_emissive_direct_3d.o \
@@ -587,6 +596,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d.o \
 		$(BUILD_DIR)/render/runtime_emission_transparency_3d_support.o \
 		$(BUILD_DIR)/render/runtime_path_depth_policy_3d.o \
+	$(BUILD_DIR)/render/runtime_path_termination_probe_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_feature_buffer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_denoise_guidance.o \

@@ -1,6 +1,5 @@
 #include "render/runtime_native_3d_render_shading_internal.h"
 
-#include "render/runtime_glass_null_interface_3d.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -18,6 +17,7 @@ static RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary_impl(
     RuntimeNative3DPrimaryTrace trace = {0};
     RuntimeLightEmitterHit3DResult emitter_hit = {0};
 
+    (void)null_interfaces; /* Geometry bypass removed: every boundary is shaded. */
     if (!scene || !projector) return trace;
 
     RuntimeDirectLight3D_TracePrimaryHit(scene,
@@ -25,16 +25,6 @@ static RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary_impl(
                                          pixel_x,
                                          pixel_y,
                                          &trace.primary);
-    if (null_interfaces && trace.primary.hit) {
-        RuntimeMaterialPayload3D first = {0};
-        if (!scene->volume.enabled &&
-            RuntimeMaterialPayload3D_ResolveFromHit(&trace.primary.hitInfo,&first) &&
-            RuntimeGlassNullInterface3D_IsNeutral(&first)) {
-            trace.primary.hit = RuntimeGlassNullInterface3D_Trace(scene,
-                &trace.primary.primaryRay,projector->nearPlane,HUGE_VAL,
-                &trace.primary.hitInfo);
-        }
-    }
     if (trace.primary.hit) {
         trace.payloadResolved =
             RuntimeMaterialPayload3D_ResolveFromHit(&trace.primary.hitInfo, &trace.payload);

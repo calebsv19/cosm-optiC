@@ -8,6 +8,11 @@ void RuntimeCameraMedium3D_Init(RuntimeCameraMedium3D* medium);
 bool RuntimeCameraDielectric3D_Resolve(RuntimeCameraMedium3D* medium,
     const RuntimeMaterialPayload3D* payload,const HitInfo3D* hit,Vec3 incoming,
     RuntimeDielectricTransport3D* out);
+/* Only at the first boundary of a newly parameterized ray segment. Supports
+ * an origin inside one solid after offsetting; does not relax nested exits. */
+bool RuntimeCameraDielectric3D_ResolveSegmentStart(RuntimeCameraMedium3D* medium,
+    const RuntimeMaterialPayload3D* payload,const HitInfo3D* hit,Vec3 incoming,
+    RuntimeDielectricTransport3D* out);
 bool RuntimeCameraMedium3D_Transmit(RuntimeCameraMedium3D* medium,
     const RuntimeMaterialPayload3D* payload,const HitInfo3D* hit,
     const RuntimeDielectricTransport3D* interface);

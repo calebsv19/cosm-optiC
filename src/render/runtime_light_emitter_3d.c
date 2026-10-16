@@ -1,4 +1,3 @@
-#include "render/runtime_glass_null_interface_3d.h"
 #include <fisics/extensions.h>
 
 #include "render/runtime_light_emitter_3d.h"
@@ -192,7 +191,7 @@ bool RuntimeLightEmitter3D_ResolveFirstHit(const RuntimeScene3D* scene,
     if (!scene || !ray || !out_result) return false;
 
     HitInfo3D_Reset(&result.geometryHitInfo);
-    result.geometryHit = RuntimeGlassNullInterface3D_Trace(scene,
+    result.geometryHit = RuntimeRay3D_TraceSceneFirstHit(scene,
                                                          ray,
                                                          t_min,
                                                          t_max,

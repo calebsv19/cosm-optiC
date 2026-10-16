@@ -2,6 +2,9 @@
 
 Start here for public repository documentation.
 
+Rough-glass checkpoint: [qualified behavior, presets and limits](rough_glass_qualification.md).
+Transport contract: [physical glass in Disney V2](physical_glass_transport.md).
+
 Main Edit atmosphere development: [retained attachments, UI/MCP controls, timing and current limits](atmosphere_attachment.md).
 Matched atmosphere previews: [evaluation scene and reproduction](atmosphere_evaluation.md).
 

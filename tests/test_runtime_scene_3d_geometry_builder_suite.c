@@ -1346,6 +1346,8 @@ static int test_runtime_scene_3d_builder_applies_authored_camera_focus_target(vo
     return 0;
 }
 
+#include "test_runtime_glass_mesh_interval.h"
+
 int run_test_runtime_scene_3d_geometry_builder_suite(void) {
     int before = test_support_failures();
 
@@ -1353,6 +1355,7 @@ int run_test_runtime_scene_3d_geometry_builder_suite(void) {
     test_runtime_scene_3d_volume_contract_defaults();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_uses_retained_seed_scope");
     test_runtime_scene_3d_builder_uses_retained_seed_scope();
+    test_runtime_glass_mesh_interval();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_center_stable");
     test_runtime_scene_3d_builder_mesh_bounds_center_rotation_keeps_center_stable();
     test_runtime_scene_3d_geometry_trace("test_runtime_scene_3d_builder_mesh_authored_origin_rotation_remains_compatible");

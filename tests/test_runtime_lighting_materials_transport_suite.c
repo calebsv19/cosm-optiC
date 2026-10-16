@@ -5348,8 +5348,10 @@ static void test_specular_sampler_energy_and_normals(void) {
 #include "test_runtime_disney_atmosphere_paths.h"
 
 #include "test_runtime_glass_receiver_direction.h"
+#include "test_runtime_physical_glass.h"
 int run_test_runtime_lighting_materials_transport_suite(void) {
     test_runtime_glass_receiver_direction();
+    test_runtime_physical_glass();
     test_runtime_disney_atmosphere_paths();
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
 

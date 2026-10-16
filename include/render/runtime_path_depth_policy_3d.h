@@ -21,6 +21,9 @@ typedef struct {
 } RuntimePathDepthPolicy3D;
 
 RuntimePathDepthPolicy3D RuntimePathDepthPolicy3D_Resolve(void);
+/* Retained profiles keep the historical eight-vertex execution guard. An
+ * explicitly deeper profile gets 64 iterations; history storage stays bounded. */
+int RuntimePathDepthPolicy3D_ContinuationBudget(const RuntimePathDepthPolicy3D* policy);
 
 int RuntimePathDepthPolicy3D_MaxDepthForLobe(const RuntimePathDepthPolicy3D* policy,
                                              RuntimePathDepthPolicy3DLobe lobe);

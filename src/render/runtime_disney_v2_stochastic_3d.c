@@ -1,3 +1,4 @@
+#include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_camera_dielectric_3d.h"
 #include "render/runtime_surface_sampling.h"
 #include "render/runtime_specular_bsdf_3d.h"
@@ -324,6 +325,7 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
     RuntimeDisneyV2_3DMisBranch emissive_area_branch = {0};
     bool has_emissive_area_direct = false;
     bool sampled_delta = false;
+    bool optical_scattered = false;
     RuntimeDielectricTransport3D camera_interface={0};
 
     if (!scene || !hit || !io_result || !io_result->principled.valid) return;
@@ -533,6 +535,27 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                                                &trace)) {
         return;
     }
+    RuntimeMaterialPayload3D optical_payload={0};bool optical_payload_resolved=false;
+    RuntimePhysicalGlass3DContext optical_context={0};bool has_optical_context=false;
+    if(trace.geometryHit&&!trace.emitterWins&&RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo,&optical_payload)&&optical_payload.hasGlassTransportOverride) {
+        RuntimePhysicalGlass3DContinuation optical;
+        if(!RuntimePhysicalGlass3D_Advance(scene,&io_result->pathState.ray,&trace.geometryHitInfo,&optical_payload,sampling,NULL,0,&optical))return;
+        io_result->recursiveBsdfRadianceR+=throughput_r*optical.radiance.x;
+        io_result->recursiveBsdfRadianceG+=throughput_g*optical.radiance.y;
+        io_result->recursiveBsdfRadianceB+=throughput_b*optical.radiance.z;
+        throughput_r*=optical.throughput.x;throughput_g*=optical.throughput.y;throughput_b*=optical.throughput.z;
+        io_result->pathState.throughputR=throughput_r;io_result->pathState.throughputG=throughput_g;io_result->pathState.throughputB=throughput_b;
+        io_result->pathState.ray=optical.ray;
+        trace.geometryHit=optical.hit;trace.geometryHitInfo=optical.hitInfo;
+        trace.emitterHit=trace.emitterWins=optical.emitterWins;trace.emitterHitInfo=optical.emitter;
+        optical_payload=optical.payload;optical_payload_resolved=optical.hit;
+        optical_context.medium=optical.medium;optical_context.depth=optical.depth;has_optical_context=true;
+        /* Direct light sampling at the original vertex cannot generate a path
+         * with an intervening scattering boundary; it has no competing density.
+         * A null boundary retains the original MIS weight. */
+        optical_scattered=optical.scattered;
+        if(!trace.geometryHit&&!trace.emitterWins)return;
+    }
     if (trace.geometryHit) {
         RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&trace.geometryHitInfo);
     }
@@ -553,7 +576,7 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
         io_result->pathState.hitInfo = trace.geometryHitInfo;
         io_result->secondaryHitCount += 1;
         secondary_payload_resolved =
-            RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo, &secondary_payload) &&
+            (optical_payload_resolved ? (secondary_payload=optical_payload,true) : RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo, &secondary_payload)) &&
             secondary_payload.valid;
         if (secondary_payload_resolved) {
             if(RuntimeSurfaceSamplingActive(trace.geometryHitInfo.sceneObjectIndex)){
@@ -585,7 +608,7 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                 throughput_r,
                 throughput_g,
                 throughput_b,
-                sampled_delta ? 1.0 : io_result->misWeightBsdf,
+                (sampled_delta || optical_scattered) ? 1.0 : io_result->misWeightBsdf,
                 1,
                 false,
                 &io_result->pathState,
@@ -660,6 +683,8 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
             }
         }
         if (!secondary_material_emitter) {
+            const RuntimePhysicalGlass3DContext* saved_optical=NULL;
+            if(has_optical_context)saved_optical=RuntimePhysicalGlass3D_SetContext(&optical_context);
             RuntimeDisneyV2_3D_ApplyRecursivePathLoop(scene,
                                                       &trace.geometryHitInfo,
                                                       sampling,
@@ -667,13 +692,14 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                                                       throughput_g,
                                                       throughput_b,
                                                       io_result);
+            if(has_optical_context)RuntimePhysicalGlass3D_SetContext(saved_optical);
         }
     }
     if (trace.emitterWins) {
         const double emitter_radiance = trace.emitterHitInfo.radiance;
-        const double contribution_r = throughput_r * emitter_radiance * (sampled_delta?1.0:io_result->misWeightBsdf);
-        const double contribution_g = throughput_g * emitter_radiance * (sampled_delta?1.0:io_result->misWeightBsdf);
-        const double contribution_b = throughput_b * emitter_radiance * (sampled_delta?1.0:io_result->misWeightBsdf);
+        const double contribution_r = throughput_r * emitter_radiance * ((sampled_delta || optical_scattered)?1.0:io_result->misWeightBsdf);
+        const double contribution_g = throughput_g * emitter_radiance * ((sampled_delta || optical_scattered)?1.0:io_result->misWeightBsdf);
+        const double contribution_b = throughput_b * emitter_radiance * ((sampled_delta || optical_scattered)?1.0:io_result->misWeightBsdf);
         io_result->pathState.emitterHit = trace.emitterHit;
         io_result->pathState.emitterWins = true;
         io_result->pathState.emitterHitInfo = trace.emitterHitInfo;

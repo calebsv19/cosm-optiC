@@ -18,6 +18,8 @@ typedef struct {
     Vec3 refractionDir;
 } RuntimeDielectricTransport3D;
 
+double RuntimeDielectricTransport3D_FresnelExact(double cosine,double eta_from,double eta_to);
+
 bool RuntimeDielectricTransport3D_Resolve(const RuntimeMaterialPayload3D* payload,
                                           Vec3 surface_normal,
                                           Vec3 incident_dir,

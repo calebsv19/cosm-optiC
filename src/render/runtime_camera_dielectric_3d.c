@@ -1,9 +1,9 @@
 #include "render/runtime_camera_dielectric_3d.h"
 #include <math.h>
 void RuntimeCameraMedium3D_Init(RuntimeCameraMedium3D* m) { RuntimeCausticPhotonMediumStack3D_Init(m); }
-bool RuntimeCameraDielectric3D_Resolve(RuntimeCameraMedium3D* m,
+static bool resolve(RuntimeCameraMedium3D* m,
     const RuntimeMaterialPayload3D* p,const HitInfo3D* h,Vec3 incoming,
-    RuntimeDielectricTransport3D* out) {
+    RuntimeDielectricTransport3D* out, bool segment_start) {
     if(!p || !h || !out) return false;
     Vec3 boundary_normal=HitInfo3D_BoundaryNormal(h);
     if(!m) return RuntimeDielectricTransport3D_Resolve(p,boundary_normal,incoming,out);
@@ -14,15 +14,28 @@ bool RuntimeCameraDielectric3D_Resolve(RuntimeCameraMedium3D* m,
     RuntimeCausticPhotonMediumEntry3D boundary={0};
     if(!RuntimeCausticPhotonMediumEntry3D_FromMaterial(p,h->sceneObjectIndex,0,&boundary)) return false;
     bool entering=vec3_dot(boundary_normal,incoming)<0;
-    /* A path may start inside a single solid. Seed only its first outward boundary;
-       once a medium is known, mismatched exits and overflow remain failures. */
-    if(!entering && m->count==1 && m->pushCount==0 && m->popCount==0) {
+    /* An offset ray can begin inside a solid even after an earlier segment
+       entered and exited it. Classify this segment's origin at its first outward
+       boundary, preserving cumulative counters. Once a boundary was observed
+       in this segment, strict exit matching resumes; known nested media are
+       never replaced by this bootstrap. */
+    if(!entering && m->count==1 && (segment_start || (m->pushCount==0 && m->popCount==0))) {
         RuntimeCausticPhotonMediumTransition3D transition;
         if(!RuntimeCausticPhotonMediumStack3D_ObserveBoundary(m,&boundary,true,false,&transition)) return false;
     }
     double from,to;
     if(!RuntimeCausticPhotonMediumStack3D_ResolveInterface(m,&boundary,entering,&from,&to)) return false;
     return RuntimeDielectricTransport3D_ResolveInterface(p,boundary_normal,incoming,from,to,out);
+}
+bool RuntimeCameraDielectric3D_Resolve(RuntimeCameraMedium3D* m,
+    const RuntimeMaterialPayload3D* p,const HitInfo3D* h,Vec3 incoming,
+    RuntimeDielectricTransport3D* out) {
+    return resolve(m,p,h,incoming,out,false);
+}
+bool RuntimeCameraDielectric3D_ResolveSegmentStart(RuntimeCameraMedium3D* m,
+    const RuntimeMaterialPayload3D* p,const HitInfo3D* h,Vec3 incoming,
+    RuntimeDielectricTransport3D* out) {
+    return resolve(m,p,h,incoming,out,true);
 }
 bool RuntimeCameraMedium3D_Transmit(RuntimeCameraMedium3D* m,
     const RuntimeMaterialPayload3D* p,const HitInfo3D* h,const RuntimeDielectricTransport3D* d) {

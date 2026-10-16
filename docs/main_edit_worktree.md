@@ -1,3 +1,21 @@
+## October 16 — rough-glass local source freeze
+
+The operator accepted the 512×512 fixed-roughness still quality and authorized a
+local Main Edit source checkpoint of the unified glass, deeper-path and compensated
+termination work. All retained functional source matches the qualified installed
+renderer input. At 32 passes and 32 transmission samples, 16/16/32 versus 32/32/64
+changes selected interior/rim raw linear means by at most 0.112%. Use 16/16/32 as
+the working orb preset; animation temporal acceptance remains open. Existing
+videos, scenes, UI, MCP and installed app bytes are preserved. See
+[qualification and remaining limits](rough_glass_qualification.md).
+
+This is a source freeze in the persistent Main Edit branch. App 0.18.0 and worker
+0.11.0 are unchanged. Installed build metadata retains its original dirty-source
+build identity; checkpointing does not rebuild or relabel that package. Canonical
+adoption and public release are separate. The next proposed slice is polished
+mirror detail and controlled one/two/three-reflection qualification, beginning
+with existing mirror fidelity fixtures. No mirror estimator change is included.
+
 ## October 14 — preview and catalog UI follow-ups
 
 Preview Play/Pause, Loop/Bounce and Close use a dedicated shared control surface,

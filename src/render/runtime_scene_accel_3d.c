@@ -888,32 +888,35 @@ static RuntimeSceneAcceleration3DTraceStatus runtime_scene_accel_3d_trace_instan
         local_t_max = (t_max + world_t_tolerance) * local_direction_scale;
     }
 
-    gRuntimeSceneAcceleration3DTraceStats.blasTraceCalls += 1u;
-    blas_result = RuntimeTriangleBVH3D_TraceFirstHitStatus(instance->localMesh,
-                                                           &local_ray,
-                                                           local_t_min,
-                                                           local_t_max,
-                                                           &local_hit);
-    if (blas_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_MISS) {
-        return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;
-    }
-    if (blas_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_OVERFLOW) {
-        return RUNTIME_SCENE_ACCEL_3D_TRACE_UNSUPPORTED;
-    }
-    if (!runtime_scene_accel_3d_remap_hit(scene,
-                                          instance,
-                                          world_ray,
-                                          &local_hit,
-                                          t_min,
-                                          t_max,
-                                          out_hit,
-                                          &identity_failure)) {
+    /* Local bounds are conservative under transforms. A candidate rejected by
+     * the authoritative world-space interval is not an instance miss: the next
+     * surface can still lie inside that interval (notably a solid's exit). */
+    for (int retry=0;retry<8;++retry) {
+        gRuntimeSceneAcceleration3DTraceStats.blasTraceCalls += 1u;
+        blas_result = RuntimeTriangleBVH3D_TraceFirstHitStatus(instance->localMesh,
+                                                               &local_ray,
+                                                               local_t_min,
+                                                               local_t_max,
+                                                               &local_hit);
+        if (blas_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_MISS)
+            return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;
+        if (blas_result == RUNTIME_TRIANGLE_BVH_3D_TRACE_OVERFLOW)
+            return RUNTIME_SCENE_ACCEL_3D_TRACE_UNSUPPORTED;
+        if (runtime_scene_accel_3d_remap_hit(scene,instance,world_ray,&local_hit,
+                                               t_min,t_max,out_hit,&identity_failure))
+            goto valid_mesh_hit;
         if (identity_failure) {
             gRuntimeSceneAcceleration3DTraceStats.identityRemapFailures += 1u;
             return RUNTIME_SCENE_ACCEL_3D_TRACE_ERROR;
         }
-        return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;
+        double next=nextafter(local_hit.t,INFINITY);
+        if (!(next>local_t_min) || !(next<local_t_max))
+            return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;
+        local_t_min=next;
     }
+    /* Preserve the flattened fallback if numerical remapping cannot progress. */
+    return RUNTIME_SCENE_ACCEL_3D_TRACE_UNSUPPORTED;
+valid_mesh_hit:;
     gRuntimeSceneAcceleration3DTraceStats.blasTraceHits += 1u;
     return RUNTIME_SCENE_ACCEL_3D_TRACE_HIT;
 }

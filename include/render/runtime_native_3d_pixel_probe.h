@@ -3,7 +3,7 @@
 #include "render/runtime_disney_v2_3d.h"
 #include "render/runtime_native_3d_feature_buffer.h"
 
-/* Opt-in stderr records for at most16 native coordinates. No frame storage. */
+/* Opt-in stderr records for at most 64 native coordinates. No frame storage. */
 bool RuntimeNative3DPixelProbe_IsSelected(int x, int y);
 bool RuntimeNative3DPixelProbe_ShouldShade(int x, int y);
 void RuntimeNative3DPixelProbe_Receiver(int x, int y, const HitInfo3D* hit,

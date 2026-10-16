@@ -2,6 +2,7 @@
 #include "render/runtime_native_3d_pixel_probe.h"
 #include "render/runtime_specular_bsdf_3d.h"
 #include "render/runtime_dielectric_transport_3d.h"
+#include "render/runtime_path_termination_probe_3d.h"
 #include <math.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -16,12 +17,13 @@ static void init(void) {
     enabled=env && strcmp(env,"1")==0;
 }
 void RuntimeTransportWeightProbe3D_Begin(int x,int y,const RuntimeNative3DSamplingContext* s) {
+    RuntimePathTermination3D_Begin(x,y,s);
     pthread_once(&once,init);
     context.active=enabled && RuntimeNative3DPixelProbe_IsSelected(x,y);
     context.x=x;context.y=y;context.events=0;
     context.sequence=s?s->sampleSequence:0;context.subpass=s?s->temporalSubpassIndex:0;
 }
-void RuntimeTransportWeightProbe3D_End(void) { context.active=false; }
+void RuntimeTransportWeightProbe3D_End(void) { context.active=false; RuntimePathTermination3D_End(); }
 static bool begin(const char* stage,int depth) {
     if(!context.active || context.events++>=128) return false;
     pthread_mutex_lock(&lock);
@@ -55,6 +57,10 @@ void RuntimeTransportWeightProbe3D_Sample(const HitInfo3D* h,const RuntimeMateri
     vector("direction",s->direction);vector("factor",vec3(s->throughputR,s->throughputG,s->throughputB));end();
 }
 void RuntimeTransportWeightProbe3D_Weight(int depth,Vec3 parent,Vec3 factor,double survival,double u,double share) {
+    if (survival < 1)
+        RuntimePathTermination3D_Record(u > survival ? RUNTIME_PATH_EXIT_ROULETTE_TERMINATED
+                                                    : RUNTIME_PATH_EXIT_ROULETTE_SURVIVED, depth,
+                                       vec3(parent.x*factor.x,parent.y*factor.y,parent.z*factor.z));
     if(!begin("weight",depth)) return;
     vector("parent",parent);vector("factor",factor);
     vector("before_roulette",vec3(parent.x*factor.x,parent.y*factor.y,parent.z*factor.z));

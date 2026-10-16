@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "render/runtime_light_emitter_3d.h"
+#include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_material_payload_3d.h"
 
 const RuntimeNative3DFeatureBuffer* RuntimeNative3DFeatureBuffer_GuideSource(
@@ -212,6 +213,21 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
                 continue;
             }
 
+            Vec3 optical_guide_weight=vec3(1,1,1);
+            if(trace.geometryHit && !trace.emitterWins &&
+               RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo,&payload) &&
+               payload.hasGlassTransportOverride) {
+                RuntimePhysicalGlass3DContinuation optical;
+                if(RuntimePhysicalGlass3D_Advance(scene,&primary_ray,&trace.geometryHitInfo,&payload,NULL,NULL,0,&optical) &&
+                   optical.hit && optical.deterministicStraight) {
+                    /* This guide describes the radiance receiver after evaluating
+                     * actual deterministic boundary events. It never skips geometry
+                     * in the transport estimator or marks the editor object invisible. */
+                    trace.geometryHitInfo=optical.hitInfo;
+                    optical_guide_weight=optical.throughput;
+                }
+            }
+
             if (trace.emitterWins) {
                 normal = trace.emitterHitInfo.normal;
                 depth = trace.emitterHitInfo.t;
@@ -224,9 +240,9 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
                 if (RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo, &payload) &&
                     payload.valid) {
                     if (buffer->albedoBuffer) {
-                    buffer->albedoBuffer[normal_base] = (float)payload.baseColorR;
-                    buffer->albedoBuffer[normal_base + 1u] = (float)payload.baseColorG;
-                    buffer->albedoBuffer[normal_base + 2u] = (float)payload.baseColorB;
+                    buffer->albedoBuffer[normal_base] = (float)(payload.baseColorR*optical_guide_weight.x);
+                    buffer->albedoBuffer[normal_base + 1u] = (float)(payload.baseColorG*optical_guide_weight.y);
+                    buffer->albedoBuffer[normal_base + 2u] = (float)(payload.baseColorB*optical_guide_weight.z);
                     (void)RuntimeMaterialPayload3D_ApplyShadingNormal(&payload, &trace.geometryHitInfo);
                     const Vec3 shading = trace.geometryHitInfo.normal;
                     buffer->shadingNormalBuffer[normal_base] = (float)shading.x;

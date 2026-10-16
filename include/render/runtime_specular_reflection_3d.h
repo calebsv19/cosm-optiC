@@ -2,6 +2,7 @@
 #define RENDER_RUNTIME_SPECULAR_REFLECTION_3D_H
 
 #include <stdbool.h>
+#include "render/runtime_camera_dielectric_3d.h"
 
 #include "render/runtime_light_emitter_3d.h"
 #include "render/runtime_material_payload_3d.h"
@@ -15,6 +16,15 @@ typedef struct {
     Ray3D ray;
     HitInfo3D hitInfo;
     RuntimeLightEmitterHit3DResult emitterHitInfo;
+    bool opticalSegmentResolved;
+    Ray3D opticalInitialRay;
+    double opticalInitialDistance;
+    Vec3 opticalInitialTint;
+    RuntimeCameraMedium3D opticalMedium;
+    int opticalDepth;
+    bool hasResolvedPayload;
+    RuntimeMaterialPayload3D resolvedPayload;
+    Vec3 segmentRadiance;
     double weight;
     double tintR;
     double tintG;

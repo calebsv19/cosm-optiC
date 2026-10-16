@@ -17,6 +17,14 @@ static Vec3 runtime_dielectric_transport_3d_reflect(Vec3 incident_dir, Vec3 norm
         vec3_sub(incident_dir, vec3_scale(normal, 2.0 * vec3_dot(incident_dir, normal))));
 }
 
+double RuntimeDielectricTransport3D_FresnelExact(double c,double from,double to) {
+    if(!(from>0) || !(to>0)) return 1;
+    c=fmin(1,fabs(c));if(from==to)return 0;
+    double st2=(from/to)*(from/to)*fmax(0,1-c*c);if(st2>=1)return 1;
+    double ct=sqrt(1-st2),rs=(from*c-to*ct)/(from*c+to*ct),rp=(to*c-from*ct)/(to*c+from*ct);
+    return .5*(rs*rs+rp*rp);
+}
+
 bool RuntimeDielectricTransport3D_Resolve(const RuntimeMaterialPayload3D* payload,
                                           Vec3 surface_normal,
                                           Vec3 incident_dir,
@@ -103,6 +111,11 @@ bool RuntimeDielectricTransport3D_ResolveInterface(
             ? 0.0
             : FresnelSchlick(cos_i, f0);
 
+    if(payload->hasGlassTransportOverride) {
+        transport.fresnel=RuntimeDielectricTransport3D_FresnelExact(cos_i,eta_from,eta_to);
+        if(eta_from==eta_to){transport.hasRefraction=true;transport.refractionDir=incident;
+            *out_transport=transport;return true;}
+    }
     if (payload->thinWalled) {
         transport.totalInternalReflection = false;
         transport.hasRefraction = true;

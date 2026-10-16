@@ -1,6 +1,8 @@
+#include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_transport_weight_probe_3d.h"
+#include "render/runtime_path_termination_probe_3d.h"
 #include "render/runtime_surface_sampling.h"
 #include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_disney_v2_transport_internal_3d.h"
@@ -144,7 +146,7 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
     RuntimeDisneyV2_3DResult* io_result) {
     HitInfo3D current_hit = {0};
     RuntimeCameraMedium3D medium;
-    RuntimeCameraMedium3D_Init(&medium);
+    RuntimePhysicalGlass3D_CurrentMedium(&medium);
     double throughput_r = parent_throughput_r;
     double throughput_g = parent_throughput_g;
     double throughput_b = parent_throughput_b;
@@ -163,6 +165,8 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
             !RuntimeCameraMedium3D_Transmit(&medium,&io_result->payload,&io_result->hitInfo,&initial_interface)) return false;
     }
     current_hit = *start_hit;
+    Ray3D arriving_ray=io_result->pathState.valid?io_result->pathState.ray:
+        RuntimeRay3D_Make(vec3_sub(current_hit.position,vec3_scale(incoming_dir,current_hit.t)),incoming_dir);
     if (depth < 1) {
         depth = 1;
     }
@@ -181,7 +185,8 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         return false;
     }
 
-    while (depth < start_depth + RUNTIME_DISNEY_V2_3D_RECURSIVE_LOOP_STATE_CAPACITY) {
+    const int execution_end = start_depth + RuntimePathDepthPolicy3D_ContinuationBudget(&io_result->pathPolicy);
+    while (depth < execution_end) {
         RuntimeDisneyV2_3DPathState state = {0};
         RuntimeLightEmitterTrace3DResult trace = {0};
         RuntimeMaterialPayload3D payload = {0};
@@ -198,10 +203,36 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         bool has_emissive_area_direct = false;
         bool payload_resolved = false;
 
-        payload_resolved = RuntimeMaterialPayload3D_ResolveFromHit(&current_hit, &payload) &&
+        bool start_override=depth==start_depth && io_result->secondaryPayloadResolved &&
+            current_hit.triangleIndex==io_result->pathState.hitInfo.triangleIndex &&
+            current_hit.sceneObjectIndex==io_result->pathState.hitInfo.sceneObjectIndex;
+        payload_resolved = (start_override?(payload=io_result->secondaryPayload,true):RuntimeMaterialPayload3D_ResolveFromHit(&current_hit, &payload)) &&
                            payload.valid;
         if(payload_resolved && RuntimeSurfaceSamplingActive(current_hit.sceneObjectIndex))
             (void)RuntimeMaterialPayload3D_ApplyShadingNormal(&payload,&current_hit);
+        if(payload_resolved && payload.hasGlassTransportOverride) {
+            Ray3D arriving=arriving_ray;
+            RuntimePhysicalGlass3DContinuation optical;
+            if(!RuntimePhysicalGlass3D_Advance(scene,&arriving,&current_hit,&payload,sampling,&medium,depth,&optical))break;
+            io_result->recursiveBsdfRadianceR+=throughput_r*optical.radiance.x;
+            io_result->recursiveBsdfRadianceG+=throughput_g*optical.radiance.y;
+            io_result->recursiveBsdfRadianceB+=throughput_b*optical.radiance.z;
+            throughput_r*=optical.throughput.x;throughput_g*=optical.throughput.y;throughput_b*=optical.throughput.z;
+            if(!optical.hit) {
+                state.valid=true;state.ray=optical.ray;
+                state.throughputR=throughput_r;state.throughputG=throughput_g;state.throughputB=throughput_b;
+                if(optical.emitterWins) {
+                    double weight=optical.scattered?1.0:io_result->misWeightBsdf;
+                    io_result->recursiveBsdfRadianceR+=throughput_r*optical.emitter.radiance*weight;
+                    io_result->recursiveBsdfRadianceG+=throughput_g*optical.emitter.radiance*weight;
+                    io_result->recursiveBsdfRadianceB+=throughput_b*optical.emitter.radiance*weight;
+                    contributed=true;
+                } else contributed|=runtime_disney_v2_transport_3d_accumulate_environment_miss(scene,&state,NULL,vertex_index,io_result);
+                break;
+            }
+            current_hit=optical.hitInfo;payload=optical.payload;medium=optical.medium;
+            incoming_dir=optical.ray.direction;depth=optical.depth;
+        }
         principled = payload_resolved ? RuntimePrincipledBSDF3D_FromMaterialPayload(&payload)
                                       : RuntimePrincipledBSDF3D_Default();
         if (RuntimeDisneyV2_3D_ShouldEvaluateEmissiveAreaLightSample(scene,
@@ -233,6 +264,11 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         if (!RuntimePathDepthPolicy3D_AllowsDepth(&io_result->pathPolicy,
                                                   vertex_sample.policyLobe,
                                                   depth)) {
+            RuntimePathTermination3D_Record(
+                vertex_sample.policyLobe == RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_DIFFUSE ? RUNTIME_PATH_EXIT_DIFFUSE_DEPTH :
+                vertex_sample.policyLobe == RUNTIME_PATH_DEPTH_POLICY_3D_LOBE_SPECULAR ? RUNTIME_PATH_EXIT_SPECULAR_DEPTH :
+                                                                                       RUNTIME_PATH_EXIT_TRANSMISSION_DEPTH,
+                depth, vec3(throughput_r, throughput_g, throughput_b));
             runtime_disney_v2_transport_3d_note_termination(
                 io_result,
                 RUNTIME_DISNEY_V2_3D_LOOP_TERMINATION_MAX_DEPTH);
@@ -526,11 +562,15 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
             0.0);
 
         incoming_dir = state.ray.direction;
+        arriving_ray=state.ray;
         current_hit = trace.geometryHitInfo;
         io_result->pathDepth = depth;
         depth += 1;
     }
 
+    if (depth >= execution_end)
+        RuntimePathTermination3D_Record(RUNTIME_PATH_EXIT_CONTINUATION_SAFETY, depth,
+                                        vec3(throughput_r, throughput_g, throughput_b));
     return contributed;
 }
 
@@ -829,6 +869,12 @@ static bool runtime_disney_v2_transport_3d_apply_reflection_loop(
     loop_result.pathState.valid = true;
     loop_result.pathState.sampledLobe = RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR;
     loop_result.pathState.ray = selected->ray;
+    loop_result.pathState.hitInfo=selected->hitInfo;
+    loop_result.secondaryPayloadResolved=selected->hasResolvedPayload;
+    loop_result.secondaryPayload=selected->resolvedPayload;
+    RuntimeMaterialPayload3D selected_payload={0};
+    if(!RuntimeMaterialPayload3D_ResolveFromHit(&selected->hitInfo,&selected_payload) ||
+       !selected_payload.hasGlassTransportOverride)
     (void)RuntimeDisneyV2_3D_ApplyReflectedTransmissionContinuation(scene,
                                                                     &selected->hitInfo,
                                                                     selected->ray,
@@ -837,6 +883,9 @@ static bool runtime_disney_v2_transport_3d_apply_reflection_loop(
                                                                     parent_g,
                                                                     parent_b,
                                                                     io_result);
+    RuntimePhysicalGlass3DContext optical_context={selected->opticalMedium,selected->opticalDepth};
+    const RuntimePhysicalGlass3DContext* saved_optical=NULL;
+    if(selected->opticalSegmentResolved)saved_optical=RuntimePhysicalGlass3D_SetContext(&optical_context);
     (void)runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         scene,
         &selected->hitInfo,
@@ -849,6 +898,7 @@ static bool runtime_disney_v2_transport_3d_apply_reflection_loop(
         /* Its direct response was already evaluated as the first reflected vertex. */
         true,
         &loop_result);
+    if(selected->opticalSegmentResolved)RuntimePhysicalGlass3D_SetContext(saved_optical);
     runtime_disney_v2_transport_3d_merge_reflection_loop(io_result,
                                                          &loop_result,
                                                          rough_sample_used);
@@ -908,9 +958,11 @@ bool RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(
         io_result->specularReflectionRoughness = roughness;
         for (sample_index = 0; sample_index < rough_sample_count; ++sample_index) {
             selected = *reflection;
+            if(reflection->opticalSegmentResolved){selected.tintR=reflection->opticalInitialTint.x;selected.tintG=reflection->opticalInitialTint.y;selected.tintB=reflection->opticalInitialTint.z;}
+            selected.opticalSegmentResolved=false;selected.hasResolvedPayload=false;
             rough_ray = runtime_disney_v2_transport_3d_make_rough_reflection_ray(
                 source_hit,
-                &reflection->ray,
+                reflection->opticalSegmentResolved?&reflection->opticalInitialRay:&reflection->ray,
                 sampling,
                 roughness,
                 rough_sample_count,
@@ -918,11 +970,26 @@ bool RuntimeDisneyV2_3D_ApplySpecularReflectionRecursion(
             RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
                 RUNTIME_RENDER_TRACE_COST_RAY_REFLECTION_SPECULAR,
                 2);
-            if (RuntimeLightEmitter3D_ResolveFirstHit(scene,
+            bool rough_found=RuntimeLightEmitter3D_ResolveFirstHit(scene,
                                                       &rough_ray,
                                                       kRuntimeDisneyV2Transport3DEpsilon,
                                                       RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE,
-                                                      &rough_trace) &&
+                                                      &rough_trace);
+            RuntimeMaterialPayload3D rough_payload={0};
+            if(rough_found && rough_trace.geometryHit && !rough_trace.emitterWins &&
+               RuntimeMaterialPayload3D_ResolveFromHit(&rough_trace.geometryHitInfo,&rough_payload) && rough_payload.hasGlassTransportOverride) {
+                RuntimePhysicalGlass3DContinuation optical;
+                if(RuntimePhysicalGlass3D_Advance(scene,&rough_ray,&rough_trace.geometryHitInfo,&rough_payload,sampling,NULL,1,&optical)) {
+                    selected.opticalSegmentResolved=true;selected.opticalMedium=optical.medium;selected.opticalDepth=optical.depth;
+                    selected.hasResolvedPayload=optical.hit;selected.resolvedPayload=optical.payload;
+                    rough_ray=optical.ray;rough_trace.geometryHit=optical.hit;
+                    rough_trace.geometryHitInfo=optical.hitInfo;
+                    rough_trace.emitterHit=rough_trace.emitterWins=optical.emitterWins;rough_trace.emitterHitInfo=optical.emitter;
+                    selected.tintR*=optical.throughput.x;selected.tintG*=optical.throughput.y;selected.tintB*=optical.throughput.z;
+                    rough_found=optical.hit||optical.emitterWins;
+                } else rough_found=false;
+            }
+            if (rough_found &&
                 rough_trace.geometryHit &&
                 rough_trace.geometryHitInfo.triangleIndex >= 0 &&
                 rough_trace.geometryHitInfo.triangleIndex != source_hit->triangleIndex) {

@@ -60,6 +60,13 @@ int RuntimePathDepthPolicy3D_MaxDepthForLobe(const RuntimePathDepthPolicy3D* pol
     }
 }
 
+int RuntimePathDepthPolicy3D_ContinuationBudget(const RuntimePathDepthPolicy3D* policy) {
+    RuntimePathDepthPolicy3D resolved;
+    if (!policy) { resolved = RuntimePathDepthPolicy3D_Resolve(); policy = &resolved; }
+    return policy->diffuseDepth > 8 || policy->specularDepth > 8 || policy->transmissionDepth > 16
+               ? 64 : 8;
+}
+
 bool RuntimePathDepthPolicy3D_AllowsDepth(const RuntimePathDepthPolicy3D* policy,
                                           RuntimePathDepthPolicy3DLobe lobe,
                                           int depth) {
