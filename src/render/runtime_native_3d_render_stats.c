@@ -810,6 +810,10 @@ void RuntimeNative3DRenderStats_Accumulate(RuntimeNative3DRenderStats* dst,
                    sizeof(dst->mirrorFidelityNeutralProbeObjectId));
         }
     }
+    if (src->temporalTileSchedulerRequestedWorkers > dst->temporalTileSchedulerRequestedWorkers) dst->temporalTileSchedulerRequestedWorkers = src->temporalTileSchedulerRequestedWorkers;
+    if (src->temporalTileSchedulerActualWorkers > dst->temporalTileSchedulerActualWorkers) dst->temporalTileSchedulerActualWorkers = src->temporalTileSchedulerActualWorkers;
+    if (src->temporalTileSchedulerHostCpuCount > dst->temporalTileSchedulerHostCpuCount) dst->temporalTileSchedulerHostCpuCount = src->temporalTileSchedulerHostCpuCount;
+    dst->temporalTileSchedulerWallMs += src->temporalTileSchedulerWallMs;
     dst->temporalCommittedSubpasses += src->temporalCommittedSubpasses;
     dst->temporalPixelsRendered += src->temporalPixelsRendered;
     dst->temporalPixelsSkipped += src->temporalPixelsSkipped;

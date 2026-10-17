@@ -69,6 +69,9 @@ typedef struct {
     bool hit;
     bool visible;
     bool payloadResolved;
+    /* Local receiver only; path throughput belongs to the calling continuation. */
+    bool photonReceiverEvaluated;
+    double photonReceiverRadianceR, photonReceiverRadianceG, photonReceiverRadianceB;
     bool tracePixelContextResolved;
     int tracePixelX;
     int tracePixelY;

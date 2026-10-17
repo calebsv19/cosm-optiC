@@ -17,4 +17,8 @@ RuntimeSpecularBSDF3DSample RuntimeSpecularBSDF3D_Sample(
     double lobe_probability, double u, double v);
 double RuntimeSpecularBSDF3D_Pdf(const RuntimePrincipledBSDF3D *bsdf,
     const HitInfo3D *hit, Vec3 view, Vec3 direction);
+/* Fixed-NDF-sample differentials for smooth constant-normal opaque reflectors.
+ * Only footprint fields may change; rejection restores the broad fallback. */
+bool RuntimeSpecularBSDF3D_TransportFootprint(const RuntimeMaterialPayload3D *payload,
+    const RuntimePrincipledBSDF3D *bsdf, const HitInfo3D *hit, Vec3 view, Ray3D *ray);
 #endif

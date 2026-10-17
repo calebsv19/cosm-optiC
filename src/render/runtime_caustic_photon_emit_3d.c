@@ -1,3 +1,4 @@
+#include "render/runtime_caustic_photon_budget_3d.h"
 #include "render/runtime_caustic_photon_emit_3d.h"
 #include "render/runtime_light_radiometry_3d.h"
 
@@ -12,7 +13,7 @@
 
 enum {
     RUNTIME_CAUSTIC_PHOTON_EMISSION_DEFAULT_BUDGET = 256,
-    RUNTIME_CAUSTIC_PHOTON_EMISSION_MAX_BUDGET = 262144
+    RUNTIME_CAUSTIC_PHOTON_EMISSION_MAX_BUDGET = RUNTIME_PHOTON_SURFACE_LIMIT
 };
 
 static double photon_emit_luma(Vec3 value) {

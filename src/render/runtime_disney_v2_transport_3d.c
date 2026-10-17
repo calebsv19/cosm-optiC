@@ -1,3 +1,5 @@
+#include "render/runtime_disney_v2_photon_receiver_3d.h"
+#include "render/runtime_reflection_footprint_probe_3d.h"
 #include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
@@ -7,6 +9,7 @@
 #include "render/runtime_mirror_composition_3d.h"
 #include "render/runtime_disney_v2_transport_internal_3d.h"
 
+#include "render/runtime_specular_bsdf_3d.h"
 #include <math.h>
 #include <stdint.h>
 
@@ -203,11 +206,13 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         bool has_emissive_area_direct = false;
         bool payload_resolved = false;
 
+        RuntimeReflectionFootprintProbe3D_Record("arrive","recursive",depth-1,&current_hit,NULL,&arriving_ray);
         bool start_override=depth==start_depth && io_result->secondaryPayloadResolved &&
             current_hit.triangleIndex==io_result->pathState.hitInfo.triangleIndex &&
             current_hit.sceneObjectIndex==io_result->pathState.hitInfo.sceneObjectIndex;
         payload_resolved = (start_override?(payload=io_result->secondaryPayload,true):RuntimeMaterialPayload3D_ResolveFromHit(&current_hit, &payload)) &&
                            payload.valid;
+        RuntimeReflectionFootprintProbe3D_Record("receiver","recursive",depth-1,&current_hit,payload_resolved?&payload:NULL,&arriving_ray);
         if(payload_resolved && RuntimeSurfaceSamplingActive(current_hit.sceneObjectIndex))
             (void)RuntimeMaterialPayload3D_ApplyShadingNormal(&payload,&current_hit);
         if(payload_resolved && payload.hasGlassTransportOverride) {
@@ -232,6 +237,18 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
             }
             current_hit=optical.hitInfo;payload=optical.payload;medium=optical.medium;
             incoming_dir=optical.ray.direction;depth=optical.depth;
+        }
+        /* The dedicated reflected-first vertex has a separate local owner.
+         * Later receivers get photon light using arriving throughput only,
+         * before sampling/weighting the next event or terminating that event. */
+        if (!(skip_start_vertex_direct && depth == start_depth) && payload_resolved) {
+            RuntimeDisneyV2_3DResult photon = {0};
+            if (RuntimeDisneyV2PhotonReceiver3D_Apply(&current_hit, &payload, &photon)) {
+                io_result->recursiveDirectRadianceR += throughput_r * photon.photonReceiverRadianceR;
+                io_result->recursiveDirectRadianceG += throughput_g * photon.photonReceiverRadianceG;
+                io_result->recursiveDirectRadianceB += throughput_b * photon.photonReceiverRadianceB;
+                contributed = true;
+            }
         }
         principled = payload_resolved ? RuntimePrincipledBSDF3D_FromMaterialPayload(&payload)
                                       : RuntimePrincipledBSDF3D_Default();
@@ -338,6 +355,10 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
                                             HitInfo3D_OffsetNormal(&current_hit),
                                             vertex_sample.direction,
                                             kRuntimeDisneyV2Transport3DEpsilon);
+        if (vertex_sample.lobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR && !vertex_sample.dielectricResolved)
+            (void)RuntimeSpecularBSDF3D_TransportFootprint(payload_resolved?&payload:NULL,
+                &principled,&current_hit,vec3_scale(incoming_dir,-1),&state.ray);
+        RuntimeReflectionFootprintProbe3D_Record("spawn","recursive",depth,&current_hit,&payload,&state.ray);
         throughput_r = state.throughputR;
         throughput_g = state.throughputG;
         throughput_b = state.throughputB;
@@ -443,6 +464,7 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         }
 
         if (trace.geometryHit) {
+            RuntimeReflectionFootprintProbe3D_Record("hit","recursive",depth,&trace.geometryHitInfo,NULL,&state.ray);
             RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&trace.geometryHitInfo);
             state.hit = true;
             state.hitInfo = trace.geometryHitInfo;

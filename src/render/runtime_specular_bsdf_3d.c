@@ -1,5 +1,6 @@
 #include "render/runtime_specular_bsdf_3d.h"
 #include <math.h>
+#include "render/runtime_surface_sampling.h"
 
 static const double pi = 3.14159265358979323846;
 static double clamp01(double x) { return fmax(0.0, fmin(1.0, x)); }
@@ -77,4 +78,64 @@ RuntimeSpecularBSDF3DSample RuntimeSpecularBSDF3D_Sample(
     sample.valid = isfinite(sample.throughputR) && isfinite(sample.throughputG) && isfinite(sample.throughputB);
     if (!sample.valid) return (RuntimeSpecularBSDF3DSample){0};
     return sample;
+}
+
+static bool footprint_finite(Vec3 v) {
+    return isfinite(v.x) && isfinite(v.y) && isfinite(v.z) && vec3_length(v)>1e-12;
+}
+bool RuntimeSpecularBSDF3D_TransportFootprint(const RuntimeMaterialPayload3D *payload,
+    const RuntimePrincipledBSDF3D *bsdf, const HitInfo3D *hit, Vec3 view, Ray3D *ray) {
+    if (!ray) return false;
+    /* Reset stale differential state on every refusal, leaving the transport ray intact. */
+    (void)RuntimeRay3D_TransportIdealFootprint(NULL,vec3(0,0,1),
+        RUNTIME_RAY_IDEAL_REFLECTION,1,1,ray);
+    if (!payload || !payload->valid || !bsdf || !bsdf->valid || !hit ||
+        payload->hasGlassTransportOverride || payload->hasMicrodetailNormal ||
+        !isfinite(payload->transparency) || payload->transparency>1e-6 ||
+        !isfinite(bsdf->transmissionWeight) || bsdf->transmissionWeight>1e-9 ||
+        !isfinite(bsdf->roughness) || bsdf->roughness<0 || bsdf->roughness>0.08 ||
+        RuntimeSurfaceSamplingNormalResponseActive(hit->sceneObjectIndex) ||
+        !footprint_finite(view) || !footprint_finite(ray->direction) ||
+        !footprint_finite(hit->incidentDirection)) return false;
+    view=vec3_normalize(view);
+    if (vec3_length(vec3_add(view,vec3_normalize(hit->incidentDirection)))>1e-8) return false;
+    Vec3 normal=HitInfo3D_ShadingNormalForReflection(hit,view);
+    Vec3 ideal_direction=vec3_sub(vec3_scale(normal,2*vec3_dot(view,normal)),view);
+    Ray3D ideal=*ray;ideal.direction=ideal_direction;
+    Vec3 neighbor_normals[2];
+    if (!RuntimeRay3D_ReflectionFootprintNeighbors(hit,normal,&ideal,neighbor_normals)) return false;
+    Vec3 half_sum=vec3_add(view,vec3_normalize(ray->direction));
+    if (!footprint_finite(half_sum)) return false;
+    Vec3 half=vec3_normalize(half_sum),geometric=vec3_normalize(hit->geometricNormal);
+    if (vec3_dot(half,normal)<=1e-8 || vec3_dot(view,half)<=1e-8) return false;
+    /* Hold the NDF sample's local coordinates fixed, using exactly the same
+     * normal-dependent frame as Sample(). Constant normals preserve the old
+     * arithmetic; varying normals carry the sample through the changing frame. */
+    Vec3 axis=fabs(normal.z)<.999?vec3(0,0,1):vec3(0,1,0);
+    Vec3 tangent=vec3_normalize(vec3_cross(axis,normal)),bitangent=vec3_cross(normal,tangent);
+    double hn=vec3_dot(half,normal),ht=vec3_dot(half,tangent),hb=vec3_dot(half,bitangent);
+    Vec3 incoming[]={hit->incidentDirection,hit->incidentDirectionDx,hit->incidentDirectionDy};
+    Vec3 outgoing[3];
+    for (int i=0;i<3;++i) {
+        Vec3 d=vec3_normalize(incoming[i]);
+        Vec3 sample_half=half,sample_normal=normal;
+        if(i>0 && !hit->constantShadingNormal) {
+            sample_normal=neighbor_normals[i-1];
+            /* The sampler basis has a discontinuity at this axis switch. */
+            if((fabs(sample_normal.z)<.999)!=(fabs(normal.z)<.999))return false;
+            Vec3 t=vec3_normalize(vec3_cross(axis,sample_normal)),b=vec3_cross(sample_normal,t);
+            sample_half=vec3_normalize(vec3_add(vec3_scale(sample_normal,hn),
+                vec3_add(vec3_scale(t,ht),vec3_scale(b,hb))));
+        }
+        if (vec3_dot(d,sample_half)>=-1e-8) return false;
+        outgoing[i]=vec3_normalize(vec3_sub(d,vec3_scale(sample_half,2*vec3_dot(d,sample_half))));
+        if (!footprint_finite(outgoing[i]) || vec3_dot(outgoing[i],geometric)<=1e-8 ||
+            vec3_dot(outgoing[i],sample_normal)<=1e-8) return false;
+    }
+    if (vec3_length(vec3_sub(outgoing[0],vec3_normalize(ray->direction)))>1e-8) return false;
+    ray->originDx=ideal.originDx;ray->originDy=ideal.originDy;
+    ray->directionDx=outgoing[1];ray->directionDy=outgoing[2];
+    ray->hasDifferentials=ray->hasDifferentialOrigins=ray->footprintTransported=true;
+    ray->footprintUnbounded=false;
+    return true;
 }

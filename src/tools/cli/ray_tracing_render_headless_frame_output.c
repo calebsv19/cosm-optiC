@@ -114,13 +114,19 @@ int ray_tracing_headless_write_rendered_frame_output(
     const char *job_status_path,
     const char *job_id,
     const char *request_path) {
+    if (!frame_path || !pixels || !request || !preflight || !temporal_progress) return 10;
+    if (!ray_tracing_headless_write_photon_runtime_report(
+            request, frame_index, preflight->render_trace_ms)) {
+        snprintf(preflight->diagnostics, sizeof(preflight->diagnostics),
+                 "failed to write photon runtime report at frame %d", frame_index);
+        return 10;
+    }
     struct timespec stage_started_at = {0};
     char temporary_frame_path[PATH_MAX] = {0};
     uint8_t frame_max_r = 0u;
     uint8_t frame_max_g = 0u;
     uint8_t frame_max_b = 0u;
     size_t frame_nonzero_pixels = 0u;
-    if (!frame_path || !pixels || !request || !preflight || !temporal_progress) return 10;
 
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
     frame_nonzero_pixels = ray_tracing_headless_count_nonzero_pixels(pixels,

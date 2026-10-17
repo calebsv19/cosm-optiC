@@ -1,3 +1,4 @@
+#include "render/runtime_caustic_photon_budget_3d.h"
 #include "render/runtime_caustic_photon_direct_consumer_3d.h"
 
 #include <stdatomic.h>
@@ -226,6 +227,8 @@ void RuntimeCausticPhotonDirectConsumer3D_Bind(
         settings && settings->sampleBudget > 0
             ? (uint64_t)settings->sampleBudget
             : 4096u;
+    g_surface_sample_budget = RuntimePhotonBudget3D_Effective(
+        g_surface_sample_budget,settings && settings->volumeQueryEnabled);
     g_beam_map = beam_map;
     g_surface_radiance_scale =
         settings && settings->surfaceRadianceScale >= 0.0
@@ -481,6 +484,20 @@ static bool photon_direct_sample_surface_map(
     photon_direct_record_surface_diagnostic(hit, &result);
     if (out_readback) *out_readback = result;
     return true;
+}
+
+bool RuntimeCausticPhotonDirectConsumer3D_SampleSurfaceWithPayload(
+    const HitInfo3D* hit, const RuntimeMaterialPayload3D* material,
+    Vec3* out_radiance, RuntimeCausticPhotonMapQueryResult3D* out_readback) {
+    if (out_radiance) *out_radiance = vec3(0, 0, 0);
+    if (out_readback) memset(out_readback, 0, sizeof(*out_readback));
+    if (!RuntimeCausticPhotonDirectConsumer3D_Active() || !hit || !material ||
+        !material->valid || !out_radiance || material->hasGlassTransportOverride ||
+        !(material->bsdf.diffuseWeight > 0.0) ||
+        (g_surface_receiver_scene_object_index >= 0 &&
+         hit->sceneObjectIndex != g_surface_receiver_scene_object_index)) return false;
+    return photon_direct_sample_surface_map(g_surface_map, g_surface_sample_budget,
+        hit, material, 0.0, out_radiance, out_readback);
 }
 
 bool RuntimeCausticPhotonDirectConsumer3D_SampleSurfaceWithReceiverArea(

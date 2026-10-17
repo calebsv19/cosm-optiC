@@ -8,6 +8,8 @@
 
 typedef struct {
     bool valid;
+    bool spatialIndexUsed;
+    uint64_t searchCandidateCount;
     uint64_t recordCount;
     uint64_t neighborLimit;
     uint64_t adaptiveRecordCount;
@@ -18,6 +20,20 @@ typedef struct {
 } RuntimeCausticPhotonSampleSupportReadback3D;
 
 bool RuntimeCausticPhotonSampleSupport3D_Prepare(
+    RuntimeCausticPhotonMapRecord3D* records,
+    uint64_t record_count,
+    uint64_t neighbor_limit,
+    double min_normal_dot,
+    RuntimeCausticPhotonSampleSupportReadback3D* out_readback);
+
+bool RuntimeCausticPhotonSampleSupport3D_PrepareBruteForce(
+    RuntimeCausticPhotonMapRecord3D* records,
+    uint64_t record_count,
+    uint64_t neighbor_limit,
+    double min_normal_dot,
+    RuntimeCausticPhotonSampleSupportReadback3D* out_readback);
+
+bool RuntimeCausticPhotonSampleSupport3D_PrepareSpatial(
     RuntimeCausticPhotonMapRecord3D* records,
     uint64_t record_count,
     uint64_t neighbor_limit,

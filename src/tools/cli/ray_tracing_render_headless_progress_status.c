@@ -1,3 +1,4 @@
+#include "render/runtime_caustic_photon_budget_3d.h"
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include "app/ray_tracing_durable_io.h"
@@ -101,6 +102,15 @@ static bool write_progress_file(const char *path,
     fprintf(file, "  \"frame_index\": %d,\n", frame_index);
     fprintf(file, "  \"frames_completed\": %d,\n", frames_completed);
     fprintf(file, "  \"frame_count\": %d,\n", request->frame_count);
+    if(request->caustic_photon_render_prep_population_enabled) {
+        const RuntimeCausticPhotonIntegrationSettings3D* photon=&request->caustic_photon_integration_settings;
+        uint64_t requested=photon->sampleBudget>0 ? (uint64_t)photon->sampleBudget : 0;
+        uint64_t effective=RuntimePhotonBudget3D_Effective(requested,photon->volumeQueryEnabled);
+        fprintf(file,"  \"photon_budget\":{\"requested\":%llu,\"effective\":%llu,\"limit\":%llu,\"limited\":%s},\n",
+            (unsigned long long)requested,(unsigned long long)effective,
+            (unsigned long long)RuntimePhotonBudget3D_Limit(photon->volumeQueryEnabled),
+            requested!=effective ? "true" : "false");
+    }
     fprintf(file, "  \"temporal_subpasses_started\": %d,\n", temporal_subpasses_started);
     fprintf(file, "  \"temporal_subpasses_completed\": %d,\n", temporal_subpasses_completed);
     fprintf(file, "  \"temporal_subpasses_total\": %d,\n", temporal_subpasses_total);
@@ -393,6 +403,15 @@ bool ray_tracing_render_headless_write_job_status_file(
     fprintf(file, "  \"frame_index\": %d,\n", frame_index);
     fprintf(file, "  \"frames_completed\": %d,\n", frames_completed);
     fprintf(file, "  \"frame_count\": %d,\n", request->frame_count);
+    if(request->caustic_photon_render_prep_population_enabled) {
+        const RuntimeCausticPhotonIntegrationSettings3D* photon=&request->caustic_photon_integration_settings;
+        uint64_t requested=photon->sampleBudget>0 ? (uint64_t)photon->sampleBudget : 0;
+        uint64_t effective=RuntimePhotonBudget3D_Effective(requested,photon->volumeQueryEnabled);
+        fprintf(file,"  \"photon_budget\":{\"requested\":%llu,\"effective\":%llu,\"limit\":%llu,\"limited\":%s},\n",
+            (unsigned long long)requested,(unsigned long long)effective,
+            (unsigned long long)RuntimePhotonBudget3D_Limit(photon->volumeQueryEnabled),
+            requested!=effective ? "true" : "false");
+    }
     fprintf(file, "  \"temporal_subpasses_started\": %d,\n", temporal_subpasses_started);
     fprintf(file, "  \"temporal_subpasses_completed\": %d,\n", temporal_subpasses_completed);
     fprintf(file, "  \"temporal_subpasses_total\": %d,\n", temporal_subpasses_total);

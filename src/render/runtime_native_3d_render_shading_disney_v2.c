@@ -1,3 +1,4 @@
+#include "render/runtime_reflection_footprint_probe_3d.h"
 #include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_transport_weight_probe_3d.h"
@@ -68,11 +69,13 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             const int local_y = y - start_y;
             const int local_x = x - start_x;
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
+            RuntimeReflectionFootprintProbe3D_Begin(x,y,sampling);
             primary_trace = runtime_native_3d_render_trace_primary_disney_v2(scene,
                                                                    projector,
                                                                    (double)x,
                                                                    (double)y);
             if (primary_trace.emitterWins) {
+                RuntimeReflectionFootprintProbe3D_End();
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
@@ -97,6 +100,7 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
                     end_y - start_y,
                     &result);
             RuntimeTransportWeightProbe3D_End();
+            RuntimeReflectionFootprintProbe3D_End();
             if (!shaded) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,

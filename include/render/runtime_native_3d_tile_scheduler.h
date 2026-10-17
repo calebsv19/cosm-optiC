@@ -76,6 +76,8 @@ typedef struct RuntimeNative3DTileSchedulerControl {
     /* A resolved render-pixel tile size supplied by desktop presentation
      * policy. Zero preserves the display-neutral scheduler default. */
     int tileSizeOverride;
+    /* Progress reporting alone does not imply an interactive presentation. */
+    bool nonInteractive;
 } RuntimeNative3DTileSchedulerControl;
 
 bool RuntimeNative3DTileSchedulerCancelToken_IsRequested(

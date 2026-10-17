@@ -1,3 +1,4 @@
+#include "render/runtime_caustic_photon_budget_3d.h"
 #include "test_runtime_caustic_photon_emit_3d.h"
 
 #include "render/runtime_caustic_photon_emit_3d.h"
@@ -312,8 +313,46 @@ static int test_runtime_caustic_photon_emit_legacy_energy_override_contract(void
     return 0;
 }
 
+static int test_photon_reference_budget(void) {
+    assert_true("photon_budget_surface_ceiling",RuntimePhotonBudget3D_Effective(UINT64_MAX,false)==1048576u);
+    assert_true("photon_budget_volume_ceiling",RuntimePhotonBudget3D_Effective(524288u,true)==262144u);
+    assert_true("photon_budget_legacy_capacity",RuntimePhotonBudget3D_MapCapacity(65536,10,false)==262144u);
+    assert_true("photon_budget_reference_capacity",RuntimePhotonBudget3D_MapCapacity(524288,10,false)==1048576u);
+    assert_true("photon_budget_multiply_overflow",RuntimePhotonBudget3D_MapCapacity(UINT64_MAX,UINT64_MAX,false)==1048576u);
+    RuntimeLightSet3D lights=test_light_set();lights.lightCount=1;
+    RuntimeCausticPhotonEmissionSettings3D settings;
+    RuntimeCausticPhotonEmission3D_DefaultSettings(&settings);
+    settings.sampleBudget=8;
+    RuntimeCausticPhotonEmissionBatch3D batch;RuntimeCausticPhotonEmission3D_InitBatch(&batch);
+    RuntimeCausticPhotonEmissionDiagnostics3D small,large;
+    assert_true("photon_budget_small_alloc",RuntimeCausticPhotonEmission3D_AllocateBatch(&batch,8));
+    assert_true("photon_budget_small_emit",RuntimeCausticPhotonEmission3D_EmitFromLightSet(&batch,&lights,&settings,&small));
+    Vec3 first_flux=batch.samples[0].flux,first_direction=batch.samples[0].direction;
+    RuntimeCausticPhotonEmission3D_FreeBatch(&batch);
+    settings.sampleBudget=524288;
+    assert_true("photon_budget_large_alloc",RuntimeCausticPhotonEmission3D_AllocateBatch(&batch,settings.sampleBudget));
+    assert_true("photon_budget_alloc_not_old_cap",batch.sampleCapacity==524288u);
+    assert_true("photon_budget_large_emit",RuntimeCausticPhotonEmission3D_EmitFromLightSet(&batch,&lights,&settings,&large));
+    assert_true("photon_budget_emitted_not_old_cap",large.emittedPhotonCount==524288u);
+    assert_close("photon_budget_same_direction",vec3_length(vec3_sub(first_direction,batch.samples[0].direction)),0,1e-15);
+    assert_close("photon_budget_flux_scaled_once",batch.samples[0].flux.x*65536.0,first_flux.x,1e-10);
+    assert_close("photon_budget_total_flux_r",large.totalEmittedFlux.x,small.totalEmittedFlux.x,1e-7);
+    assert_close("photon_budget_total_flux_g",large.totalEmittedFlux.y,small.totalEmittedFlux.y,1e-7);
+    assert_close("photon_budget_total_flux_b",large.totalEmittedFlux.z,small.totalEmittedFlux.z,1e-7);
+    RuntimeCausticPhotonEmission3D_FreeBatch(&batch);
+    assert_true("photon_budget_cap_alloc",RuntimeCausticPhotonEmission3D_AllocateBatch(&batch,UINT64_MAX));
+    assert_true("photon_budget_cap_bounded",batch.sampleCapacity==1048576u);
+    RuntimeCausticPhotonEmission3D_FreeBatch(&batch);
+    RuntimeCausticPhotonMap3D map;RuntimeCausticPhotonMap3D_Init(&map);
+    assert_true("photon_budget_large_map_alloc",RuntimeCausticPhotonMap3D_Allocate(&map,524288));
+    assert_true("photon_budget_large_map_capacity",map.recordCapacity==524288u);
+    RuntimeCausticPhotonMap3D_Free(&map);
+    return 0;
+}
+
 int run_test_runtime_caustic_photon_emit_3d_tests(void) {
     int failures = 0;
+    failures += test_photon_reference_budget();
     failures += test_runtime_caustic_photon_emit_deterministic_samples();
     failures += test_runtime_caustic_photon_emit_populates_surface_map_proxy();
     failures += test_runtime_caustic_photon_emit_map_capacity_rejects();

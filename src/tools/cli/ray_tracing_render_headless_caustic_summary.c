@@ -206,6 +206,14 @@ void ray_tracing_headless_write_caustic_state_summary(
                     callsite->radiance.y,
                     callsite->radiance.z);
             fprintf(file, "        \"map_lifecycle\": {\n");
+            fprintf(file, "          \"capture_stage\": \"preflight_legacy_snapshot\",\n");
+            fprintf(file, "          \"runtime_report_pattern\": \"photon_runtime_<frame>.json\",\n");
+            fprintf(file, "          \"legacy_cpu_field_units\": \"wall_ms\",\n");
+            fprintf(file, "          \"fingerprint_wall_ms\": %.6f,\n", callsite->mapLifecycle.fingerprintCpuMs);
+            fprintf(file, "          \"map_build_wall_ms\": %.6f,\n", callsite->mapLifecycle.mapBuildCpuMs);
+            fprintf(file, "          \"prep_query_and_deposit_wall_ms\": %.6f,\n", callsite->mapLifecycle.queryAndDepositCpuMs);
+            fprintf(file, "          \"acceleration_inserted_record_count\": %llu,\n",
+                    (unsigned long long)callsite->mapLifecycle.accelerationBuildCount);
             fprintf(file, "          \"evaluated\": %s,\n",
                     callsite->mapLifecycle.evaluated ? "true" : "false");
             fprintf(file, "          \"rebuilt\": %s,\n",
@@ -286,6 +294,12 @@ void ray_tracing_headless_write_caustic_state_summary(
                     population->volumeBeamPopulated ? "true" : "false");
             fprintf(file, "          \"requested_sample_budget\": %llu,\n",
                     (unsigned long long)population->requestedSampleBudget);
+            fprintf(file, "          \"effective_sample_budget\": %llu,\n",
+                    (unsigned long long)population->effectiveSampleBudget);
+            fprintf(file, "          \"sample_budget_limit\": %llu,\n",
+                    (unsigned long long)population->sampleBudgetLimit);
+            fprintf(file, "          \"sample_budget_limited\": %s,\n",
+                    population->sampleBudgetLimited ? "true" : "false");
             fprintf(file, "          \"emitted_photon_count\": %llu,\n",
                     (unsigned long long)population->emittedPhotonCount);
             fprintf(file, "          \"rejected_photon_count\": %llu,\n",

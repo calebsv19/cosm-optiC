@@ -1,3 +1,4 @@
+#include "render/runtime_reflection_footprint_probe_3d.h"
 /* Surface mapping's prepared sampling adapter; shares its validated transforms. */
 #include "core_authored_surface_sampling.h"
 #include "render/runtime_surface_sampling.h"
@@ -475,16 +476,36 @@ bool RuntimeSurfaceSamplingCoordinates(const HitInfo3D *hit, double uv[2], doubl
 static bool sampling_pyramid_sample(const HitInfo3D *hit,
     const CoreAuthoredSurfacePyramid *p,const double uv[2],const double dx[2],
     const double dy[2],double *values,double *lod) {
+    bool observe=hit && p && RuntimeReflectionFootprintProbe3D_Active() &&
+        RuntimeSurfaceSamplingActive(hit->sceneObjectIndex) &&
+        p==&sampling[hit->sceneObjectIndex].images[0];
+    double observed_lod=0;
+    double* sample_lod=observe?&observed_lod:lod;
     if(!hit || !hit->footprintTransported || !hit->hasPixelFootprint || hit->footprintUnbounded)
-        return core_authored_surface_pyramid_sample(p,uv,dx,dy,values,lod);
+        {
+            bool ok=core_authored_surface_pyramid_sample(p,uv,dx,dy,values,sample_lod);
+            if(observe && ok) {
+                double point[8],zero[2]={0,0};
+                if(core_authored_surface_pyramid_sample(p,uv,zero,zero,point,NULL))
+                    RuntimeReflectionFootprintProbe3D_Filter(hit,p->width,p->height,uv,dx,dy,observed_lod,values,point);
+                if(lod)*lod=observed_lod;
+            }
+            return ok;
+        }
     if(!p || !values || p->channels<1 || p->channels>8)return false;
     double half_dx[2]={dx[0]*.5,dx[1]*.5},half_dy[2]={dy[0]*.5,dy[1]*.5};
     for(unsigned c=0;c<p->channels;++c)values[c]=0;
     for(int y=-1;y<=1;y+=2)for(int x=-1;x<=1;x+=2) {
         double center[2]={uv[0]+.25*(x*dx[0]+y*dy[0]),uv[1]+.25*(x*dx[1]+y*dy[1])};
         double tap[8];
-        if(!core_authored_surface_pyramid_sample(p,center,half_dx,half_dy,tap,lod))return false;
+        if(!core_authored_surface_pyramid_sample(p,center,half_dx,half_dy,tap,sample_lod))return false;
         for(unsigned c=0;c<p->channels;++c)values[c]+=.25*tap[c];
+    }
+    if(observe) {
+        double point[8],zero[2]={0,0};
+        if(core_authored_surface_pyramid_sample(p,uv,zero,zero,point,NULL))
+            RuntimeReflectionFootprintProbe3D_Filter(hit,p->width,p->height,uv,dx,dy,observed_lod,values,point);
+        if(lod)*lod=observed_lod;
     }
     return true;
 }

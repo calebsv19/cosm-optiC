@@ -5,6 +5,8 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include "render/runtime_reflection_footprint_probe_3d.h"
 
 static pthread_once_t init_once = PTHREAD_ONCE_INIT;
 static pthread_mutex_t output_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -156,4 +158,71 @@ void RuntimeNative3DPixelProbe_Denoise(int x, int y,
         variance_text,blend,neighbors,weight,
         before[0],before[1],before[2],after[0],after[1],after[2]);
     pthread_mutex_unlock(&output_lock);
+}
+
+/* Per-primary-call scope; coordinates use the existing observer's 64-pixel cap. */
+static pthread_once_t footprint_once=PTHREAD_ONCE_INIT;
+static bool footprint_enabled;
+static _Thread_local struct {
+    bool active; int x,y,depth; unsigned sequence,subpass,events,dropped;
+    const char* branch;
+} footprint;
+static void footprint_initialize(void) {
+    const char* flag=getenv("RAY_TRACING_REFLECTION_FOOTPRINT_PROBE");
+    footprint_enabled=flag && !strcmp(flag,"1");
+}
+void RuntimeReflectionFootprintProbe3D_Begin(int x,int y,const RuntimeNative3DSamplingContext* sampling) {
+    pthread_once(&footprint_once,footprint_initialize);
+    if(!footprint_enabled){footprint.active=false;return;}
+    memset(&footprint,0,sizeof(footprint));
+    footprint.active=footprint_enabled && selected(x,y);
+    footprint.x=x;footprint.y=y;footprint.branch="primary";
+    footprint.sequence=sampling?sampling->sampleSequence:0;
+    footprint.subpass=sampling?sampling->temporalSubpassIndex:0;
+}
+bool RuntimeReflectionFootprintProbe3D_Active(void) {return footprint.active;}
+static bool footprint_record(const char* stage) {
+    if(!footprint.active)return false;
+    if(footprint.events>=256){++footprint.dropped;return false;}
+    pthread_mutex_lock(&output_lock);flockfile(stderr);
+    fprintf(stderr,"REFLECTION_FOOTPRINT {\"stage\":\"%s\",\"x\":%d,\"y\":%d,\"sequence\":%u,\"subpass\":%u,\"event\":%u,\"branch\":\"%s\",\"depth\":%d",
+        stage,footprint.x,footprint.y,footprint.sequence,footprint.subpass,
+        footprint.events++,footprint.branch,footprint.depth);
+    return true;
+}
+static void footprint_finish(void){fputs("}\n",stderr);funlockfile(stderr);pthread_mutex_unlock(&output_lock);}
+void RuntimeReflectionFootprintProbe3D_Record(const char* stage,const char* branch,int depth,
+    const HitInfo3D* h,const RuntimeMaterialPayload3D* p,const Ray3D* ray) {
+    if(!footprint.active || !h || !stage || !branch)return;
+    footprint.branch=branch;footprint.depth=depth;
+    if(!footprint_record(stage))return;
+    fprintf(stderr,",\"object\":%d,\"triangle\":%d,\"hit_footprint\":%d,\"hit_unbounded\":%d,\"hit_transported\":%d,\"incident_differentials\":%d,\"constant_normal\":%d,\"position\":[%.17g,%.17g,%.17g],\"dpdx\":[%.17g,%.17g,%.17g],\"dpdy\":[%.17g,%.17g,%.17g]",
+        h->sceneObjectIndex,h->triangleIndex,h->hasPixelFootprint,h->footprintUnbounded,
+        h->footprintTransported,h->hasIncidentDifferentials,h->constantShadingNormal,
+        h->position.x,h->position.y,h->position.z,h->pixelDpDx.x,h->pixelDpDx.y,h->pixelDpDx.z,
+        h->pixelDpDy.x,h->pixelDpDy.y,h->pixelDpDy.z);
+    if(p)fprintf(stderr,",\"material\":%d,\"roughness\":%.17g,\"albedo\":[%.17g,%.17g,%.17g]",
+        p->materialId,p->bsdf.roughness,p->baseColorR,p->baseColorG,p->baseColorB);
+    if(ray)fprintf(stderr,",\"ray_differentials\":%d,\"ray_differential_origins\":%d,\"ray_unbounded\":%d,\"ray_transported\":%d,\"direction\":[%.17g,%.17g,%.17g]",
+        ray->hasDifferentials,ray->hasDifferentialOrigins,ray->footprintUnbounded,ray->footprintTransported,
+        ray->direction.x,ray->direction.y,ray->direction.z);
+    footprint_finish();
+}
+void RuntimeReflectionFootprintProbe3D_Filter(const HitInfo3D* h,unsigned width,unsigned height,
+    const double uv[2],const double dx[2],const double dy[2],double lod,
+    const double* filtered,const double* point) {
+    if(!h || !footprint_record("base_color_filter"))return;
+    fprintf(stderr,",\"object\":%d,\"triangle\":%d,\"width\":%u,\"height\":%u,\"uv\":[%.17g,%.17g],\"duvdx\":[%.17g,%.17g],\"duvdy\":[%.17g,%.17g],\"lod\":%.17g,\"hit_unbounded\":%d,\"filtered\":[%.17g,%.17g,%.17g],\"point_reference\":[%.17g,%.17g,%.17g]",
+        h->sceneObjectIndex,h->triangleIndex,width,height,uv[0],uv[1],dx[0],dx[1],dy[0],dy[1],lod,
+        h->footprintUnbounded,filtered[0],filtered[1],filtered[2],point[0],point[1],point[2]);
+    footprint_finish();
+}
+void RuntimeReflectionFootprintProbe3D_End(void) {
+    if(footprint.active) {
+        pthread_mutex_lock(&output_lock);flockfile(stderr);
+        fprintf(stderr,"REFLECTION_FOOTPRINT {\"stage\":\"end\",\"x\":%d,\"y\":%d,\"sequence\":%u,\"subpass\":%u,\"events\":%u,\"dropped\":%u}\n",
+            footprint.x,footprint.y,footprint.sequence,footprint.subpass,footprint.events,footprint.dropped);
+        funlockfile(stderr);pthread_mutex_unlock(&output_lock);
+    }
+    footprint.active=false;
 }

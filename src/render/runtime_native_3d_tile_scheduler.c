@@ -730,6 +730,7 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
     CoreQueueMutex completion_queue = {0};
     CoreWorkers workers = {0};
     size_t worker_count = 0u;
+    const int host_cpu_count = SDL_GetCPUCount();
     RuntimeNative3DCheckpointTile* checkpoint_tiles = NULL;
 
     if (out_stats) {
@@ -799,8 +800,9 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
 
     worker_count = RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
         scheduler.jobCount,
-        SDL_GetCPUCount(),
-        tile_progress_callback != NULL,
+        host_cpu_count,
+        tile_progress_callback != NULL &&
+            !(scheduler_control && scheduler_control->nonInteractive),
         resource_budget);
 
     thread_slots = (pthread_t*)calloc(worker_count, sizeof(*thread_slots));
@@ -825,6 +827,10 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
         goto finalize;
     }
     scheduler.workerPoolOwnerCount = 1;
+    scheduler.stats.temporalTileSchedulerRequestedWorkers =
+        resource_budget ? resource_budget->maxWorkerThreads : 0;
+    scheduler.stats.temporalTileSchedulerActualWorkers = (int)worker_count;
+    scheduler.stats.temporalTileSchedulerHostCpuCount = host_cpu_count;
 
     ok = true;
     for (int subpass = scheduler.committedSubpasses;
@@ -952,6 +958,9 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
     runtime_native_3d_tile_scheduler_collect_metrics(&scheduler);
 
 finalize:
+    scheduler.stats.temporalTileSchedulerWallMs =
+        runtime_native_3d_tile_scheduler_ticks_to_ms(
+            (uint64_t)SDL_GetPerformanceCounter() - frame_start_ticks);
     timer_hud_record_duration_ms(
         "Tile Full Frame",
         runtime_native_3d_tile_scheduler_ticks_to_ms((uint64_t)SDL_GetPerformanceCounter() -

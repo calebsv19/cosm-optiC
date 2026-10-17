@@ -17,6 +17,13 @@ static bool gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled = false;
 static RuntimeCausticPhotonIntegrationSettings3D
     gRuntimeNative3DCausticPhotonRenderPrepSettings;
 static RuntimeCausticPhotonMapStore3D gRuntimeNative3DCausticPhotonMapStore;
+static RuntimeCausticPhotonPreparationStats3D g_photon_preparation_stats;
+
+void RuntimeNative3DRender_SnapshotPhotonPreparation(
+    RuntimeCausticPhotonPreparationStats3D* out) {
+    if (out) *out = g_photon_preparation_stats;
+}
+
 bool runtime_native_3d_prepare_photon_volume_requested(void) {
     return gRuntimeNative3DCausticPhotonRenderPrepPopulationEnabled &&
         gRuntimeNative3DCausticPhotonRenderPrepSettings.volumeQueryEnabled;
@@ -48,6 +55,7 @@ void RuntimeNative3DRender_SetCausticPhotonRenderPrepPopulation(
 }
 
 void RuntimeNative3DRender_ResetCausticPhotonMapStore(void) {
+    memset(&g_photon_preparation_stats, 0, sizeof(g_photon_preparation_stats));
     RuntimeCausticPhotonDirectConsumer3D_Reset();
     RuntimeCausticPhotonMapStore3D_Free(&gRuntimeNative3DCausticPhotonMapStore);
 }
@@ -251,7 +259,8 @@ void runtime_native_3d_prepare_populate_photon_render_prep(
         settings.consumer == RUNTIME_CAUSTIC_PHOTON_CONSUMER_CACHE_BRIDGE ||
         settings.volumeQueryEnabled;
     clock_gettime(CLOCK_MONOTONIC, &query_started_at);
-    if (settings.surfaceQueryEnabled) {
+    if (settings.surfaceQueryEnabled &&
+        settings.consumer == RUNTIME_CAUSTIC_PHOTON_CONSUMER_CACHE_BRIDGE) {
         (void)RuntimeCausticPhotonIntegration3D_DepositSurfaceContributionsForReceiverBuckets(
             surface_map,
             &frame->causticSurfaceCache,
@@ -402,6 +411,19 @@ void runtime_native_3d_prepare_populate_photon_render_prep(
             sizeof(*surface_map->records) +
         beam_map->segmentCapacity * sizeof(*beam_map->segments);
     frame->causticPhotonRenderPrepReadbackBuilt = true;
+    g_photon_preparation_stats.available = true;
+    g_photon_preparation_stats.preparationCount++;
+    g_photon_preparation_stats.latest = frame->causticPhotonRenderPrepReadback;
+    g_photon_preparation_stats.support = surface_map->sampleSupport;
+    g_photon_preparation_stats.fingerprintWallMs += lifecycle_readback.fingerprintCpuMs;
+    g_photon_preparation_stats.mapBuildWallMs += map_build_cpu_ms;
+    g_photon_preparation_stats.probeAndDepositWallMs +=
+        frame->causticPhotonRenderPrepReadback.mapLifecycle.queryAndDepositCpuMs;
+    if (lifecycle_readback.rebuilt) {
+        g_photon_preparation_stats.emissionWallMs += population.emissionWallMs;
+        g_photon_preparation_stats.pathTransportWallMs += population.pathTransportWallMs;
+        g_photon_preparation_stats.supportPreparationWallMs += population.supportPreparationWallMs;
+    }
     if (settings.renderContributionEnabled) {
         RuntimeCausticPhotonDirectConsumer3D_Bind(
             settings.consumer,

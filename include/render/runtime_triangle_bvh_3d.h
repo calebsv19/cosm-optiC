@@ -51,6 +51,7 @@ typedef struct RuntimeTriangleBVH3DBuildStats {
 } RuntimeTriangleBVH3DBuildStats;
 
 typedef struct RuntimeTriangleBVH3DTraceStats {
+    bool enabled; /* Heavy counters only; overflow/fallback safety totals stay active. */
     uint64_t traceCalls;
     uint64_t traceHits;
     uint64_t traceMisses;

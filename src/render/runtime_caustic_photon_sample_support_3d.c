@@ -28,7 +28,7 @@ static bool photon_sample_support_same_receiver(
     return vec3_dot(lhs->normal, rhs->normal) >= min_normal_dot;
 }
 
-bool RuntimeCausticPhotonSampleSupport3D_Prepare(
+bool RuntimeCausticPhotonSampleSupport3D_PrepareBruteForce(
     RuntimeCausticPhotonMapRecord3D* records,
     uint64_t record_count,
     uint64_t neighbor_limit,
@@ -54,6 +54,7 @@ bool RuntimeCausticPhotonSampleSupport3D_Prepare(
         double support_radius = record->queryRadius;
         bool adaptive = false;
         for (uint64_t j = 0u; j < record_count; ++j) {
+            readback.searchCandidateCount++;
             Vec3 delta;
             double distance;
             if (i == j || !photon_sample_support_same_receiver(
@@ -95,4 +96,20 @@ bool RuntimeCausticPhotonSampleSupport3D_Prepare(
     readback.valid = true;
     if (out_readback) *out_readback = readback;
     return true;
+}
+
+/* Preserve the brute-force implementation as allocation/numeric-domain fallback
+ * and an independent exact-support oracle. */
+bool RuntimeCausticPhotonSampleSupport3D_Prepare(
+    RuntimeCausticPhotonMapRecord3D* records, uint64_t record_count,
+    uint64_t neighbor_limit, double min_normal_dot,
+    RuntimeCausticPhotonSampleSupportReadback3D* out_readback) {
+    RuntimeCausticPhotonSampleSupportReadback3D spatial;
+    if (record_count >= 32u && RuntimeCausticPhotonSampleSupport3D_PrepareSpatial(
+            records, record_count, neighbor_limit, min_normal_dot, &spatial)) {
+        if (out_readback) *out_readback = spatial;
+        return true;
+    }
+    return RuntimeCausticPhotonSampleSupport3D_PrepareBruteForce(
+        records, record_count, neighbor_limit, min_normal_dot, out_readback);
 }

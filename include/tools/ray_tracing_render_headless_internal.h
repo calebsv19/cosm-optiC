@@ -443,6 +443,9 @@ int ray_tracing_headless_write_rendered_frame_output(
     const char *job_status_path,
     const char *job_id,
     const char *request_path);
+bool ray_tracing_headless_write_photon_runtime_report(
+    const RayTracingAgentRenderRequest* request, int frame_index,
+    double cumulative_frame_wall_ms);
 bool ray_tracing_headless_write_photon_surface_diagnostics(
     const RayTracingAgentRenderRequest* request,
     int frame_index);

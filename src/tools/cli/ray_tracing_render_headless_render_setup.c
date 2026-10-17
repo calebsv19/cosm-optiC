@@ -66,6 +66,11 @@ void ray_tracing_headless_initial_light_point(double *out_x, double *out_y) {
 
 void ray_tracing_headless_reset_render_trace_state(void) {
     RuntimeTriangleBVH3D_ResetTraceStats();
+    /* Heavy per-node diagnostics are opt-in. Reset before disabling so the
+     * snapshot cannot retain stale preflight counters. Safety counters stay on. */
+    const char *bvh_trace_stats = getenv("RAY_TRACING_BVH_TRACE_STATS");
+    if (!bvh_trace_stats || strcmp(bvh_trace_stats, "1") != 0)
+        RuntimeTriangleBVH3D_DisableTraceStats();
     RuntimeSceneAcceleration3D_ResetTraceStats();
     RuntimeRay3D_ResetRouteStats();
     RuntimeRenderTraceCostLedger3D_SetEnabledFromEnvironment();

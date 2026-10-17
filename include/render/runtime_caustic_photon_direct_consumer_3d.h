@@ -87,6 +87,11 @@ bool RuntimeCausticPhotonDirectConsumer3D_SampleSurface(
     const HitInfo3D* hit,
     Vec3* out_radiance,
     RuntimeCausticPhotonMapQueryResult3D* out_readback);
+/* Shader-owned receiver query: use the actual resolved surface material.
+ * Never substitute a white fallback or resolve the payload a second time. */
+bool RuntimeCausticPhotonDirectConsumer3D_SampleSurfaceWithPayload(
+    const HitInfo3D* hit, const RuntimeMaterialPayload3D* material,
+    Vec3* out_radiance, RuntimeCausticPhotonMapQueryResult3D* out_readback);
 bool RuntimeCausticPhotonDirectConsumer3D_SampleSurfaceWithReceiverArea(
     const HitInfo3D* hit,
     double receiver_area_m2,

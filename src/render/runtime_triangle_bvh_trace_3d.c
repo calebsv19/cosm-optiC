@@ -76,6 +76,7 @@ void RuntimeTriangleBVH3D_ResetTraceStats(void) {
 void RuntimeTriangleBVH3D_SnapshotTraceStats(RuntimeTriangleBVH3DTraceStats* out_stats) {
     if (!out_stats) return;
     memset(out_stats, 0, sizeof(*out_stats));
+    out_stats->enabled = runtime_triangle_bvh_trace_stats_enabled();
     out_stats->traceCalls = runtime_triangle_bvh_counter_load(&g_trace_calls);
     out_stats->traceHits = runtime_triangle_bvh_counter_load(&g_trace_hits);
     out_stats->traceMisses = runtime_triangle_bvh_counter_load(&g_trace_misses);
@@ -97,9 +98,9 @@ void RuntimeTriangleBVH3D_DisableTraceStats(void) {
 }
 
 void RuntimeTriangleBVH3D_RecordFlatFallback(bool due_to_overflow) {
-    runtime_triangle_bvh_counter_add(&g_flat_fallback_calls, 1u);
+    atomic_fetch_add_explicit(&g_flat_fallback_calls, 1u, memory_order_relaxed);
     if (due_to_overflow) {
-        runtime_triangle_bvh_counter_add(&g_overflow_fallback_calls, 1u);
+        atomic_fetch_add_explicit(&g_overflow_fallback_calls, 1u, memory_order_relaxed);
     }
 }
 
@@ -172,9 +173,10 @@ RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
     double t_max,
     HitInfo3D* out_hit) {
     int stack[RUNTIME_TRIANGLE_BVH_MAX_STACK];
+    double tested_limit[RUNTIME_TRIANGLE_BVH_MAX_STACK];
     int stack_count = 0;
     int stack_limit = runtime_triangle_bvh_traversal_stack_limit();
-    HitInfo3D best_hit = {0};
+    HitInfo3D best_hit;
     bool found = false;
     if (!RuntimeTriangleMesh3D_HasReadyBVH(mesh) || !ray || !out_hit) {
         return RUNTIME_TRIANGLE_BVH_3D_TRACE_MISS;
@@ -182,16 +184,19 @@ RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
 
     runtime_triangle_bvh_counter_add(&g_trace_calls, 1u);
     HitInfo3D_Reset(&best_hit);
+    tested_limit[stack_count] = NAN; /* Root has no parent test. */
     stack[stack_count++] = 0;
     runtime_triangle_bvh_counter_max(&g_max_stack_depth, (uint64_t)stack_count);
     while (stack_count > 0) {
         int node_index = stack[--stack_count];
+        double cached_limit = tested_limit[stack_count];
+        double current_limit = found ? fmin(t_max, best_hit.t + 1e-9) : t_max;
         const RuntimeTriangleBVH3DNode* node = NULL;
         double node_enter = 0.0;
         if (node_index < 0 || node_index >= mesh->bvh->nodeCount) continue;
         node = &mesh->bvh->nodes[node_index];
         runtime_triangle_bvh_counter_add(&g_node_visits, 1u);
-        if (!runtime_triangle_bvh_intersect_aabb(ray,
+        if (cached_limit != current_limit && !runtime_triangle_bvh_intersect_aabb(ray,
                                                  node->min,
                                                  node->max,
                                                  t_min,
@@ -204,7 +209,8 @@ RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
             runtime_triangle_bvh_counter_add(&g_leaf_visits, 1u);
             for (int i = 0; i < node->count; ++i) {
                 int triangle_index = mesh->bvh->indices[node->start + i];
-                HitInfo3D hit = {0};
+                /* Successful triangle tests initialize the complete record. */
+                HitInfo3D hit;
                 runtime_triangle_bvh_counter_add(&g_triangle_tests, 1u);
                 if (!RuntimeRay3D_IntersectTriangle(ray,
                                                     &mesh->triangles[triangle_index],
@@ -244,27 +250,31 @@ RuntimeTriangleBVH3DTraceResult RuntimeTriangleBVH3D_TraceFirstHitStatus(
                 int near_node = left_enter <= right_enter ? node->left : node->right;
                 int far_node = left_enter <= right_enter ? node->right : node->left;
                 if (stack_count + 2 > stack_limit) {
-                    runtime_triangle_bvh_counter_add(&g_trace_overflows, 1u);
+                    atomic_fetch_add_explicit(&g_trace_overflows, 1u, memory_order_relaxed);
                     HitInfo3D_Reset(out_hit);
                     return RUNTIME_TRIANGLE_BVH_3D_TRACE_OVERFLOW;
                 }
+                tested_limit[stack_count] = current_limit;
                 stack[stack_count++] = far_node;
+                tested_limit[stack_count] = current_limit;
                 stack[stack_count++] = near_node;
                 runtime_triangle_bvh_counter_max(&g_max_stack_depth, (uint64_t)stack_count);
             } else if (hit_left) {
                 if (stack_count + 1 > stack_limit) {
-                    runtime_triangle_bvh_counter_add(&g_trace_overflows, 1u);
+                    atomic_fetch_add_explicit(&g_trace_overflows, 1u, memory_order_relaxed);
                     HitInfo3D_Reset(out_hit);
                     return RUNTIME_TRIANGLE_BVH_3D_TRACE_OVERFLOW;
                 }
+                tested_limit[stack_count] = current_limit;
                 stack[stack_count++] = node->left;
                 runtime_triangle_bvh_counter_max(&g_max_stack_depth, (uint64_t)stack_count);
             } else if (hit_right) {
                 if (stack_count + 1 > stack_limit) {
-                    runtime_triangle_bvh_counter_add(&g_trace_overflows, 1u);
+                    atomic_fetch_add_explicit(&g_trace_overflows, 1u, memory_order_relaxed);
                     HitInfo3D_Reset(out_hit);
                     return RUNTIME_TRIANGLE_BVH_3D_TRACE_OVERFLOW;
                 }
+                tested_limit[stack_count] = current_limit;
                 stack[stack_count++] = node->right;
                 runtime_triangle_bvh_counter_max(&g_max_stack_depth, (uint64_t)stack_count);
             }

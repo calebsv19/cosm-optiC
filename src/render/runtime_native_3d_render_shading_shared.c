@@ -586,6 +586,9 @@ void runtime_native_3d_render_apply_surface_caustic_cache(
     double* io_luma,
     bool* io_visible,
     RuntimeNative3DRenderStats* stats) {
+    /* Direct-map light is owned by receiver shading, including through glass
+     * and mirrors. Only the explicit cache-bridge lane may resplat cache data. */
+    if (RuntimeCausticPhotonDirectConsumer3D_Active()) return;
     Vec3 radiance = vec3(0.0, 0.0, 0.0);
     double luma = 0.0;
 
@@ -621,6 +624,8 @@ void runtime_native_3d_render_apply_transmitted_surface_caustic_cache(
     double* io_luma,
     bool* io_visible,
     RuntimeNative3DRenderStats* stats) {
+    /* Every direct-map receiver already contributed inside its continuation. */
+    if (RuntimeCausticPhotonDirectConsumer3D_Active()) return;
     Vec3 radiance = vec3(0.0, 0.0, 0.0);
     double throughput_r = 0.0;
     double throughput_g = 0.0;

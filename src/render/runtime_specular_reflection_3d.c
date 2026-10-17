@@ -1,3 +1,4 @@
+#include "render/runtime_reflection_footprint_probe_3d.h"
 #include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_principled_bsdf_3d.h"
 #include "render/runtime_specular_reflection_3d.h"
@@ -70,8 +71,7 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
                                          kRuntimeSpecularReflection3DEpsilon);
     if(payload->bsdf.roughness<=0.08 && !payload->hasMicrodetailNormal &&
        !RuntimeSurfaceSamplingNormalResponseActive(hit->sceneObjectIndex))
-        (void)RuntimeRay3D_TransportIdealFootprint(hit,reflection_normal,
-            RUNTIME_RAY_IDEAL_REFLECTION,1,1,&result.ray);
+        (void)RuntimeRay3D_TransportReflectionFootprint(hit,reflection_normal,&result.ray);
     result.traced = true;
     RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
         RUNTIME_RENDER_TRACE_COST_RAY_REFLECTION_SPECULAR,
@@ -88,6 +88,8 @@ bool RuntimeSpecularReflection3D_Trace(const RuntimeScene3D* scene,
         RuntimeRenderTraceCostLedger3D_RecordHitMaterialFamily(&trace.geometryHitInfo);
     }
 
+    if(trace.geometryHit && !trace.emitterWins)
+        RuntimeReflectionFootprintProbe3D_Record("hit","dedicated_first",1,&trace.geometryHitInfo,NULL,&result.ray);
     RuntimeMaterialPayload3D encountered={0};
     if(trace.geometryHit && !trace.emitterWins && RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo,&encountered) && encountered.hasGlassTransportOverride) {
         RuntimePhysicalGlass3DContinuation optical;

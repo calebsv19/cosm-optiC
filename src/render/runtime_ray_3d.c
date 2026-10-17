@@ -417,7 +417,7 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     double bary_w = 0.0;
     double bary_u = 0.0;
     FISICS_DIM(length) FISICS_UNIT(meter) double t = 0.0;
-    HitInfo3D hit = {0};
+    HitInfo3D hit;
 
     if (!ray || !triangle || !out_hit) return false;
     if (vec3_length(ray->direction) <= 1e-9) return false;
@@ -482,6 +482,7 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     hit.baryU = bary_u;
     hit.baryV = bary_v;
     hit.baryW = bary_w;
+    RuntimeRay3D_SetReflectionNormalField(triangle,&hit);
     if(triangle->hasSurfaceUV) {
         hit.hasSurfaceUV=true;memcpy(hit.uvSetId,triangle->uvSetId,sizeof(hit.uvSetId));
         const CoreMeshAssetSurfaceCorner *corners=triangle->surfaceCorners;

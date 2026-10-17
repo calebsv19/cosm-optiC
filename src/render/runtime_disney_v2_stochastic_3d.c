@@ -1,3 +1,4 @@
+#include "render/runtime_reflection_footprint_probe_3d.h"
 #include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_camera_dielectric_3d.h"
 #include "render/runtime_surface_sampling.h"
@@ -524,6 +525,10 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                                                        HitInfo3D_OffsetNormal(hit),
                                                        sample_dir,
                                                        RUNTIME_DISNEY_V2_3D_EPSILON);
+    if (io_result->sampledLobe == RUNTIME_DISNEY_V2_3D_LOBE_SPECULAR && !sampled_delta)
+        (void)RuntimeSpecularBSDF3D_TransportFootprint(&io_result->payload,
+            &io_result->principled,hit,view_dir,&io_result->pathState.ray);
+    RuntimeReflectionFootprintProbe3D_Record("spawn","sampled_primary",1,hit,NULL,&io_result->pathState.ray);
     io_result->secondaryRayCount = 1;
     RuntimeRenderTraceCostLedger3D_RecordRayAtDepth(
         RUNTIME_RENDER_TRACE_COST_RAY_DISNEY_RECURSIVE,
@@ -535,6 +540,8 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                                                &trace)) {
         return;
     }
+    if(trace.geometryHit && !trace.emitterWins)
+        RuntimeReflectionFootprintProbe3D_Record("hit","sampled_primary",1,&trace.geometryHitInfo,NULL,&io_result->pathState.ray);
     RuntimeMaterialPayload3D optical_payload={0};bool optical_payload_resolved=false;
     RuntimePhysicalGlass3DContext optical_context={0};bool has_optical_context=false;
     if(trace.geometryHit&&!trace.emitterWins&&RuntimeMaterialPayload3D_ResolveFromHit(&trace.geometryHitInfo,&optical_payload)&&optical_payload.hasGlassTransportOverride) {

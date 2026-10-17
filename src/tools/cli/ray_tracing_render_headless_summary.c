@@ -1258,6 +1258,8 @@ void ray_tracing_render_headless_write_summary(
             (unsigned long long)preflight->bvh_build_stats.buildScratchBytes);
     fprintf(file, "    \"total_bytes\": %llu,\n",
             (unsigned long long)preflight->bvh_build_stats.totalBytes);
+    fprintf(file, "    \"trace_stats_enabled\": %s,\n",
+            preflight->bvh_trace_stats.enabled ? "true" : "false");
     fprintf(file, "    \"trace_calls\": %llu,\n",
             (unsigned long long)preflight->bvh_trace_stats.traceCalls);
     fprintf(file, "    \"trace_hits\": %llu,\n",

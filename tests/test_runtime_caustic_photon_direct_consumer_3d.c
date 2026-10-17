@@ -284,8 +284,11 @@ static int test_runtime_caustic_photon_direct_consumer_ignores_insertion_prefix(
     return 0;
 }
 
+int run_test_runtime_photon_receiver_routing_tests(void);
+
 int run_test_runtime_caustic_photon_direct_consumer_3d_tests(void) {
     int failures = 0;
+    failures += run_test_runtime_photon_receiver_routing_tests();
     failures += test_runtime_caustic_photon_direct_consumer_surface_and_beam();
     failures +=
         test_runtime_caustic_photon_direct_consumer_ignores_insertion_prefix();

@@ -1,3 +1,113 @@
+## October 17 — exact photon support search and runtime phase/reuse reporting
+
+Photon support preparation uses a temporary balanced spatial index and bounded
+neighbor heap. It retains every qualifying-neighbor count, the original distance
+predicate and selected radius, record order, normalized kernels and photon flux.
+The brute-force implementation remains the numeric/allocation fallback and test
+oracle. Dense neighborhoods can still require substantial preparation; this does
+not establish linear scaling or a general high-budget preset.
+
+Headless photon preparation emits `photon_runtime_<frame>.json` after each rendered
+frame. Reports include process-scope preparation/build/reuse counts, wall-time
+phases, live surface-query counts and photon flux totals. Existing summary fields
+remain compatible and explicitly identify their preflight snapshot and wall-time
+units. Actual camera-gather timing is marked unavailable rather than inferred
+from preparation probes or whole-frame time. No optical budget, four-worker
+default, UI, MCP or scene-storage change. Source qualification and installed-app
+adoption remain separate; versions are unchanged.
+
+## October 16 — bounded BVH traversal work reduction
+
+Traversal reuses successful child-box results only while their tested distance
+limit remains unchanged; a closer hit triggers the original test again. Redundant
+caller hit-record clears are removed while successful triangle records retain
+complete initialization. Geometry, sampling, optical estimates and footprint
+transport are unchanged. Fixed-scene native images, independent geometry oracles,
+edge/tie/fallback checks, scoped sanitizers and surrounding regression groups pass.
+Prepared-ray and material-cache experiments are not retained. This source-only
+checkpoint leaves installed Desktop/worker delivery separate.
+
+## October 16 — opt-in headless BVH traversal diagnostics
+
+Headless rendering disables expensive per-node BVH counters by default. Set
+`RAY_TRACING_BVH_TRACE_STATS=1` to collect them; `bvh_summary.trace_stats_enabled`
+reports availability. Overflow/fallback safety counters remain active in both
+modes. Sampling, geometry, optical paths and saved settings are unchanged.
+See [headless diagnostics](headless_agent_render_cli.md). This source-only local
+qualification does not refresh the installed Desktop app or a worker package.
+
+## October 16 — explicit worker ceilings and lightweight scheduler cost reporting
+
+Main Edit supports explicit native worker ceilings up to12 while retaining the
+four-worker default ceiling, CPU budgets/reservations and job limits. Headless
+progress no longer implies an interactive-preview CPU reservation; Desktop
+initializers preserve preview policy. Native summaries report requested/created
+pool/host CPU counts and scheduler wall time, with peak-count/summed-time frame
+aggregation. Existing tile and sampled/skipped counters remain unchanged.
+
+Fresh contained application/headless/test builds, policy/aggregation contracts,
+eleven relevant regression groups and local native comparisons pass. On the
+8-CPU laptop, requested4/8/12 resolves4/8/8: actual12 throughput is unqualified.
+All27 candidate images match retained Main Edit baselines exactly, and two-frame
+cross-worker controls pass. Shared-host measurements support retaining default4;
+no universal speedup or isolated overhead bound is claimed. No renderer estimator,
+optical depth, adaptive stopping, photon-map, UI or MCP policy was changed.
+Installed Desktop app, original scenes/videos and glass freeze are preserved;
+source qualification does not imply a Desktop refresh, version or worker release.
+See [headless controls](headless_agent_render_cli.md).
+
+## October 16 — shared opaque reflection footprints across smooth triangle normals
+
+Main Edit carries smooth triangle normal variation through deterministic opaque
+reflection and sampled-primary/recursive GGX footprints. The affine world-space
+vertex-normal field is independent of object type and UV mapping. The sampled
+GGX half-vector keeps its local sample coordinates in each neighboring normal
+frame. Constant-normal mirrors retain their previous arithmetic; central rays,
+PDF/throughput formulas, depth/roulette and existing glass footprint functions
+are unchanged. Polished opaque eligibility remains roughness <=0.08; unsupported
+normal response, curves, clamping, grazing/hemisphere failures, large normal
+variation and sampler-frame discontinuities retain the conservative fallback.
+
+Fresh contained application/headless builds, independent neighboring-hit/sampler
+oracles, material tests and nine surrounding regression groups pass. Native
+512-square/32-pass comparisons verify flat plane/imported triangle equivalence,
+matching vertex normals, closed-prism front faces and restored smooth-sphere
+detail. Fixed-sequence sampling/depth controls and exact replay are retained.
+This is source qualification; the installed Desktop app, existing scenes/videos,
+UI/runtime/MCP and immutable glass checkpoint remain preserved. No new version,
+package, canonical adoption or release is implied. General rough/normal-mapped,
+sharp-edge subpixel, concave focusing and arbitrary STL qualification remain open.
+
+## October 16 — bounded smooth-reflection footprint repair
+
+Sampled-primary and recursive GGX reflection continuations now transport coherent
+texture footprints for eligible smooth constant-normal opaque mirrors. The
+camera neighbors use the same sampled NDF half-vector; central rays, sampling,
+PDF/weight formulas, depth and roulette policies remain unchanged. Unsupported
+rough, curved, perturbed-normal, transmissive or invalid footprints keep the
+conservative fallback. No unfiltered mip bypass or brightness compensation.
+
+Fresh contained headless/test builds, real-sampler neighbor and fallback tests,
+lighting/material regression groups and unchanged RT-MIRROR-1 acceptance pass.
+The saved one/two/three-reflection comparison has twelve completed native controls,
+including 512-square/32-pass stills, unchanged direct references and exact replay.
+Selected native chains retain bounded footprints and varying filtered texture
+color at later receivers. This is bounded smooth-planar qualification, not a
+universal mirror, energy or infinite-depth convergence claim. The glass freeze
+remains the parent; UI/MCP/scene formats, versions and installed app are unchanged.
+See [footprint contract and qualification](reflection_footprint_probe.md).
+
+## October 16 — per-bounce mirror footprint diagnosis
+
+An opt-in selected-pixel observer records dedicated/sampled reflection receivers,
+recursive ray footprints and actual base-color UV/mip choices. In the saved planar
+three-mirror fixture, a bounded hit at mirror B spawns an unbounded recursive ray;
+later targets select their texture-wide average. Observer-on/off and the retained
+M1 image replay are byte exact. No rendering repair or installed-app refresh is
+included. See [reflection footprint observation](reflection_footprint_probe.md).
+The rough-glass source freeze remains the parent checkpoint; mirror differential
+transport repair is the next separate boundary.
+
 ## October 16 — rough-glass repair qualification closed
 
 The operator accepted the 512×512 fixed-roughness still quality and authorized a
@@ -2889,3 +2999,96 @@ controls. UI/editor/tool sources and original scene artifacts are unchanged.
 See [physical glass transport](physical_glass_transport.md) for the model and
 limitations. This is uncommitted Main Edit source validation, not a package
 refresh, release, measured-material calibration or human visual acceptance.
+
+
+## October 17 — actual-hit photon receiver routing (Main Edit)
+
+The direct-map surface consumer now evaluates at the actual opaque receiver hit
+with its already resolved diffuse BSDF. Primary, transmitted and reflected
+receivers share that local response. Path owners apply arriving throughput once;
+the dedicated reflected-first receiver is skipped by subsequent recursive local
+lighting, and the host no longer adds a selected transmitted hit again. Direct-map
+preparation no longer deposits bucket-centroid surface cache records. The explicit
+cache-bridge mode retains its separate reconstruction behavior.
+
+Fixed seed/camera/sampling native controls at 8,192 and 65,536 photons preserve
+all exported photon records, support values and emitted/stored flux exactly.
+The secondary focus artifact disappears in the cache-isolated control. Actual-hit
+receiver shading replaces it with a distributed caustic whose fixed-crop
+cross-budget RGB RMSE falls from 3.227 to 0.491 in 8-bit output. This compares two
+finite budgets, not an unbiased reference. Cache-bridge and contribution-off
+controls are pixel-exact. Resolved-material, once-only primary/transmitted/mirror
+receiver tests, twelve focused regression groups, and application/headless/test
+builds pass. Query-call sums are not integrated energy. Dense support-search work,
+high-budget presets, installed delivery and release remain separate.
+
+
+## October 17 — exact dense photon support search (Main Edit)
+
+Sample-centered support preparation now uses longest-extent spatial splits,
+conservative subtree bounds and uniform receiver metadata for exact bulk neighbor
+counts. A separate near-first bounded heap search tightens its radius without
+truncating the full accepted neighbor count. Original strict distance arithmetic,
+receiver filters, optical record order/support values and brute-force numeric or
+allocation fallback remain unchanged. Temporary metadata is freed after preparation.
+
+The 133,468-record oracle and ASan/UBSan, twelve focused regression groups, and
+application/headless/test builds pass. Fixed 8,192/65,536/262,144-photon native
+before/after frames, exported records/supports and emitted/stored energy/query
+counts are exact. The preceding actual-hit receiver repair is preserved. This is
+cost-only source qualification; high-budget presets, reference convergence,
+installed delivery and release remain separate.
+
+
+## October 17 — photon quality/preset qualification (Main Edit)
+
+Sixteen fixed native lens cases qualify budget and support/gather tradeoffs using
+the accepted frozen renderer. At 8K/32K/65K/131K/262K, focused linear NRMSE against
+an independent ceiling seed is 16.69/13.41/11.79/11.69/9.80 percent. Keep the
+existing sample-centered k_nearest response, support 0.045 and cap 0.1 for this
+fixture; 65K is the balanced starting point. Explicit gather 16/64 and tighter
+support do not improve this comparison. Both ceiling seeds still disagree by
+9.85 percent; this is not a converged reference. A requested 524K emits 262K due
+to the current cap. Requested one diffuse sample normalizes to four; that
+correction also applies to earlier timing-fixture descriptions of the request.
+
+Recommendations and reusable request settings remain opt-in, not UI defaults.
+Accepted 8K/65K/262K images replay exactly; no functional renderer changes,
+Desktop/PC/release action or connection reset. Motion, final resolution and
+larger actual reference maps remain separate. See
+[photon quality settings](photon_quality_presets.md).
+
+
+## October 17 — larger surface photon maps and explicit budgets (Main Edit)
+
+Surface-only emission and map storage support1,048,576; volume/beam capacity
+remains262,144. Existing through262K allocation and optical results are preserved.
+A central policy bounds multiplication/allocation and clamps budget-scaled query
+consumers consistently. Live progress reports requested/effective/limit/limited;
+post-frame budget reports actual emission, record capacities, storage ceiling,
+capacity rejections and prepared support-neighbor limit. Actual524K/1M two-seed
+native renders pass with zero capacity rejections; legacy65K/262K pixels, selected
+linear samples and energy/query counts are exact. Fresh app/headless/test builds,
+large-emission tests, targeted ASan/UBSan, fourteen regression groups and headless
+preflight/export gates pass. No Desktop/PC/release action or connection reset.
+
+The support-neighbor policy remains capped at256; higher actual photon counts
+alone do not certify a converged reference. Further photon reference/filter,
+motion and representative volume/beam work remains explicit. The recommended next
+documented area is reliable surface adaptive stopping, starting without photons
+and keeping active photon surfaces conservative until separately qualified.
+
+
+## October 17 — accepted renderer source freeze
+
+The accepted mirror-footprint, exact traversal, worker-policy/reporting and photon
+receiver/support/budget work is frozen over the retained rough-glass checkpoint.
+The source matches the qualified native build inputs; the final contained native
+headless preflight/job-runner/worker-version smoke passes. Existing per-lane
+pixel, numerical, sanitizer and regression evidence remains applicable to these
+unchanged implementation bytes. Default workers remain four; surface adaptive
+stopping remains conservative, and larger photon maps are not a convergence claim.
+
+This is a local source checkpoint/reconciliation only. App0.18.0 and worker0.11.0
+are unchanged. Release-package identity, native Linux workload qualification,
+publication, Registry-current and activation remain separate future boundaries.

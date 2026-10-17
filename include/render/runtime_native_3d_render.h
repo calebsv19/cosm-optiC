@@ -392,6 +392,12 @@ typedef struct {
     int temporalTileSchedulerProgressTileArrayOwnerCount;
     int temporalTileSchedulerCompletionQueueOwnerCount;
     int temporalTileSchedulerWorkerPoolOwnerCount;
+    /* Peak pool/request/CPU counts; elapsed milliseconds summed across frames.
+     * Tile work milliseconds already count overlapping worker intervals. */
+    int temporalTileSchedulerRequestedWorkers;
+    int temporalTileSchedulerActualWorkers;
+    int temporalTileSchedulerHostCpuCount;
+    double temporalTileSchedulerWallMs;
     int temporalTileSchedulerCancelTokenBound;
     int temporalTileSchedulerCancelCheckCount;
     int temporalTileSchedulerCancelRequestedCount;

@@ -751,6 +751,14 @@ void ray_tracing_headless_write_render_stats_summary(
             preflight->stats.temporalTileSchedulerProgressTileArrayOwnerCount);
     fprintf(file, "    \"temporal_tile_scheduler_completion_queue_owners\": %d,\n",
             preflight->stats.temporalTileSchedulerCompletionQueueOwnerCount);
+    fprintf(file, "    \"temporal_tile_scheduler_requested_workers\": %d,\n",
+            preflight->stats.temporalTileSchedulerRequestedWorkers);
+    fprintf(file, "    \"temporal_tile_scheduler_actual_workers\": %d,\n",
+            preflight->stats.temporalTileSchedulerActualWorkers);
+    fprintf(file, "    \"temporal_tile_scheduler_host_cpu_count\": %d,\n",
+            preflight->stats.temporalTileSchedulerHostCpuCount);
+    fprintf(file, "    \"temporal_tile_scheduler_wall_ms\": %.6f,\n",
+            preflight->stats.temporalTileSchedulerWallMs);
     fprintf(file, "    \"temporal_tile_scheduler_worker_pool_owners\": %d,\n",
             preflight->stats.temporalTileSchedulerWorkerPoolOwnerCount);
     fprintf(file, "    \"temporal_tile_scheduler_cancel_token_bound\": %d,\n",

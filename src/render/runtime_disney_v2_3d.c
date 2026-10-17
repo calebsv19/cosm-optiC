@@ -1,3 +1,5 @@
+#include "render/runtime_disney_v2_photon_receiver_3d.h"
+#include "render/runtime_reflection_footprint_probe_3d.h"
 #include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_disney_v2_internal_3d.h"
@@ -165,9 +167,11 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
                                                                   &reflection,
                                                                   sampling,
                                                                   io_result);
+        RuntimeReflectionFootprintProbe3D_Record("arrive","dedicated_local",1,&reflection.hitInfo,NULL,&reflection.ray);
         if ((reflection.hasResolvedPayload ? (reflected_payload=reflection.resolvedPayload,true) : RuntimeMaterialPayload3D_ResolveFromHit(&reflection.hitInfo, &reflected_payload)) &&
             reflected_payload.valid) {
             io_result->specularReflectionProbePayload = reflected_payload;
+            RuntimeReflectionFootprintProbe3D_Record("receiver","dedicated_local",1,&reflection.hitInfo,&reflected_payload,&reflection.ray);
             if (runtime_disney_v2_3d_shade_hit_with_payload(
                     scene,
                     &reflection.hitInfo,
@@ -390,6 +394,9 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
 
     if (!result.hairScatteringApplied) {
         runtime_disney_v2_3d_apply_mirror_composition(&result.payload, &result);
+        /* Receiver BSDF already contains its diffuse mixture weight. Add this
+         * local light once, without the renderer's heuristic direct scaling. */
+        (void)RuntimeDisneyV2PhotonReceiver3D_Apply(hit, &result.payload, &result);
         if (continue_transport) {
             if (!RuntimeMirrorComposition3D_Evaluate(&result.payload).active ||
                 RuntimeMirrorComposition3D_EstimatorMode() != RUNTIME_MIRROR_SAMPLED) {

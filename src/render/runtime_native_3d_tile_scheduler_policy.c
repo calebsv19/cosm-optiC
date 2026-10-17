@@ -189,6 +189,12 @@ size_t RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
     if (worker_count > job_count) {
         worker_count = job_count;
     }
+    /* Opt-in larger pools through the existing resource budget. A missing
+     * positive request preserves the established desktop/headless default. */
+    if ((!resource_budget || resource_budget->maxWorkerThreads <= 0) &&
+        worker_count > kRuntimeNative3DTileSchedulerDefaultWorkers) {
+        worker_count = kRuntimeNative3DTileSchedulerDefaultWorkers;
+    }
     if (worker_count > kRuntimeNative3DTileSchedulerMaxWorkers) {
         worker_count = kRuntimeNative3DTileSchedulerMaxWorkers;
     }

@@ -1811,6 +1811,33 @@ static int test_runtime_native_3d_tile_scheduler_policy_contract(void) {
     assert_true("runtime_native_3d_tile_scheduler_workers_budget_small_vps_half",
                 RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(
                     12u, 2, false, &half_budget) == 1u);
+    RuntimeNative3DResourceBudget larger = {0};
+    larger.maxWorkerThreads = 8;
+    assert_true("worker_explicit_eight", RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(100, 16, false, &larger) == 8);
+    larger.maxWorkerThreads = 12;
+    assert_true("worker_explicit_twelve", RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(100, 16, false, &larger) == 12);
+    assert_true("worker_host_bound", RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(100, 8, false, &larger) == 8);
+    assert_true("worker_preview_reservation", RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(100, 8, true, &larger) == 7);
+    assert_true("worker_job_bound", RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(3, 16, false, &larger) == 3);
+    larger.cpuPercent = 50;
+    larger.reserveCpuCount = 2;
+    assert_true("worker_combined_cpu_budget", RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(100, 10, false, &larger) == 4);
+    larger.cpuPercent = 100;
+    larger.reserveCpuCount = 0;
+    larger.maxWorkerThreads = 99;
+    assert_true("worker_hard_cap_twelve", RuntimeNative3DTileSchedulerResolveWorkerCountForCpuBudgeted(100, 64, false, &larger) == 12);
+    RuntimeNative3DRenderStats aggregate = {0}, frame_cost = {0};
+    frame_cost.temporalTileSchedulerRequestedWorkers = 12;
+    frame_cost.temporalTileSchedulerActualWorkers = 8;
+    frame_cost.temporalTileSchedulerHostCpuCount = 8;
+    frame_cost.temporalTileSchedulerWallMs = 2.5;
+    RuntimeNative3DRenderStats_Accumulate(&aggregate, &frame_cost);
+    RuntimeNative3DRenderStats_Accumulate(&aggregate, &frame_cost);
+    assert_true("worker_cost_counts_are_peaks_not_sums",
+                aggregate.temporalTileSchedulerRequestedWorkers == 12 &&
+                aggregate.temporalTileSchedulerActualWorkers == 8 &&
+                aggregate.temporalTileSchedulerHostCpuCount == 8);
+    assert_true("worker_cost_wall_sums_frames", aggregate.temporalTileSchedulerWallMs == 5.0);
     return 0;
 }
 

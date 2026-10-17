@@ -1,11 +1,20 @@
+#include "render/runtime_caustic_photon_budget_3d.h"
 #include "render/runtime_caustic_photon_path_scheduler_3d.h"
 
 #include <stddef.h>
 #include <string.h>
+#include <time.h>
 
 #include "render/runtime_caustic_photon_path_population_3d.h"
 #include "render/runtime_caustic_photon_path_transport_3d.h"
 #include "render/runtime_caustic_photon_emission_proposal_3d.h"
+
+static double photon_phase_wall_ms(const struct timespec* start) {
+    struct timespec end;
+    if (clock_gettime(CLOCK_MONOTONIC, &end) != 0) return 0.0;
+    return (end.tv_sec - start->tv_sec) * 1000.0 +
+           (end.tv_nsec - start->tv_nsec) / 1000000.0;
+}
 
 static RuntimeCausticPhotonPathObserver3D g_path_observer;
 static void* g_path_observer_user_data;
@@ -43,6 +52,7 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     RuntimeCausticPhotonPathPopulationSettings3D population_settings;
     RuntimeCausticPhotonMapDiagnostics3D surface_diag;
     RuntimeCausticBeamMapDiagnostics3D beam_diag;
+    struct timespec phase_start = {0};
     uint64_t sample_budget;
     uint64_t map_capacity;
     uint64_t surface_neighbor_minimum;
@@ -60,12 +70,15 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     readback.tracePopulationAttempted = true;
     readback.surfaceMapPopulationAttempted = settings->surfaceQueryEnabled;
     readback.volumeBeamPopulationAttempted = settings->volumeQueryEnabled;
-    sample_budget = (uint64_t)settings->sampleBudget;
-    map_capacity = sample_budget *
-                   (uint64_t)(settings->maxPathDepth > 0 ? settings->maxPathDepth : 1);
-    if (map_capacity < sample_budget || map_capacity > 262144u) {
-        map_capacity = 262144u;
-    }
+    readback.requestedSampleBudget = (uint64_t)settings->sampleBudget;
+    readback.sampleBudgetLimit = RuntimePhotonBudget3D_Limit(settings->volumeQueryEnabled);
+    sample_budget = RuntimePhotonBudget3D_Effective(readback.requestedSampleBudget,
+                                                   settings->volumeQueryEnabled);
+    readback.effectiveSampleBudget = sample_budget;
+    readback.sampleBudgetLimited = sample_budget != readback.requestedSampleBudget;
+    map_capacity = RuntimePhotonBudget3D_MapCapacity(sample_budget,
+        settings->maxPathDepth>0 ? (uint64_t)settings->maxPathDepth : 1u,
+        settings->volumeQueryEnabled);
     if (!RuntimeCausticPhotonMap3D_Allocate(surface_map, map_capacity) ||
         (settings->volumeQueryEnabled &&
          (!beam_map || !RuntimeCausticBeamMap3D_Allocate(beam_map, map_capacity)))) {
@@ -77,6 +90,7 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     readback.volumeBeamMapAllocated =
         settings->volumeQueryEnabled && RuntimeCausticBeamMap3D_IsAllocated(beam_map);
 
+    clock_gettime(CLOCK_MONOTONIC, &phase_start);
     RuntimeCausticPhotonEmission3D_DefaultSettings(&emission_settings);
     emission_settings.sampleBudget = sample_budget;
     emission_settings.baseSeed = settings->emissionSeed;
@@ -89,12 +103,12 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
     }
     readback.emissionSucceeded = RuntimeCausticPhotonEmission3D_EmitFromLightSet(
         &batch, &scene->lightSet, &emission_settings, &emission_diag);
-    readback.requestedSampleBudget = sample_budget;
     readback.emissionSeed = emission_settings.baseSeed;
     readback.emittedPhotonCount = emission_diag.emittedPhotonCount;
     readback.rejectedPhotonCount = emission_diag.rejectedPhotonCount;
     readback.totalEmittedFlux = emission_diag.totalEmittedFlux;
 
+    readback.emissionWallMs = photon_phase_wall_ms(&phase_start);
     RuntimeCausticPhotonPathTransport3D_DefaultSettings(&transport_settings);
     transport_settings.sceneTrace.maxDepth =
         (uint32_t)(settings->maxPathDepth > 0 ? settings->maxPathDepth : 1);
@@ -116,6 +130,7 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
         RuntimeVolumeGrid3D_IsConfigured(&scene->volume.grid);
     population_settings.beamBoundsMin = scene->volume.grid.boundsMin;
     population_settings.beamBoundsMax = scene->volume.grid.boundsMax;
+    clock_gettime(CLOCK_MONOTONIC, &phase_start);
     for (uint64_t i = 0u; i < batch.sampleCount; ++i) {
         RuntimeCausticPhotonSceneTrace3D trace;
         RuntimeCausticPhotonPathPopulationReadback3D path_population;
@@ -279,7 +294,9 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
                 path_population.beamEligibility[reason];
         }
     }
+    readback.pathTransportWallMs = photon_phase_wall_ms(&phase_start);
     RuntimeCausticPhotonEmission3D_FreeBatch(&batch);
+    clock_gettime(CLOCK_MONOTONIC, &phase_start);
     surface_neighbor_minimum =
         settings->qualityTier == RUNTIME_CAUSTIC_PHOTON_BUDGET_FINAL
             ? 64u
@@ -298,6 +315,7 @@ bool RuntimeCausticPhotonPathScheduler3D_PopulateOwnedMaps(
         return false;
     }
 
+    readback.supportPreparationWallMs = photon_phase_wall_ms(&phase_start);
     RuntimeCausticPhotonMap3D_SnapshotDiagnostics(surface_map, &surface_diag);
     if (beam_map) RuntimeCausticBeamMap3D_SnapshotDiagnostics(beam_map, &beam_diag);
     else memset(&beam_diag, 0, sizeof(beam_diag));

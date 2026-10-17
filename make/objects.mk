@@ -74,6 +74,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
+	$(BUILD_DIR)/render/runtime_disney_v2_photon_receiver_3d.o \
 	$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_beam_map_3d.o \
@@ -102,6 +103,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_bsdf_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_patch_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_sample_support_3d.o \
+	$(BUILD_DIR)/render/runtime_caustic_photon_support_search_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_contribution_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_receiver_policy_3d.o \
 	$(BUILD_DIR)/render/runtime_caustic_photon_scene_descriptor_3d.o \
@@ -206,6 +208,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d_sampled_footprint.o \
+	$(BUILD_DIR)/render/runtime_ray_3d_reflection_footprint.o \
 	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \
@@ -359,6 +362,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_prepare.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_object_audit_summary.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_surface_diagnostics.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_runtime_report.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_receiver_accounting.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_callbacks.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_progress_status.o \
@@ -447,7 +451,9 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_caustic_lens_transport_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_emit_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_direct_consumer_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_photon_receiver_routing.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_estimator_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_caustic_photon_support_search_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_integration_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_map_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_medium_acceptance_3d.o \
@@ -550,6 +556,7 @@ TEST_DEPS := \
 		$(BUILD_DIR)/render/runtime_hair_scattering_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_result_3d.o \
+		$(BUILD_DIR)/render/runtime_disney_v2_photon_receiver_3d.o \
 		$(BUILD_DIR)/render/runtime_disney_v2_stochastic_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_bootstrap_3d.o \
 		$(BUILD_DIR)/render/runtime_caustic_beam_map_3d.o \
@@ -647,6 +654,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_accel_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d.o \
 	$(BUILD_DIR)/render/runtime_ray_3d_sampled_footprint.o \
+	$(BUILD_DIR)/render/runtime_ray_3d_reflection_footprint.o \
 	$(BUILD_DIR)/render/runtime_frame_dataflow_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_render_trace_cost_ledger_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d.o \

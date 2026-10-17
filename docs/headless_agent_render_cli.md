@@ -1,5 +1,44 @@
 # RayTracing Headless Agent Render CLI
 
+## Photon runtime reports
+
+When `inspection.caustic_photon_render_prep_population_enabled` is true, completed
+frames write `photon_runtime_0000.json` (and corresponding frame indices) in the
+output root. These are `ray_tracing_photon_runtime_v1` snapshots captured after
+rendering and before synthetic diagnostic probes. `preparation_count`,
+`rebuild_count` and `reuse_count` include preflight and runtime preparations in
+this process; the latest preparation flags describe the actual most recent
+frame preparation. An unchanged three-frame request can therefore report one
+initial build and three reuses. Separate CLI processes do not share this map.
+
+`cumulative_wall_ms` includes fingerprinting, map build, emission, path transport,
+support preparation and preparation probes/deposition. Emission, path transport
+and support preparation are nested parts of map build, not additive to it. Build
+phases only accumulate on rebuild; `latest_map_build_wall_ms` is zero on reuse.
+Frame-render wall time includes runtime preparation and shading. Camera-gather
+time is explicitly unavailable; surface-query counts cover calls since the last
+consumer bind/reset and are not unique pixels. Support-search counts describe the
+last successful map build. Flux totals describe the stored photon population.
+
+The existing final-summary `map_lifecycle` stays a compatible preflight snapshot,
+now labeled `capture_stage: preflight_legacy_snapshot`. Its legacy `*_cpu_ms`
+fields measure wall milliseconds; explicit wall aliases and inserted-record
+counts clarify those units. Use the per-frame reports to establish runtime reuse.
+This reporting adds no per-ray timer or locking and does not change rendering,
+estimators, sampling budgets, UI, MCP or saved scenes.
+
+## Opt-in BVH traversal diagnostics
+
+Headless renders omit expensive per-node BVH counter updates by default. Set
+`RAY_TRACING_BVH_TRACE_STATS=1` on the CLI process to enable them; an unset
+variable or any other value keeps them off. The `bvh_summary.trace_stats_enabled`
+field reports whether these counters were enabled. Disabled traversal totals
+are reset to zero, which means unavailable measurement rather than zero tracing.
+Overflow and fallback safety totals remain active in either mode, preserving
+render failure detection. Scene preparation, TLAS/route statistics, render budgets
+and optical behavior are unchanged. This process-local setting does not alter
+the Desktop app or saved scenes/settings.
+
 For editable scene revisions, sampled/consecutive previews and frozen local
 render packages, see [Local scene workflow](scene_workflow.md).
 
@@ -373,10 +412,27 @@ for headless renders:
 
 - `cpu_percent`: `1..100`, caps worker threads to an approximate percentage of
   detected host CPUs. `50` on a 2-vCPU VPS resolves to one render worker.
-- `max_workers`: caps render workers directly, after CPU-percent and
-  scheduler-global limits.
+- `max_workers`: explicitly selects a render-worker ceiling, after CPU-percent,
+  CPU-reservation and available-job limits, up to the scheduler maximum of 12.
+  Omitted or nonpositive native limits retain the established four-worker default.
+  A request for 12 on an eight-CPU host resolves to at most eight workers.
+  Headless progress reporting does not reserve an interactive-preview CPU.
 - `reserve_cpu_count`: subtracts host CPUs before resolving the worker cap, so
   colocated services keep explicit headroom.
+
+Completed native tiled render summaries report
+`temporal_tile_scheduler_requested_workers` (zero when no explicit native limit
+or no pool was created),
+`temporal_tile_scheduler_actual_workers`, `temporal_tile_scheduler_host_cpu_count`
+and `temporal_tile_scheduler_wall_ms`. Actual workers means the successfully created pool size, not average busy CPUs.
+Counts are maxima across rendered frames; wall milliseconds sum across frame scheduler invocations and include setup,
+worker dispatch/wait and final resolve. These are not whole-command timings or
+photon-preparation timings. Existing frame-dataflow `total_tile_ms` counts overlapping
+worker intervals and is not CPU time; it must not be added to wall time.
+Existing rendered/skipped pixel-sample counters describe delivered sampling.
+Whole-process peak memory and CPU utilization require an external process
+measurement. Untiled paths leave scheduler-only counters at zero; pool counts also remain zero
+when there are no tile jobs and no pool is created.
 
 When `resources` is omitted, direct local CLI runs keep legacy behavior. The
 packaged Linux worker wrapper sets `CODEWORK_RAY_TRACING_DEFAULT_CPU_PERCENT=50`
@@ -690,11 +746,33 @@ frames. The summary reports:
 - `inspection.caustic_product_mode` (`off`, reference modes, or explicit
   `production`/`photon_map`)
 - `inspection.caustic_photon_consumer` (`direct_map` or `cache_bridge`)
+  - `direct_map` evaluates the surface photon map at each actual opaque receiver
+    hit using the already resolved material's diffuse BSDF. Primary, transmitted
+    and reflected receivers share this response; arriving path throughput is
+    applied by the enclosing transport owner. It neither deposits nor samples the
+    surface bucket bridge, and the host does not add a selected transmitted
+    receiver a second time.
+  - `cache_bridge` retains the explicit bucket-centroid reconstruction path.
+    It is an approximation distinct from actual-hit direct-map evaluation.
+  - Receiver accounting sums count query calls; they are not integrated power
+    or final camera-pixel radiance. Compare emitted/stored photon flux separately
+    from receiver BSDF response and display-encoded image differences.
 - `inspection.caustic_photon_render_prep_population_enabled`
 - `inspection.caustic_photon_render_contribution_enabled`
 - `inspection.caustic_photon_surface_diagnostics_enabled` (default false;
   writes per-frame landing and reconstructed-query JSONL)
 - `inspection.caustic_photon_sample_budget`
+  - Surface-only maps support up to 1,048,576 emitted photons and records;
+    the owned volume/beam route remains limited to 262,144. Progress exposes
+    `photon_budget.requested/effective/limit/limited`. Post-frame photon runtime
+    reports emitted count, record capacities/storage bytes, capacity rejections
+    and prepared support-neighbor limit in `budget`. These record-storage bytes
+    exclude other process memory. Compare requested/effective/emitted counts;
+    larger requests are explicitly capped.
+  - `k_nearest` uses population-derived sample-centered supports. The explicit
+    gather-neighbor setting tunes other gather estimators. Gather max radius is
+    normalized to be at least query radius. See
+    [bounded quality qualification](photon_quality_presets.md) for measured limits.
 - `inspection.caustic_photon_max_path_depth`
 - `inspection.caustic_photon_surface_query_radius`
 - `inspection.caustic_photon_surface_gather_max_radius`

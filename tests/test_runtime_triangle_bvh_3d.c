@@ -1,4 +1,5 @@
 #include <math.h>
+#include <float.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -321,7 +322,21 @@ static void test_bvh_overflow_falls_back_to_flat_trace(void) {
     assert_true("bvh_overflow_flat_fallback", stats.flatFallbackCalls > 0u);
     assert_true("bvh_overflow_fallback_recorded", stats.overflowFallbackCalls > 0u);
 
+    RuntimeTriangleBVH3D_SetTraversalStackLimitForTests(1);
     RuntimeTriangleBVH3D_ResetTraceStats();
+    RuntimeTriangleBVH3D_DisableTraceStats();
+    fallback_hit = RuntimeRay3D_TraceSceneFirstHit(&scene, &ray, 0.001, 100.0, &fallback);
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&stats);
+    assert_true("bvh_disabled_snapshot", !stats.enabled && stats.traceCalls == 0u &&
+                stats.nodeVisits == 0u && stats.aabbTests == 0u && stats.triangleTests == 0u);
+    assert_true("bvh_disabled_safety_survives", stats.traceOverflows > 0u &&
+                stats.flatFallbackCalls > 0u && stats.overflowFallbackCalls > 0u);
+    assert_true("bvh_disabled_hit_state", flat_hit == fallback_hit);
+    if (flat_hit && fallback_hit) assert_hit_matches("bvh_disabled_match", &flat, &fallback);
+    RuntimeTriangleBVH3D_SetTraversalStackLimitForTests(0);
+    RuntimeTriangleBVH3D_ResetTraceStats();
+    RuntimeTriangleBVH3D_SnapshotTraceStats(&stats);
+    assert_true("bvh_reset_reenables", stats.enabled && stats.traceOverflows == 0u);
     RuntimeScene3D_Free(&scene);
 }
 
@@ -483,9 +498,12 @@ static void test_bvh_tie_candidates_are_not_clipped(void) {
     RuntimeScene3D_Free(&scene);
 }
 
+#include "test_runtime_bvh_query_edges.h"
+
 int main(void) {
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     test_bvh_matches_flat_trace();
+    test_bvh_query_edges();
     test_bvh_tie_candidates_are_not_clipped();
     test_bvh_float_bounds_remain_conservative_at_t_max();
     test_bvh_copy_preserves_trace_results();

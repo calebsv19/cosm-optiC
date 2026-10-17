@@ -156,8 +156,11 @@ static int test_runtime_caustic_photon_estimator_budget_scaled_growth(void) {
     return 0;
 }
 
+int run_test_runtime_caustic_photon_support_search_3d_tests(void);
+
 int run_test_runtime_caustic_photon_estimator_3d_tests(void) {
     int failures = 0;
+    failures += run_test_runtime_caustic_photon_support_search_3d_tests();
     failures += test_runtime_caustic_photon_estimator_labels();
     failures += test_runtime_caustic_photon_estimator_bounded_settings();
     failures += test_runtime_caustic_photon_estimator_deterministic_top_k();

@@ -4930,10 +4930,12 @@ static int test_procedural_solid_microdetail_normal_is_bounded_and_shading_only(
 
 #include "test_runtime_explicit_glass_roughness.h"
 #include "test_runtime_sampled_footprint.h"
+#include "test_runtime_specular_footprint.h"
 
 int run_test_runtime_lighting_materials_payload_suite(void) {
     test_runtime_explicit_glass_optical_roughness();
     test_runtime_sampled_footprint();
+    test_runtime_specular_footprint();
     test_runtime_material_payload_3d_scene_object_resolution_contract();
     test_runtime_material_payload_3d_authoring_object_values_override_preset();
     test_runtime_material_payload_3d_object_multipliers_contract();

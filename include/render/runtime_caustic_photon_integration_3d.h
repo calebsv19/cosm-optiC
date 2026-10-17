@@ -227,6 +227,9 @@ typedef struct {
     bool volumeBeamPopulated;
     RuntimeCausticPhotonPopulationSource3D populationSource;
     uint64_t requestedSampleBudget;
+    uint64_t effectiveSampleBudget;
+    uint64_t sampleBudgetLimit;
+    bool sampleBudgetLimited;
     uint32_t emissionSeed;
     uint64_t emittedPhotonCount;
     uint64_t rejectedPhotonCount;
@@ -310,6 +313,9 @@ typedef struct {
     uint64_t surfaceMapCapacity;
     uint64_t volumeBeamCapacity;
     uint64_t recordStorageCeilingBytes;
+    double emissionWallMs;
+    double pathTransportWallMs;
+    double supportPreparationWallMs;
     Vec3 totalEmittedFlux;
     Vec3 totalStoredSurfaceFlux;
     Vec3 totalStoredVolumeFlux;

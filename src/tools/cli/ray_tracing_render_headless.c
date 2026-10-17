@@ -950,6 +950,9 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             *out_preflight = preflight;
             return 13;
         }
+        /* Headless progress callbacks must not reserve a preview CPU. */
+        scheduler_control.nonInteractive = true;
+        active_scheduler_control = &scheduler_control;
         if (checkpoint_session.enabled) {
             checkpoint_callbacks.restore = ray_tracing_temporal_checkpoint_restore;
             checkpoint_callbacks.commit = ray_tracing_temporal_checkpoint_commit;

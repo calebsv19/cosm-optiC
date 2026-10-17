@@ -76,7 +76,8 @@ typedef struct RuntimeNative3DTileScheduler {
 } RuntimeNative3DTileScheduler;
 
 enum {
-    kRuntimeNative3DTileSchedulerMaxWorkers = 4,
+    kRuntimeNative3DTileSchedulerDefaultWorkers = 4,
+    kRuntimeNative3DTileSchedulerMaxWorkers = 12,
     /*
      * Dirty progress presents upload the bounding host rect of each reported
      * dirty set. After priority scheduling, adjacent completions are not
