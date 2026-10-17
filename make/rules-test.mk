@@ -2871,6 +2871,10 @@ test-ray-tracing-animated-water-photon-caustics: $(RAY_TRACING_RENDER_HEADLESS_B
 test-ray-tracing-job-runner-help: $(RAY_TRACING_JOB_RUNNER_BIN)
 	python3 tests/integration/run_ray_tracing_job_runner_help.py --runner "$(RAY_TRACING_JOB_RUNNER_BIN)"
 
+.PHONY: test-ray-tracing-job-runner-status-snapshot
+test-ray-tracing-job-runner-status-snapshot: $(RAY_TRACING_JOB_RUNNER_BIN)
+	python3 tests/integration/run_ray_tracing_job_runner_status_snapshot.py --runner "$(RAY_TRACING_JOB_RUNNER_BIN)"
+
 test-ray-tracing-checkpoint-retention-stack:
 	python3 tests/integration/run_checkpoint_retention_stack.py
 

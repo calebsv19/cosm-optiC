@@ -125,6 +125,8 @@ void ray_tracing_detached_job_record_mark_cancelled(RayTracingDetachedJobRecord 
                                                     const RayTracingDetachedJobPaths *paths,
                                                     const char *job_id,
                                                     pid_t pid);
+bool ray_tracing_job_runner_write_status_to_stream(FILE *file,
+                                                  const RayTracingDetachedJobRecord *record);
 bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPaths *paths,
                                                   const RayTracingDetachedJobRecord *record);
 bool ray_tracing_job_runner_write_shared_report_file(const RayTracingDetachedJobPaths *paths,

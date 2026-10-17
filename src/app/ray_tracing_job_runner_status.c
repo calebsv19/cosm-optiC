@@ -153,14 +153,9 @@ void ray_tracing_detached_job_record_mark_cancelled(RayTracingDetachedJobRecord 
     snprintf(record->diagnostics, sizeof(record->diagnostics), "cancel requested");
 }
 
-bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPaths *paths,
+bool ray_tracing_job_runner_write_status_to_stream(FILE *file,
                                                   const RayTracingDetachedJobRecord *record) {
-    RayTracingDurableOutput output;
-    FILE *file = NULL;
-    if (!paths || !record) return false;
-    if (!ray_tracing_job_runner_ensure_parent_directory_exists(paths->job_status_path)) return false;
-    if (!ray_tracing_durable_output_begin(&output, paths->job_status_path)) return false;
-    file = output.stream;
+    if (!file || !record) return false;
     fprintf(file, "{\n");
     fprintf(file, "  \"schema_version\": ");
     json_write_string(file, RAY_TRACING_DETACHED_JOB_STATUS_SCHEMA);
@@ -244,6 +239,19 @@ bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPat
     fprintf(file, "  \"diagnostics\": ");
     json_write_string(file, record->diagnostics);
     fprintf(file, "\n}\n");
+    return !ferror(file);
+}
+
+bool ray_tracing_job_runner_write_job_status_file(const RayTracingDetachedJobPaths *paths,
+                                                  const RayTracingDetachedJobRecord *record) {
+    RayTracingDurableOutput output;
+    if (!paths || !record) return false;
+    if (!ray_tracing_job_runner_ensure_parent_directory_exists(paths->job_status_path)) return false;
+    if (!ray_tracing_durable_output_begin(&output, paths->job_status_path)) return false;
+    if (!ray_tracing_job_runner_write_status_to_stream(output.stream, record)) {
+        ray_tracing_durable_output_abort(&output);
+        return false;
+    }
     return ray_tracing_durable_output_commit(&output);
 }
 

@@ -1347,6 +1347,9 @@ Phase 2 truth additions:
   `execution_mode`, `request_sha256`, and `renderer_build_sha256`; these are
   rehydrated from durable client/request state even when the renderer updates
   the shared status file
+- `job_runner status` emits that merged record directly. A concurrent renderer
+  status replacement cannot remove the negotiated mode or protocol identity
+  from the CLI response after the reader has recovered them
 - protocol events are immutable JSON files under `worker_events/`, including
   progress, full-frame dirty-region notices, completed-frame checkpoint
   references for completed frames and temporal-subpass generations,

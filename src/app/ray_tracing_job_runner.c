@@ -850,13 +850,17 @@ bool ray_tracing_job_runner_print_status(FILE *out,
     }
     {
         RayTracingDetachedJobRecord record;
-        if (ray_tracing_job_runner_load_job_status_record(&paths, &record)) {
-            (void)ray_tracing_job_runner_refresh_job_status_record(&paths, &record);
+        if (!ray_tracing_job_runner_load_job_status_record(&paths, &record)) {
+            diag_set(out_diagnostics, out_diagnostics_size, "failed to load job status record");
+            return false;
         }
-    }
-    if (!ray_tracing_job_runner_print_file_to_stream(out, paths.job_status_path)) {
-        diag_set(out_diagnostics, out_diagnostics_size, "failed to read job status file");
-        return false;
+        (void)ray_tracing_job_runner_refresh_job_status_record(&paths, &record);
+        /* The renderer can replace the generic status file after refresh.
+           Emit this merged snapshot, including immutable worker metadata. */
+        if (!ray_tracing_job_runner_write_status_to_stream(out, &record)) {
+            diag_set(out_diagnostics, out_diagnostics_size, "failed to print job status record");
+            return false;
+        }
     }
     diag_set(out_diagnostics, out_diagnostics_size, "ok");
     return true;
