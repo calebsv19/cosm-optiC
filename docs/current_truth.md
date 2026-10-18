@@ -1,3 +1,13 @@
+## October 18 — Decision 1 candidate preparation
+
+The qualified Main Edit source/documentation checkpoint `060bc5b` is adopted into
+canonical. Authorized Decision 1 has applied canonical candidate app **0.19.0**
+and worker **0.13.0**. Registered releases remain desktop **0.18.0** and worker
+**0.12.1**; Main Edit retains those development baseline labels until release
+reconciliation. See [version status](release_versions.md) for the separate source,
+release and runtime surfaces. Packaging/authentication is in progress; no Decision 2
+publication or production-current transition is claimed.
+
 ## October 18 — current version reconciliation
 
 Current source and registered desktop baseline: **0.18.0**. Current source and

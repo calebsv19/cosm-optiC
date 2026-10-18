@@ -4,8 +4,8 @@
 C/SDL2 scene editor and renderer with both legacy `2D` paths and a shipped
 native `3D` runtime ladder.
 
-Version status (October 18, 2026): source/registered desktop **0.18.0** and
-independent source/registered worker **0.12.1**. Proposed next releases are
+Version status (October 18, 2026): registered desktop **0.18.0** and independent
+registered worker **0.12.1**. Decision 1 is preparing canonical source candidates
 desktop **0.19.0** and worker **0.13.0**. See
 [version attribution and release checks](docs/release_versions.md).
 

@@ -5,19 +5,23 @@ checkout, desktop package and worker package need not share a version number.
 
 | Surface | Verified version | Meaning |
 | --- | --- | --- |
-| Source app `VERSION` | `0.18.0` | Current package-version baseline in canonical and Main Edit |
-| Source `WORKER_VERSION` | `0.12.1` | Independent worker baseline in both checkouts |
+| Canonical candidate app `VERSION` | `0.19.0` | Applied by Decision 1; not yet released |
+| Main Edit app baseline | `0.18.0` | Development checkout at the accepted source checkpoint |
+| Canonical candidate `WORKER_VERSION` | `0.13.0` | Applied by Decision 1; not yet released |
+| Main Edit worker baseline | `0.12.1` | Independent development baseline |
 | Registered public desktop release | `0.18.0` | Current desktop production record |
 | Registered headless worker release | `0.12.1` | Current `ray_tracing_headless_worker` production record |
-| Proposed next desktop release | `0.19.0` | Minor-release intent; not applied or released |
-| Proposed next worker release | `0.13.0` | Independent minor-release intent; not applied or released |
+| Desktop preparation target | `0.19.0` | Authorized Decision 1 in progress |
+| Worker preparation target | `0.13.0` | Authorized independent Decision 1 in progress |
 
 The worker `0.12.1` record names source commit
 `ee9e7348a9e6e01c8a64f43207e0a7475fd27b6f` and tree
 `f1c2b7b3901a5828ea71524b36971f7e1d2921a4`. These exactly match the
 canonical baseline inherited by Main Edit. The water, emitter and camera work
 is checkpointed at `60a1670dfacf16ff89b6b518a6875bfd6ac9f540`; it has not
-yet been adopted into canonical or included in a released package.
+been included in a released package. Canonical adopted the qualified Main Edit
+source and documentation through `060bc5b394fa9dbe738570ef87bf189fbff2398c`
+before Decision 1 applied the candidate version transitions.
 
 Development packages additionally carry their own source/binary build identity.
 Their displayed package-version baseline does not prove inclusion of a later
