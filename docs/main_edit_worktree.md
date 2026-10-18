@@ -1,5 +1,11 @@
-## October 16 — rough-glass local source freeze
+## October 18 — current version reconciliation
 
+Canonical and Main Edit source labels are app **0.18.0** and worker **0.12.1**,
+matching their respective production records. Main Edit's water checkpoint
+`60a1670` inherits the exact source commit/tree recorded for worker 0.12.1.
+Proposed desktop **0.19.0** and worker **0.13.0** remain unapplied Decision-1
+intent. The [version status](release_versions.md) supersedes older dated version
+summaries for current attribution. Historical entries remain unchanged.
 
 ## October 18 — water transport source checkpoint
 
@@ -23,6 +29,8 @@ works; the human formatter currently fails on missing `release_progress`.
 A minor app release is recommended, with worker version intent selected separately.
 No VERSION, installed app, worker, publication or Registry state changes are part
 of this checkpoint.
+
+## October 16 — rough-glass local source freeze
 
 The operator accepted the 512×512 fixed-roughness still quality and authorized a
 local Main Edit source checkpoint of the unified glass, deeper-path and compensated

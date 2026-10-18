@@ -1,6 +1,6 @@
 # Ray Tracing Desktop Packaging
 
-Last updated: 2026-07-13
+Version/discovery status updated: 2026-10-18.
 
 ## Bundle Contract
 
@@ -16,7 +16,10 @@ Last updated: 2026-07-13
 
 ## Public Package Discovery
 
-The current public desktop package release is `optiC 0.6.1`.
+The registered public desktop release is **optiC 0.18.0** as of October 18.
+The independent registered headless worker is **0.12.1**. See
+[version status](release_versions.md) for source identities, proposed transitions
+and the distinction between registered, installed and loaded versions.
 
 Fresh agents should discover public release downloads through the Ecosystem
 agent manifest:
@@ -25,14 +28,9 @@ agent manifest:
 https://ecosystem.calebsv.tech/agents/programs/optic.json
 ```
 
-The manifest links both macOS desktop architectures and the Linux x86_64 GUI
-desktop package:
-
-- `optiC-0.6.1-macOS-arm64-stable.zip`
-- `optiC-0.6.1-macOS-x86_64-stable.zip`
-- `optiC-0.6.1-linux-x86_64-desktop-stable.tar.gz`
-
-It also provides immutable version URLs, SHA-256 values, and size metadata. A
+Read the manifest's actual architecture and artifact entries; an older release's
+platform list does not establish coverage for a newer version. It provides
+immutable version URLs, SHA-256 values, and size metadata. A
 public package smoke should verify those values without rebuilding, replacing,
 or republishing the release artifacts.
 

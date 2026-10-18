@@ -27,10 +27,11 @@ Ecosystem agent manifest:
 https://ecosystem.calebsv.tech/agents/programs/optic.json
 ```
 
-That manifest is the public package-discovery bridge for `optiC 0.5.0`. It
-lists the current macOS `arm64` and `x86_64` ZIPs, immutable version URLs,
-SHA-256 values, size metadata, the public agent guide, and this GitHub
-repository. Treat the manifest as read-only release metadata unless an operator
+That manifest is the live public package-discovery bridge. Read its actual
+version and platform entries, immutable URLs, SHA-256 values, size metadata,
+public agent guide and repository link. See `docs/release_versions.md` for the
+dated source/Registry version reconciliation. Treat the manifest as read-only
+release metadata unless an operator
 explicitly starts a website/release publication lane.
 
 ## Safe Local Commands

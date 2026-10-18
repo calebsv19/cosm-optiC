@@ -1,3 +1,12 @@
+## October 18 — current version reconciliation
+
+Current source and registered desktop baseline: **0.18.0**. Current source and
+registered independent headless worker baseline: **0.12.1**. Both source checkouts
+already contain these labels. The next proposed release is desktop **0.19.0** and
+worker **0.13.0**, pending Decision 1. See the [version status and release
+checks](release_versions.md) for exact source identities and attribution rules.
+Older dated entries below retain their historical version labels.
+
 ## October 18 — explicit wet water/glass contact
 
 Opt-in `water_body_boundary_v1.optical_contact: "wet_container"` now validates

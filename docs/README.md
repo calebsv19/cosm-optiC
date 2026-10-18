@@ -2,6 +2,9 @@
 
 Start here for public repository documentation.
 
+Current versions: [source, desktop and worker status, proposed targets and release
+attribution checks](release_versions.md) (verified October 18, 2026).
+
 Rough-glass checkpoint: [qualified behavior, presets and limits](rough_glass_qualification.md).
 Transport contract: [physical glass in Disney V2](physical_glass_transport.md).
 
