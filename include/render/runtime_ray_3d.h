@@ -59,8 +59,8 @@ typedef struct {
     bool hasSurfaceDifferentials, hasPixelFootprint, footprintUnbounded;
     Vec3 surfaceDpDu, surfaceDpDv, pixelDpDx, pixelDpDy;
     bool hasIncidentDifferentials, constantShadingNormal;
-    /* World-space affine vertex-normal field, before normalization. Opaque
-     * reflection only; the existing glass footprint policy is unchanged. */
+    /* World-space affine vertex-normal field, before normalization, shared
+     * by reflection and optical continuation. */
     bool hasReflectionNormalField;
     Vec3 reflectionNormalValue, reflectionNormalGradient[3];
     /* Boundary winding survives face-forward shading; occupies existing bool padding. */
@@ -136,6 +136,8 @@ bool RuntimeRay3D_TransportIdealFootprint(const HitInfo3D* hit, Vec3 normal,
 void RuntimeRay3D_SetReflectionNormalField(const RuntimeTriangle3D* triangle, HitInfo3D* hit);
 /* Shared opaque-reflection geometry. Neighbor normals include smooth-normal
  * variation. Refusal leaves the central ray intact and clears stale footprint. */
+bool RuntimeRay3D_NormalFootprintNeighbors(const HitInfo3D* hit, Vec3 normal,
+    Vec3 neighbor_normals[2]);
 bool RuntimeRay3D_ReflectionFootprintNeighbors(const HitInfo3D* hit, Vec3 normal,
     Ray3D* io_ray, Vec3 neighbor_normals[2]);
 bool RuntimeRay3D_TransportReflectionFootprint(const HitInfo3D* hit, Vec3 normal, Ray3D* io_ray);

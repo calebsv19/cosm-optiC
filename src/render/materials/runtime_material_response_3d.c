@@ -249,9 +249,9 @@ static void runtime_material_response_3d_apply_specular_reflection(
     }
     if (reflection.emitterWins) {
         io_result->specularHitCount += 1;
-        reflected_r = reflection.emitterHitInfo.radiance;
-        reflected_g = reflection.emitterHitInfo.radiance;
-        reflected_b = reflection.emitterHitInfo.radiance;
+        reflected_r = RuntimeLightEmitter3D_RadianceRGB(&reflection.emitterHitInfo).x;
+        reflected_g = RuntimeLightEmitter3D_RadianceRGB(&reflection.emitterHitInfo).y;
+        reflected_b = RuntimeLightEmitter3D_RadianceRGB(&reflection.emitterHitInfo).z;
     } else if (reflection.geometryHit &&
                reflection.hitInfo.triangleIndex >= 0 &&
                reflection.hitInfo.triangleIndex != hit->triangleIndex &&

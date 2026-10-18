@@ -30,6 +30,7 @@ typedef struct {
     double radianceR;
     double radianceG;
     double radianceB;
+    Vec3 directOnlyRectangleRadiance;
     int evaluatedLightCount;
     int contributingLightCount;
     int visibilityRayCount;

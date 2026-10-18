@@ -238,7 +238,7 @@ static bool runtime_native_3d_adaptive_sampling_is_stable_emitter_pixel(
     if (!scene || !projector) return false;
 
     primary_ray = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
-    if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
+    if (!RuntimeLightEmitter3D_ResolveCameraFirstHit(scene,
                                                &primary_ray,
                                                projector->nearPlane,
                                                1.0e30,

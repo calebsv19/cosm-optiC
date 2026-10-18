@@ -1,4 +1,6 @@
 NATIVE3D_AUDIT_DEPS = \
+	$(BUILD_DIR)/render/runtime_transport_weight_probe_3d.o \
+	$(BUILD_DIR)/render/runtime_native_3d_pixel_probe.o \
 	$(BUILD_DIR)/app/scene_atmosphere_assets.o \
 	$(BUILD_DIR)/app/scene_atmosphere_attachment.o \
 	$(BUILD_DIR)/app/scene_atmosphere_optics.o \
@@ -60,6 +62,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_physical_glass_bsdf_3d.o \
 	$(BUILD_DIR)/render/runtime_glass_microsurface_3d.o \
 	$(BUILD_DIR)/render/runtime_physical_glass_3d.o \
+	$(BUILD_DIR)/render/runtime_glass_reflection_footprint_3d.o \
 	$(BUILD_DIR)/render/runtime_glass_path_termination_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_dielectric_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_transmission_sample_3d.o \
@@ -159,6 +162,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_utils.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_camera_pixel_sampling_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling_state_mask.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d_manifest.o \
@@ -231,7 +235,9 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
 	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
+	$(BUILD_DIR)/render/runtime_heightfield_normals_3d.o \
 	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
+	$(BUILD_DIR)/render/runtime_water_contact_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \
@@ -335,8 +341,6 @@ NATIVE3D_AUDIT_DEPS = \
 	$(KIT_RUNTIME_DIAG_OBJS)
 
 RAY_TRACING_RENDER_HEADLESS_DEPS = \
-	$(BUILD_DIR)/render/runtime_native_3d_pixel_probe.o \
-	$(BUILD_DIR)/render/runtime_transport_weight_probe_3d.o \
 	$(BUILD_DIR)/app/ray_tracing_checkpoint_reference.o \
 	$(BUILD_DIR)/app/ray_tracing_checkpoint_transaction.o \
 	$(BUILD_DIR)/app/ray_tracing_durable_io.o \
@@ -543,6 +547,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_physical_glass_bsdf_3d.o \
 	$(BUILD_DIR)/render/runtime_glass_microsurface_3d.o \
 	$(BUILD_DIR)/render/runtime_physical_glass_3d.o \
+	$(BUILD_DIR)/render/runtime_glass_reflection_footprint_3d.o \
 	$(BUILD_DIR)/render/runtime_glass_path_termination_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_dielectric_3d.o \
 	$(BUILD_DIR)/render/runtime_camera_transmission_sample_3d.o \
@@ -616,6 +621,7 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_tile_scheduler_utils.o \
 	$(BUILD_DIR)/render/runtime_native_3d_blue_noise.o \
 	$(BUILD_DIR)/render/runtime_native_3d_sampling.o \
+	$(BUILD_DIR)/render/runtime_camera_pixel_sampling_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_adaptive_sampling_state_mask.o \
 	$(BUILD_DIR)/render/materials/runtime_material_authored_texture_3d.o \
 	$(BUILD_DIR)/render/materials/runtime_material_graph_3d.o \
@@ -675,7 +681,9 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_geometry.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_heightfield.o \
 	$(BUILD_DIR)/render/runtime_water_body_mesh_3d.o \
+	$(BUILD_DIR)/render/runtime_heightfield_normals_3d.o \
 	$(BUILD_DIR)/render/runtime_water_body_prepare_3d.o \
+	$(BUILD_DIR)/render/runtime_water_contact_3d.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_mesh.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_curve.o \
 	$(BUILD_DIR)/render/runtime_scene_3d_builder_shared.o \

@@ -268,6 +268,7 @@ static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
 
     for (int i = 0; i < RuntimeLightSet3D_EnabledCount(light_set); ++i) {
         const RuntimeLightSource3D* source = RuntimeLightSet3D_GetEnabled(light_set, i);
+        Vec3 before = vec3(light_r, light_g, light_b);
         runtime_direct_light_3d_accumulate_source(scene,
                                                   hit,
                                                   source,
@@ -279,6 +280,11 @@ static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
                                                   &light_g,
                                                   &light_b,
                                                   &any_light_sample_visible);
+        if (source && source->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT &&
+            source->origin != RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER) {
+            result.directOnlyRectangleRadiance = vec3_add(result.directOnlyRectangleRadiance,
+                vec3_sub(vec3(light_r, light_g, light_b), before));
+        }
     }
     if (result.rectSampleCount > 0) {
         result.rectReceiverCosAvg =
@@ -290,6 +296,9 @@ static bool runtime_direct_light_3d_shade_hit_with_light_set_and_payload(
     result.radianceR = (light_r + top_fill) * tint_r;
     result.radianceG = (light_g + top_fill) * tint_g;
     result.radianceB = (light_b + top_fill) * tint_b;
+    result.directOnlyRectangleRadiance.x *= tint_r;
+    result.directOnlyRectangleRadiance.y *= tint_g;
+    result.directOnlyRectangleRadiance.z *= tint_b;
     result.radiance = runtime_direct_light_3d_peak(result.radianceR,
                                                    result.radianceG,
                                                    result.radianceB);

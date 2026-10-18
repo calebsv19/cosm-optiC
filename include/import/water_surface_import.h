@@ -9,6 +9,7 @@
 
 typedef struct RuntimeWaterBodyBoundaryV1 {
     bool present;
+    bool wet_container_contact;
     char closure_mode[32];
     char body_id[RUNTIME_WATER_BODY_ID_MAX];
     char container_id[RUNTIME_WATER_BODY_ID_MAX];

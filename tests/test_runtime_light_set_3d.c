@@ -250,11 +250,19 @@ static int test_runtime_light_set_3d_rect_lambertian_radiometry_contract(void) {
     return 0;
 }
 
+#include "test_runtime_light_emitter_contract.h"
+#include "test_runtime_glass_reflection_footprint.h"
+
 int run_test_runtime_light_set_3d_tests(void) {
+    int before = test_support_failures();
+    test_runtime_glass_local_reflection_footprint();
+    test_runtime_light_emitter_contract();
+    test_runtime_water_emitter_transport();
+    test_runtime_clear_water_offspecular_light();
     test_runtime_light_set_3d_empty_contract();
     test_runtime_light_set_3d_append_disabled_and_enabled_contract();
     test_runtime_light_set_3d_compatibility_seed_contract();
     test_runtime_light_set_3d_copy_rgb_and_shape_contract();
     test_runtime_light_set_3d_rect_lambertian_radiometry_contract();
-    return 0;
+    return test_support_failures() - before;
 }

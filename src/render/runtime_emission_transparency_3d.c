@@ -464,9 +464,9 @@ static bool runtime_emission_transparency_3d_sample_transmission(
         contributing_samples += 1;
         if (transmitted.emitterWins) {
             total_direct += transmitted.emitterHit.radiance * source_filter.luma;
-            total_direct_r += transmitted.emitterHit.radiance * source_filter.r;
-            total_direct_g += transmitted.emitterHit.radiance * source_filter.g;
-            total_direct_b += transmitted.emitterHit.radiance * source_filter.b;
+            total_direct_r += RuntimeLightEmitter3D_RadianceRGB(&transmitted.emitterHit).x * source_filter.r;
+            total_direct_g += RuntimeLightEmitter3D_RadianceRGB(&transmitted.emitterHit).y * source_filter.g;
+            total_direct_b += RuntimeLightEmitter3D_RadianceRGB(&transmitted.emitterHit).z * source_filter.b;
             continue;
         }
 
@@ -578,9 +578,9 @@ static bool runtime_emission_transparency_3d_sample_reflection(
     (void)source_segment_distance;
     if (reflected.emitterWins) {
         *out_direct = reflected.emitterHit.radiance;
-        *out_direct_r = reflected.emitterHit.radiance;
-        *out_direct_g = reflected.emitterHit.radiance;
-        *out_direct_b = reflected.emitterHit.radiance;
+        *out_direct_r = RuntimeLightEmitter3D_RadianceRGB(&reflected.emitterHit).x;
+        *out_direct_g = RuntimeLightEmitter3D_RadianceRGB(&reflected.emitterHit).y;
+        *out_direct_b = RuntimeLightEmitter3D_RadianceRGB(&reflected.emitterHit).z;
         return true;
     }
 

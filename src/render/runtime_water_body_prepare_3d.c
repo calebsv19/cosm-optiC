@@ -1,4 +1,6 @@
 #include "render/runtime_water_body_prepare_3d.h"
+#include "render/runtime_water_contact_3d.h"
+#include "render/runtime_water_material_3d.h"
 #include "render/runtime_heightfield_perimeter_resolver.h"
 
 #include <math.h>
@@ -259,6 +261,14 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
                             (double)(water->grid_d - 1u);
     desc.bottom_height = boundary->bottom_height_m;
     desc.map_y_height_to_scene_z = true;
+    int contact_container = -1;
+    RuntimeWaterMaterial3DOverride contact_material;
+    if (!RuntimeWaterContact3D_Prepare(scene, boundary, &desc, &contact_container,
+                                      out_diagnostics, out_diagnostics_size) ||
+        (contact_container >= 0 && !RuntimeWaterMaterial3D_Get(scene_object_index, &contact_material))) {
+        free(resolved_heights);
+        return false;
+    }
     if (!RuntimeScene3D_CopyGeometryFrom(&backup, scene)) {
         free(resolved_heights);
         water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
@@ -284,7 +294,17 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
         return false;
     }
     RuntimeScene3D_Free(&backup);
+    if (contact_container >= 0) {
+        contact_material.wetContactContainerIndexPlusOne = contact_container + 1;
+        RuntimeWaterMaterial3D_Set(scene_object_index, &contact_material);
+    }
     report.active = true;
+    report.wet_container_contact = contact_container >= 0;
+    report.contact_bounds[0] = desc.sample_origin_x;
+    report.contact_bounds[1] = desc.sample_origin_x + desc.sample_spacing_x * (desc.grid_w - 1);
+    report.contact_bounds[2] = desc.sample_origin_z;
+    report.contact_bounds[3] = desc.sample_origin_z + desc.sample_spacing_z * (desc.grid_d - 1);
+    report.contact_bounds[4] = desc.bottom_height;
     snprintf(report.closure_mode, sizeof(report.closure_mode), "%s", boundary->closure_mode);
     snprintf(report.body_id, sizeof(report.body_id), "%s", boundary->body_id);
     snprintf(report.container_id, sizeof(report.container_id), "%s", boundary->container_id);

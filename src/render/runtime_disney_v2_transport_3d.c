@@ -227,10 +227,10 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
                 state.valid=true;state.ray=optical.ray;
                 state.throughputR=throughput_r;state.throughputG=throughput_g;state.throughputB=throughput_b;
                 if(optical.emitterWins) {
-                    double weight=optical.scattered?1.0:io_result->misWeightBsdf;
-                    io_result->recursiveBsdfRadianceR+=throughput_r*optical.emitter.radiance*weight;
-                    io_result->recursiveBsdfRadianceG+=throughput_g*optical.emitter.radiance*weight;
-                    io_result->recursiveBsdfRadianceB+=throughput_b*optical.emitter.radiance*weight;
+                    double weight=RuntimeLightEmitter3D_BsdfHitWeight(&optical.emitter, optical.scattered, io_result->misWeightBsdf);
+                    io_result->recursiveBsdfRadianceR+=throughput_r*RuntimeLightEmitter3D_RadianceRGB(&optical.emitter).x*weight;
+                    io_result->recursiveBsdfRadianceG+=throughput_g*RuntimeLightEmitter3D_RadianceRGB(&optical.emitter).y*weight;
+                    io_result->recursiveBsdfRadianceB+=throughput_b*RuntimeLightEmitter3D_RadianceRGB(&optical.emitter).z*weight;
                     contributed=true;
                 } else contributed|=runtime_disney_v2_transport_3d_accumulate_environment_miss(scene,&state,NULL,vertex_index,io_result);
                 break;
@@ -389,12 +389,12 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
                                                  &current_hit,
                                                  sampling,
                                                  &finite_direct))) {
-            const double direct_r = area_throughput_r * finite_direct.radianceR *
-                                    vertex_sample.finiteLightMis.weightLight;
-            const double direct_g = area_throughput_g * finite_direct.radianceG *
-                                    vertex_sample.finiteLightMis.weightLight;
-            const double direct_b = area_throughput_b * finite_direct.radianceB *
-                                    vertex_sample.finiteLightMis.weightLight;
+            const double direct_r = area_throughput_r * RuntimeLightEmitter3D_DirectEstimate(finite_direct.radianceR,
+                                        finite_direct.directOnlyRectangleRadiance.x, vertex_sample.finiteLightMis.weightLight);
+            const double direct_g = area_throughput_g * RuntimeLightEmitter3D_DirectEstimate(finite_direct.radianceG,
+                                        finite_direct.directOnlyRectangleRadiance.y, vertex_sample.finiteLightMis.weightLight);
+            const double direct_b = area_throughput_b * RuntimeLightEmitter3D_DirectEstimate(finite_direct.radianceB,
+                                        finite_direct.directOnlyRectangleRadiance.z, vertex_sample.finiteLightMis.weightLight);
             RuntimeTransportWeightProbe3D_Direct(depth,&current_hit,
                 vec3(area_throughput_r,area_throughput_g,area_throughput_b),
                 vec3(finite_direct.radianceR,finite_direct.radianceG,finite_direct.radianceB),
@@ -473,13 +473,13 @@ static bool runtime_disney_v2_3d_apply_recursive_path_loop_from_direction(
         }
 
         if (trace.emitterWins) {
-            const double emitter_radiance = trace.emitterHitInfo.radiance;
+            const Vec3 emitter_radiance = RuntimeLightEmitter3D_RadianceRGB(&trace.emitterHitInfo);
             const double contribution_r =
-                state.throughputR * emitter_radiance * (vertex_sample.delta ? 1.0 : io_result->misWeightBsdf);
+                state.throughputR * emitter_radiance.x * RuntimeLightEmitter3D_BsdfHitWeight(&trace.emitterHitInfo, vertex_sample.delta, io_result->misWeightBsdf);
             const double contribution_g =
-                state.throughputG * emitter_radiance * (vertex_sample.delta ? 1.0 : io_result->misWeightBsdf);
+                state.throughputG * emitter_radiance.y * RuntimeLightEmitter3D_BsdfHitWeight(&trace.emitterHitInfo, vertex_sample.delta, io_result->misWeightBsdf);
             const double contribution_b =
-                state.throughputB * emitter_radiance * (vertex_sample.delta ? 1.0 : io_result->misWeightBsdf);
+                state.throughputB * emitter_radiance.z * RuntimeLightEmitter3D_BsdfHitWeight(&trace.emitterHitInfo, vertex_sample.delta, io_result->misWeightBsdf);
             state.emitterHit = trace.emitterHit;
             state.emitterWins = true;
             state.emitterHitInfo = trace.emitterHitInfo;

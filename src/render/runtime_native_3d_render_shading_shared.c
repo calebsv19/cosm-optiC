@@ -33,7 +33,7 @@ static RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary_impl(
                 &trace.payload, &trace.primary.hitInfo);
         }
     }
-    if (RuntimeLightEmitter3D_IntersectRay(scene,
+    if (RuntimeLightEmitter3D_IntersectCameraRay(scene,
                                            &trace.primary.primaryRay,
                                            projector->nearPlane,
                                            HUGE_VAL,
@@ -44,7 +44,8 @@ static RuntimeNative3DPrimaryTrace runtime_native_3d_render_trace_primary_impl(
                                                      &trace.primary.primaryRay,
                                                      projector->nearPlane,
                                                      emitter_hit.t);
-        emitter_hit.radiance *= transmittance.luma;
+        RuntimeLightEmitter3D_ApplyTransmittance(&emitter_hit,
+            vec3(transmittance.r, transmittance.g, transmittance.b));
         trace.emitterHit = emitter_hit;
         trace.emitterWins = true;
     }

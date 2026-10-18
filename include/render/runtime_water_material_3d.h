@@ -5,14 +5,18 @@
 
 #include "render/runtime_material_payload_3d.h"
 
+/* Imported clear water: no coverage/opacity mixture. Absorption coefficients
+ * are per world metre; absorptionDistance is only their reference encoding.
+ * Legacy reflectivity is retained as input metadata; IOR owns Fresnel. */
 typedef struct {
     bool valid;
+    /* Explicit water/container overlap; zero means no contact partner. */
+    int wetContactContainerIndexPlusOne;
     double ior;
     double absorptionDistance;
     double absorptionR;
     double absorptionG;
     double absorptionB;
-    double transparency;
     double reflectivity;
     double roughness;
 } RuntimeWaterMaterial3DOverride;

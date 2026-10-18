@@ -13,6 +13,14 @@
 #include "render/runtime_ray_3d.h"
 #include "render/runtime_scene_3d.h"
 
+/* Membership-only contact crossings need ledger space without spending the
+ * physical scattering budget. Two redundant faces per physical event are
+ * bounded separately from dielectric events and optical depth. */
+enum {
+    RUNTIME_CAUSTIC_PHOTON_SCENE_MAX_HIT_EVENTS =
+        3 * RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS
+};
+
 typedef enum {
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_NONE = 0,
     RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_DIELECTRIC_EXIT,
@@ -72,6 +80,7 @@ typedef struct {
     RuntimeCausticPhotonBsdfSampleStream3D bsdfSampleStream;
     RuntimeCausticPhotonRoulette3D roulette;
     bool usedSeededBsdfSamples;
+    bool nullContactBoundary;
     RuntimeCausticPhotonSceneTermination3D termination;
 } RuntimeCausticPhotonSceneHitEvent3D;
 
@@ -102,7 +111,7 @@ typedef struct {
     RuntimeCausticPhotonMediumStack3D initialMediumStack;
     RuntimeCausticPhotonMediumStack3D finalMediumStack;
     RuntimeCausticPhotonSceneHitEvent3D hitEvents[
-        RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS];
+        RUNTIME_CAUSTIC_PHOTON_SCENE_MAX_HIT_EVENTS];
 } RuntimeCausticPhotonSceneTrace3D;
 
 typedef struct {

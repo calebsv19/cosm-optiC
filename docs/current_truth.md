@@ -1,3 +1,94 @@
+## October 18 — explicit wet water/glass contact
+
+Opt-in `water_body_boundary_v1.optical_contact: "wet_container"` now validates
+rectangular glass walls and prepares a small numerical overlap. Camera and photon
+paths use a shared declared-pair medium policy: redundant container faces are null
+membership changes, and the water boundary owns the physical water/glass event.
+The default `separated` policy retains real air gaps. Source ownership, tolerances,
+readback and unsupported shapes are documented in
+[clear-water transport](clear_water_transport.md#explicit-watercontainer-contact).
+
+Fresh builds, focused contact tests and surrounding regressions pass except the
+previously reproduced emission/transparency adaptive-center failure (33/34 test
+groups pass). Native Aquarium comparison keeps lighting, imported water heights,
+material values and sampling fixed; only the copied fixture enables wet contact.
+This is a transport repair, not acceptance of the final water appearance.
+Canonical adoption, installed apps, worker packages and release remain separate.
+
+## October 18 — medium-aware physical photon branch policy
+
+Physical solid dielectric photon paths now use their resolved incident/destination
+IOR pair for exact Fresnel branch selection as well as refraction. The separate
+compatibility policy remains available. An unresolved physical solid interface
+fails before lobe selection; photon flux receives no camera radiance eta-squared
+factor. Per-hit policy records identify the pair used. See the
+[water transport ownership and qualification map](clear_water_transport.md#ownership-and-editing-map).
+
+Fresh contained headless/test builds and focused interface, medium, nested-path,
+TIR and flux tests pass. Surrounding photon/caustic regressions pass; the broader
+emission/transparency group retains a pre-existing
+`runtime_emission_transparency_adaptive_center_preserved` failure, reproduced
+with the pre-repair photon code. At that checkpoint wet-contact geometry was unimplemented; the subsequent
+explicit-contact repair is described above. Full camera/photon rough-surface
+estimator equivalence remains unimplemented. Aquarium
+appearance and temporal acceptance remain separate. Source only; versions,
+canonical adoption, installed apps, workers and release state are unchanged.
+
+## October 18 — pixel-area camera sampling
+
+Native multipass 3D rendering samples pixel area with a deterministic progressive
+scrambled Sobol sequence, one spatial position per outer pass. Center references
+and jittered-grid comparisons remain available; single-pass behavior stays at
+center. Geometry, emitter, background and primary scatter queries share sampled
+coordinates. Camera mode/revision joins checkpoint sampling identity. Area mode
+keeps its full spatial budget pending area-aware adaptive qualification. No
+material, UI, MCP or saved-scene schema change. See
+[pixel-area sampling contract](pixel_area_camera_sampling.md). Source qualification
+is separate from Aquarium, installed-app and release acceptance.
+
+## October 18 — unified water top normals and optical footprint continuity
+
+Unified closed-water tops reconstruct shared vertex normals from neighboring
+prepared heights and interpolate them at hits through the existing smooth-mesh
+path. Walls/bottom creases, geometry, medium boundaries and optical materials
+retain their owners. Glass continuations now share the smooth normal-gradient
+field for bounded neighboring-ray transport, with conservative fallbacks at
+incompatible events. See [water surface smoothing](water_surface_smoothing.md).
+
+Analytic/continuity/geometry tests, targeted normal-construction sanitizers and
+nine affected regression groups pass. Matched512x384/16pass/16trans low-light
+stills and selected64pass/64trans references qualify local glint behavior; flat
+water and white-glass native controls remain exact. Optical observations identify
+additional reflections between ripple crests. Generic material/caustic, temporal
+and full Aquarium acceptance remain separate. Primary pixel-area sampling remains
+a next quality boundary. Source only; no install, release, scene, UI or MCP change.
+
+## October 18 — bounded rectangular-emitter consistency repair
+
+Authored rectangles are visible to camera/reflection/transmission queries with
+shared shape, sidedness and RGB; physical radiance is not multiplied by extra
+cosine or distance falloff. Legacy intensity remains explicit. Opaque non-delta
+receivers use a disjoint direct-only rectangle estimate, while camera, delta and
+glass continuations receive emitter hits, preventing a new overlapping estimate.
+Material-emitter proxies retain their existing geometry owner. See the
+[emitter contract and qualification limits](light_emitter_transport.md).
+Fresh local app/headless/test builds, focused optical/energy checks, 12 affected
+regression groups and exact white-glass native control pass. Main Edit source
+only; full Aquarium/glint convergence, generic MIS and release acceptance remain
+separate. No versions, installed app, worker, scene, UI or MCP state change.
+
+## October 18 — imported clear-water material repair
+
+Imported water now resolves neutral interface color and separate bulk absorption,
+without the hidden 0.92 diffuse/opaque mixture or an authored reflection floor.
+IOR and microscopic roughness remain authored. Headless payload reports expose
+absorption transmittance and diffuse weight separately. See the
+[clear-water contract and qualification boundary](clear_water_transport.md).
+Native import checks, focused material/transport regressions and a matched local
+water-only comparison pass; full Aquarium, photon-enabled appearance and animation
+acceptance remain separate. Main Edit source only; no installed-app or worker
+release/activation is implied.
+
 ## October 17 — exact photon support search and runtime phase/reuse reporting
 
 Photon support preparation uses a temporary balanced spatial index and bounded

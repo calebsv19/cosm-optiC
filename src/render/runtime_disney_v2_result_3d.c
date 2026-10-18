@@ -6,6 +6,9 @@ void runtime_disney_v2_3d_apply_transmittance(
     int i = 0;
     if (!transmittance || !io_result) return;
 
+    io_result->directOnlyRectangleRadiance.x *= transmittance->r;
+    io_result->directOnlyRectangleRadiance.y *= transmittance->g;
+    io_result->directOnlyRectangleRadiance.z *= transmittance->b;
     io_result->directRadianceR *= transmittance->r;
     io_result->directRadianceG *= transmittance->g;
     io_result->directRadianceB *= transmittance->b;

@@ -1,5 +1,14 @@
 # Physical glass transport in Disney V2
 
+Imported water uses the separate [clear-water optical contract](clear_water_transport.md):
+neutral interfaces, no implicit diffuse mixture, and distance-only bulk absorption.
+
+Smooth unified-water normals and shared optical normal-field differentials follow
+the [water smoothing contract](water_surface_smoothing.md).
+
+Finite rectangular light visibility and RGB follow the shared
+[emitter transport contract](light_emitter_transport.md).
+
 Explicit optical-response materials use the same boundary transport for camera,
 reflection and sampled BSDF paths. Legacy materials without an optical-response
 override retain their previous material estimator and saved representation.

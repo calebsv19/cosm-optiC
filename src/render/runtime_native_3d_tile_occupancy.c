@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "render/runtime_scene_curve_3d.h"
+#include "render/runtime_light_set_3d.h"
 
 static int runtime_native_3d_tile_occupancy_clamp_int(int value, int min_value, int max_value) {
     if (value < min_value) return min_value;
@@ -106,9 +107,9 @@ static bool runtime_native_3d_tile_occupancy_mark_triangle(RuntimeNative3DTileOc
     return true;
 }
 
-static bool runtime_native_3d_tile_occupancy_mark_emitter(RuntimeNative3DTileOccupancy* occupancy,
+static bool runtime_native_3d_tile_occupancy_mark_sphere(RuntimeNative3DTileOccupancy* occupancy,
                                                           const RuntimeCameraProjector3D* projector,
-                                                          const RuntimeScene3D* scene) {
+                                                          Vec3 position, double radius) {
     double screen_x = 0.0;
     double screen_y = 0.0;
     double camera_depth = 0.0;
@@ -123,10 +124,10 @@ static bool runtime_native_3d_tile_occupancy_mark_emitter(RuntimeNative3DTileOcc
     int tile_min_y = 0;
     int tile_max_y = 0;
 
-    if (!occupancy || !projector || !scene || !scene->hasLight) return true;
-    if (!(scene->light.radius > 1e-9)) return true;
+    if (!occupancy || !projector) return true;
+    if (!(radius > 1e-9)) return true;
     if (!RuntimeCameraProjector3D_ProjectPoint(projector,
-                                               scene->light.position,
+                                               position,
                                                &screen_x,
                                                &screen_y,
                                                &camera_depth,
@@ -135,7 +136,7 @@ static bool runtime_native_3d_tile_occupancy_mark_emitter(RuntimeNative3DTileOcc
         return true;
     }
 
-    radius_pixels = scene->light.radius *
+    radius_pixels = radius *
                     ((double)projector->viewportWidth /
                      (2.0 * projector->tanHalfFovX * camera_depth));
     if (!(radius_pixels > 0.0) || !isfinite(radius_pixels)) {
@@ -285,6 +286,41 @@ static bool runtime_native_3d_tile_occupancy_mark_curve_instance(
         occupancy, projector, world_min, world_max);
 }
 
+/* Visibility acceleration must include the same finite emitter shapes that
+ * primary rays can intersect. A failed projection disables culling safely. */
+static bool runtime_native_3d_tile_occupancy_mark_emitters(
+    RuntimeNative3DTileOccupancy* occupancy, const RuntimeCameraProjector3D* projector,
+    const RuntimeScene3D* scene) {
+    if (scene->lightSet.lightCount == 0)
+        return !scene->hasLight || runtime_native_3d_tile_occupancy_mark_sphere(
+            occupancy, projector, scene->light.position, scene->light.radius);
+    for (int i=0; i<scene->lightSet.lightCount; ++i) {
+        const RuntimeLightSource3D* light = &scene->lightSet.lights[i];
+        if (!light->enabled) continue;
+        if (light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_RECT) {
+            if (light->origin == RUNTIME_LIGHT_SOURCE_3D_ORIGIN_MATERIAL_EMITTER ||
+                !(light->width > 1e-9) || !(light->height > 1e-9)) continue;
+            Vec3 u = vec3_length(light->axisU) > 1e-9 ? vec3_normalize(light->axisU) : vec3(1,0,0);
+            Vec3 v = vec3_length(light->axisV) > 1e-9 ? vec3_normalize(light->axisV) : vec3(0,0,1);
+            u = vec3_scale(u, .5 * light->width);
+            v = vec3_scale(v, .5 * light->height);
+            Vec3 p0 = vec3_sub(vec3_sub(light->position,u),v);
+            Vec3 p1 = vec3_add(vec3_sub(light->position,u),v);
+            Vec3 p2 = vec3_add(vec3_add(light->position,u),v);
+            Vec3 p3 = vec3_sub(vec3_add(light->position,u),v);
+            RuntimeTriangle3D triangle = {.p0=p0, .p1=p1, .p2=p2};
+            if (!runtime_native_3d_tile_occupancy_mark_triangle(occupancy,projector,&triangle)) return false;
+            triangle.p1=p2; triangle.p2=p3;
+            if (!runtime_native_3d_tile_occupancy_mark_triangle(occupancy,projector,&triangle)) return false;
+        } else if ((light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_POINT ||
+                    light->kind == RUNTIME_LIGHT_SOURCE_3D_KIND_SPHERE) &&
+                   light->radiometryMode == RUNTIME_LIGHT_RADIOMETRY_LEGACY_INTENSITY &&
+                   !runtime_native_3d_tile_occupancy_mark_sphere(occupancy,projector,
+                        light->position,light->radius)) return false;
+    }
+    return true;
+}
+
 bool RuntimeNative3DTileOccupancy_Build(RuntimeNative3DTileOccupancy* occupancy,
                                         const RuntimeScene3D* scene,
                                         const RuntimeCameraProjector3D* projector,
@@ -334,7 +370,7 @@ bool RuntimeNative3DTileOccupancy_Build(RuntimeNative3DTileOccupancy* occupancy,
             return false;
         }
     }
-    if (!runtime_native_3d_tile_occupancy_mark_emitter(occupancy, projector, scene)) {
+    if (!runtime_native_3d_tile_occupancy_mark_emitters(occupancy, projector, scene)) {
         runtime_native_3d_tile_occupancy_disable(occupancy);
         return false;
     }

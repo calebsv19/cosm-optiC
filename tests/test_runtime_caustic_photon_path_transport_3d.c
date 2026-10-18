@@ -541,7 +541,7 @@ static int test_runtime_caustic_photon_path_transport_two_object_transmission(vo
     return 0;
 }
 
-static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
+static int test_runtime_caustic_photon_path_transport_tir_continuation(bool physical) {
     RuntimeScene3D scene;
     RuntimeCausticPhotonSample3D sample = photon_path_transport_sample();
     RuntimeCausticPhotonPathTransportSettings3D settings;
@@ -557,6 +557,7 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
     memset(&fixture, 0, sizeof(fixture));
     fixture.material = photon_path_transport_glass();
     fixture.material.materialId = 61;
+    fixture.material.hasGlassTransportOverride = physical;
     fixture.material.baseColorR = 0.25;
     fixture.material.baseColorG = 0.5;
     fixture.material.absorptionDistance = 2.0;
@@ -619,6 +620,25 @@ static int test_runtime_caustic_photon_path_transport_tir_continuation(void) {
                         trace.hitEvents[i].segmentTransmittance.x < 1.0 &&
                         trace.hitEvents[i].dielectric.etaFrom >
                             trace.hitEvents[i].dielectric.etaTo);
+    }
+    if (physical) {
+        for (uint32_t i = 0; i < 4; ++i) {
+            assert_true("physical_photon_tir_policy_resolved",
+                trace.hitEvents[i].bsdfPolicy.usesResolvedInterface);
+            assert_close("physical_photon_tir_policy_reflects_all",
+                trace.hitEvents[i].bsdfPolicy.fresnelReflectance, 1.0, 1e-12);
+        }
+        /* A photon beginning inside a solid needs its declared initial medium.
+         * Neither a reflection draw nor a TIR override may mask its absence. */
+        RuntimeCausticPhotonSceneTrace3D invalid;
+        settings.hasInitialMediumStack = false;
+        fixture.calls = 0;
+        assert_true("physical_photon_missing_medium_refused",
+            !RuntimeCausticPhotonPathTransport3D_Trace(&scene, &sample, &settings, &invalid));
+        assert_true("physical_photon_missing_medium_reason",
+            invalid.readback.mediumTransitionFailureCount == 1 &&
+            invalid.readback.termination == RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_MEDIUM_TRANSITION_REJECTED &&
+            !invalid.hitEvents[0].bsdfSelection.selected);
     }
     assert_true("runtime_caustic_photon_path_transport_tir_direction_sequence",
                 trace.trace.events[1].outgoingDirection.z > 0.0 &&
@@ -720,7 +740,7 @@ static int test_runtime_caustic_photon_path_transport_budget_invariant_delivery(
     return 0;
 }
 
-static int test_runtime_caustic_photon_path_transport_nested_ior_replay(void) {
+static int test_runtime_caustic_photon_path_transport_nested_ior_replay(bool physical) {
     static const int object_id[4] = {71, 72, 72, 71};
     static const int material_id[4] = {701, 702, 702, 701};
     static const double eta_from[4] = {1.0, 1.5, 1.33, 1.5};
@@ -748,6 +768,8 @@ static int test_runtime_caustic_photon_path_transport_nested_ior_replay(void) {
     fixture.water.materialId = 702;
     fixture.water.opticalIor = 1.33;
     fixture.water.bsdf.ior = 1.33;
+    fixture.water.hasGlassTransportOverride = physical;
+    fixture.glass.hasGlassTransportOverride = physical;
     RuntimeCausticPhotonPathTransport3D_DefaultSettings(&settings);
     settings.sceneTrace.maxDepth = 5u;
     settings.sceneTrace.materialResolver = photon_path_transport_nested_material;
@@ -808,6 +830,19 @@ static int test_runtime_caustic_photon_path_transport_nested_ior_replay(void) {
                      hit->dielectric.etaTo,
                      eta_to[i],
                      1.0e-12);
+        if (physical) {
+            assert_true("physical_photon_path_policy_pair",
+                hit->bsdfPolicy.usesResolvedInterface &&
+                hit->bsdfPolicy.etaFrom == eta_from[i] && hit->bsdfPolicy.etaTo == eta_to[i]);
+            assert_close("physical_photon_path_policy_direction_fresnel",
+                hit->bsdfPolicy.fresnelReflectance, hit->dielectric.fresnel, 1e-12);
+            assert_close("physical_photon_path_transmit_probability",
+                hit->bsdfSelection.branchPdf, 1.0 - hit->dielectric.fresnel, 1e-12);
+            assert_close("physical_photon_path_flux_preserved",
+                hit->bsdfSelection.throughputAfter.x, sample.flux.x, 1e-12);
+        } else {
+            assert_true("legacy_photon_path_policy_retained", !hit->bsdfPolicy.usesResolvedInterface);
+        }
         assert_true("runtime_caustic_photon_path_transport_nested_direction_replay",
                     vec3_length(vec3_sub(
                         hit->bsdfDirection.outgoingDirection,
@@ -1015,7 +1050,11 @@ static int test_runtime_caustic_photon_path_population_transaction(void) {
     return 0;
 }
 
+#include "test_runtime_wet_contact_photon.h"
+
 int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
+    test_runtime_wet_contact_photon();
+    test_runtime_wet_contact_photon_full_budget();
     int failures = 0;
     failures +=
         test_runtime_caustic_photon_path_transport_normal_identity_remap();
@@ -1023,10 +1062,12 @@ int run_test_runtime_caustic_photon_path_transport_3d_tests(void) {
     failures += test_runtime_caustic_photon_path_transport_reflective_depth_loop();
     failures += test_runtime_caustic_photon_path_transport_two_object_reflection();
     failures += test_runtime_caustic_photon_path_transport_two_object_transmission();
-    failures += test_runtime_caustic_photon_path_transport_tir_continuation();
+    failures += test_runtime_caustic_photon_path_transport_tir_continuation(false);
+    failures += test_runtime_caustic_photon_path_transport_tir_continuation(true);
     failures +=
         test_runtime_caustic_photon_path_transport_budget_invariant_delivery();
-    failures += test_runtime_caustic_photon_path_transport_nested_ior_replay();
+    failures += test_runtime_caustic_photon_path_transport_nested_ior_replay(false);
+    failures += test_runtime_caustic_photon_path_transport_nested_ior_replay(true);
     failures += test_runtime_caustic_photon_path_population_transaction();
     return failures;
 }

@@ -205,7 +205,7 @@ bool RuntimeNative3DFeatureBuffer_RenderRegion(RuntimeNative3DFeatureBuffer* buf
             Vec3 normal = vec3(0.0, 0.0, 0.0);
             double depth = 0.0;
 
-            if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
+            if (!RuntimeLightEmitter3D_ResolveCameraFirstHit(scene,
                                                        &primary_ray,
                                                        projector->nearPlane,
                                                        HUGE_VAL,

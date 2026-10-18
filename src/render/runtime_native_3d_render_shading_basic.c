@@ -37,6 +37,8 @@ bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
     }
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
+            double sample_x, sample_y;
+            RuntimeNative3DSampling_PixelPosition(sampling, x, y, &sample_x, &sample_y);
             RuntimeDirectLight3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
@@ -45,15 +47,15 @@ bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             primary_trace = runtime_native_3d_render_trace_primary(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y);
+                                                                   sample_x,
+                                                                   sample_y);
             if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
-                                                                             (double)x,
-                                                                             (double)y,
+                                                                             sample_x,
+                                                                             sample_y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
                                                                              caustic_cache,
@@ -68,8 +70,8 @@ bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
                     &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y,
+                                                                   sample_x,
+                                                                   sample_y,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
@@ -99,8 +101,8 @@ bool runtime_native_3d_render_shade_direct_light(float* radiance_buffer,
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,
-                                                               (double)x,
-                                                               (double)y,
+                                                               sample_x,
+                                                               sample_y,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
@@ -172,6 +174,8 @@ bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer,
 
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
+            double sample_x, sample_y;
+            RuntimeNative3DSampling_PixelPosition(sampling, x, y, &sample_x, &sample_y);
             RuntimeDiffuseBounce3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
@@ -180,15 +184,15 @@ bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer,
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             primary_trace = runtime_native_3d_render_trace_primary(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y);
+                                                                   sample_x,
+                                                                   sample_y);
             if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
-                                                                             (double)x,
-                                                                             (double)y,
+                                                                             sample_x,
+                                                                             sample_y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
                                                                              caustic_cache,
@@ -203,8 +207,8 @@ bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer,
                     &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y,
+                                                                   sample_x,
+                                                                   sample_y,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
@@ -222,8 +226,8 @@ bool runtime_native_3d_render_shade_diffuse_bounce(float* radiance_buffer,
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,
-                                                               (double)x,
-                                                               (double)y,
+                                                               sample_x,
+                                                               sample_y,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
@@ -304,6 +308,8 @@ bool runtime_native_3d_render_shade_material(float* radiance_buffer,
     }
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
+            double sample_x, sample_y;
+            RuntimeNative3DSampling_PixelPosition(sampling, x, y, &sample_x, &sample_y);
             RuntimeMaterialResponse3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
@@ -312,15 +318,15 @@ bool runtime_native_3d_render_shade_material(float* radiance_buffer,
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             primary_trace = runtime_native_3d_render_trace_primary(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y);
+                                                                   sample_x,
+                                                                   sample_y);
             if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
-                                                                             (double)x,
-                                                                             (double)y,
+                                                                             sample_x,
+                                                                             sample_y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
                                                                              caustic_cache,
@@ -335,8 +341,8 @@ bool runtime_native_3d_render_shade_material(float* radiance_buffer,
                     &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y,
+                                                                   sample_x,
+                                                                   sample_y,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
@@ -354,8 +360,8 @@ bool runtime_native_3d_render_shade_material(float* radiance_buffer,
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,
-                                                               (double)x,
-                                                               (double)y,
+                                                               sample_x,
+                                                               sample_y,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
@@ -437,6 +443,8 @@ bool runtime_native_3d_render_shade_emission_transparency(
     }
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
+            double sample_x, sample_y;
+            RuntimeNative3DSampling_PixelPosition(sampling, x, y, &sample_x, &sample_y);
             RuntimeEmissionTransparency3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
@@ -445,15 +453,15 @@ bool runtime_native_3d_render_shade_emission_transparency(
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             primary_trace = runtime_native_3d_render_trace_primary(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y);
+                                                                   sample_x,
+                                                                   sample_y);
             if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
-                                                                             (double)x,
-                                                                             (double)y,
+                                                                             sample_x,
+                                                                             sample_y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
                                                                              caustic_cache,
@@ -468,8 +476,8 @@ bool runtime_native_3d_render_shade_emission_transparency(
                     &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y,
+                                                                   sample_x,
+                                                                   sample_y,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
@@ -487,8 +495,8 @@ bool runtime_native_3d_render_shade_emission_transparency(
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,
-                                                               (double)x,
-                                                               (double)y,
+                                                               sample_x,
+                                                               sample_y,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);
@@ -569,6 +577,8 @@ bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
     }
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
+            double sample_x, sample_y;
+            RuntimeNative3DSampling_PixelPosition(sampling, x, y, &sample_x, &sample_y);
             RuntimeDisney3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
             RuntimeVolume3DScatterResult scatter = {0};
@@ -577,15 +587,15 @@ bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
             size_t idx = (size_t)local_y * (size_t)radiance_stride + (size_t)local_x;
             primary_trace = runtime_native_3d_render_trace_primary(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y);
+                                                                   sample_x,
+                                                                   sample_y);
             if (primary_trace.emitterWins) {
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
-                                                                             (double)x,
-                                                                             (double)y,
+                                                                             sample_x,
+                                                                             sample_y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
                                                                              caustic_cache,
@@ -600,8 +610,8 @@ bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
                     &result)) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y,
+                                                                   sample_x,
+                                                                   sample_y,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
@@ -619,8 +629,8 @@ bool runtime_native_3d_render_shade_disney(float* radiance_buffer,
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,
-                                                               (double)x,
-                                                               (double)y,
+                                                               sample_x,
+                                                               sample_y,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);

@@ -429,6 +429,8 @@ void ray_tracing_headless_note_water_surface_mesh(
     preflight->water_surface_mesh_attached = triangle_count > 0;
     if (RuntimeWaterBodyPrepare3D_GetLastReport(&body_report)) {
         preflight->water_body_active = body_report.active;
+        preflight->water_body_wet_container_contact = body_report.wet_container_contact;
+        memcpy(preflight->water_body_contact_bounds, body_report.contact_bounds, sizeof(body_report.contact_bounds));
         preflight->water_body_legacy_shell_suppressed =
             body_report.legacy_shell_suppressed;
         preflight->water_body_material_parity_valid = body_report.material_parity_valid;
@@ -465,6 +467,10 @@ void ray_tracing_headless_note_water_surface_mesh(
             preflight->water_surface_payload_tint_r = payload.baseColorR;
             preflight->water_surface_payload_tint_g = payload.baseColorG;
             preflight->water_surface_payload_tint_b = payload.baseColorB;
+            preflight->water_surface_payload_absorption_rgb[0] = payload.glassAbsorptionColorR;
+            preflight->water_surface_payload_absorption_rgb[1] = payload.glassAbsorptionColorG;
+            preflight->water_surface_payload_absorption_rgb[2] = payload.glassAbsorptionColorB;
+            preflight->water_surface_payload_diffuse_weight = payload.bsdf.diffuseWeight;
         }
     }
 }

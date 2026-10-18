@@ -1099,7 +1099,6 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
     override.absorptionR = 0.10;
     override.absorptionG = 0.035;
     override.absorptionB = 0.015;
-    override.transparency = 0.92;
     override.reflectivity = 0.12;
     override.roughness = 0.0;
     ok = RuntimeWaterMaterial3D_Set(0, &override);
@@ -1129,23 +1128,23 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
                  1e-9);
     assert_close("runtime_material_payload_water_override_transparency",
                  payload.transparency,
-                 0.92,
+                 1.0,
                  1e-9);
     assert_close("runtime_material_payload_water_override_tint_r",
-                 payload.baseColorR,
+                 payload.glassAbsorptionColorR,
                  expected_tint_r,
                  1e-9);
     assert_close("runtime_material_payload_water_override_tint_g",
-                 payload.baseColorG,
+                 payload.glassAbsorptionColorG,
                  expected_tint_g,
                  1e-9);
     assert_close("runtime_material_payload_water_override_tint_b",
-                 payload.baseColorB,
+                 payload.glassAbsorptionColorB,
                  expected_tint_b,
                  1e-9);
     assert_close("runtime_material_payload_water_override_reflectivity",
                  payload.bsdf.reflectivity,
-                 0.12,
+                 pow((1.333 - 1.0) / (1.333 + 1.0), 2),
                  1e-9);
     assert_close("runtime_material_payload_water_override_roughness",
                  payload.bsdf.roughness,
@@ -1154,8 +1153,35 @@ static int test_runtime_material_payload_3d_water_override_contract(void) {
     assert_true("runtime_material_payload_water_override_ggx",
                 payload.bsdf.model == MATERIAL_BSDF_GGX);
     assert_true("runtime_material_payload_water_override_specular_weight",
-                payload.bsdf.specWeight >= 0.12);
+                payload.bsdf.specWeight == 1.0);
     assert_true("runtime_material_payload_water_override_solid", !payload.thinWalled);
+    assert_true("water_explicit_separate_optics", payload.hasGlassTransportOverride &&
+        payload.hasGlassInterfaceTintOverride && payload.hasGlassAbsorptionColorOverride);
+    assert_close("water_neutral_interface", payload.glassInterfaceTintR, 1, 0);
+    assert_close("water_no_diffuse", payload.bsdf.diffuseWeight, 0, 0);
+    RuntimeVisibility3DTransmittance tr = RuntimeVisibility3D_UnitTransmittance();
+    RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&payload, 0, &tr);
+    assert_close("water_zero_distance", tr.r, 1, 1e-12);
+    RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&payload, 1, &tr);
+    assert_close("water_one_meter", tr.r, exp(-0.10), 1e-12);
+    RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&payload, 2, &tr);
+    assert_close("water_segment_additivity", tr.r, exp(-0.30), 1e-12);
+    /* Changing the reference encoding must not change physical attenuation. */
+    override.absorptionDistance = 8;
+    assert_true("water_reference_reencode", RuntimeWaterMaterial3D_Set(0, &override));
+    RuntimeMaterialPayload3D reencoded = {0};
+    assert_true("water_reference_payload", RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &reencoded));
+    tr = RuntimeVisibility3D_UnitTransmittance();
+    RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&reencoded, 3, &tr);
+    assert_close("water_reference_invariant", tr.r, exp(-0.30), 1e-12);
+    /* Zero absorption is neutral even though legacy object color was not. */
+    override.absorptionR = override.absorptionG = override.absorptionB = 0;
+    assert_true("water_zero_absorption_set", RuntimeWaterMaterial3D_Set(0, &override));
+    assert_true("water_zero_absorption_payload", RuntimeMaterialPayload3D_ResolveFromSceneObjectIndex(0, &reencoded));
+    tr = RuntimeVisibility3D_UnitTransmittance();
+    RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(&reencoded, 100, &tr);
+    assert_close("water_zero_absorption_neutral", tr.r, 1, 0);
+
     principled = RuntimePrincipledBSDF3D_FromMaterialPayload(&payload);
     assert_true("runtime_material_payload_water_override_principled_valid",
                 principled.valid);

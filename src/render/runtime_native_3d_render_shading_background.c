@@ -20,7 +20,7 @@ bool runtime_native_3d_render_trace_visible_emitter(
     if (!scene || !projector || !out_emitter_hit) return false;
 
     primary_ray = RuntimeCameraProjector3D_MakePrimaryRay(projector, pixel_x, pixel_y);
-    if (!RuntimeLightEmitter3D_ResolveFirstHit(scene,
+    if (!RuntimeLightEmitter3D_ResolveCameraFirstHit(scene,
                                                &primary_ray,
                                                projector->nearPlane,
                                                HUGE_VAL,
@@ -36,7 +36,8 @@ bool runtime_native_3d_render_trace_visible_emitter(
                                                      &primary_ray,
                                                      projector->nearPlane,
                                                      trace.emitterHitInfo.t);
-        out_emitter_hit->radiance *= transmittance.luma;
+        RuntimeLightEmitter3D_ApplyTransmittance(out_emitter_hit,
+            vec3(transmittance.r, transmittance.g, transmittance.b));
     }
     return true;
 }
@@ -386,11 +387,12 @@ void runtime_native_3d_render_write_emitter_radiance_with_scatter(
                                                        hit->t,
                                                        sampling,
                                                        caustic_cache);
-    runtime_native_3d_render_record_scatter_stats(io_stats, &scatter, pixel_x, pixel_y);
-    radiance_r = hit->radiance;
-    radiance_g = hit->radiance;
-    radiance_b = hit->radiance;
-    peak = hit->radiance;
+    runtime_native_3d_render_record_scatter_stats(io_stats, &scatter,
+        (int)floor(pixel_x + 0.5), (int)floor(pixel_y + 0.5));
+    radiance_r = RuntimeLightEmitter3D_RadianceRGB(hit).x;
+    radiance_g = RuntimeLightEmitter3D_RadianceRGB(hit).y;
+    radiance_b = RuntimeLightEmitter3D_RadianceRGB(hit).z;
+    peak = fmax(radiance_r, fmax(radiance_g, radiance_b));
     runtime_native_3d_render_apply_scatter_rgb(&radiance_r,
                                                &radiance_g,
                                                &radiance_b,

@@ -295,7 +295,14 @@ bool RuntimeNative3DRenderUnit_Setup(RuntimeNative3DRenderUnit* unit,
     unit->temporalFrames = (temporal_frames <= 1) ? 1 : temporal_frames;
     unit->committedSubpasses = 0;
     unit->baseSampling = sampling ? *sampling : (RuntimeNative3DSamplingContext){0};
+    unit->baseSampling.cameraPixelSampler =
+        unit->baseSampling.cameraPixelSampler == RUNTIME_CAMERA_PIXEL_AUTO
+            ? frame->sampling.cameraPixelSampler : unit->baseSampling.cameraPixelSampler;
+    unit->baseSampling.cameraSequenceSeed = sampling ? sampling->sampleSequence : 0;
+    /* Center-hit guides cannot prove convergence of subpixel coverage. Keep
+     * the full spatial budget until area-aware stopping is qualified. */
     unit->useAdaptiveSampling =
+        (unit->temporalFrames <= 1 || unit->baseSampling.cameraPixelSampler == RUNTIME_CAMERA_PIXEL_CENTER) &&
         runtime_native_3d_render_unit_resolve_adaptive_sampling_enabled(integrator_id,
                                                                         unit->temporalFrames);
     unit->useDisneyTemporalPruning =

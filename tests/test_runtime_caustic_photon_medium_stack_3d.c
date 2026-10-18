@@ -252,7 +252,10 @@ static int test_runtime_caustic_photon_medium_stack_failure_records(void) {
     return 0;
 }
 
+#include "test_runtime_wet_contact_medium.h"
+
 int run_test_runtime_caustic_photon_medium_stack_3d_tests(void) {
+    test_runtime_wet_contact_medium();
     int result = 0;
     result |= test_runtime_caustic_photon_medium_stack_initial_air();
     result |= test_runtime_caustic_photon_medium_stack_material_entry();

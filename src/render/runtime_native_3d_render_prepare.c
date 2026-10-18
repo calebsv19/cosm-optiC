@@ -539,13 +539,8 @@ static bool runtime_native_3d_render_attach_configured_volume(RuntimeScene3D* sc
 static void runtime_native_3d_render_configure_water_surface_object(
     SceneObject* object,
     const RuntimeWaterSurfaceFrame* water) {
-    unsigned char r = 88u;
-    unsigned char g = 178u;
-    unsigned char b = 235u;
-    double tint_r = 88.0 / 255.0;
-    double tint_g = 178.0 / 255.0;
-    double tint_b = 235.0 / 255.0;
-    double water_transparency = 0.92;
+    /* Clear water has no surface color filter or implicit opaque mixture. */
+    double water_transparency = 1.0;
     double water_ior = 1.333;
     double water_absorption_distance = 4.0;
     if (!object || !water) return;
@@ -556,18 +551,6 @@ static void runtime_native_3d_render_configure_water_surface_object(
         water_absorption_distance = fmax(water->material.absorption_distance_m, 1e-6);
     }
 
-    RuntimeWaterMaterial3D_ComputeTransmittanceTint(
-        water_absorption_distance,
-        water->material.valid ? water->material.absorption_rgb[0] : 0.10,
-        water->material.valid ? water->material.absorption_rgb[1] : 0.035,
-        water->material.valid ? water->material.absorption_rgb[2] : 0.015,
-        &tint_r,
-        &tint_g,
-        &tint_b);
-    r = (unsigned char)(runtime_native_3d_render_clamp01(tint_r) * 255.0);
-    g = (unsigned char)(runtime_native_3d_render_clamp01(tint_g) * 255.0);
-    b = (unsigned char)(runtime_native_3d_render_clamp01(tint_b) * 255.0);
-
     snprintf(object->type, sizeof(object->type), "%s", "water_surface");
     object->x = water->sample_origin_x +
                 (((double)water->grid_w - 1.0) * water->sample_spacing_x * 0.5);
@@ -575,7 +558,7 @@ static void runtime_native_3d_render_configure_water_surface_object(
                 (((double)water->grid_d - 1.0) * water->sample_spacing_z * 0.5);
     object->z = water->surface_avg_y;
     object->scale = 1.0;
-    object->color = SceneObjectPackRGBBytes(r, g, b);
+    object->color = SceneObjectPackRGBBytes(255u, 255u, 255u);
     object->opacity = 1.0;
     object->alpha = water_transparency;
     object->reflectivity = runtime_native_3d_water_material_or_default(
@@ -723,7 +706,6 @@ static bool runtime_native_3d_render_apply_water_surface_material(
                                                  : 0.035;
     override.absorptionB = water->material.valid ? water->material.absorption_rgb[2]
                                                  : 0.015;
-    override.transparency = 0.92;
     override.reflectivity = runtime_native_3d_water_material_or_default(
         water->material.reflectivity,
         kRuntimeNative3DWaterSurfaceReflectivity);
@@ -1339,6 +1321,9 @@ static bool runtime_native_3d_prepare_frame_internal(
     if (sampling) {
         frame.sampling = *sampling;
     }
+    frame.sampling.cameraSequenceSeed = frame.sampling.sampleSequence - frame.sampling.temporalSubpassIndex;
+    frame.sampling.cameraPixelSampler = RuntimeNative3DSampling_ResolveCameraSampler(
+        frame.sampling.cameraPixelSampler);
     if (evaluated_scene) {
         frame.evaluatedSceneBound = true;
         frame.evaluatedScene = *evaluated_scene;

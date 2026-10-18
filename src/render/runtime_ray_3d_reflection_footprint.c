@@ -36,6 +36,30 @@ void RuntimeRay3D_SetReflectionNormalField(const RuntimeTriangle3D* t,HitInfo3D*
     h->hasReflectionNormalField=true;
 }
 
+bool RuntimeRay3D_NormalFootprintNeighbors(const HitInfo3D* h,Vec3 n,Vec3 normals[2]) {
+    if(!h || !normals || !h->hasPixelFootprint || !h->hasIncidentDifferentials ||
+       h->footprintUnbounded || !direction_valid(n))return false;
+    n=vec3_normalize(n);
+    if(h->constantShadingNormal){normals[0]=normals[1]=n;return true;}
+    if(!h->hasReflectionNormalField || h->hasCurveTangent ||
+       !direction_valid(h->reflectionNormalValue) ||
+       vec3_length(vec3_sub(n,vec3_normalize(h->reflectionNormalValue)))>1e-8 ||
+       (h->hasUnperturbedShadingNormal && vec3_length(vec3_sub(n,vec3_normalize(h->unperturbedShadingNormal)))>1e-8))return false;
+    Vec3 dp[]={h->pixelDpDx,h->pixelDpDy};
+    for(int j=0;j<2;++j) {
+        if(!finite_vector(dp[j]))return false;
+        Vec3 raw=h->reflectionNormalValue;double d[]={dp[j].x,dp[j].y,dp[j].z};
+        for(int i=0;i<3;++i) {
+            if(!finite_vector(h->reflectionNormalGradient[i]))return false;
+            raw=vec3_add(raw,vec3_scale(h->reflectionNormalGradient[i],d[i]));
+        }
+        if(!direction_valid(raw))return false;
+        normals[j]=vec3_normalize(raw);
+        if(vec3_dot(normals[j],n)<.9)return false;
+    }
+    return true;
+}
+
 bool RuntimeRay3D_ReflectionFootprintNeighbors(const HitInfo3D* h,Vec3 n,Ray3D* ray,Vec3 normals[2]) {
     if(!ray||!normals)return false;
     if(h && h->constantShadingNormal) {
@@ -57,14 +81,10 @@ bool RuntimeRay3D_ReflectionFootprintNeighbors(const HitInfo3D* h,Vec3 n,Ray3D* 
        vec3_dot(vec3_normalize(h->incidentDirection),ng)>=-1e-8 ||
        vec3_length(vec3_sub(reflect(vec3_normalize(h->incidentDirection),n),vec3_normalize(ray->direction)))>1e-8)return false;
     Vec3 dp[]={h->pixelDpDx,h->pixelDpDy},incoming[]={h->incidentDirectionDx,h->incidentDirectionDy},out[2],origins[2];
+    if(!RuntimeRay3D_NormalFootprintNeighbors(h,n,normals))return false;
     for(int j=0;j<2;++j) {
-        Vec3 raw=h->reflectionNormalValue;double d[]={dp[j].x,dp[j].y,dp[j].z};
-        for(int i=0;i<3;++i) {
-            if(!finite_vector(h->reflectionNormalGradient[i]))return false;
-            raw=vec3_add(raw,vec3_scale(h->reflectionNormalGradient[i],d[i]));
-        }
-        if(!direction_valid(raw)||!direction_valid(incoming[j]))return false;
-        normals[j]=vec3_normalize(raw);Vec3 incident=vec3_normalize(incoming[j]);
+        if(!direction_valid(incoming[j]))return false;
+        Vec3 incident=vec3_normalize(incoming[j]);
         if(vec3_dot(normals[j],n)<.9 || vec3_dot(normals[j],ng)<=1e-8 ||
            vec3_dot(incident,ng)>=-1e-8 || vec3_dot(incident,normals[j])>=-1e-8)return false;
         out[j]=reflect(incident,normals[j]);origins[j]=vec3_add(ray->origin,dp[j]);

@@ -1158,8 +1158,15 @@ static int test_water_body_dynamic_perimeter_rejects_invalid_inputs(void) {
     return 0;
 }
 
+#include "test_runtime_water_smooth_normals.h"
+#include "test_runtime_wet_contact_geometry.h"
+
 int run_test_water_surface_runtime_tests(void) {
     int before = test_support_failures();
+    test_runtime_water_smooth_normals();
+    test_runtime_wet_contact_geometry();
+    test_runtime_wet_contact_parse();
+    test_runtime_wet_contact_camera_null();
     test_water_surface_runtime_appends_heightfield_surface();
     test_water_surface_runtime_skips_cutout_boundary_quads();
     test_water_surface_runtime_maps_physics_y_height_to_scene_z();

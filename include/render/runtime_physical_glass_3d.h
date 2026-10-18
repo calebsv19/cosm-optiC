@@ -47,6 +47,10 @@ bool RuntimePhysicalGlass3D_SampleMicrosurface(const RuntimeMaterialPayload3D *,
 bool RuntimePhysicalGlass3D_Sample(const RuntimeMaterialPayload3D *payload, Vec3 boundary_normal,
                                    Vec3 incoming, double eta_from, double eta_to, double u,
                                    double v, double choice, RuntimePhysicalGlass3DSample *out);
+/* Local reflection derivative recovery; never changes the sampled ray/weight. */
+bool RuntimePhysicalGlass3D_TransportLocalReflectionFootprint(
+    const RuntimeMaterialPayload3D *,const HitInfo3D *,Vec3,
+    const RuntimePhysicalGlass3DSample *,double,double,double,double,double,Ray3D *);
 bool RuntimePhysicalGlass3D_Shade(const RuntimeScene3D *scene, const Ray3D *ray,
                                   const HitInfo3D *hit, const RuntimeMaterialPayload3D *payload,
                                   const RuntimeNative3DSamplingContext *sampling, int x, int y,

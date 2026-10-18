@@ -29,6 +29,8 @@ typedef enum {
 typedef struct {
     bool valid;
     bool isAir;
+    /* Explicit water/container overlap; zero means no contact partner. */
+    int wetContactContainerIndexPlusOne;
     int mediumId;
     int sceneObjectIndex;
     int materialId;
@@ -81,6 +83,9 @@ const RuntimeCausticPhotonMediumEntry3D* RuntimeCausticPhotonMediumStack3D_Top(
     const RuntimeCausticPhotonMediumStack3D* stack);
 uint32_t RuntimeCausticPhotonMediumStack3D_Depth(
     const RuntimeCausticPhotonMediumStack3D* stack);
+bool RuntimeCausticPhotonMediumStack3D_IsNullContact(
+    const RuntimeCausticPhotonMediumStack3D* stack,
+    const RuntimeCausticPhotonMediumEntry3D* boundary, bool entering);
 bool RuntimeCausticPhotonMediumStack3D_ResolveInterface(
     const RuntimeCausticPhotonMediumStack3D* stack,
     const RuntimeCausticPhotonMediumEntry3D* boundary,

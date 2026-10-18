@@ -53,6 +53,8 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
 
     for (int y = start_y; y < end_y; ++y) {
         for (int x = start_x; x < end_x; ++x) {
+            double sample_x, sample_y;
+            RuntimeNative3DSampling_PixelPosition(sampling, x, y, &sample_x, &sample_y);
             if (!RuntimeNative3DPixelProbe_ShouldShade(x,y)) continue;
             RuntimeDisneyV2_3DResult result = {0};
             RuntimeNative3DPrimaryTrace primary_trace = {0};
@@ -72,16 +74,16 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             RuntimeReflectionFootprintProbe3D_Begin(x,y,sampling);
             primary_trace = runtime_native_3d_render_trace_primary_disney_v2(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y);
+                                                                   sample_x,
+                                                                   sample_y);
             if (primary_trace.emitterWins) {
                 RuntimeReflectionFootprintProbe3D_End();
                 runtime_native_3d_render_write_emitter_radiance_with_scatter(radiance_buffer,
                                                                              idx,
                                                                              scene,
                                                                              projector,
-                                                                             (double)x,
-                                                                             (double)y,
+                                                                             sample_x,
+                                                                             sample_y,
                                                                              &primary_trace.emitterHit,
                                                                              sampling,
                                                                              caustic_cache,
@@ -104,8 +106,8 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             if (!shaded) {
                 scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                    projector,
-                                                                   (double)x,
-                                                                   (double)y,
+                                                                   sample_x,
+                                                                   sample_y,
                                                                    HUGE_VAL,
                                                                    sampling,
                                                                    caustic_cache);
@@ -135,8 +137,8 @@ bool runtime_native_3d_render_shade_disney_v2(float* radiance_buffer,
             }
             scatter = runtime_native_3d_render_primary_scatter(scene,
                                                                projector,
-                                                               (double)x,
-                                                               (double)y,
+                                                               sample_x,
+                                                               sample_y,
                                                                result.hitInfo.t,
                                                                sampling,
                                                                caustic_cache);

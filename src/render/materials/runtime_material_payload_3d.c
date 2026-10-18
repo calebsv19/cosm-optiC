@@ -644,7 +644,6 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
     }
     payload.valid = true;
     runtime_material_payload_3d_apply_texture(&object_copy, hit, &payload);
-    RuntimeWaterMaterial3D_ApplyToPayload(scene_object_index, &payload);
     (void)ProceduralSurfaceMaterial_ApplyHitToPayload(hit, &payload);
     (void)ProceduralSolidAuthoredMaterial_ApplyHitToPayload(
         &object_copy, hit, &payload);
@@ -677,6 +676,9 @@ static bool runtime_material_payload_3d_resolve(int scene_object_index,
                                         ? (double)(object_copy.glassAbsorptionColor & 0xFF) /
                                               255.0
                                         : payload.baseColorB;
+    /* Resolve imported water last: generic object color fallbacks must not
+     * overwrite its separate neutral interface and bulk absorption fields. */
+    RuntimeWaterMaterial3D_ApplyToPayload(scene_object_index, &payload);
     payload.hairOptics.enabled = object_copy.hasHairOpticsOverride;
     payload.hairOptics.absorptionR = object_copy.hairAbsorptionR;
     payload.hairOptics.absorptionG = object_copy.hairAbsorptionG;

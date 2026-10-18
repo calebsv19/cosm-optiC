@@ -189,11 +189,15 @@ typedef struct RayTracingHeadlessPreflight {
     double water_surface_payload_tint_r;
     double water_surface_payload_tint_g;
     double water_surface_payload_tint_b;
+    double water_surface_payload_absorption_rgb[3];
+    double water_surface_payload_diffuse_weight;
     int water_surface_triangle_count;
     bool water_body_boundary_present;
     bool water_body_active;
     bool water_body_legacy_shell_suppressed;
     bool water_body_material_parity_valid;
+    bool water_body_wet_container_contact;
+    double water_body_contact_bounds[5];
     bool water_body_topology_valid;
     char water_body_closure_mode[32];
     char water_body_id[64];

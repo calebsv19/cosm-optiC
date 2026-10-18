@@ -80,6 +80,7 @@ static void runtime_disney_v2_3d_apply_mirror_composition(
         runtime_disney_v2_3d_peak(before_r, before_g, before_b);
 
     if (policy.active) {
+        io_result->directOnlyRectangleRadiance = vec3_scale(io_result->directOnlyRectangleRadiance, policy.baseAttenuation);
         io_result->directRadianceR *= policy.baseAttenuation;
         io_result->directRadianceG *= policy.baseAttenuation;
         io_result->directRadianceB *= policy.baseAttenuation;
@@ -143,9 +144,9 @@ static void runtime_disney_v2_3d_apply_specular_reflection(
     if (reflection.emitterWins) {
         io_result->specularReflectionHitCount += 1;
         io_result->specularReflectionEmitterHitCount += 1;
-        reflected_r = reflection.emitterHitInfo.radiance;
-        reflected_g = reflection.emitterHitInfo.radiance;
-        reflected_b = reflection.emitterHitInfo.radiance;
+        reflected_r = RuntimeLightEmitter3D_RadianceRGB(&reflection.emitterHitInfo).x;
+        reflected_g = RuntimeLightEmitter3D_RadianceRGB(&reflection.emitterHitInfo).y;
+        reflected_b = RuntimeLightEmitter3D_RadianceRGB(&reflection.emitterHitInfo).z;
     } else if (reflection.geometryHit && reflection.hitInfo.triangleIndex >= 0 &&
                reflection.hitInfo.triangleIndex != hit->triangleIndex) {
         io_result->specularReflectionHitCount += 1;
@@ -332,6 +333,7 @@ static bool runtime_disney_v2_3d_shade_hit_with_payload(
             direct.visibilityOutcomeStablePartialCount;
         result.directVisibilityOutcomeMixedPartialCount =
             direct.visibilityOutcomeMixedPartialCount;
+        result.directOnlyRectangleRadiance = direct.directOnlyRectangleRadiance;
         result.directRadianceR = direct.radianceR;
         result.directRadianceG = direct.radianceG;
         result.directRadianceB = direct.radianceB;

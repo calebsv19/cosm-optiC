@@ -1,4 +1,5 @@
 #include "render/runtime_water_body_mesh_3d.h"
+#include "render/runtime_heightfield_normals_3d.h"
 
 #include "render/runtime_scene_3d_builder_internal.h"
 
@@ -464,6 +465,10 @@ bool RuntimeWaterBodyMesh3D_Append(RuntimeScene3D* scene,
                                                 up);
         }
     }
+    if (ok) ok = RuntimeHeightfieldNormals3D_ApplyTopQuads(
+        &scene->triangleMesh.triangles[old_triangle_count], desc->heights_y,
+        desc->grid_w, desc->grid_d, desc->sample_spacing_x, desc->sample_spacing_z,
+        desc->map_y_height_to_scene_z);
     for (uint32_t x = 0u; x + 1u < desc->grid_w && ok; ++x) {
         ok = runtime_water_body_append_quad(scene,
                                             primitive_index,

@@ -486,11 +486,14 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                                                   emissive_area_branch);
 
     io_result->stochasticDirectRadianceR =
-        io_result->directRadianceR * finite_light_branch.weightLight;
+        RuntimeLightEmitter3D_DirectEstimate(io_result->directRadianceR,
+            io_result->directOnlyRectangleRadiance.x, finite_light_branch.weightLight);
     io_result->stochasticDirectRadianceG =
-        io_result->directRadianceG * finite_light_branch.weightLight;
+        RuntimeLightEmitter3D_DirectEstimate(io_result->directRadianceG,
+            io_result->directOnlyRectangleRadiance.y, finite_light_branch.weightLight);
     io_result->stochasticDirectRadianceB =
-        io_result->directRadianceB * finite_light_branch.weightLight;
+        RuntimeLightEmitter3D_DirectEstimate(io_result->directRadianceB,
+            io_result->directOnlyRectangleRadiance.z, finite_light_branch.weightLight);
     runtime_disney_v2_3d_record_light_sample_contribution(
         io_result,
         0,
@@ -652,14 +655,14 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
                 const RuntimeMirrorComposition3DPolicy secondary_policy = RuntimeMirrorComposition3D_Evaluate(&secondary_payload);
                 const double local_share = secondary_policy.active ? secondary_policy.baseAttenuation : 1.0;
                 const double contribution_r =
-                    throughput_r * local_share * secondary_direct.radianceR *
-                    secondary_finite_branch.weightLight;
+                    throughput_r * local_share * RuntimeLightEmitter3D_DirectEstimate(secondary_direct.radianceR,
+                        secondary_direct.directOnlyRectangleRadiance.x, secondary_finite_branch.weightLight);
                 const double contribution_g =
-                    throughput_g * local_share * secondary_direct.radianceG *
-                    secondary_finite_branch.weightLight;
+                    throughput_g * local_share * RuntimeLightEmitter3D_DirectEstimate(secondary_direct.radianceG,
+                        secondary_direct.directOnlyRectangleRadiance.y, secondary_finite_branch.weightLight);
                 const double contribution_b =
-                    throughput_b * local_share * secondary_direct.radianceB *
-                    secondary_finite_branch.weightLight;
+                    throughput_b * local_share * RuntimeLightEmitter3D_DirectEstimate(secondary_direct.radianceB,
+                        secondary_direct.directOnlyRectangleRadiance.z, secondary_finite_branch.weightLight);
                 io_result->recursiveDirectRadianceR += contribution_r;
                 io_result->recursiveDirectRadianceG += contribution_g;
                 io_result->recursiveDirectRadianceB += contribution_b;
@@ -703,10 +706,10 @@ void runtime_disney_v2_3d_apply_stochastic_transport(
         }
     }
     if (trace.emitterWins) {
-        const double emitter_radiance = trace.emitterHitInfo.radiance;
-        const double contribution_r = throughput_r * emitter_radiance * ((sampled_delta || optical_scattered)?1.0:io_result->misWeightBsdf);
-        const double contribution_g = throughput_g * emitter_radiance * ((sampled_delta || optical_scattered)?1.0:io_result->misWeightBsdf);
-        const double contribution_b = throughput_b * emitter_radiance * ((sampled_delta || optical_scattered)?1.0:io_result->misWeightBsdf);
+        const Vec3 emitter_radiance = RuntimeLightEmitter3D_RadianceRGB(&trace.emitterHitInfo);
+        const double contribution_r = throughput_r * emitter_radiance.x * RuntimeLightEmitter3D_BsdfHitWeight(&trace.emitterHitInfo, sampled_delta || optical_scattered, io_result->misWeightBsdf);
+        const double contribution_g = throughput_g * emitter_radiance.y * RuntimeLightEmitter3D_BsdfHitWeight(&trace.emitterHitInfo, sampled_delta || optical_scattered, io_result->misWeightBsdf);
+        const double contribution_b = throughput_b * emitter_radiance.z * RuntimeLightEmitter3D_BsdfHitWeight(&trace.emitterHitInfo, sampled_delta || optical_scattered, io_result->misWeightBsdf);
         io_result->pathState.emitterHit = trace.emitterHit;
         io_result->pathState.emitterWins = true;
         io_result->pathState.emitterHitInfo = trace.emitterHitInfo;

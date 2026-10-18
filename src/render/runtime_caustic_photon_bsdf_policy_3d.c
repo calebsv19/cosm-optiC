@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "render/runtime_water_material_3d.h"
+#include "render/runtime_dielectric_transport_3d.h"
 
 static double photon_bsdf_clamp01(double value) {
     if (value < 0.0) return 0.0;
@@ -107,9 +108,10 @@ const char* RuntimeCausticPhotonBsdfTermination3D_Label(
     }
 }
 
-bool RuntimeCausticPhotonBsdfPolicy3D_Build(
+static bool photon_bsdf_build(
     const RuntimeMaterialPayload3D* material,
     double incident_cosine,
+    bool resolved_interface, double eta_from, double eta_to,
     Vec3 parent_throughput,
     RuntimeCausticPhotonBsdfPolicy3D* out_policy) {
     RuntimeCausticPhotonBsdfPolicy3D policy;
@@ -129,12 +131,19 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
     memset(&policy, 0, sizeof(policy));
     policy.parentThroughput = parent_throughput;
     policy.incidentCosine = photon_bsdf_clamp01(fabs(incident_cosine));
-    if (!photon_bsdf_valid_input(material, incident_cosine, parent_throughput)) {
+    if (!photon_bsdf_valid_input(material, incident_cosine, parent_throughput) ||
+        (resolved_interface &&
+         (!material->hasGlassTransportOverride || material->thinWalled ||
+          material->transparency <= 0.0 || !isfinite(eta_from) || !isfinite(eta_to) ||
+          eta_from < 1.0 || eta_to < 1.0))) {
         policy.termination = RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_INVALID_MATERIAL;
         *out_policy = policy;
         return false;
     }
 
+    policy.usesResolvedInterface = resolved_interface;
+    policy.etaFrom = resolved_interface ? eta_from : 0.0;
+    policy.etaTo = resolved_interface ? eta_to : 0.0;
     emissive = fmax(material->emissive, material->bsdf.emissive);
     if (emissive > 1.0e-12) {
         photon_bsdf_append(&policy,
@@ -156,7 +165,9 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
         }
         diffuse_weight = surface_weight * diffuse_weight / bsdf_weight_sum;
         specular_weight = surface_weight * specular_weight / bsdf_weight_sum;
-        policy.fresnelReflectance = photon_bsdf_fresnel(
+        policy.fresnelReflectance = resolved_interface
+            ? RuntimeDielectricTransport3D_FresnelExact(policy.incidentCosine, eta_from, eta_to)
+            : photon_bsdf_fresnel(
             policy.incidentCosine,
             material->opticalIor > 0.0 ? material->opticalIor : material->bsdf.ior,
             material->bsdf.reflectivity);
@@ -233,6 +244,21 @@ bool RuntimeCausticPhotonBsdfPolicy3D_Build(
     policy.valid = true;
     *out_policy = policy;
     return true;
+}
+
+bool RuntimeCausticPhotonBsdfPolicy3D_Build(
+    const RuntimeMaterialPayload3D* material, double incident_cosine,
+    Vec3 parent_throughput, RuntimeCausticPhotonBsdfPolicy3D* out_policy) {
+    return photon_bsdf_build(material, incident_cosine, false, 0.0, 0.0,
+                             parent_throughput, out_policy);
+}
+
+bool RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(
+    const RuntimeMaterialPayload3D* material, double incident_cosine,
+    double eta_from, double eta_to, Vec3 parent_throughput,
+    RuntimeCausticPhotonBsdfPolicy3D* out_policy) {
+    return photon_bsdf_build(material, incident_cosine, true, eta_from, eta_to,
+                             parent_throughput, out_policy);
 }
 
 bool RuntimeCausticPhotonBsdfPolicy3D_Select(

@@ -83,6 +83,10 @@ bool RuntimeDisneyV2_3D_AccumulateEmissiveMaterialHit(
         io_state->emitterHitInfo.normal = hit->normal;
         io_state->emitterHitInfo.radialFalloff = facing;
         io_state->emitterHitInfo.attenuation = 1.0;
+        io_state->emitterHitInfo.hasRadianceRGB = true;
+        io_state->emitterHitInfo.radianceRGB = vec3(emissive_r * emissive_strength * facing,
+                                                  emissive_g * emissive_strength * facing,
+                                                  emissive_b * emissive_strength * facing);
         io_state->emitterHitInfo.radiance =
             runtime_disney_v2_transport_3d_peak(emissive_r * emissive_strength * facing,
                                                 emissive_g * emissive_strength * facing,

@@ -39,6 +39,10 @@ typedef struct {
     uint32_t candidateCount;
     double incidentCosine;
     double fresnelReflectance;
+    /* True only when branch weights use the medium pair resolved at this hit. */
+    bool usesResolvedInterface;
+    double etaFrom;
+    double etaTo;
     double rawWeightSum;
     double selectionPdfSum;
     Vec3 parentThroughput;
@@ -69,6 +73,18 @@ const char* RuntimeCausticPhotonBsdfTermination3D_Label(
 bool RuntimeCausticPhotonBsdfPolicy3D_Build(
     const RuntimeMaterialPayload3D* material,
     double incident_cosine,
+    Vec3 parent_throughput,
+    RuntimeCausticPhotonBsdfPolicy3D* out_policy);
+/* Physical solid dielectric policy: the same ordered media used by Snell/TIR
+ * must own branch probabilities. No authored reflection floor or eta-squared
+ * camera-radiance factor enters this photon-flux policy. Invalid pairs fail
+ * closed; this entry point never silently assumes air. Build above retains the
+ * compatibility/artistic policy for callers without a resolved interface. */
+bool RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(
+    const RuntimeMaterialPayload3D* material,
+    double incident_cosine,
+    double eta_from,
+    double eta_to,
     Vec3 parent_throughput,
     RuntimeCausticPhotonBsdfPolicy3D* out_policy);
 bool RuntimeCausticPhotonBsdfPolicy3D_Select(

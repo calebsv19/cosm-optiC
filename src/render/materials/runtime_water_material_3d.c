@@ -29,12 +29,6 @@ static double runtime_water_material_3d_nonnegative_or(double value, double fall
     return fallback;
 }
 
-static double runtime_water_material_3d_luma(double r, double g, double b) {
-    return runtime_water_material_3d_clamp((0.2126 * r) + (0.7152 * g) + (0.0722 * b),
-                                          0.0,
-                                          1.0);
-}
-
 void RuntimeWaterMaterial3D_ClearAll(void) {
     memset(gWaterMaterialOverrides, 0, sizeof(gWaterMaterialOverrides));
 }
@@ -56,6 +50,7 @@ bool RuntimeWaterMaterial3D_Set(int scene_object_index,
     }
 
     normalized.valid = true;
+    normalized.wetContactContainerIndexPlusOne = override->wetContactContainerIndexPlusOne;
     normalized.ior = runtime_water_material_3d_clamp(
         runtime_water_material_3d_positive_or(override->ior, 1.333),
         1.0,
@@ -74,10 +69,6 @@ bool RuntimeWaterMaterial3D_Set(int scene_object_index,
         runtime_water_material_3d_nonnegative_or(override->absorptionB, 0.015),
         0.0,
         64.0);
-    normalized.transparency = runtime_water_material_3d_clamp(
-        runtime_water_material_3d_positive_or(override->transparency, 0.92),
-        0.0,
-        1.0);
     normalized.reflectivity = runtime_water_material_3d_clamp(override->reflectivity, 0.0, 1.0);
     normalized.roughness = runtime_water_material_3d_clamp(
         runtime_water_material_3d_nonnegative_or(override->roughness, 0.02),
@@ -134,10 +125,6 @@ bool RuntimeWaterMaterial3D_ApplyToPayload(int scene_object_index,
     double tint_r = 1.0;
     double tint_g = 1.0;
     double tint_b = 1.0;
-    double tint_luma = 0.0;
-    double spec_weight = 0.0;
-    double diffuse_weight = 0.0;
-    double weight_sum = 0.0;
     if (!payload || !payload->valid ||
         !RuntimeWaterMaterial3D_Get(scene_object_index, &override)) {
         return false;
@@ -150,39 +137,32 @@ bool RuntimeWaterMaterial3D_ApplyToPayload(int scene_object_index,
                                                     &tint_r,
                                                     &tint_g,
                                                     &tint_b);
-    tint_luma = runtime_water_material_3d_luma(tint_r, tint_g, tint_b);
-
-    payload->baseColorR = tint_r;
-    payload->baseColorG = tint_g;
-    payload->baseColorB = tint_b;
-    payload->transparency = override.transparency;
+    /* Clear water is a dielectric interface plus a participating medium.
+     * Reference-distance transmittance must never become an interface tint,
+     * albedo, or an implicit opaque/diffuse mixture. */
+    payload->hasGlassTransportOverride = true;
+    payload->wetContactContainerIndexPlusOne = override.wetContactContainerIndexPlusOne;
+    payload->hasGlassInterfaceTintOverride = true;
+    payload->glassInterfaceTintR = payload->glassInterfaceTintG = payload->glassInterfaceTintB = 1.0;
+    payload->hasGlassAbsorptionColorOverride = true;
+    payload->glassAbsorptionColorR = tint_r;
+    payload->glassAbsorptionColorG = tint_g;
+    payload->glassAbsorptionColorB = tint_b;
+    payload->baseColorR = payload->baseColorG = payload->baseColorB = 1.0;
+    payload->transparency = 1.0; /* Fresnel still splits reflected/transmitted energy. */
     payload->opticalIor = override.ior;
     payload->absorptionDistance = override.absorptionDistance;
     payload->thinWalled = false;
-    payload->bsdf.baseColorR = tint_r;
-    payload->bsdf.baseColorG = tint_g;
-    payload->bsdf.baseColorB = tint_b;
-    payload->bsdf.albedo = tint_luma;
+    payload->bsdf.baseColorR = payload->bsdf.baseColorG = payload->bsdf.baseColorB = 1.0;
+    payload->bsdf.albedo = 1.0;
+    payload->bsdf.opacity = 0.0;
     payload->bsdf.ior = override.ior;
-    payload->bsdf.reflectivity = override.reflectivity;
+    const double ratio = (override.ior - 1.0) / (override.ior + 1.0);
+    payload->bsdf.reflectivity = ratio * ratio;
     payload->bsdf.roughness = override.roughness;
-    payload->bsdf.model = override.reflectivity > 0.05 ? MATERIAL_BSDF_GGX
-                                                       : MATERIAL_BSDF_LAMBERT;
-    spec_weight = runtime_water_material_3d_clamp(
-        fmax(payload->bsdf.specWeight, override.reflectivity),
-        0.0,
-        1.0);
-    diffuse_weight = runtime_water_material_3d_clamp(
-        fmin(payload->bsdf.diffuseWeight, 1.0 - spec_weight),
-        0.0,
-        1.0);
-    weight_sum = diffuse_weight + spec_weight;
-    if (weight_sum <= 1e-4) {
-        diffuse_weight = 1.0;
-        weight_sum = 1.0;
-    }
-    payload->bsdf.diffuseWeight = diffuse_weight;
-    payload->bsdf.specWeight = spec_weight;
-    payload->bsdf.weightSum = weight_sum;
+    payload->bsdf.model = MATERIAL_BSDF_GGX;
+    payload->bsdf.diffuseWeight = 0.0;
+    payload->bsdf.specWeight = 1.0;
+    payload->bsdf.weightSum = 1.0;
     return true;
 }

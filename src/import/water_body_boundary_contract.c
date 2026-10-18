@@ -172,7 +172,22 @@ bool WaterBodyBoundaryContract_Parse(
     *out_boundary_height_y = out_boundary->base_surface_height_m;
     *out_boundary_bottom_height_y = out_boundary->bottom_height_m;
 
+    cJSON* contact = cJSON_GetObjectItem(boundary, "optical_contact");
+    if (contact) {
+        if (!cJSON_IsString(contact) || !contact->valuestring ||
+            (strcmp(contact->valuestring, "separated") != 0 &&
+             strcmp(contact->valuestring, "wet_container") != 0)) {
+            boundary_diag(out_diagnostics, out_diagnostics_size,
+                          "water_body_boundary_v1.optical_contact unsupported");
+            return false;
+        }
+        out_boundary->wet_container_contact = strcmp(contact->valuestring, "wet_container") == 0;
+    }
     bounds = cJSON_GetObjectItem(boundary, "container_inner_bounds_m");
+    if (out_boundary->wet_container_contact && !bounds) {
+        boundary_diag(out_diagnostics, out_diagnostics_size, "wet contact requires full boundary contract");
+        return false;
+    }
     if (!bounds) return true;
     has_full_contract = cJSON_IsObject(bounds);
     if (!has_full_contract) {

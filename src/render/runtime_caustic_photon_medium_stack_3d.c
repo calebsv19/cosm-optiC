@@ -112,6 +112,7 @@ bool RuntimeCausticPhotonMediumEntry3D_FromMaterial(
     entry.sceneObjectIndex = scene_object_index;
     entry.materialId = material->materialId;
     entry.ior = ior;
+    entry.wetContactContainerIndexPlusOne = material->wetContactContainerIndexPlusOne;
     entry.absorptionColor = vec3(
         photon_medium_clamp01(material->hasGlassAbsorptionColorOverride
                                   ? material->glassAbsorptionColorR
@@ -167,6 +168,23 @@ uint32_t RuntimeCausticPhotonMediumStack3D_Depth(
     return stack->count - 1u;
 }
 
+/* Only the named container may pass underneath water. Never relax unrelated
+ * overlap ordering, and never insert an already active container twice. */
+bool RuntimeCausticPhotonMediumStack3D_IsNullContact(
+    const RuntimeCausticPhotonMediumStack3D* stack,
+    const RuntimeCausticPhotonMediumEntry3D* boundary, bool entering) {
+    const RuntimeCausticPhotonMediumEntry3D* top = RuntimeCausticPhotonMediumStack3D_Top(stack);
+    if (!photon_medium_entry_valid(top) || !photon_medium_entry_valid(boundary) ||
+        top->isAir || boundary->isAir || top->sceneObjectIndex == boundary->sceneObjectIndex ||
+        top->wetContactContainerIndexPlusOne <= 0 ||
+        top->wetContactContainerIndexPlusOne - 1 != boundary->sceneObjectIndex) return false;
+    if (!entering) return stack->count >= 3u &&
+        photon_medium_entries_match(&stack->entries[stack->count - 2u], boundary);
+    for (uint32_t i = 1; i < stack->count; ++i)
+        if (stack->entries[i].sceneObjectIndex == boundary->sceneObjectIndex) return false;
+    return true;
+}
+
 bool RuntimeCausticPhotonMediumStack3D_ResolveInterface(
     const RuntimeCausticPhotonMediumStack3D* stack,
     const RuntimeCausticPhotonMediumEntry3D* boundary,
@@ -183,8 +201,13 @@ bool RuntimeCausticPhotonMediumStack3D_ResolveInterface(
     }
     top = RuntimeCausticPhotonMediumStack3D_Top(stack);
     if (!photon_medium_entry_valid(top)) return false;
+    if (RuntimeCausticPhotonMediumStack3D_IsNullContact(stack, boundary, entering)) {
+        *out_eta_from = *out_eta_to = top->ior;
+        return true;
+    }
     if (entering) {
-        if (photon_medium_entries_match(top, boundary)) return false;
+        for (uint32_t i = 1; i < stack->count; ++i)
+            if (stack->entries[i].sceneObjectIndex == boundary->sceneObjectIndex) return false;
         *out_eta_from = top->ior;
         *out_eta_to = boundary->ior;
         return true;
@@ -239,8 +262,12 @@ bool RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
         return true;
     }
     top = RuntimeCausticPhotonMediumStack3D_Top(stack);
+    const bool null_contact = RuntimeCausticPhotonMediumStack3D_IsNullContact(stack, boundary, entering);
     if (entering) {
-        if (photon_medium_entries_match(top, boundary)) {
+        bool duplicate = false;
+        for (uint32_t i = 1; i < stack->count; ++i)
+            if (stack->entries[i].sceneObjectIndex == boundary->sceneObjectIndex) duplicate = true;
+        if (duplicate) {
             stack->mismatchCount++;
             photon_medium_transition_finish(
                 stack,
@@ -262,7 +289,11 @@ bool RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
             *out_transition = transition;
             return false;
         }
-        stack->entries[stack->count++] = *boundary;
+        if (null_contact) {
+            stack->entries[stack->count] = *top;
+            stack->entries[stack->count - 1u] = *boundary;
+            ++stack->count;
+        } else stack->entries[stack->count++] = *boundary;
         stack->pushCount++;
         if (RuntimeCausticPhotonMediumStack3D_Depth(stack) > stack->maxDepth) {
             stack->maxDepth = RuntimeCausticPhotonMediumStack3D_Depth(stack);
@@ -287,7 +318,7 @@ bool RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
         *out_transition = transition;
         return false;
     }
-    if (!photon_medium_entries_match(top, boundary)) {
+    if (!null_contact && !photon_medium_entries_match(top, boundary)) {
         stack->mismatchCount++;
         photon_medium_transition_finish(stack,
                                         RUNTIME_CAUSTIC_PHOTON_MEDIUM_TRANSITION_MISMATCH,
@@ -297,6 +328,7 @@ bool RuntimeCausticPhotonMediumStack3D_ObserveBoundary(
         *out_transition = transition;
         return false;
     }
+    if (null_contact) stack->entries[stack->count - 2u] = *top;
     memset(&stack->entries[stack->count - 1u], 0, sizeof(stack->entries[0]));
     stack->count--;
     stack->popCount++;

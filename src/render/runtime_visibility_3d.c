@@ -98,9 +98,12 @@ void RuntimeVisibility3D_ApplyTransparentPayloadAbsorption(
         return;
     }
 
-    tint_r = runtime_visibility_3d_clamp(payload->baseColorR, 0.0, 1.0);
-    tint_g = runtime_visibility_3d_clamp(payload->baseColorG, 0.0, 1.0);
-    tint_b = runtime_visibility_3d_clamp(payload->baseColorB, 0.0, 1.0);
+    tint_r = runtime_visibility_3d_clamp(payload->hasGlassAbsorptionColorOverride
+        ? payload->glassAbsorptionColorR : payload->baseColorR, 0.0, 1.0);
+    tint_g = runtime_visibility_3d_clamp(payload->hasGlassAbsorptionColorOverride
+        ? payload->glassAbsorptionColorG : payload->baseColorG, 0.0, 1.0);
+    tint_b = runtime_visibility_3d_clamp(payload->hasGlassAbsorptionColorOverride
+        ? payload->glassAbsorptionColorB : payload->baseColorB, 0.0, 1.0);
     absorption_distance =
         fmax(payload->absorptionDistance, length_epsilon);
     effective_distance = payload->thinWalled

@@ -7,7 +7,7 @@
 
 enum {
     PHOTON_PATH_POPULATION_MAX_CANDIDATES =
-        RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS
+        RUNTIME_CAUSTIC_PHOTON_SCENE_MAX_HIT_EVENTS
 };
 
 static double photon_path_population_luma(Vec3 value) {

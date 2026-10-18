@@ -250,7 +250,8 @@ bool ray_tracing_temporal_checkpoint_configure_frame(
     session->identity.integratorId = integrator_id;
     sampling_size = snprintf(sampling_identity,
                              sizeof(sampling_identity),
-                             "accumulation=moments-v2;probe=pass-v1;frame=%d;temporal=%d;integrator=%d;request=%s",
+                             "accumulation=moments-v2;probe=pass-v1;camera-area-v1=%d;frame=%d;temporal=%d;integrator=%d;request=%s",
+                             (int)RuntimeNative3DSampling_ResolveCameraSampler(RUNTIME_CAMERA_PIXEL_AUTO),
                              frame_index,
                              request->temporal_frames,
                              integrator_id,

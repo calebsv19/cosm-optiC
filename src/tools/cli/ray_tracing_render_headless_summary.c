@@ -231,6 +231,12 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "    \"height\": %d,\n", request->height);
     fprintf(file, "    \"normalized_t\": %.9f,\n", request->normalized_t);
     fprintf(file, "    \"temporal_frames\": %d,\n", request->temporal_frames);
+    {
+        const RuntimeCameraPixelSampler3D sampler = RuntimeNative3DSampling_ResolveCameraSampler(RUNTIME_CAMERA_PIXEL_AUTO);
+        fprintf(file, "    \"camera_pixel_sampler\": \"%s\",\n",
+            request->temporal_frames <= 1 || sampler == RUNTIME_CAMERA_PIXEL_CENTER ? "center" :
+            sampler == RUNTIME_CAMERA_PIXEL_STRATIFIED ? "stratified" : "progressive_sobol_owen_v1");
+    }
     fprintf(file, "    \"has_denoise_enabled_override\": %s,\n",
             request->has_denoise_enabled_override ? "true" : "false");
     fprintf(file, "    \"denoise_enabled\": %s\n",
@@ -785,6 +791,12 @@ void ray_tracing_render_headless_write_summary(
             preflight->water_body_wet_samples,
             preflight->water_body_dry_container_samples,
             preflight->water_body_solid_occluder_samples);
+    fprintf(file, "      \"optical_contact\": \"%s\",\n",
+            preflight->water_body_wet_container_contact ? "wet_container" : "separated");
+    fprintf(file, "      \"generated_contact_bounds_scene_m\": [%.9f, %.9f, %.9f, %.9f, %.9f],\n",
+            preflight->water_body_contact_bounds[0], preflight->water_body_contact_bounds[1],
+            preflight->water_body_contact_bounds[2], preflight->water_body_contact_bounds[3],
+            preflight->water_body_contact_bounds[4]);
     fprintf(file, "      \"legacy_shell_suppressed\": %s,\n",
             preflight->water_body_legacy_shell_suppressed ? "true" : "false");
     fprintf(file, "      \"material_parity_valid\": %s,\n",
@@ -830,10 +842,15 @@ void ray_tracing_render_headless_write_summary(
             preflight->water_surface_payload_reflectivity);
     fprintf(file, "      \"roughness\": %.9f,\n",
             preflight->water_surface_payload_roughness);
-    fprintf(file, "      \"tint_rgb\": [%.9f, %.9f, %.9f]\n",
+    fprintf(file, "      \"tint_rgb\": [%.9f, %.9f, %.9f],\n",
             preflight->water_surface_payload_tint_r,
             preflight->water_surface_payload_tint_g,
             preflight->water_surface_payload_tint_b);
+    fprintf(file, "      \"absorption_transmittance_rgb\": [%.9f, %.9f, %.9f],\n",
+            preflight->water_surface_payload_absorption_rgb[0],
+            preflight->water_surface_payload_absorption_rgb[1],
+            preflight->water_surface_payload_absorption_rgb[2]);
+    fprintf(file, "      \"diffuse_weight\": %.9f\n", preflight->water_surface_payload_diffuse_weight);
     fprintf(file, "    }\n");
     fprintf(file, "  },\n");
     ray_tracing_headless_write_render_stats_summary(file, preflight);

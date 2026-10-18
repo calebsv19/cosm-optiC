@@ -969,6 +969,9 @@ static int test_runtime_native_3d_background_volume_transmittance_dims_environme
     return 0;
 }
 
+#include "test_runtime_emitter_tile_occupancy.h"
+#include "test_runtime_camera_pixel_sampling.h"
+
 int run_test_runtime_native_3d_render_prepared_parity_volume_suite(void) {
     int before = test_support_failures();
 
@@ -976,6 +979,9 @@ int run_test_runtime_native_3d_render_prepared_parity_volume_suite(void) {
     test_runtime_native_3d_render_prepared_region_parity();
     test_runtime_native_3d_render_visible_emitter_tile_parity();
     test_runtime_native_3d_tile_occupancy_contract();
+    test_runtime_emitter_tile_occupancy();
+    test_runtime_camera_pixel_sampling();
+    test_runtime_camera_pixel_sampling_native();
     test_runtime_native_3d_curve_tile_occupancy_contract();
     test_runtime_native_3d_prepare_frame_attaches_configured_volume();
     test_runtime_native_3d_primary_volume_transmittance_darks_surface();

@@ -96,6 +96,7 @@ typedef struct {
     double directRadianceR;
     double directRadianceG;
     double directRadianceB;
+    Vec3 directOnlyRectangleRadiance;
     double diffuseRadiance;
     double diffuseRadianceR;
     double diffuseRadianceG;

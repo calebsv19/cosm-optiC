@@ -11,6 +11,8 @@
 
 typedef struct RuntimeWaterBodyPrepare3DReport {
     bool active;
+    bool wet_container_contact;
+    double contact_bounds[5]; /* scene min/max X, min/max Y, bottom Z */
     char closure_mode[32];
     char body_id[RUNTIME_WATER_BODY_ID_MAX];
     char container_id[RUNTIME_WATER_BODY_ID_MAX];

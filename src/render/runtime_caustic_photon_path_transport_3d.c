@@ -102,7 +102,7 @@ static RuntimeCausticPhotonSceneHitEvent3D* photon_path_transport_append_hit(
     RuntimeCausticPhotonSceneHitEvent3D* event;
     if (!result || !hit || !material ||
         result->readback.hitEventCount >=
-            RUNTIME_CAUSTIC_PHOTON_TRACE_MAX_DIELECTRIC_EVENTS) {
+            RUNTIME_CAUSTIC_PHOTON_SCENE_MAX_HIT_EVENTS) {
         return NULL;
     }
     event = &result->hitEvents[result->readback.hitEventCount++];
@@ -378,7 +378,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
         double eta_to = 0.0;
         double incident_cosine;
 
-        ray = depth == 1u
+        ray = result.readback.intersectionCount == 0u
                   ? RuntimeRay3D_Make(state.position, state.direction)
                   : RuntimeRay3D_MakeOffset(state.position,
                                             previous_normal,
@@ -481,6 +481,29 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                     &eta_to);
         }
 
+        /* A redundant container face is a membership update, not scattering.
+         * Segment absorption above still applies. The bounded hit-event buffer
+         * limits pathological null loops; optical depth and flux are untouched. */
+        if (medium_interface_resolved &&
+            RuntimeCausticPhotonMediumStack3D_IsNullContact(&medium_stack, &medium_boundary, entering)) {
+            if (!photon_path_transport_observe_medium(&medium_stack, &medium_boundary,
+                    entering, false, depth, active->mediumFailurePolicy, hit_event, &result.readback)) {
+                photon_path_transport_mark_medium_failure(&result, &state, hit_event);
+                hard_failure = true;
+                break;
+            }
+            hit_event->nullContactBoundary = true;
+            hit_event->pathPdfAfter = state.pathPdf;
+            /* Beam extraction still needs the traversed segment's flux even
+             * though no BSDF lobe was selected at this face. */
+            hit_event->bsdfSelection.throughputBefore = state.throughput;
+            hit_event->bsdfSelection.throughputAfter = state.throughput;
+            state.position = hit.position;
+            previous_normal = geometric_normal;
+            trace->finalState = state;
+            --depth;
+            continue;
+        }
         memset(&dielectric_probe, 0, sizeof(dielectric_probe));
         if (active->continueTotalInternalReflection &&
             material.transparency > 1.0e-12 &&
@@ -495,8 +518,25 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
             exact_tir = true;
         }
 
-        if (!RuntimeCausticPhotonBsdfPolicy3D_Build(
-                &material, incident_cosine, state.throughput, &hit_event->bsdfPolicy)) {
+        /* Resolve the physical boundary before selecting either lobe. A valid
+         * reflection must not conceal an unresolved/mismatched solid medium. */
+        const bool physical_interface = material.hasGlassTransportOverride &&
+                                        !material.thinWalled && material.transparency > 1.0e-12;
+        if (physical_interface && !medium_interface_resolved) {
+            photon_path_transport_observe_medium(
+                &medium_stack, &medium_boundary, entering, false, depth,
+                active->mediumFailurePolicy, hit_event, &result.readback);
+            photon_path_transport_mark_medium_failure(&result, &state, hit_event);
+            hard_failure = true;
+            break;
+        }
+        const bool policy_built = physical_interface
+            ? RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(
+                &material, incident_cosine, eta_from, eta_to,
+                state.throughput, &hit_event->bsdfPolicy)
+            : RuntimeCausticPhotonBsdfPolicy3D_Build(
+                &material, incident_cosine, state.throughput, &hit_event->bsdfPolicy);
+        if (!policy_built) {
             hit_event->termination =
                 RUNTIME_CAUSTIC_PHOTON_SCENE_TERMINATION_BSDF_DIRECTION_INVALID;
             trace->finalState = state;

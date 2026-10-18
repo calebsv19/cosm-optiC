@@ -30,6 +30,8 @@ typedef struct {
     bool hasGlassAbsorptionColorOverride;
     bool thinWalled;
     bool hasGlassTransportOverride;
+    /* Explicit water/container overlap; zero means no contact partner. */
+    int wetContactContainerIndexPlusOne;
     double textureMask;
     double textureU;
     double textureV;

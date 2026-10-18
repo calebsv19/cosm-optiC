@@ -1921,7 +1921,7 @@ static int test_runtime_render_trace_cost_ledger_transmission_sample_index_attri
 static int test_runtime_native_3d_render_unit_setup_defers_feature_prepass(void) {
     RuntimeNative3DPreparedFrame frame = {0};
     RuntimeNative3DRenderUnit unit;
-    RuntimeNative3DSamplingContext sampling = {0};
+    RuntimeNative3DSamplingContext sampling = {.cameraPixelSampler=RUNTIME_CAMERA_PIXEL_CENTER};
     RuntimeScene3D scene;
     bool ok = false;
 

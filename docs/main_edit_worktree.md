@@ -1,5 +1,29 @@
 ## October 16 — rough-glass local source freeze
 
+
+## October 18 — water transport source checkpoint
+
+The retained clear-water, rectangular-emitter, water-normal/reflection-footprint,
+pixel-area sampling, medium-aware photon and explicit wet-contact changes are
+checkpointed together on `codex/ray-tracing-main-edit` at the operator's request.
+Their contracts and ownership maps are linked from `docs/current_truth.md`.
+
+The latest fresh headless/test build passed; 33 of 34 surrounding test groups
+passed. `runtime_emission_transparency_adaptive_center_preserved` remains a
+previously reproduced failure. The wet-contact native comparison accepted
+131,071 of 131,072 photon paths; the remaining near-boundary origin case is
+retained for diagnosis. Still-image acceptance is provisional, and motion review
+remains open. These are source qualification results, not package release gates.
+
+Canonical adoption and release preparation must bind this new checkpoint before
+building packages. The read-only release preflight still observes canonical
+`ee9e7348a9e6e01c8a64f43207e0a7475fd27b6f`, identifies a worker-adapter source
+binding mismatch, and requires refreshed selected-host evidence. Its JSON output
+works; the human formatter currently fails on missing `release_progress`.
+A minor app release is recommended, with worker version intent selected separately.
+No VERSION, installed app, worker, publication or Registry state changes are part
+of this checkpoint.
+
 The operator accepted the 512×512 fixed-roughness still quality and authorized a
 local Main Edit source checkpoint of the unified glass, deeper-path and compensated
 termination work. All retained functional source matches the qualified installed

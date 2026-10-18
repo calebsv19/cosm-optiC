@@ -2,6 +2,7 @@
 #include "render/runtime_disney_v2_atmosphere_3d.h"
 #include "render/runtime_disney_v2_transmission_internal_3d.h"
 #include "render/runtime_light_emitter_3d.h"
+#include "render/runtime_reflection_footprint_probe_3d.h"
 #include "render/runtime_path_termination_probe_3d.h"
 #include "render/runtime_glass_path_termination_3d.h"
 #include <limits.h>
@@ -104,6 +105,15 @@ static Vec3 path(const RuntimeScene3D *scene, Ray3D ray, HitInfo3D hit, RuntimeM
                         &context.medium, &p, &hit, ray.direction, &macro))) {
             exit_reason = RUNTIME_PATH_EXIT_INVALID_MEDIUM;
             break;
+        }
+        RuntimeCausticPhotonMediumEntry3D contact_boundary;
+        if (RuntimeCausticPhotonMediumEntry3D_FromMaterial(&p, hit.sceneObjectIndex, 0, &contact_boundary) &&
+            RuntimeCausticPhotonMediumStack3D_IsNullContact(&context.medium, &contact_boundary, macro.entering)) {
+            p.transparency = 1;
+            p.emissive = 0;
+            p.bsdf.roughness = 0;
+            p.hasGlassInterfaceTintOverride = true;
+            p.glassInterfaceTintR = p.glassInterfaceTintG = p.glassInterfaceTintB = 1;
         }
         Vec3 attenuation;
         if (!RuntimeCausticPhotonMediumEntry3D_SegmentTransmittance(
@@ -218,7 +228,7 @@ static Vec3 path(const RuntimeScene3D *scene, Ray3D ray, HitInfo3D hit, RuntimeM
         } else {
             Ray3D next = RuntimeRay3D_MakeOffset(hit.position, HitInfo3D_OffsetNormal(&hit),
                                                  event.direction, 1e-6);
-            if (event.delta)
+            if (event.delta && hit.constantShadingNormal)
                 RuntimeRay3D_TransportIdealFootprint(&hit, event.interface.orientedNormal,
                                                      event.reflected ? RUNTIME_RAY_IDEAL_REFLECTION
                                                                      : RUNTIME_RAY_IDEAL_REFRACTION,
@@ -226,25 +236,46 @@ static Vec3 path(const RuntimeScene3D *scene, Ray3D ray, HitInfo3D hit, RuntimeM
             else {
                 next.footprintUnbounded = true;
                 next.footprintTransported = true;
-                if (hit.hasIncidentDifferentials && hit.hasPixelFootprint &&
-                    !hit.footprintUnbounded && hit.constantShadingNormal &&
-                    !p.hasMicrodetailNormal) {
-                    RuntimePhysicalGlass3DSample dx, dy;
-                    if (RuntimePhysicalGlass3D_Sample(&p, shading, hit.incidentDirectionDx,
-                                                      macro.etaFrom, macro.etaTo, u, v, choose,
-                                                      &dx) &&
-                        RuntimePhysicalGlass3D_Sample(&p, shading, hit.incidentDirectionDy,
-                                                      macro.etaFrom, macro.etaTo, u, v, choose,
-                                                      &dy) &&
-                        dx.reflected == event.reflected && dy.reflected == event.reflected) {
-                        next.directionDx = dx.direction;
-                        next.directionDy = dy.direction;
-                        next.originDx = vec3_add(next.origin, hit.pixelDpDx);
-                        next.originDy = vec3_add(next.origin, hit.pixelDpDy);
-                        next.hasDifferentials = next.hasDifferentialOrigins = true;
-                        next.footprintUnbounded = false;
-                    }
+                Vec3 neighbor_normals[2];
+                const char *footprint_rejection = NULL;
+                RuntimePhysicalGlass3DSample dx, dy;
+                if (p.hasMicrodetailNormal) footprint_rejection = "microdetail";
+                else if (!RuntimeRay3D_NormalFootprintNeighbors(&hit, shading, neighbor_normals))
+                    footprint_rejection = "normal_neighbors";
+                else if (!RuntimePhysicalGlass3D_Sample(&p, neighbor_normals[0], hit.incidentDirectionDx,
+                                                        macro.etaFrom, macro.etaTo, u, v, choose, &dx))
+                    footprint_rejection = "sample_dx";
+                else if (!RuntimePhysicalGlass3D_Sample(&p, neighbor_normals[1], hit.incidentDirectionDy,
+                                                        macro.etaFrom, macro.etaTo, u, v, choose, &dy))
+                    footprint_rejection = "sample_dy";
+                else if (dx.reflected != event.reflected) footprint_rejection = "branch_dx";
+                else if (dy.reflected != event.reflected) footprint_rejection = "branch_dy";
+                else if (((vec3_dot(hit.incidentDirectionDx, HitInfo3D_BoundaryNormal(&hit)) *
+                           vec3_dot(dx.direction, HitInfo3D_BoundaryNormal(&hit)) < 0) != event.reflected))
+                    footprint_rejection = "side_dx";
+                else if (((vec3_dot(hit.incidentDirectionDy, HitInfo3D_BoundaryNormal(&hit)) *
+                           vec3_dot(dy.direction, HitInfo3D_BoundaryNormal(&hit)) < 0) != event.reflected))
+                    footprint_rejection = "side_dy";
+                else {
+                    next.directionDx = dx.direction;
+                    next.directionDy = dy.direction;
+                    next.originDx = vec3_add(next.origin, hit.pixelDpDx);
+                    next.originDy = vec3_add(next.origin, hit.pixelDpDy);
+                    next.hasDifferentials = next.hasDifferentialOrigins = true;
+                    next.footprintUnbounded = false;
                 }
+                if (footprint_rejection && event.reflected &&
+                    (!strcmp(footprint_rejection,"branch_dx") || !strcmp(footprint_rejection,"branch_dy")) &&
+                    RuntimePhysicalGlass3D_TransportLocalReflectionFootprint(&p,&hit,shading,&event,
+                        macro.etaFrom,macro.etaTo,u,v,choose,&next)) {
+                    if (RuntimeReflectionFootprintProbe3D_Active())
+                        RuntimeReflectionFootprintProbe3D_Record("optical_footprint_recovered",
+                            "local_reflection_derivative",context.depth+1,&hit,&p,&next);
+                    footprint_rejection=NULL;
+                }
+                if (footprint_rejection && RuntimeReflectionFootprintProbe3D_Active())
+                    RuntimeReflectionFootprintProbe3D_Record("optical_footprint_fallback",
+                        footprint_rejection, context.depth + 1, &hit, &p, &next);
             }
             segment_start = true;
             ray = next;
@@ -252,8 +283,15 @@ static Vec3 path(const RuntimeScene3D *scene, Ray3D ray, HitInfo3D hit, RuntimeM
             min_t = 0;
             ++context.depth;
         }
+        if (RuntimeReflectionFootprintProbe3D_Active())
+            RuntimeReflectionFootprintProbe3D_Record("optical_departure",
+                event.reflected ? "glass_reflection" : "glass_transmission",
+                context.depth, &hit, &p, &ray);
         RuntimeLightEmitterTrace3DResult next = {0};
         RuntimeLightEmitter3D_ResolveFirstHit(scene, &ray, min_t, HUGE_VAL, &next);
+        if (RuntimeReflectionFootprintProbe3D_Active() && next.geometryHit && !next.emitterWins)
+            RuntimeReflectionFootprintProbe3D_Record("optical_arrival", "glass_continuation",
+                context.depth, &next.geometryHitInfo, NULL, &ray);
         double distance = next.emitterWins   ? next.emitterHitInfo.t - previous
                           : next.geometryHit ? next.geometryHitInfo.t - previous
                                              : RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE;
@@ -264,6 +302,9 @@ static Vec3 path(const RuntimeScene3D *scene, Ray3D ray, HitInfo3D hit, RuntimeM
                                             &scattered);
         sum = vec3_add(sum, scattered);
         if (next.emitterWins || !next.geometryHit) {
+            if (next.emitterWins && RuntimeReflectionFootprintProbe3D_Active())
+                RuntimeReflectionFootprintProbe3D_Record("optical_emitter", "glass_terminal",
+                    context.depth, &hit, &p, &ray);
             Vec3 tr;
             if (!RuntimeCausticPhotonMediumEntry3D_SegmentTransmittance(
                     RuntimeCausticPhotonMediumStack3D_Top(&context.medium), distance, &tr)) {
@@ -273,8 +314,7 @@ static Vec3 path(const RuntimeScene3D *scene, Ray3D ray, HitInfo3D hit, RuntimeM
             beta = mul(beta, tr);
             Vec3 light;
             if (next.emitterWins)
-                light = vec3(next.emitterHitInfo.radiance, next.emitterHitInfo.radiance,
-                             next.emitterHitInfo.radiance);
+                light = RuntimeLightEmitter3D_RadianceRGB(&next.emitterHitInfo);
             else
                 RuntimeEnvironment3D_EvaluateBackgroundRGB(&scene->environment, ray.direction,
                                                            &light.x, &light.y, &light.z);

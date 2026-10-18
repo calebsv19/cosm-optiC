@@ -201,6 +201,11 @@ void RuntimeReflectionFootprintProbe3D_Record(const char* stage,const char* bran
         h->footprintTransported,h->hasIncidentDifferentials,h->constantShadingNormal,
         h->position.x,h->position.y,h->position.z,h->pixelDpDx.x,h->pixelDpDx.y,h->pixelDpDx.z,
         h->pixelDpDy.x,h->pixelDpDy.y,h->pixelDpDy.z);
+    fprintf(stderr,",\"has_normal_field\":%d,\"has_unperturbed_normal\":%d,\"normal\":[%.17g,%.17g,%.17g],\"shading_normal\":[%.17g,%.17g,%.17g],\"field_normal\":[%.17g,%.17g,%.17g],\"unperturbed_normal\":[%.17g,%.17g,%.17g]",
+        h->hasReflectionNormalField,h->hasUnperturbedShadingNormal,
+        h->normal.x,h->normal.y,h->normal.z,h->shadingNormal.x,h->shadingNormal.y,h->shadingNormal.z,
+        h->reflectionNormalValue.x,h->reflectionNormalValue.y,h->reflectionNormalValue.z,
+        h->unperturbedShadingNormal.x,h->unperturbedShadingNormal.y,h->unperturbedShadingNormal.z);
     if(p)fprintf(stderr,",\"material\":%d,\"roughness\":%.17g,\"albedo\":[%.17g,%.17g,%.17g]",
         p->materialId,p->bsdf.roughness,p->baseColorR,p->baseColorG,p->baseColorB);
     if(ray)fprintf(stderr,",\"ray_differentials\":%d,\"ray_differential_origins\":%d,\"ray_unbounded\":%d,\"ray_transported\":%d,\"direction\":[%.17g,%.17g,%.17g]",

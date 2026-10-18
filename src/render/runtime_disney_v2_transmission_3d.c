@@ -977,6 +977,7 @@ static bool runtime_disney_v2_3d_apply_transmission_continuation(
     RuntimeDisneyV2TransmittedCaustic3D_Finalize(
         io_result, contributing_sample_count);
 
+    io_result->directOnlyRectangleRadiance = vec3_scale(io_result->directOnlyRectangleRadiance, front_body_weight);
     io_result->directRadianceR *= front_body_weight;
     io_result->directRadianceG *= front_body_weight;
     io_result->directRadianceB *= front_body_weight;

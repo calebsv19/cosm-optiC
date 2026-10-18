@@ -300,6 +300,13 @@ make the water and glass coplanar. This footprint retarget changes only sample
 positions. It must preserve the authored height and normal arrays so water
 motion and optical-shape comparisons remain matched. The current collimated-sun
 working proof uses a `0.001 m` clearance from each measured inner wall.
+With the default `separated` contact policy, this historical ray-safe clearance
+is an **optical air gap**, which can produce water/air TIR at submerged side and
+bottom boundaries. Explicit `wet_container` contact instead validates the wall
+geometry and uses one physical water/glass event plus a null membership crossing.
+See [clear-water contact](clear_water_transport.md#explicit-watercontainer-contact)
+for the shared camera/photon rules, geometric limits and numerical tolerance.
+Do not substitute water/glass IOR while retaining two physical air interfaces.
 
 A one-sided `rect` or `disk` using legacy-intensity radiometry is treated as a
 collimated photon emitter. Its origins remain distributed over the authored
@@ -346,3 +353,16 @@ quantitative optical certification, PVA-5, professional readiness, scene
 pointer/latest-good promotion, release packaging, publication, and release
 readiness remain independent gates. The reference caustic modes should remain
 available until a separate deprecation decision is made and verified.
+
+### Resolved physical photon interfaces
+
+Physical solid dielectric path transport uses
+`RuntimeCausticPhotonBsdfPolicy3D_BuildInterface` with the medium stack's ordered
+IOR pair. Exact Fresnel owns branch probabilities; Snell/TIR uses that same pair.
+This replaces the air/material approximation in that path without changing the
+separate compatibility/artistic `Build` entry point. Per-hit policy readback
+records `usesResolvedInterface`, `etaFrom` and `etaTo`. Invalid solid interfaces
+fail before reflection or transmission selection. Photon throughput remains
+flux-based and does not receive camera radiance eta-squared factors. The photon
+rough-direction approximation remains separate from the camera microsurface
+sampler; see the [water transport ownership map](clear_water_transport.md#ownership-and-editing-map).

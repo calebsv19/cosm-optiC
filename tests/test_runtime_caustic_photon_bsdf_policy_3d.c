@@ -240,7 +240,7 @@ static int test_clear_dielectric_no_diffuse_and_single_bulk_absorption(void) {
     material = photon_bsdf_material();
     material.sceneObjectIndex = 0;
     RuntimeWaterMaterial3DOverride water = {0};
-    water.ior = 1.333; water.transparency = 0.92; water.roughness = 0.008;
+    water.ior = 1.333; water.roughness = 0.008;
     RuntimeWaterMaterial3D_ClearAll();
     assert_true("clear_water_override", RuntimeWaterMaterial3D_Set(0, &water));
     assert_true("clear_water_payload", RuntimeWaterMaterial3D_ApplyToPayload(0, &material));
@@ -251,12 +251,80 @@ static int test_clear_dielectric_no_diffuse_and_single_bulk_absorption(void) {
     assert_close("clear_water_ior_fresnel", policy.fresnelReflectance,
         pow((1.333-1)/(1.333+1), 2), 1e-12);
     assert_close("clear_water_no_bulk_tint_at_interface", policy.candidates[1].responseTint.x, 1.0, 1e-12);
+    assert_close("clear_water_no_hidden_loss", policy.candidates[0].rawWeight + policy.candidates[1].rawWeight, 1.0, 1e-12);
+
     RuntimeWaterMaterial3D_ClearAll();
+    return 0;
+}
+
+static int test_physical_photon_resolved_interface(void) {
+    /* Independent unpolarized Fresnel reference values, including the audited
+     * Aquarium side angle. Same angle, different destination: TIR vs 0.9%. */
+    static const double cases[][4] = {
+        {1.0, 1.333, 1.0, 0.020373187841971414},
+        {1.333, 1.0, 1.0, 0.020373187841971414},
+        {1.333, 1.0, 0.75, 0.06820718626329243},
+        {1.333, 1.0, 0.523138, 1.0},
+        {1.333, 1.45, 0.523138, 0.0090886716447997},
+        {1.45, 1.333, 0.8, 0.00250149920710303},
+        {1.0, 1.333, 0.1, 0.5398421007281624},
+        {1.333, 1.333, 0.001, 0.0}
+    };
+    RuntimeMaterialPayload3D p = photon_bsdf_material();
+    RuntimeCausticPhotonBsdfPolicy3D policy;
+    RuntimeCausticPhotonBsdfSelection3D selected;
+    const Vec3 flux = {2.0, 3.0, 5.0};
+    p.hasGlassTransportOverride = true;
+    p.hasGlassInterfaceTintOverride = true;
+    p.glassInterfaceTintR = p.glassInterfaceTintG = p.glassInterfaceTintB = 1.0;
+    p.transparency = 1.0;
+    p.bsdf.roughness = 0.008;
+    p.bsdf.reflectivity = 0.9; /* Must not override a physical interface. */
+    for (size_t i = 0; i < sizeof(cases)/sizeof(cases[0]); ++i) {
+        const double *c = cases[i];
+        assert_true("physical_photon_interface_build",
+            RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(&p, c[2], c[0], c[1], flux, &policy));
+        assert_true("physical_photon_pair_readback", policy.valid && policy.usesResolvedInterface &&
+            policy.etaFrom == c[0] && policy.etaTo == c[1]);
+        assert_close("physical_photon_fresnel_reference", policy.fresnelReflectance, c[3], 2e-14);
+        assert_close("physical_photon_unit_branch_sum", policy.rawWeightSum, 1.0, 2e-14);
+        unsigned reflections = 0;
+        Vec3 mean = vec3(0,0,0);
+        for (unsigned j = 0; j < 10000; ++j) {
+            assert_true("physical_photon_branch_sample",
+                RuntimeCausticPhotonBsdfPolicy3D_Select(&policy, (j + 0.5)/10000.0, &selected));
+            if (selected.lobe == RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_SPECULAR) ++reflections;
+            else assert_true("physical_photon_only_transmission",
+                selected.lobe == RUNTIME_CAUSTIC_PHOTON_BSDF_LOBE_TRANSMISSION);
+            mean = vec3_add(mean, vec3_scale(selected.throughputAfter, 1.0/10000.0));
+        }
+        assert_close("physical_photon_branch_frequency", reflections/10000.0, c[3], 1.0/10000.0);
+        /* Photons carry flux, not the camera's eta-squared radiance weight. */
+        assert_close("physical_photon_flux_r", mean.x, flux.x, 1e-11);
+        assert_close("physical_photon_flux_g", mean.y, flux.y, 1e-11);
+        assert_close("physical_photon_flux_b", mean.z, flux.z, 1e-11);
+    }
+    assert_true("physical_photon_invalid_pair_rejected",
+        !RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(&p, 1, NAN, 1, flux, &policy) && !policy.valid &&
+        policy.termination == RUNTIME_CAUSTIC_PHOTON_BSDF_TERMINATION_INVALID_MATERIAL);
+    assert_true("physical_photon_missing_pair_rejected",
+        !RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(&p, 1, 0, 0, flux, &policy));
+    p.thinWalled = true;
+    assert_true("physical_photon_thin_contract_separate",
+        !RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(&p, 1, 1, 1.333, flux, &policy));
+    p.thinWalled = false;
+    p.hasGlassTransportOverride = false;
+    assert_true("physical_photon_legacy_contract_separate",
+        !RuntimeCausticPhotonBsdfPolicy3D_BuildInterface(&p, 1, 1, 1.333, flux, &policy));
+    assert_true("physical_photon_legacy_entry_retained",
+        RuntimeCausticPhotonBsdfPolicy3D_Build(&p, 1, flux, &policy) && !policy.usesResolvedInterface);
+    assert_close("physical_photon_legacy_floor_retained", policy.fresnelReflectance, 0.9, 1e-12);
     return 0;
 }
 
 int run_test_runtime_caustic_photon_bsdf_policy_3d_tests(void) {
     int failures = 0;
+    failures += test_physical_photon_resolved_interface();
     failures += test_clear_dielectric_no_diffuse_and_single_bulk_absorption();
     failures += test_runtime_caustic_photon_bsdf_policy_labels_and_invalid();
     failures += test_runtime_caustic_photon_bsdf_policy_diffuse_ledger();

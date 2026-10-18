@@ -112,3 +112,10 @@ byte-identical BMP. Summary evidence reports generation counts and
 total/last/maximum write cost; cadence grows an undersized tile budget when
 checkpoint overhead dominates and contracts it when a render batch exceeds
 the elapsed-time bound.
+
+## Camera sampling compatibility
+
+Sampling identity includes the pixel-area camera sampler and algorithm revision.
+Center, stratified and progressive modes cannot share accumulated checkpoints.
+Same-mode recovery preserves subpass positions; existing exact request and budget
+compatibility checks remain in force. See [camera sampling](pixel_area_camera_sampling.md).
