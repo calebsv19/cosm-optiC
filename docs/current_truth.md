@@ -1,3 +1,21 @@
+## October 18 — desktop 0.19.0 / worker 0.13.0 release complete
+
+Decision Two completed for source commit
+`f2cf7472789775cbb2d0f9eb1499577c954c2317`, tag `v0.19.0`. The signed/notarized
+macOS arm64 desktop package and independently versioned Linux x86_64 worker
+package passed their selected publication and Registry checks. Website metadata,
+public readback, production-current promotion, signed snapshot and terminal
+verification are complete. Current registered versions are desktop **0.19.0**
+and worker **0.13.0**. See [version attribution](release_versions.md) for package
+hashes and the separate source, installation and runtime surfaces.
+
+Versioned worker installation on the home server and Linux PC and the exact
+loaded coordinator binding passed independent verification. This does not claim
+a worker current-pointer rollout, workload dispatch readiness, desktop app
+installation or motion/visual acceptance. Main Edit remains at its preserved
+app0.18.0/worker0.12.1 development baseline. Earlier dated entries below describe
+their original checkpoints and preparation state.
+
 ## October 18 — Decision 1 candidate preparation
 
 The qualified Main Edit source/documentation checkpoint `060bc5b` is adopted into
