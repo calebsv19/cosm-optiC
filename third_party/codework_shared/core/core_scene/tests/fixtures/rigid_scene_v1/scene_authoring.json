@@ -1,0 +1,365 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_authoring_v1",
+  "schema_version": 1,
+  "scene_id": "rigid_scene_contract_pilot",
+  "space_mode_intent": "3d",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1,
+  "objects": [
+    {
+      "object_id": "floor",
+      "object_type": "mesh_asset_instance",
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "floor_mesh"
+      },
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": -0.2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "flags": {
+        "visible": false
+      }
+    },
+    {
+      "object_id": "pillar_left",
+      "object_type": "mesh_asset_instance",
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "pillar_mesh"
+      },
+      "transform": {
+        "position": {
+          "x": -2,
+          "y": 0,
+          "z": 2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "flags": {
+        "visible": true
+      }
+    },
+    {
+      "object_id": "pillar_right",
+      "object_type": "mesh_asset_instance",
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "pillar_mesh"
+      },
+      "transform": {
+        "position": {
+          "x": 2,
+          "y": 0,
+          "z": 2
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "flags": {
+        "visible": true
+      }
+    },
+    {
+      "object_id": "tumbling_body",
+      "object_type": "mesh_asset_instance",
+      "geometry_ref": {
+        "kind": "mesh_asset",
+        "id": "asymmetric_mesh"
+      },
+      "transform": {
+        "position": {
+          "x": 0,
+          "y": 0,
+          "z": 3
+        },
+        "rotation": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "scale": {
+          "x": 1,
+          "y": 1,
+          "z": 1
+        }
+      },
+      "flags": {
+        "visible": true
+      }
+    }
+  ],
+  "hierarchy": [],
+  "materials": [],
+  "lights": [],
+  "cameras": [],
+  "constraints": [],
+  "extensions": {
+    "rigid_scene": {
+      "schema": "core_rigid_scene_v1",
+      "coordinate_system": "right_handed_z_up_meters",
+      "rate_numerator": 240,
+      "rate_denominator": 1,
+      "end_tick": 720,
+      "gravity_mps2": [
+        0,
+        0,
+        -9.81
+      ],
+      "contact_policy": "min_restitution_geometric_friction_v1",
+      "bindings": [
+        {
+          "source_asset_id": "floor_source",
+          "mesh_asset_id": "floor_mesh",
+          "collision_sha256": "9159952acc804cd0342607ea9aaf8cf288629e0d1f333c544a8e067233f1d658",
+          "source_sha256": "fc64922c8c4bdf1163ca005efdb87b21efd28e5c0bbd765cf8a4a4435f0e62a7",
+          "mesh_sha256": "fc7ed8d57d3c9452260370c4ae507706a6ae0750764bcc4c2db3c28f61c8283f",
+          "source_center_m": [
+            0,
+            0,
+            0
+          ],
+          "principal_to_source": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "object_id": "floor",
+          "body_id": 100,
+          "role": "static",
+          "motion_owner": "authored",
+          "collides": true,
+          "collision_asset_id": "floor_collision",
+          "orientation_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "linear_velocity_mps": [
+            0,
+            0,
+            0
+          ],
+          "angular_velocity_radps": [
+            0,
+            0,
+            0
+          ],
+          "mass_kg": 0,
+          "principal_inertia_kgm2": [
+            0,
+            0,
+            0
+          ],
+          "restitution": 0.2,
+          "friction": 0.3
+        },
+        {
+          "source_asset_id": "pillar_source",
+          "mesh_asset_id": "pillar_mesh",
+          "collision_sha256": "ef276f5c37fcbbcaec7bec0163277bc7d59f63cbde679c7d931871949f5da833",
+          "source_sha256": "404ec47a49da8dffaeb0a10fd88c09803585c41ccc2ba0bde41e9017870c559a",
+          "mesh_sha256": "c07223c48efefc0de9a5aad04595e218f22656b2b9f1d6e5bbd37907b6c385c9",
+          "source_center_m": [
+            0,
+            0,
+            0
+          ],
+          "principal_to_source": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "object_id": "pillar_left",
+          "body_id": 101,
+          "role": "static",
+          "motion_owner": "authored",
+          "collides": true,
+          "collision_asset_id": "pillar_collision",
+          "orientation_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "linear_velocity_mps": [
+            0,
+            0,
+            0
+          ],
+          "angular_velocity_radps": [
+            0,
+            0,
+            0
+          ],
+          "mass_kg": 0,
+          "principal_inertia_kgm2": [
+            0,
+            0,
+            0
+          ],
+          "restitution": 0.2,
+          "friction": 0.3
+        },
+        {
+          "source_asset_id": "pillar_source",
+          "mesh_asset_id": "pillar_mesh",
+          "collision_sha256": "ef276f5c37fcbbcaec7bec0163277bc7d59f63cbde679c7d931871949f5da833",
+          "source_sha256": "404ec47a49da8dffaeb0a10fd88c09803585c41ccc2ba0bde41e9017870c559a",
+          "mesh_sha256": "c07223c48efefc0de9a5aad04595e218f22656b2b9f1d6e5bbd37907b6c385c9",
+          "source_center_m": [
+            0,
+            0,
+            0
+          ],
+          "principal_to_source": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "object_id": "pillar_right",
+          "body_id": 102,
+          "role": "static",
+          "motion_owner": "authored",
+          "collides": true,
+          "collision_asset_id": "pillar_collision",
+          "orientation_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "linear_velocity_mps": [
+            0,
+            0,
+            0
+          ],
+          "angular_velocity_radps": [
+            0,
+            0,
+            0
+          ],
+          "mass_kg": 0,
+          "principal_inertia_kgm2": [
+            0,
+            0,
+            0
+          ],
+          "restitution": 0.2,
+          "friction": 0.3
+        },
+        {
+          "source_asset_id": "asymmetric_source",
+          "mesh_asset_id": "asymmetric_mesh",
+          "collision_sha256": "93da9fe3218a67f19def46767bddb5b9f027e9463dcd77d44fcf28647215b2fd",
+          "source_sha256": "d5ff251e2bc428ef17113ec1c993f73a52512fc0f4a5e5dc53fd07044e573c0f",
+          "mesh_sha256": "467292a0b065287b12269390f50de263a7afe4ac7fedece8f81a891fa1a31eb2",
+          "source_center_m": [
+            0.2,
+            -0.3,
+            0.1
+          ],
+          "principal_to_source": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "object_id": "tumbling_body",
+          "body_id": 103,
+          "role": "dynamic",
+          "motion_owner": "simulation",
+          "collides": true,
+          "collision_asset_id": "asymmetric_collision",
+          "orientation_wxyz": [
+            1,
+            0,
+            0,
+            0
+          ],
+          "linear_velocity_mps": [
+            1,
+            0,
+            0
+          ],
+          "angular_velocity_radps": [
+            0,
+            1,
+            0.2
+          ],
+          "mass_kg": 2,
+          "principal_inertia_kgm2": [
+            0.8,
+            1.2,
+            1.6
+          ],
+          "restitution": 0.2,
+          "friction": 0.3
+        }
+      ],
+      "origin_tick": 0
+    },
+    "foreign_producer": {
+      "preserve": [
+        "opaque",
+        17
+      ]
+    }
+  }
+}
