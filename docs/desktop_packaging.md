@@ -16,8 +16,8 @@ Version/discovery status updated: 2026-10-18.
 
 ## Public Package Discovery
 
-The registered public desktop release is **optiC 0.18.0** as of October 18.
-The independent registered headless worker is **0.12.1**. See
+The registered public desktop release is **optiC 0.19.0** as of October 18.
+The independent registered headless worker is **0.13.0**. See
 [version status](release_versions.md) for source identities, proposed transitions
 and the distinction between registered, installed and loaded versions.
 

@@ -74,7 +74,7 @@ Headless summaries expose exact quaternion/body/tick/result provenance.
 
 ## Development dependency and verification
 
-This additive reader uses core_scene development1.4.0, the existing core_pack v1
+This additive reader uses committed, imported core_scene 1.11.0, the existing core_pack v1
 reader and core_scene_compile SHA-256. Ray supplies its existing SHA-256 helper through a callback, so core_scene has
 no dependency on the downstream scene compiler. The optional cJSON result adapter adds no
 solver, renderer or UI dependency to the shared default archive. The current

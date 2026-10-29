@@ -1,14 +1,14 @@
 # optiC version status
 
-Verified October 18, 2026. Version labels identify separate surfaces; a source
+Release records verified October 18, 2026; development reconciliation verified October 29, 2026. Version labels identify separate surfaces; a source
 checkout, desktop package and worker package need not share a version number.
 
 | Surface | Verified version | Meaning |
 | --- | --- | --- |
 | Canonical app `VERSION` | `0.19.0` | Released macOS arm64 desktop; Decision Two complete |
-| Main Edit app baseline | `0.18.0` | Preserved development checkout label |
+| Main Edit app baseline | `0.19.0` | Reconciled existing release baseline; later engineering checkpoint is not yet packaged |
 | Canonical `WORKER_VERSION` | `0.13.0` | Released independent Linux x86_64 worker package |
-| Main Edit worker baseline | `0.12.1` | Preserved independent development baseline |
+| Main Edit worker baseline | `0.13.0` | Reconciled independent existing release baseline; no new worker artifact selected |
 | Registered public desktop release | `0.19.0` | Publication and production-current readback passed |
 | Registered headless worker release | `0.13.0` | Current `ray_tracing_headless_worker` production record |
 | Selected-host installation | `0.13.0` | Versioned package trees independently verified on the home server and Linux PC |

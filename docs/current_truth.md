@@ -1,3 +1,33 @@
+## October 29 — reviewed source checkpoint and release preparation
+
+Human-authorized Main Edit engineering is checkpointed at `f53cc03`, with the
+committed core_scene 1.11.0 module imported separately at `4236497` from shared
+`c483c1ef44adc23a54b0a8f2eb2fc5f9422b256c` (module split
+`a33d445ba672a4b6dcd9a0cda69bdf3a4de791cf`). Canonical release/documentation drift
+is reconciled by `8efd5a0`; source labels are desktop 0.19.0 and worker 0.13.0.
+These labels identify the existing release baseline, not a new package.
+
+Fresh application/headless/probe builds, the aggregate C regression runner,
+45 immutable-result consumer checks over all 181 source ticks, headless preflight
+and image export, compound metadata and the non-fused constant-hold regression
+pass. A test-only native harness with Vulkan validation enabled passes normal
+and compact preview controls, interrupted Close, exact stepping, document
+identity and host restoration. Its sole instrumentation enables validation;
+the product source retains its ordinary validation policy.
+
+All scenes, raw/lossless frames, videos, saved projects, installed apps and
+immutable physical results are preserved. Ball numerical source is not adopted.
+Kinetic Spill remains qualified only through tick 587, with its tick-588 energy
+failure retained; the separate thirty-second bay proof does not generalize it.
+Sparse/repeated-frame video cadence and hard camera cuts remain presentation
+limits, independent of exact recorded poses. Human motion/visual acceptance is
+not inferred from these tests.
+
+New package versions, signing/notarization and finished-candidate verification
+remain pending the selected desktop/worker artifact scope and ordinary release
+preparation. Public publication, push/tag, Registry current/snapshot, installation,
+Desktop refresh and deployment/worker rollout are excluded.
+
 ## October28 — curated uniform-scale assets
 
 [Uniform-scale preparation and qualification](rigid_uniform_assets.md) now supports bracket0.55 and channel0.85/0.52 with native source certificates. Kinetic Machinery Spill qualifies only through tick587; energy fails588 and native continuation refuses1218. No15s/settled-aftermath claim.
