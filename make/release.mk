@@ -20,8 +20,8 @@ release-clean:
 release-build: all
 	@echo "Release build complete: $(APP_TARGET)"
 
-# Keep audit evidence beside the exact ZIP/checksum/manifest output set.
-release-bundle-audit: RELEASE_DIR = $(RELEASE_ROOT).audit
+# Keep diagnostics in owned build storage; the release root contains only artifacts.
+release-bundle-audit: RELEASE_DIR = $(BUILD_DIR_BASE)/release-audit
 release-bundle-audit: PACKAGE_REQUIRE_FFMPEG=1
 release-bundle-audit: package-desktop-self-test
 	@mkdir -p "$(RELEASE_DIR)"
@@ -39,11 +39,11 @@ release-bundle-audit: package-desktop-self-test
 	@runtime_dir="$$(/usr/bin/grep '^RAY_TRACING_RUNTIME_DIR=' "$(RELEASE_DIR)/print_config.txt" | /usr/bin/cut -d= -f2-)"; \
 	if [ -z "$$runtime_dir" ]; then echo "runtime dir missing from print-config"; exit 1; fi; \
 	case "$$runtime_dir" in *"/Contents/Resources"*) echo "runtime dir incorrectly points into app bundle: $$runtime_dir"; exit 1;; esac; \
-	case "$$runtime_dir" in /tmp/*|/var/*|"$(HOME)"/*) ;; *) echo "runtime dir is not user-writable rooted: $$runtime_dir"; exit 1;; esac
+	case "$$runtime_dir" in /tmp/*|/var/*|/private/tmp/*|/private/var/*|"$(HOME)"/*) ;; *) echo "runtime dir is not user-writable rooted: $$runtime_dir"; exit 1;; esac
 	@dataset_path="$$(/usr/bin/grep '^RAY_TRACING_RENDER_METRICS_DATASET_PATH=' "$(RELEASE_DIR)/print_config.txt" | /usr/bin/cut -d= -f2-)"; \
 	if [ -z "$$dataset_path" ]; then echo "render metrics dataset path missing from print-config"; exit 1; fi; \
 	case "$$dataset_path" in *"/Contents/Resources"*) echo "render metrics dataset path incorrectly points into app bundle: $$dataset_path"; exit 1;; esac; \
-	case "$$dataset_path" in /tmp/*|/var/*|"$(HOME)"/*) ;; *) echo "render metrics dataset path is not user-writable rooted: $$dataset_path"; exit 1;; esac
+	case "$$dataset_path" in /tmp/*|/var/*|/private/tmp/*|/private/var/*|"$(HOME)"/*) ;; *) echo "render metrics dataset path is not user-writable rooted: $$dataset_path"; exit 1;; esac
 	@ffmpeg_bin="$$(/usr/bin/grep '^RAY_TRACING_FFMPEG_BIN=' "$(RELEASE_DIR)/print_config.txt" | /usr/bin/cut -d= -f2-)"; \
 	if [ -z "$$ffmpeg_bin" ]; then echo "ffmpeg path missing from print-config"; exit 1; fi; \
 	test -x "$$ffmpeg_bin" || (echo "ffmpeg path from print-config is not executable: $$ffmpeg_bin"; exit 1)

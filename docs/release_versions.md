@@ -5,19 +5,32 @@ checkout, desktop package and worker package need not share a version number.
 
 | Surface | Verified version | Meaning |
 | --- | --- | --- |
-| Source app `VERSION` | `0.18.0` | Current package-version baseline in canonical and Main Edit |
-| Source `WORKER_VERSION` | `0.12.1` | Independent worker baseline in both checkouts |
-| Registered public desktop release | `0.18.0` | Current desktop production record |
-| Registered headless worker release | `0.12.1` | Current `ray_tracing_headless_worker` production record |
-| Proposed next desktop release | `0.19.0` | Minor-release intent; not applied or released |
-| Proposed next worker release | `0.13.0` | Independent minor-release intent; not applied or released |
+| Canonical app `VERSION` | `0.19.0` | Released macOS arm64 desktop; Decision Two complete |
+| Main Edit app baseline | `0.18.0` | Preserved development checkout label |
+| Canonical `WORKER_VERSION` | `0.13.0` | Released independent Linux x86_64 worker package |
+| Main Edit worker baseline | `0.12.1` | Preserved independent development baseline |
+| Registered public desktop release | `0.19.0` | Publication and production-current readback passed |
+| Registered headless worker release | `0.13.0` | Current `ray_tracing_headless_worker` production record |
+| Selected-host installation | `0.13.0` | Versioned package trees independently verified on the home server and Linux PC |
 
-The worker `0.12.1` record names source commit
-`ee9e7348a9e6e01c8a64f43207e0a7475fd27b6f` and tree
-`f1c2b7b3901a5828ea71524b36971f7e1d2921a4`. These exactly match the
-canonical baseline inherited by Main Edit. The water, emitter and camera work
-is checkpointed at `60a1670dfacf16ff89b6b518a6875bfd6ac9f540`; it has not
-yet been adopted into canonical or included in a released package.
+Release source commit `f2cf7472789775cbb2d0f9eb1499577c954c2317` is published as
+`v0.19.0`. It includes the water, emitter and camera checkpoint
+`60a1670dfacf16ff89b6b518a6875bfd6ac9f540`, adopted through
+`060bc5b394fa9dbe738570ef87bf189fbff2398c` before packaging.
+
+Desktop package SHA-256:
+`230f28844a0670b5ceb189456b2d449ebaf65bc25bcb0ccc5becb33dccbcf9ff`.
+Worker archive SHA-256:
+`cc847d493febab3e1b0d618707b12331f1ddc6c375ba088c0326c72e669ffba8`.
+The desktop package is signed and notarized. Independent publication readback,
+Registry promotion, signed snapshot and terminal verification all passed. See the
+[GitHub release](https://github.com/calebsv19/cosm-optiC/releases/tag/v0.19.0).
+
+Selected-host versioned installation and the coordinator's exact loaded
+code/catalog/package binding have their own passing receipts. Those results do
+not establish a worker current-pointer rollout, workload dispatch readiness,
+installation of the desktop app, or motion/visual acceptance. Those surfaces
+require their respective verification.
 
 Development packages additionally carry their own source/binary build identity.
 Their displayed package-version baseline does not prove inclusion of a later
