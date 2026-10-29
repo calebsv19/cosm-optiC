@@ -175,3 +175,5 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 - near-term direction: `docs/future_intent.md`
 
 Read the subdirectory READMEs under `src/` and `include/` for subsystem-specific notes.
+
+- [Bounded friction-bearing flat-face support](docs/rigid_friction_support.md).

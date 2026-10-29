@@ -1,0 +1,19 @@
+{
+  "schema": "optic_rigid_scene_qualification_limits_v1",
+  "rate_hz": 240,
+  "ticks": 480,
+  "accepted_mesh_penetration_m": 0.002,
+  "incoming_contact_penetration_m": 0.035,
+  "quaternion_norm_error": 1e-10,
+  "ballistic_velocity_error_mps": 1e-10,
+  "semi_implicit_position_error_m": 1e-10,
+  "mass_frame_error": 1e-11,
+  "render_vertex_error_m": 2e-12,
+  "restitution_velocity_error_mps": 0.025,
+  "generated_angular_speed_min_radps": 0.001,
+  "render_width": 256,
+  "render_height": 192,
+  "render_rate_hz": 30,
+  "render_frame_count": 61,
+  "minimum_projectile_primary_hit_pixels": 8
+}

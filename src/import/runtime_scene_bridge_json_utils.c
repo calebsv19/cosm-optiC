@@ -3,6 +3,8 @@
 #include "import/runtime_scene_timeline.h"
 #include "app/scene_atmosphere_runtime.h"
 
+#include "import/runtime_rigid_result.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -202,6 +204,8 @@ bool runtime_scene_bridge_validate_root(json_object *root, RuntimeSceneBridgePre
     double world_scale_value = 1.0;
 
     if (!root || !out_preflight) return false;
+
+    if (!RuntimeRigidResultValidateReference(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
 
     if (!json_object_object_get_ex(root, "schema_family", &schema_family) ||
         !json_object_is_type(schema_family, json_type_string)) {

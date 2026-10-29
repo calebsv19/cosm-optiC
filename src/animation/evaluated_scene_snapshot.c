@@ -46,6 +46,11 @@ static bool ray_evaluated_quaternion_valid(RayEvaluatedQuaternion value) {
            isfinite(value.z) && fabs(norm_squared - 1.0) <= 1e-9;
 }
 
+static bool ray_evaluated_digest_valid(const char value[65]) {
+    for(size_t i=0;i<64;i++)if(!value[i]||!strchr("0123456789abcdef",value[i]))return false;
+    return value[64]=='\0';
+}
+
 static bool ray_evaluated_id_valid(const char* value, size_t capacity) {
     return value && value[0] && strnlen(value, capacity) < capacity;
 }
@@ -185,7 +190,8 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
                  RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION &&
              transform->source !=
                  RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT &&
-             transform->source != RAY_EVALUATED_OBJECT_TRANSFORM_SCENE_TIMELINE) ||
+             transform->source != RAY_EVALUATED_OBJECT_TRANSFORM_SCENE_TIMELINE &&
+             transform->source != RAY_EVALUATED_OBJECT_TRANSFORM_RIGID_RESULT) ||
             !ray_evaluated_id_valid(transform->target_id,
                                     sizeof(transform->target_id)) ||
             (!transform->has_position && !transform->has_rotation) ||
@@ -200,6 +206,10 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
               !transform->has_orientation_quaternion ||
               !transform->source_handoff_digest ||
               !transform->source_binding_digest)) ||
+            (transform->source == RAY_EVALUATED_OBJECT_TRANSFORM_RIGID_RESULT &&
+             (!transform->has_position || !transform->has_orientation_quaternion ||
+              !transform->rigid_body_id || !ray_evaluated_digest_valid(transform->rigid_result_revision) ||
+              !ray_evaluated_digest_valid(transform->rigid_physical_input_sha256))) ||
             !TimelineEvaluationContextsReferToSameSample(
                 &snapshot->frame, &transform->frame)) {
             return TIMELINE_STATUS_INVALID_SNAPSHOT;

@@ -1,3 +1,331 @@
+## October28 — curated uniform-scale assets
+
+[Uniform-scale preparation and qualification](rigid_uniform_assets.md) now supports bracket0.55 and channel0.85/0.52 with native source certificates. Kinetic Machinery Spill qualifies only through tick587; energy fails588 and native continuation refuses1218. No15s/settled-aftermath claim.
+
+## October 28 — complex-bay deck-contact continuation
+
+The seven-body bay now completes 7,200 genuine ticks / 30 seconds with exact
+normal/sanitized native replay and optiC playback. Measured contact witnesses
+replace the physical profile's support-band approximation; physical limits and
+rollback remain unchanged. The arch and both probes settle by the declared final
+window; the bracket and U-channel leave the finite deck. See
+[qualified continuation](rigid_deck_contact_continuation.md).
+
+## October 28 — exact rigid recording duration
+
+The local rigid result envelope is now 14,400 ticks / 60 seconds, with an explicit
+record-and-replay budget up to 1800 seconds. Stored bundles have no automatic
+expiry. The analytic full-minute control passes; the separately repaired bay now
+completes 30 seconds under unchanged physical/rollback gates. See
+[duration contracts and qualification](rigid_result_duration.md).
+
+[Latest audited source-region compiler and bounded elastic jaw response](rigid_source_region_compilation.md): seven-child source-exact wrench; centered deep-jaw motion now passes the existing physical gates.
+
+## October23 — bounded friction-bearing support continuation
+
+[Latest wrench jaw diagnosis and atomic source/energy refusal](rigid_wrench_jaw_refusal.md): tick316 rejected, valid315-tick prefix retained; six full asset controls unchanged.
+
+**Latest native collision boundary:** [existing decomposition artifact intake and U-channel/wrench results](rigid_decomposition_intake.md). Six controls pass; the deeper wrench jaw impact remains failed under unchanged gates. Main Edit qualification only.
+
+**Current October 27 collision assessment:** [STL representations, qualified collisions and native intake gap](rigid_asset_collision_status.md); [receiver face successor](rigid_receiver_face.md). These Main Edit results do not imply installed or release adoption.
+
+The retained friction refusal and tangential slide/stop controls now pass with certified flat-face impulses and support forces. Same physical gates and staged-state rollback; normal gravity and one static/dynamic pair. Rolling/torsion, tipping, rotating and general coupled contact remain separate. [Profile](rigid_friction_support.md).
+
+## October23 — gravity-driven resting/recontact continuation
+
+The retained gravity rest/return refusals now complete their impact and two
+seconds of rest. Certified pressure reactions, real return events and a staged
+contact/energy state preserve existing physical gates and rollback. Friction and
+resistance remain refused. [Profile](rigid_gravity_contact.md).
+
+## October23 — isolated gravity-driven swept impact tick
+
+A bounded static/dynamic line profile now reaches actual ballistic contact,
+responds at that pose and certifies the remaining quadratic gap. Explicit
+work-energy accounting retains existing physical and rollback gates. Later
+non-impact gravity integration is unchanged. [Profile](rigid_gravity_sweep.md).
+
+## October23 — bounded resting swept-impact continuation
+
+The retained zero-restitution refusal now advances with its original nonzero
+post-impulse residual. A finite-interval supporting-plane certificate reuses the
+existing coordinate allowance; larger closing/rotating motion still refuses
+with complete rollback. [Profile and qualification](rigid_resting_continuation.md).
+
+## October23 — retained swept-impact response and continuation
+
+Isolated zero-gravity face impacts now advance to actual contact, reuse the
+manifold solver and continue only with a conservative whole-compound separation
+certificate. The three original thin-plate misses now respond; unsupported
+continuation still rolls back atomically. [Profile and proof](rigid_swept_response.md).
+
+## October22 — staged sweep admission closes retained missed crossings
+
+Classified translation-only mesh sweeps now refuse endpoint-clear intervening
+impacts atomically. Three retained plate misses become tick-zero safe refusals;
+19 other diagnostic histories remain exact. No swept response solver is claimed.
+[Scope, verification and remaining boundary](rigid_sweep_admission.md).
+
+## October22 — classified cast contract and face normals hardened
+
+New opt-in translation-only query passes46 normal/repeat/SAN cases, including
+all eight retained donor blockers. Max normal error1.93e-16; impact error~0.1µm.
+Initial states remain explicit; edge normals can be unresolved; rotation/invalid
+motion refuse. Legacy41 results and existing CCD/manifold contracts remain exact.
+[Implementation, limits and staged-integration boundary](rigid_cast_contract_hardening.md).
+No runtime swept-path adoption, version change or installed/release effect.
+
+## October22 — compound-cast donor finds retained misses; adoption blocked
+
+41 read-only queries match normal/repeat/SAN:33 checks pass,8 remain blocked.
+Initially separated plate misses are detected at about0.1µm spatial TOI error.
+The wrapper loses initial-contact states; far-origin normals fail the declared
+strict gate and rebasing alone is insufficient. No runtime repair or adoption.
+[Evidence and concrete hardening boundary](rigid_compound_cast_donor.md).
+
+## October22 — fast/thin diagnostic finds accepted missed crossings
+
+Twenty-two controls classify5 contacts,2 clear motions,12 atomic safe refusals
+and3 accepted thin-plate crossings missed between ticks. Normal/repeat/SAN agree
+on140 snapshots. Source/collider and analytic sub-tick witnesses confirm the
+defect; sealed optiC playback faithfully reproduces it. No runtime/guard repair.
+[Diagnostic and next cast-donor boundary](rigid_fast_thin_diagnostic.md).
+
+## October 22 — dynamic compound pairs qualified
+
+Six aligned/spinning bracket/bracket, arch/arch and mixed pairs pass unchanged
+physical gates; 2,886 exact normal/replay/SAN snapshots and 415,584 optiC source
+vertices per build pass. Ten two-compound contact/rollback/refusal checks per
+build pass. No runtime/shared/version change. [Evidence and limits](rigid_compound_pairs.md).
+
+## October 22 — exact compound-motion bridge qualified
+
+Pinned two-child bracket and three-child closed arch now run through child-aware
+Ball admission/contact/recovery and authenticated optiC source-frame playback.
+Nine cases / 3,849 exact normal-replay-SAN snapshots and 447,432 native source
+vertices pass. Elastic support quietness remains failed; a separate dissipative
+settling control passes. See [scope, evidence and limits](rigid_compound_bridge.md).
+Development source only; no canonical adoption, installation or release.
+
+## October22 — contact placement repaired for free collision groups
+
+Free-group impulses now act at retained poses; static-envelope groups retain
+qualified support stabilization. Five collision controls pass fixed momentum and
+energy gates, including a mixed resting/free scene and a sphere negative control.
+Closed-pair angular-momentum error is below8.76e-14kgm²/s. Existing quiet gates
+pass;11172 qualified normal/SAN snapshots match and the32-body legacy crossing
+trace is exact. The faster room still refuses its motion budget. The top-heavy
+impact settles but fails the unchanged two-upper-brick toppling criterion(1/2),
+so that full scene remains unqualified. Local source/tools only.
+[Repair, evidence, reproduction and limits](rigid_contact_placement_repair.md).
+
+## October 22 — tumbling impact qualification exposes contact placement defect
+
+Three unequal-inertia tumbling pairs conserve energy and linear momentum but
+fail total spin-plus-orbital angular momentum by 0.01246–0.02303 kg m²/s. An
+independent COM-shift observer accounts for the jumps to roundoff. The 15-body
+obstacle profile refuses tick128 at the unchanged motion budget. Qualification
+is failed; free-rotation repair remains valid, and no numerical law was changed.
+[Diagnostic, fixed controls and next repair](rigid_tumbling_impact_diagnostic.md).
+
+## October 22 — gyroscopic rotation repaired locally
+
+The native Ball scene owner now couples implicit-midpoint Euler momentum with
+Cayley attitude updates for unequal inertia. Ten-second nonprincipal controls,
+reversal and tumbling floor impacts pass; 19,693 normal/sanitizer snapshots agree.
+The old 0.1597 kg m²/s drift is reduced to 5.31e-14 on the same two-second control.
+The retained sphere/cube trajectory remains exact. This is local source/tool
+qualification; the earlier video, installed apps and production are unchanged.
+[Algorithm, qualification and limits](rigid_gyroscopic_rotation.md).
+
+## October22 — non-cubic convex qualification and render
+
+Six isolated controls and two32-body rooms qualify7688 exact normal/sanitizer
+snapshots.15 non-cubic props react; exact2401-tick optiC playback passes. Arbitrary
+free precession was an explicit numerical gap in that pre-repair qualification. [Qualification](rigid_noncubic_qualification.md).
+The720p Disney V2 ten-second MP4 is verified at16FPS/160frames; full decode
+passes, raw frames and successful scratch are retired.
+
+## October 21 — crossing and off-center impacts qualified
+
+Three 32-body ten-second cases pass unchanged physical gates. Both impact
+arrangements have loaded crossing contact and two eccentric block strikes, then
+settle; 7,203 normal/sanitizer snapshots and all native optiC playback ticks agree.
+[Qualification and reproduction](rigid_crossing_qualification.md). This is local
+Main Edit source/tool proof; installed and production adoption remain separate.
+
+## October21 — 32-body development qualification
+
+The retained Main Edit native workflow now supports32 bodies/496 pairs with
+core_scene1.8.0 and bounded64MiB/4M-node result admission.22 dynamic bodies
+settle after simultaneous contacts and all four static obstacles are struck.
+[Proof, reproduction and remaining limits](rigid_capacity32_qualification.md).
+Installed/canonical/production adoption remains separate.
+
+## October21 — explicit rolling/torsional resistance
+
+Main Edit collision bindings support optional resistance lengths in metres,
+with core_scene development1.7.0 physical matching. Thirteen profiles match all
+18,733 normal/sanitizer snapshots; independent energy/momentum and analytical
+controls pass. The new2mm-material room settles all five dynamic bodies under
+unchanged4–6s gates. Original zero-law trajectories remain exact. All4,323
+native playback ticks/source vertices agree. See [parameters and qualification](rigid_contact_resistance.md).
+Installed/canonical/production adoption remains separate.
+
+## October 21 — sphere settling diagnostic resolved
+
+The mixed-room sphere quiet-window failure is explained by continuing rolling
+and later prop contacts. Both speed/spin limits hold from4.020833s; original4–6s
+gate remains failed. Seven isolated controls pass normally/sanitized, including
+analytical sliding, sustained rolling/spin and an at-rest/drop control. Original
+1441-frame replay is exact in each build. No numerical repair or hidden damping;
+explicit rolling/torsional resistance would be a separate model feature.
+See [the diagnostic follow-up](rigid_elastic_room_qualification.md#follow-up-diagnostic--original-motion-explained).
+
+## October 21 — analytical sphere and elastic room
+
+Main Edit adds verified analytical sphere assets and an explicit zero-cutoff
+elastic contact policy through Ball, shared core_scene development1.6.0 and
+optiC result playback. Eleven primary cases pass with8,171 exact normal/sanitizer
+snapshots. All four props react in both13-body elastic rooms; maximum energy
+drift is0.018%. All4,323 room playback ticks/source vertices match. The gravity
+room's four props pass4–6s rest gates, but the sphere briefly exceeds speed/spin
+limits at the window start; that failure is retained despite rest by6s.
+See [contracts, measurements and limits](rigid_elastic_room_qualification.md).
+No installed/canonical/worker/release transition.
+
+## October 21 — twelve-brick offset collision and settling qualified
+
+The +2 cm strike now completes six seconds and passes all 84 physical checks
+normally and sanitized. The stopped query was a separated pair with a measured
+2.227 mm gap; the penetration adapter now permits its existing projection checks
+to certify separation after a limited GJK search. Unresolved searches still
+refuse. All three upper bricks overturn/fall; every brick settles within the
+unchanged 4–6 s gates. Earlier twelve-brick controls and six-brick trajectories
+remain exact. Native all-tick geometry, eight ray/material views and the offset
+preview pass. No solver law, capacity, tolerance/window, shared API/version,
+application VERSION, installed/worker or release transition was made.
+
+## October21 — larger capacity and centered twelve-brick qualification
+
+The local scene/result/playback path now admits16 bodies and120 pairs, with
+120 constraints and8 distinct assets. A12-brick/floor/8kg-projectile scene passes
+all164 physical checks normally and sanitized under the unchanged6s/4–6s gates.
+All2882 snapshots agree; every brick settles. Native playback verifies all source
+vertices plus11 ray/material views. Two32-frame/16FPS previews verify and their
+raw frames are deleted. The additional2cm offset strike remains unqualified:
+a convex query reaches its iteration limit at tick150; rollback preserves the
+last accepted state. Next work is that query diagnosis, not a larger count.
+Shared optional result consumer source is1.5.0 and requires recompilation.
+Installed/canonical/worker/release state remains separate.
+
+## October21 — top-heavy offset settling repaired and qualified
+
+Native support witnesses now use contact depth plus slop instead of the legacy
+25mm band, and accepted orientation uses contact-solved angular velocity. The
+same six-second/4–6s gates pass for all top-heavy cases normally and sanitized
+(194/194 each), plus bottom-heavy/equal-mass and six resting controls. No extra
+damping, sleeping, window or tolerance change. Independent geometry/pose,
+replay/portable and13-view native presentation checks pass. The initial
+band-only bottom-offset regression is retained as failed evidence; the combined
+repair passes it. Larger structures and installed/canonical/release adoption
+remain separate. See [repair and proof](rigid_contact_settling_repair.md).
+
+## October21 — top-heavy tower: primary pass, offset settling open
+
+Reversed1.25/1.5/1.75/2/2.5/3kg ordering stays stable and passes the original
+strike. Native recovery's64-sweep budget refused the heavy coupled load; a
+bounded256-sweep scene allowance repairs completion without changing tolerances
+or impulse laws. Offset4–6s settling still fails six gates (2.081mm drift,
+0.04071m/s,0.19015rad/s,0.00280J). Normal/sanitizer/replay/portable and all-tick/
+13-view presentation proof agree. Prior mass arrangement stays exactly unchanged.
+Larger structures remain on hold pending focused rocking/contact diagnosis.
+See [checkpoint and retained failure](rigid_topheavy_qualification.md).
+
+## October 21 — unequal-mass tower stable, responsive and settled
+
+Six distinct brick masses totaling12kg pass undisturbed and two finite-mass
+strikes with unchanged4–6s settling gates. All194 physical checks per build,
+4323 exact normal/sanitizer/replay/portable snapshots and13 selected native
+render views pass. Runtime mass/inertia and gravity/floor momentum audits pass.
+No numerical source, installed-app, version or release change. See
+[unequal-mass qualification and scope](rigid_unequal_mass_qualification.md).
+
+## October 21 — support creep repaired; separately labeled settling windows
+
+Ball's native scene adapter now reconciles predicted linear drift with solved
+velocity before full-solid recovery. The original and+2cm offset tower strikes
+retain toppling and pass the unchanged quiet-state limits over seconds4–6.
+All4323 normal/sanitizer/replay snapshots and native geometry/pixel proof agree.
+The repaired offset's original3–5s check still fails because rocking lasts until
+about3.3s; the later observation does not rewrite that failure. Native delivery
+remains240Hz. See [repair, timestep evidence and settling limits](rigid_settling_qualification.md).
+No installed-app, package, version, release, shared or remote change.
+
+## October 20 — upper-layer toppling qualified; quiet-position settling remains open
+
+A three-layer, six-dynamic-brick tower stays stable without a strike and loses
+its upper layer under a finite 8 kg ballistic projectile. Both upper bricks
+tilt past 60° and fall over 0.35 m, with contact-free ballistic intervals.
+Normal/sanitizer/replay parity, source-mesh overlap, external linear momentum
+and ordinary optiC pose/pixel checks pass. A +2 cm offset repeats the qualitative
+effect. Final two-second support creep reaches 2.303 mm (offset: 3.655 mm), above
+the existing 2 mm quiet-position gate despite negligible velocities. This slice
+adds qualification and diagnostics; numerical runtime and installed apps do not
+change. See [toppling proof and limits](rigid_toppling_qualification.md).
+
+## October 20 — six-brick structure and heavy strike qualified
+
+Two crossed layers of three fully dynamic bricks pass all 68 rest/impact checks
+normally and under ASan/UBSan, with 2,402 exact snapshot pairs. Settling is below
+1 mm; the broad finite-mass strike moves all six bricks by about 0.136–0.186 m.
+Full source overlap stays below 0.501 mm. Coupled contact recovery, body-pair
+normal-cache identity and a BLAS/world shared-edge remapping miss are repaired.
+All ticks/vertices and sixteen selected pixel views pass ordinary native playback.
+The structure largely remains stacked; this is not general toppling or pile proof.
+See [six-brick qualification](rigid_six_brick_qualification.md). This supersedes
+older entries saying six-brick work has not started; release/canonical adoption
+remain separate.
+
+## October 20 — contact presentation verified; initial gap diagnosis corrected
+
+The previously reported apparent block separation was a visual-review mistake.
+The retained image has continuous orange/blue contact, and six fresh frames are
+byte-identical to their originals. A new request-driven native probe and Python
+source-ray/RGB reference pass663,552 paired acceleration checks and105,570 reference
+pixels, plus six injected-band negative controls. Physics and renderer runtime are
+unchanged. The contact-presentation hold is resolved for this bounded local proof;
+six-brick and installed delivery have not started. See
+[contact presentation proof](rigid_contact_presentation.md). This supersedes the
+open presentation note in the earlier resting-contact entry below.
+
+## October 20 — resting dynamic blocks and impacts
+
+The local rigid-scene lane qualifies six five-second resting/impact cases and an
+independent finite-mass restitution oracle, with exact normal/sanitizer parity.
+Ball reconstructs bounded coplanar imported-asset faces before contact clipping;
+maximum accepted overlap is 0.912 mm under the unchanged 2 mm gate. optiC admits
+all four base results and matches all 4,804 source poses/mesh samples. A rendered
+contact presentation discrepancy remains open, so this is physical/result-geometry
+proof, not visual acceptance or general tower qualification. See
+[resting qualification](rigid_resting_qualification.md). No installed/release change.
+
+## October 20 — BR4 normal rigid result consumer
+
+Main Edit consumes caller-selected accepted BR3 bundles through shared core_scene
+development1.4.0 admission, physical compatibility, exact rational sampling and
+normal evaluated/native mesh paths. Source COM/principal mapping, exact quaternion
+and result provenance, static-cache invalidation, hidden-instance presentation and
+failed-load preservation are explicit. Rendering invokes no Ball physics. See
+[rigid result playback](rigid_result_playback.md) for the binding, checked source
+adoption, supported time mapping and limits. All181 retained source ticks match
+preview/explicit frame poses; transformed vertices agree with an independent
+reference within1.78e-15m. Forty-five native cases pass normally and with rigid
+module ASan/UBSan instrumentation;16 surrounding regression groups pass. Source
+and native proof do not establish installed UI or broader physical acceptance.
+BR5 inspection and BR6 laptop/physical qualification remain next. App/worker
+labels remain0.18.0/0.12.1 in Main Edit; released canonical0.19.0/0.13.0 is preserved.
+
 ## October 18 — current version reconciliation
 
 Current source and registered desktop baseline: **0.18.0**. Current source and
@@ -3192,3 +3520,63 @@ stopping remains conservative, and larger photon maps are not a convergence clai
 This is a local source checkpoint/reconciliation only. App0.18.0 and worker0.11.0
 are unchanged. Release-package identity, native Linux workload qualification,
 publication, Registry-current and activation remain separate future boundaries.
+# October 19 — finite collision bridge proof-tool linkage
+
+Main Edit's compound evaluated-scene, detached-geometry, assembly and visual
+proof source lists now include the motion-frame validator required by the
+evaluated snapshot. Fresh headless/tool builds, affected compound contracts
+and targeted sanitizer checks pass. Ball's finite two-body/six-wall adapter
+passes native world-vertex comparisons and headless renders at exact contact
+milestones. This is source/tool qualification; generic rigid-scene admission,
+installed Desktop delivery and canonical/release adoption remain separate.
+
+## October 19 — BR1 rigid scene metadata boundary
+
+Shared core_scene1.3.0 defines typed roles, single transform authority and separate
+visible/collision/source and COM/principal-frame bindings. The optional research
+inspection tool validates the same declaration through shared/Ball/Ray JSON
+builds. Its synthetic fixture and metadata catalog are not physical asset proof.
+Ordinary rendering refuses a rigid_scene extension pending the generic result
+consumer; the existing finite bridge remains supported. See
+[rigid scene inspection](rigid_scene_contract.md). This is a source-level contract
+checkpoint, not installed Desktop, worker or release qualification.
+
+
+## 2026-10-20 — BR5 local rigid workflow
+
+The Main Edit development lane now has deterministic local prepare/select tools,
+a retained result-selection command and Render inspection panel, asynchronous
+explicit-profile producer preparation, and result-derived timeline transport
+without invented authoring channels. Native Vulkan/event, save/reopen, rollback,
+portable CLI and surrounding regression evidence qualify this source boundary.
+See [the workflow](rigid_scene_workflow.md). Installed packaging, remote delivery
+and BR6 physical/model/visible qualification remain separate.
+
+
+## 2026-10-20 — BR6 bounded physical and visual qualification
+
+Six four-body/two-second cases across independently prepared tetrahedron/prism
+STLs pass60 physical/geometry checks normally and under ASan/UBSan, with exact
+2,886-state parity. Full-convex static-contact recovery in Ball fixes observed
+penetration; maximum accepted source overlap is0.501mm against a predeclared2mm
+limit. Ray now admits verified unused library assets while retaining integrity
+and alias refusals. Four gravity-case render sequences (244frames) were reviewed.
+See [qualification](rigid_scene_qualification.md). This completes the bounded
+BR0–BR6 local integration; long-term/stacking/concave/CCD/gyroscopic, installed,
+release and remote qualification remain separate.
+
+
+October 25: [separately qualified support-edge tipping and angular resistance](rigid_angular_support.md) adds bounded authored box profiles; general sliding-edge/concave landing remains separate. Local complex-asset render proof now exists.
+
+
+October25 successor: [sliding-to-edge transfer](rigid_sliding_edge.md) adds a separately bounded flat-face to moving-edge contact switch. The retained trajectory progresses through the switch; detachment/new-face landing remain separate. See the profile and internal evidence for final qualification counts.
+
+
+## October 26 successor — finite-edge departure
+
+A separately certified trailing-corner event now transfers moving edge contact into gravity-driven free flight within the remaining tick and subsequent ticks. Positive outward separation and the existing 0.2 rad range remain required. The retained slower sliding case keeps its prior refusal; new-face landing and zero-reaction release remain separate. See [departure profile](rigid_edge_departure.md).
+
+
+## October 26 successor — landing into receiver edge support
+
+A separately admitted lower receiver now accepts landing from the retained detached state. The tilted impact and remaining-tick support retain pose/velocity, positive reaction/slip, the original work ledger, physical gates and full rollback. The representative case lands in tick114, continues through120 and safely refuses after128 before the next face switch. See [retained landing profile](rigid_retained_landing.md). General concave landing/settling remains separate.

@@ -7,6 +7,7 @@ include $(MAKE_DIR)/flags.mk
 include $(MAKE_DIR)/paths.mk
 include $(MAKE_DIR)/sources.mk
 include $(MAKE_DIR)/objects.mk
+include $(MAKE_DIR)/rules-rigid-result.mk
 
 ifeq ($(UNAME_S),Darwin)
 OBJ += $(BUILD_DIR)/platform/ray_tracing_macos_file_panel.o

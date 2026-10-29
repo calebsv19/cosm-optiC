@@ -1,4 +1,5 @@
 #include "import/runtime_scene_motion_bridge.h"
+#include "import/runtime_rigid_result.h"
 
 #include <string.h>
 
@@ -29,4 +30,13 @@ bool runtime_scene_motion_bridge_sample_object(const char* object_id,
 
 bool runtime_scene_motion_bridge_has_executable_motion(void) {
     return false;
+}
+
+/* These geometry-only fixtures have no accepted rigid result attachment. The
+ * real unbound adapter succeeds without changing the authored instance. */
+bool RuntimeRigidResultInstanceAtT(RayTracingRuntimeMeshAssetInstance *instance,
+                                   double t) {
+    (void)instance;
+    (void)t;
+    return true;
 }

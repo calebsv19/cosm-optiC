@@ -1,5 +1,6 @@
 #include "motion/scene_motion_plans.h"
 #include "app/evaluated_scene_service.h"
+#include "import/runtime_rigid_result.h"
 #include "app/scene_atmosphere_runtime.h"
 
 #include "animation/timeline_property_registry.h"
@@ -479,6 +480,8 @@ static bool ray_evaluated_build_authored(
     }
     status=RuntimeObjectTimelineCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
     if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"object timeline evaluation failed");return false;}
+    status=RuntimeRigidResultCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
+    if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"rigid result exact tick unavailable");return false;}
     inputs.invalidation_domains |= object_transform_count?TIMELINE_INVALIDATION_RIGID_TRANSFORM:0;
     inputs.object_transforms = object_transforms;
     inputs.object_transform_count = object_transform_count;
@@ -585,6 +588,8 @@ static bool ray_evaluated_build_legacy(
     }
     status=RuntimeObjectTimelineCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
     if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"object timeline evaluation failed");return false;}
+    status=RuntimeRigidResultCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
+    if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"rigid result exact tick unavailable");return false;}
     inputs.invalidation_domains |= object_transform_count?TIMELINE_INVALIDATION_RIGID_TRANSFORM:0;
     inputs.object_transforms = object_transforms;
     inputs.object_transform_count = object_transform_count;
@@ -672,6 +677,9 @@ TimelineStatus RayEvaluatedSceneResolveTimelineClock(
         return TIMELINE_STATUS_OK;
     }
     if (scene_clock != TIMELINE_STATUS_TARGET_NOT_FOUND) return scene_clock;
+    if (RuntimeRigidResultClock(&rate,&range)) {
+        *out_rate=rate;*out_range=range;return TIMELINE_STATUS_OK;
+    }
     if (RuntimeSceneLightTimelineGetLast(&document)) {
         rate = document.timeline.rate;
         range = document.timeline.range;

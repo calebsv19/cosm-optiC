@@ -2,6 +2,7 @@
 
 #include "import/runtime_mesh_asset_loader_authored_material.h"
 #include "import/runtime_scene_motion_bridge.h"
+#include "import/runtime_rigid_result.h"
 
 static bool runtime_scene_3d_builder_smooth_mesh_shading_enabled(void) {
     const char* mode = getenv("RAY_TRACING_MESH_SHADING_MODE");
@@ -293,6 +294,10 @@ bool runtime_scene_3d_builder_append_mesh_asset_set_at_t(
 
         runtime_scene_3d_builder_apply_motion_to_mesh_instance(&sampled_instance,
                                                                normalized_t);
+        if (!RuntimeRigidResultInstanceAtT(&sampled_instance,normalized_t)) {
+            runtime_scene_3d_builder_set_diag("rigid result requires an exact covered tick");
+            return false;
+        }
         instance = &sampled_instance;
         scene_object_index = runtime_scene_3d_builder_resolve_mesh_scene_object_index(instance);
         bounds = runtime_scene_3d_builder_mesh_bounds(document, instance);

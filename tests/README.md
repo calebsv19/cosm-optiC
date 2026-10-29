@@ -1084,3 +1084,6 @@ contract; it now passes with the 0.7.1 connectivity correction. The retained
 Neither gate is part of the routine stable suite. The mixed full-asset baseline
 and retained evidence contract are documented in
 [`docs/smoothing_first_slice.md`](../docs/smoothing_first_slice.md).
+
+
+Angular support continuation: see `tests/qualify_rigid_angular_support.py` in Ball Main Edit and `docs/rigid_angular_support.md`; normal/sanitizer numerical reference, repeat, rollback and immutable replay are separate from rendered appearance.

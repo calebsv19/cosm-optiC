@@ -13,6 +13,7 @@
 #include "config/config_manager.h"
 #include "import/runtime_scene_light_timeline_io.h"
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_rigid_result.h"
 #include "render/font_runtime.h"
 #include "render/text_draw.h"
 #include <math.h>
@@ -47,7 +48,15 @@ static bool sync_document(void) {
         snprintf(document_path, sizeof(document_path), "%s", path ? path : "");
     }
     if (available && !changed_scene && session.scene_revision == revision) return true;
-    available = SceneEditorDocumentGetTimeline(&document) == TIMELINE_STATUS_OK;
+    TimelineStatus loaded = SceneEditorDocumentGetTimeline(&document);
+    available = loaded == TIMELINE_STATUS_OK;
+    /* Result-only scenes have transport without inventing authored channels.
+     * The accepted cache, rather than legacy animation settings, owns time. */
+    if (!available && loaded == TIMELINE_STATUS_TARGET_NOT_FOUND && SceneEditorDocumentIsOpen()) {
+        TimelineRate rate; TimelineRange range;
+        if (RuntimeRigidResultClock(&rate,&range))
+            available=TimelineDocumentInit(&document,rate,range)==TIMELINE_STATUS_OK;
+    }
     if (!available) { session.transport.playing = false; return false; }
     TimelinePropertyRegistryInitFoundationDefaults(&registry);
     memset(&bindings, 0, sizeof(bindings));

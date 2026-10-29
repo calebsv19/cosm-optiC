@@ -1,3 +1,4 @@
+#include "scene_editor_rigid_panel.h"
 #include "editor/scene_editor_shared_text.h"
 #include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_shared_fields.h"
@@ -51,7 +52,7 @@ void SceneEditorRenderButton(SDL_Renderer* r,SDL_Rect rect,const char* text,bool
 bool SceneEditorRenderAuthoringDraftActive(void) {return editing>=0 || SceneEditorTimelineSettingsActive();}
 bool SceneEditorRenderAuthoringTiming(void) {return timing;}
 void SceneEditorRenderAuthoringSetTiming(bool enabled) {SceneEditorTimelineSettingsReset();if(enabled) SceneEditorMotionPathPanelSelect(false);SceneEditorTimelineKeyInspectorReset();timing=enabled;editing=-1;do{scene_editor_shared_field_end(draft);SDL_StopTextInput();}while(0);SceneEditorCameraInspectorReset();}
-void SceneEditorRenderAuthoringReset(void) {SceneEditorTimelineSettingsReset();SceneEditorMotionTrailReset();SceneEditorMotionPathPanelReset();SceneEditorObjectTimelinePanelReset();SceneEditorTimelineKeyInspectorReset();timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
+void SceneEditorRenderAuthoringReset(void) {SceneEditorRigidPanelReset();SceneEditorTimelineSettingsReset();SceneEditorMotionTrailReset();SceneEditorMotionPathPanelReset();SceneEditorObjectTimelinePanelReset();SceneEditorTimelineKeyInspectorReset();timing=false;left_offset=left_max=0;editing=-1;feedback[0]=0;memset(controls,0,sizeof(controls));}
 void SceneEditorRenderAuthoringSelect(SceneEditor* editor,bool camera) {
     SceneEditorTimelineSettingsReset();
     SceneEditorMotionPathPanelSelect(false);
@@ -96,6 +97,7 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     if(timing && SceneEditorTimelineSettingsEvent(e)) return true;
     if(SceneEditorMotionPathPanelEvent(editor,e,&layout)) return true;
     if(SceneEditorMotionPathPanelActive()) {if(e->type==SDL_MOUSEBUTTONDOWN && hit(controls[0],e->button.x,e->button.y)) {SceneEditorRenderAuthoringSelect(editor,true);return true;}if(e->type==SDL_MOUSEBUTTONDOWN && hit(controls[1],e->button.x,e->button.y)) {SceneEditorRenderAuthoringSelect(editor,false);return true;}return false;}
+    if(SceneEditorRigidPanelEvent(e)) return true;
     if(SceneEditorMotionTrailEvent(editor,e,&layout)) return true;
     if(SceneEditorObjectTimelinePanelEvent(e)) {editing=-1;return true;}
     if(SceneEditorObjectTimelineEvent(editor,e)) return true;
@@ -156,6 +158,7 @@ bool SceneEditorRenderAuthoringEvent(SceneEditor* editor,SDL_Event* e) {
     return hit(layout.left_content_rect,x,y) || (timing && hit(layout.right_content_rect,x,y));
 }
 void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLayout* layout) {
+    SceneEditorRigidPanelClearControls();
     memset(controls,0,sizeof(controls));memset(fields,0,sizeof(fields));
     for(int i=0;i<17;++i) controls_enabled[i]=true;
     if(layout->viewport_expanded) return;
@@ -182,6 +185,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
     controls[1]=(SDL_Rect){x+(w+6)/3,y,(w-12)/3,24};SceneEditorSharedUiPanelButton(r,154,256+(1),controls[1],"Light",!camera && !object && !SceneEditorMotionPathPanelActive(),true);
     controls[16]=(SDL_Rect){x+2*(w+6)/3,y,(w-12)/3,24};SceneEditorSharedUiPanelButton(r,154,384+(16),controls[16],"Paths",SceneEditorMotionPathPanelActive(),true);y+=30;
     if(SceneEditorMotionPathPanelActive()) {SDL_RenderSetClipRect(r,clipped?&prior:NULL);SceneEditorMotionPathPanelDraw(editor,layout);return;}
+    y=SceneEditorRigidPanelDraw(r,pane,y);
     label(r,object?"Subject: selected object":camera?"Subject: Camera":light_label,x,y);y+=26;
     controls[2]=(SDL_Rect){x,y,(w-6)/2,34};controls[3]=(SDL_Rect){x+(w-6)/2+6,y,(w-6)/2,34};
     SceneEditorSharedUiPanelButton(r,154,512+(2),controls[2],"Path shape",!timing,!object);SceneEditorSharedUiPanelButton(r,154,640+(3),controls[3],"Timing",timing,true);y+=40;
@@ -252,6 +256,7 @@ void SceneEditorRenderAuthoringDraw(SceneEditor* editor,const SceneEditorPaneLay
 bool SceneEditorRenderAuthoringControl(const char* name,SDL_Rect* out) {
     const char* names[]={"camera","light","path","animation","setup","frame_paths","previous","next","select","add","delete","interpolation","handles","yaw","pitch","intensity","paths"};
     if(!name || !out) return false;
+    if(SceneEditorRigidPanelControl(name,out)) return true;
     if(SceneEditorTimelineSettingsControl(name,out)) return true;
     if(SceneEditorMotionTrailControl(name,out)) return true;
     if(SceneEditorMotionPathPanelControl(name,out)) return true;

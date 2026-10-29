@@ -1,0 +1,14 @@
+{
+  "schema": "rigid_unequal_brick_qualification_v1",
+  "brick_mass_kg": {
+    "brick_0": 3.0,
+    "brick_1": 2.5,
+    "brick_2": 2.0,
+    "brick_3": 1.75,
+    "brick_4": 1.5,
+    "brick_5": 1.25
+  },
+  "projectile_mass_kg": 8.0,
+  "absolute_inertia_error_kgm2": 1e-12,
+  "initial_energy_error_j": 1e-10
+}

@@ -1,3 +1,4 @@
+#include "import/runtime_rigid_result.h"
 #include "import/runtime_scene_motion_bridge.h"
 #include "import/runtime_scene_object_timeline.h"
 
@@ -402,5 +403,5 @@ bool runtime_scene_motion_bridge_sample_object(const char *object_id,
 }
 
 bool runtime_scene_motion_bridge_has_executable_motion(void) {
-    return g_last_object_motion_summary.has_executable_motion || RuntimeObjectTimelineHasMotion();
+    return g_last_object_motion_summary.has_executable_motion || RuntimeObjectTimelineHasMotion() || RuntimeRigidResultActive();
 }

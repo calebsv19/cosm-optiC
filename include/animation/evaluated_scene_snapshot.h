@@ -9,7 +9,7 @@
 #include "animation/timeline_document.h"
 #include "animation/timeline_light_motion.h"
 
-#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 3u
+#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 4u
 #define RAY_EVALUATED_SCENE_DIAGNOSTICS_CAPACITY 256u
 #define RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY 64u
 
@@ -34,7 +34,8 @@ typedef enum RayEvaluatedObjectTransformSource {
     RAY_EVALUATED_OBJECT_TRANSFORM_NONE = 0,
     RAY_EVALUATED_OBJECT_TRANSFORM_COMPATIBILITY_MOTION,
     RAY_EVALUATED_OBJECT_TRANSFORM_COMPOUND_SCENE_EXACT,
-    RAY_EVALUATED_OBJECT_TRANSFORM_SCENE_TIMELINE
+    RAY_EVALUATED_OBJECT_TRANSFORM_SCENE_TIMELINE,
+    RAY_EVALUATED_OBJECT_TRANSFORM_RIGID_RESULT
 } RayEvaluatedObjectTransformSource;
 
 typedef enum RayEvaluatedSimulationInterpolation {
@@ -116,6 +117,9 @@ typedef struct RayEvaluatedObjectTransform {
     uint64_t source_handoff_digest;
     uint64_t source_binding_digest;
     uint64_t source_tick;
+    char rigid_result_revision[65];
+    char rigid_physical_input_sha256[65];
+    uint32_t rigid_body_id;
     TimelineEvaluationContext frame;
 } RayEvaluatedObjectTransform;
 

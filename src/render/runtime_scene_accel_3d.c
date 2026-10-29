@@ -909,6 +909,21 @@ static RuntimeSceneAcceleration3DTraceStatus runtime_scene_accel_3d_trace_instan
             gRuntimeSceneAcceleration3DTraceStats.identityRemapFailures += 1u;
             return RUNTIME_SCENE_ACCEL_3D_TRACE_ERROR;
         }
+        /* A local shared-edge hit can choose a triangle that rejects the
+         * transformed world ray, while its coplanar neighbor accepts it.
+         * Advancing t would skip that neighbor at the same distance. Recheck
+         * this instance's authoritative world triangles for in-range remaps;
+         * interval/self-hit rejection keeps the bounded retry below. */
+        double world_candidate_t = local_hit.t / local_direction_scale;
+        if (world_candidate_t >= t_min - world_t_tolerance &&
+            world_candidate_t <= t_max + world_t_tolerance) {
+            RuntimeSceneAcceleration3DTraceStatus status =
+                runtime_scene_accel_3d_trace_primitive_instance(
+                    scene, instance, world_ray, t_min, t_max, out_hit);
+            if (status == RUNTIME_SCENE_ACCEL_3D_TRACE_HIT)
+                goto valid_mesh_hit;
+            return status;
+        }
         double next=nextafter(local_hit.t,INFINITY);
         if (!(next>local_t_min) || !(next<local_t_max))
             return RUNTIME_SCENE_ACCEL_3D_TRACE_MISS;

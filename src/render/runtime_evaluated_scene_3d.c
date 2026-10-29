@@ -1,4 +1,5 @@
 #include "render/runtime_evaluated_scene_3d.h"
+#include "import/runtime_rigid_result.h"
 
 #include <string.h>
 
@@ -44,6 +45,7 @@ bool RuntimeEvaluatedScene3DApply(
         RayEvaluatedSceneSnapshotValidate(snapshot) != TIMELINE_STATUS_OK) {
         return false;
     }
+    if(!RuntimeRigidResultSnapshotMatches(snapshot))return false;
     light = runtime_evaluated_scene_find_light(&copied_scene->lightSet,
                                                &snapshot->light,
                                                snapshot->source);

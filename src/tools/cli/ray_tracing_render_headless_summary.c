@@ -150,7 +150,13 @@ void ray_tracing_render_headless_write_summary(
     for(size_t i=0;i<preflight->evaluated_object_count;++i) {
         const RayEvaluatedObjectTransform* object=&preflight->evaluated_objects[i];
         fprintf(file,"%s{\"object_id\":",i?",":"");RayTracingJsonWriteString(file,object->target_id);
-        fprintf(file,",\"position\":[%.17g,%.17g,%.17g],\"has_rotation\":%s,\"rotation_radians\":[%.17g,%.17g,%.17g],\"source\":%d}",object->position.x,object->position.y,object->position.z,object->has_rotation?"true":"false",object->rotation_radians.x,object->rotation_radians.y,object->rotation_radians.z,(int)object->source);
+        fprintf(file,",\"position\":[%.17g,%.17g,%.17g],\"has_rotation\":%s,\"rotation_radians\":[%.17g,%.17g,%.17g],\"source\":%d",object->position.x,object->position.y,object->position.z,object->has_rotation?"true":"false",object->rotation_radians.x,object->rotation_radians.y,object->rotation_radians.z,(int)object->source);
+        if(object->source==RAY_EVALUATED_OBJECT_TRANSFORM_RIGID_RESULT) {
+            fprintf(file,",\"source_tick\":%llu,\"body_id\":%u,\"orientation_wxyz\":[%.17g,%.17g,%.17g,%.17g],\"result_revision\":",(unsigned long long)object->source_tick,object->rigid_body_id,object->orientation_quaternion.w,object->orientation_quaternion.x,object->orientation_quaternion.y,object->orientation_quaternion.z);
+            RayTracingJsonWriteString(file,object->rigid_result_revision);
+            fprintf(file,",\"physical_input_sha256\":");RayTracingJsonWriteString(file,object->rigid_physical_input_sha256);
+        }
+        fprintf(file,"}");
     }
     fprintf(file,"],\n");
     fprintf(file, "  \"rendered_frames\": %s,\n", preflight->rendered_frames ? "true" : "false");

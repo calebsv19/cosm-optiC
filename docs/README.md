@@ -1,6 +1,31 @@
+## October28 — curated uniform-scale assets
+
+[Uniform-scale preparation and qualification](rigid_uniform_assets.md) now supports bracket0.55 and channel0.85/0.52 with native source certificates. Kinetic Machinery Spill qualifies only through tick587; energy fails588 and native continuation refuses1218. No15s/settled-aftermath claim.
+
+- [Complex-bay deck-contact continuation](rigid_deck_contact_continuation.md) — qualified 30-second motion, unchanged gates and finite-deck limits.
+
+- [Contact-placement repair](rigid_contact_placement_repair.md) — conserved free-group impacts, retained resting support and explicit remaining scene gates.
+- [Tumbling impact diagnostic](rigid_tumbling_impact_diagnostic.md) — closed-pair angular-momentum failure and obstacle-room motion guard.
+- [Gyroscopic rotation repair](rigid_gyroscopic_rotation.md) — conserved angular momentum, free tumbling, contact and compatibility qualification.
+- [Non-cubic convex qualification](rigid_noncubic_qualification.md) — unequal-inertia upright prisms, elastic controls and exact playback.
+- [32-body crossing and off-center impacts](rigid_crossing_qualification.md) — loaded crossing contact, angular response and unchanged settling gates.
+- [32-body mixed-room qualification](rigid_capacity32_qualification.md) — simultaneous contacts, four-obstacle impacts and bounded result storage.
+
+- [Full-capacity larger-room qualification](rigid_larger_room_qualification.md) — mixed contacts, settling and exact ten-second result times.
+
+- [Rolling and torsional contact resistance](rigid_contact_resistance.md) — explicit collision-material lengths and energy/stopping qualification.
+
+- [Analytical sphere and elastic mixed room](rigid_elastic_room_qualification.md) — bounded physics/playback proof and retained sphere settling limit.
+
+- [Twelve-brick offset query repair](rigid_offset_query_repair.md) — separation certificate and unchanged settling qualification.
+
+- [Twelve-brick capacity and qualification](rigid_twelve_brick_qualification.md) — centered pass, offset query boundary.
+
 # optiC Docs Index
 
 Start here for public repository documentation.
+
+Main Edit rigid motion: [accepted result playback, exact time and source-frame mapping](rigid_result_playback.md).
 
 Current versions: [source, desktop and worker status, proposed targets and release
 attribution checks](release_versions.md) (verified October 18, 2026).
@@ -259,3 +284,60 @@ opt-in schema, editor workflow, response policy and adoption status.
 T4 preserves bounded ideal secondary texture detail and reduces measured preview
 costs. See [T4 quality, performance and adoption](surface_material_t4_contract.md)
 for frozen budgets, fresh checks and remaining conservative boundaries.
+
+- [Local rigid simulation workflow](rigid_scene_workflow.md): explicit local prepare/run, retained selection, inspection and playback.
+
+- [Rigid pillar scene qualification](rigid_scene_qualification.md): BR6 physical tolerances, static recovery, independent STL and local visual proof.
+- [Resting dynamic blocks and impacts](rigid_resting_qualification.md): bounded stacking, finite-mass impact and coplanar-face repair.
+- [Contact presentation proof](rigid_contact_presentation.md): pixel-level contact checks and correction of the initial gap diagnosis.
+- [Six-brick structure](rigid_six_brick_qualification.md): stable dynamic support, heavy finite-mass impact, coupled recovery and ordinary render proof.
+
+- [Six-brick upper-layer toppling and settling limits](rigid_toppling_qualification.md)
+
+- [Support-position creep repair and separately labeled settling qualification](rigid_settling_qualification.md)
+
+- [Unequal-mass six-brick qualification](rigid_unequal_mass_qualification.md) — stable tower, two impacts and final settling.
+
+- [Top-heavy six-brick checkpoint](rigid_topheavy_qualification.md) — primary pass, offset settling failure retained.
+
+- [Contact geometry and angular-drift repair](rigid_contact_settling_repair.md) — closes top-heavy offset settling under unchanged gates.
+
+- [Exact bracket/arch compound-motion bridge](rigid_compound_bridge.md) — child-aware adapter, metadata and bounded motion qualification.
+
+- [Dynamic bracket/arch compound pairs](rigid_compound_pairs.md) — six bounded two-body collision controls.
+
+- [Bounded fast/thin diagnostic](rigid_fast_thin_diagnostic.md) — three accepted missed crossings; CCD unqualified.
+
+- [Compound-cast donor qualification](rigid_compound_cast_donor.md) — retained misses found; initial-state/normal contract blockers remain.
+
+- [Classified cast contract hardening](rigid_cast_contract_hardening.md) —46 cases; explicit initial states and certified face normals; staged adoption remains next.
+
+- [Staged classified-sweep admission](rigid_sweep_admission.md) — retained misses safely refused; swept response remains next.
+
+- [Retained swept-impact response](rigid_swept_response.md) — isolated face response and certified continuation.
+
+- [Bounded resting continuation](rigid_resting_continuation.md) — retained zero-restitution impact, unchanged physical gates and rollback.
+
+- [Isolated gravity-driven swept impact](rigid_gravity_sweep.md) — ballistic impact tick, work accounting and certified remaining time.
+
+- [Gravity-driven rest/recontact](rigid_gravity_contact.md) — pressure certificate, real return events and atomic captured-state continuation.
+
+- [Bounded friction-bearing flat-face support](rigid_friction_support.md).
+
+
+October 25: [separately qualified support-edge tipping and angular resistance](rigid_angular_support.md) adds bounded authored box profiles; general sliding-edge/concave landing remains separate. Local complex-asset render proof now exists.
+
+
+October25 successor: [sliding-to-edge transfer](rigid_sliding_edge.md) adds a separately bounded flat-face to moving-edge contact switch. The retained trajectory progresses through the switch; detachment/new-face landing remain separate. See the profile and internal evidence for final qualification counts.
+
+- [Finite-edge departure and detached continuation](rigid_edge_departure.md)
+
+- [Landing from retained detached motion](rigid_retained_landing.md)
+
+October 27 successor: [receiver face qualification](rigid_receiver_face.md) and [complex STL collision status and priority](rigid_asset_collision_status.md).
+
+[Native decomposition artifact intake and current wrench limitation](rigid_decomposition_intake.md).
+
+[Latest wrench jaw diagnosis and atomic source/energy refusal](rigid_wrench_jaw_refusal.md): tick316 rejected, valid315-tick prefix retained; six full asset controls unchanged.
+
+- [Exact rigid result duration and retained continuation](rigid_result_duration.md)

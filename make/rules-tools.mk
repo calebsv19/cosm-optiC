@@ -147,3 +147,17 @@ photon-receiver-audit: $(BUILD_DIR)/tests/tools/photon_receiver_audit
 $(BUILD_DIR)/tests/tools/photon_receiver_audit: $(BUILD_DIR)/tests/tools/photon_receiver_audit.o $(RAY_TRACING_RENDER_HEADLESS_DEPS)
 	@mkdir -p $(dir $@)
 	$(CC) $^ -o $@ $(LDFLAGS)
+
+# BR1 research/admission tool: explicitly separate from the vendored renderer.
+# Override for a standalone shared checkout. No runtime subtree adoption implied.
+RIGID_SCENE_CORE_DIR ?= $(CODEWORK_WORKSPACE_ROOT)/shared/core/core_scene
+RIGID_SCENE_CONTRACT_SRC := $(RIGID_SCENE_CORE_DIR)/tools/rigid_scene_inspect.c $(RIGID_SCENE_CORE_DIR)/src/core_scene_rigid.c $(RIGID_SCENE_CORE_DIR)/src/core_scene_rigid_json.c $(CORE_MESH_ASSET_DIR)/../../shape/external/cjson/cJSON.c
+.PHONY: ray-tracing-rigid-scene-contract-tool
+ray-tracing-rigid-scene-contract-tool: $(BUILD_DIR)/tools/rigid_scene_inspect
+$(BUILD_DIR)/tools/rigid_scene_inspect: $(RIGID_SCENE_CONTRACT_SRC) $(wildcard $(RIGID_SCENE_CORE_DIR)/include/core_scene_rigid*.h)
+	@mkdir -p $(dir $@)
+	$(CLANG_CC) -std=c11 -Wall -Wextra -Werror -g -I$(RIGID_SCENE_CORE_DIR)/include -I$(CORE_BASE_DIR)/include -I$(CORE_MESH_ASSET_DIR)/../../shape/external/cjson $(RIGID_SCENE_CONTRACT_SRC) -lm -o $@
+.PHONY: test-ray-tracing-rigid-scene-admission
+test-ray-tracing-rigid-scene-admission: ray-tracing-rigid-scene-contract-tool
+	@test -n "$(RIGID_SCENE_PROOF_ROOT)" || (echo 'Set RIGID_SCENE_PROOF_ROOT to a fresh task-owned directory' >&2; exit 2)
+	PYTHONDONTWRITEBYTECODE=1 python3 $(RIGID_SCENE_CORE_DIR)/tests/test_rigid_scene_admission.py --tool $(BUILD_DIR)/tools/rigid_scene_inspect --out "$(RIGID_SCENE_PROOF_ROOT)"

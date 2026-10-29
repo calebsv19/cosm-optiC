@@ -61,6 +61,9 @@ def references(doc):
     """Discover explicit file dependencies, excluding semantic target/path IDs."""
     if isinstance(doc, dict):
         for key, value in doc.items():
+            if key == 'bundle_path' and doc.get('schema') == 'ray_rigid_result_binding_v1':
+                # A typed immutable directory is handled by rigid_dependencies.
+                continue
             if isinstance(value, str):
                 # Native surface bindings name a mapping mode here; imported
                 # region manifests can instead name a projection document.
@@ -113,7 +116,8 @@ def snapshot_inputs(scene_path, request_path, dest):
             raise ValueError(f'render.{key} must be a positive integer')
     if type(render.get('start_frame', 0)) is not int or render.get('start_frame', 0) < 0:
         raise ValueError('invalid start_frame')
-    dependencies = {}
+    from scene_workflow_rigid_assets import rigid_dependencies
+    dependencies = rigid_dependencies(scene, source, contained, read, sha)
     from scene_atmosphere_assets import scene_dependencies
     from scene_workflow_dependencies import resolve_references
     pending = list(references(scene))+scene_dependencies(scene,source)
@@ -214,6 +218,9 @@ def verify(root):
                 if rel not in expected:
                     raise ValueError(f'unmanifested scene dependency: {rel}')
                 contained(root, rel)
+    from scene_workflow_rigid_assets import rigid_dependencies
+    for rel in rigid_dependencies(read(root/'scene_runtime.json'), root, contained, read, sha):
+        if rel not in expected:raise ValueError(f'unmanifested rigid dependency: {rel}')
     from scene_atmosphere_assets import scene_dependencies
     for rel in scene_dependencies(read(root/'scene_runtime.json'),root):
         if rel not in expected:raise ValueError(f'unmanifested atmosphere dependency: {rel}')

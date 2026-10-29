@@ -279,6 +279,9 @@ TimelineStatus TimelineTrackValidate(const TimelineTrack* track,
 
 static double timeline_cubic_bezier(double p0, double p1, double p2, double p3,
                                     double u) {
+    /* Preserve an authored hold exactly.  Summing Bernstein weights can round
+     * above a bounded channel's maximum even when all controls equal it. */
+    if (p0 == p1 && p1 == p2 && p2 == p3) return p0;
     const double one_minus_u = 1.0 - u;
     return one_minus_u * one_minus_u * one_minus_u * p0 +
            3.0 * one_minus_u * one_minus_u * u * p1 +

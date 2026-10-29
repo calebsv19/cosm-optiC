@@ -2023,6 +2023,7 @@ RUNTIME_CURVE_BLAS_PSG23B_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
 	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d_reflection_footprint.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
@@ -2066,6 +2067,7 @@ RUNTIME_CURVE_SCENE_PSG23C_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_scene_accel_3d.c \
 	$(SRC_DIR)/render/runtime_scene_accel_3d_instances.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d_reflection_footprint.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
@@ -2133,6 +2135,7 @@ RUNTIME_CURVE_DENSITY_PSG23F_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
 	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d_reflection_footprint.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
@@ -2285,6 +2288,7 @@ RUNTIME_MESH_ASSET_BUILDER_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
 	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d_reflection_footprint.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
@@ -2335,6 +2339,7 @@ PROCEDURAL_SOLID_MATERIAL_RUNTIME_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
 	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d_reflection_footprint.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
@@ -2410,6 +2415,7 @@ RUNTIME_MESH_ASSET_HEADLESS_AUDIT_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
 	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d_reflection_footprint.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_environment_3d.c \
@@ -2554,6 +2560,7 @@ RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS := \
 	$(SRC_DIR)/render/runtime_curve_blas_3d.c \
 	$(SRC_DIR)/render/runtime_scene_curve_3d.c \
 	$(SRC_DIR)/render/runtime_ray_3d.c \
+	$(SRC_DIR)/render/runtime_ray_3d_reflection_footprint.c \
 	$(SRC_DIR)/render/runtime_scene_3d.c \
 	$(SRC_DIR)/render/runtime_emissive_light_set_3d.c \
 	$(SRC_DIR)/render/runtime_light_set_3d.c \
@@ -2566,6 +2573,8 @@ $(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN): $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS)
 	@mkdir -p $(dir $@)
 	$(CC) $(CSTD) -Wall -Wextra -Wpedantic -g \
 		-I$(INC_DIR) -I$(FISICS_INCLUDE_DIR) -I$(SRC_DIR) \
+		-I$(CORE_MESH_ASSET_DIR)/include -I$(CORE_OBJECT_DIR)/include \
+		-I$(CORE_UNITS_DIR)/include -I$(CORE_BASE_DIR)/include \
 		-o $@ $(RUNTIME_TRIANGLE_BVH_3D_TEST_SRCS) -lm
 
 test-runtime-triangle-bvh-3d: $(RUNTIME_TRIANGLE_BVH_3D_TEST_BIN)
@@ -3065,6 +3074,7 @@ test-ray-tracing-compound-scene-room-geometry-sanitize:
 RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_BIN := \
 	$(BUILD_DIR)/tests/compound_scene_evaluated_scene_contract_test
 RAY_TRACING_COMPOUND_EVALUATED_SCENE_TEST_SRCS := \
+	$(SRC_DIR)/motion/motion_frame.c \
 	$(TEST_DIR)/compound_scene_evaluated_scene_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
 	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
@@ -3097,6 +3107,7 @@ test-ray-tracing-compound-scene-evaluated-scene-sanitize:
 RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_BIN := \
 	$(BUILD_DIR)/tests/compound_scene_detached_geometry_contract_test
 RAY_TRACING_COMPOUND_DETACHED_GEOMETRY_TEST_SRCS := \
+	$(SRC_DIR)/motion/motion_frame.c \
 	$(TEST_DIR)/compound_scene_detached_geometry_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
 	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
@@ -3134,6 +3145,7 @@ RAY_TRACING_COMPOUND_ASSEMBLY_C2_MESH := \
 RAY_TRACING_COMPOUND_ASSEMBLY_C1_MESH := \
 	$(TEST_DIR)/fixtures/compound_scene_handoff/assets/mesh_assets/mesh_c1_l_bracket.runtime.json
 RAY_TRACING_COMPOUND_ASSEMBLY_TEST_SRCS := \
+	$(SRC_DIR)/motion/motion_frame.c \
 	$(TEST_DIR)/compound_scene_assembly_contract_test.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
 	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \
@@ -3347,6 +3359,7 @@ RAY_TRACING_COMPOUND_S9E_EMITTER_BIN := \
 RAY_TRACING_COMPOUND_S9E_SOURCE_MESH := \
 	$(TEST_DIR)/fixtures/compound_scene_handoff/assets/mesh_assets/mesh_c2_u_channel.runtime.json
 RAY_TRACING_COMPOUND_S9E_EMITTER_SRCS := \
+	$(SRC_DIR)/motion/motion_frame.c \
 	tools/compound_scene_visual_proof_emit.c \
 	$(SRC_DIR)/import/compound_scene_handoff_import.c \
 	$(SRC_DIR)/import/compound_scene_handoff_z_up_v2_import.c \

@@ -1,3 +1,4 @@
+#include "import/runtime_rigid_result.h"
 #include "import/runtime_scene_lighting_writeback.h"
 #include <fisics/extensions.h>
 
@@ -78,6 +79,7 @@ static void scaffold_state_reset(void) {
 
 static bool s_empty_after_failure;
 void runtime_scene_bridge_clear_failed_generation(void) {
+    RuntimeRigidResultCommit(NULL);
     scene_defaults_reset();
     scaffold_state_reset();
     RuntimeSurfaceMappingReset();
@@ -842,6 +844,7 @@ bool runtime_scene_bridge_preflight_json(const char *runtime_scene_json,
     if (!runtime_scene_json || !out_preflight) return false;
     runtime_scene_bridge_preflight_reset(out_preflight);
 
+    if(!RuntimeRigidResultStrictJSON(runtime_scene_json)) {runtime_scene_bridge_preflight_diag(out_preflight,"ambiguous or oversized runtime scene JSON");return false;}
     root = json_tokener_parse(runtime_scene_json);
     if (!root || !json_object_is_type(root, json_type_object)) {
         runtime_scene_bridge_preflight_diag(out_preflight, "invalid JSON object");
@@ -854,12 +857,18 @@ bool runtime_scene_bridge_preflight_json(const char *runtime_scene_json,
         return false;
     }
 
+    if(!RuntimeRigidResultValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) {json_object_put(root);return false;}
     json_object_put(root);
     return true;
 }
 
-bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
-                                     RuntimeSceneBridgePreflight *out_summary) {
+bool runtime_scene_bridge_apply_json_prepared(const char *,RuntimeSceneBridgePreflight *,RuntimeRigidResult *);
+bool runtime_scene_bridge_apply_json(const char *text,RuntimeSceneBridgePreflight *summary) {
+    return runtime_scene_bridge_apply_json_prepared(text,summary,NULL);
+}
+
+bool runtime_scene_bridge_apply_json_prepared(const char *runtime_scene_json,
+                                     RuntimeSceneBridgePreflight *out_summary,RuntimeRigidResult *rigid) {
     json_object *root = NULL;
     json_object *objects = NULL;
     json_object *materials = NULL;
@@ -871,6 +880,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     if (!runtime_scene_json || !out_summary) return false;
     runtime_scene_bridge_preflight_reset(out_summary);
 
+    if(!RuntimeRigidResultStrictJSON(runtime_scene_json)) {runtime_scene_bridge_preflight_diag(out_summary,"ambiguous or oversized runtime scene JSON");return false;}
     root = json_tokener_parse(runtime_scene_json);
     if (!root || !json_object_is_type(root, json_type_object)) {
         runtime_scene_bridge_preflight_diag(out_summary, "invalid JSON object");
@@ -883,6 +893,13 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
         return false;
     }
 
+    json_object *extensions=NULL,*physical=NULL;
+    json_object_object_get_ex(root,"extensions",&extensions);
+    if(extensions)json_object_object_get_ex(extensions,"rigid_scene",&physical);
+    if((physical!=NULL)!=(rigid!=NULL)) {
+        runtime_scene_bridge_preflight_diag(out_summary,"rigid_scene execution requires file-backed verified result admission");
+        json_object_put(root);return false;
+    }
     ray_tracing_runtime_mesh_assets_reset_last();
     ray_tracing_runtime_curve_assets_reset_last();
     RuntimeNative3DPreparedSceneMarkDirty("runtime_scene_bridge_apply_json");
@@ -917,6 +934,7 @@ bool runtime_scene_bridge_apply_json(const char *runtime_scene_json,
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.useFluidScene = false;
 
+    RuntimeRigidResultCommit(rigid);
     s_empty_after_failure = false;
     runtime_scene_bridge_preflight_diag(out_summary, "ok");
     json_object_put(root);

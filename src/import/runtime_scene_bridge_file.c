@@ -1,4 +1,6 @@
 #include "import/runtime_scene_bridge.h"
+#include "import/runtime_rigid_result.h"
+bool runtime_scene_bridge_apply_json_prepared(const char *,RuntimeSceneBridgePreflight *,RuntimeRigidResult *);
 
 #include "config/config_manager.h"
 #include "core_io.h"
@@ -19,6 +21,9 @@ static bool runtime_scene_bridge_requires_full_surface_meshes(const char *text) 
     json_object *root=json_tokener_parse(text),*objects=NULL,*ext=NULL,*ray=NULL,*authoring=NULL,*rows=NULL;
     bool required=false;
     if(!root)return false;
+    json_object *rigid_ext=NULL,*rigid=NULL;json_object_object_get_ex(root,"extensions",&rigid_ext);
+    if(rigid_ext)json_object_object_get_ex(rigid_ext,"rigid_scene",&rigid);
+    required=rigid!=NULL;
     json_object_object_get_ex(root,"objects",&objects);
     for(size_t i=0;json_object_is_type(objects,json_type_array)&&i<json_object_array_length(objects);++i){
         json_object *o=json_object_array_get_idx(objects,i),*map=NULL,*sampling=NULL,*method=NULL;
@@ -53,6 +58,7 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
     CoreResult io_result;
     char *json_text = NULL;
     bool ok;
+    RuntimeRigidResult *rigid=NULL;
 
     if (!runtime_scene_path || !out_preflight) return false;
     runtime_scene_bridge_preflight_reset(out_preflight);
@@ -83,6 +89,7 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
         runtime_scene_bridge_preflight_diag(out_preflight, "invalid surface resource scene path context");
         ok = false;
     }
+    if(ok) {json_object *root=json_tokener_parse(json_text);ok=root && RuntimeRigidResultPrepare(root,runtime_scene_path,&rigid,out_preflight->diagnostics,sizeof(out_preflight->diagnostics));if(root)json_object_put(root);}
     free(json_text);
     if (ok) {
         RayTracingRuntimeCurveAssetSet *curve_assets =
@@ -90,6 +97,7 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
         if (!curve_assets) {
             runtime_scene_bridge_preflight_diag(
                 out_preflight, "out of memory");
+            RuntimeRigidResultFree(rigid);
             return false;
         }
         ray_tracing_runtime_curve_asset_set_init(curve_assets);
@@ -112,6 +120,7 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
         if (!mesh_assets) {
             runtime_scene_bridge_preflight_diag(
                 out_preflight, "out of memory");
+            RuntimeRigidResultFree(rigid);
             return false;
         }
         if (!ray_tracing_runtime_mesh_assets_last_matches_scene_file(runtime_scene_path)) {
@@ -121,10 +130,12 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
                 mesh_assets,
                 out_preflight->diagnostics,
                 sizeof(out_preflight->diagnostics));
+            if(ok)ok=RuntimeRigidResultMeshesMatch(rigid,mesh_assets,out_preflight->diagnostics,sizeof(out_preflight->diagnostics));
             ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
-        }
+        } else {ok=RuntimeRigidResultMeshesMatch(rigid,ray_tracing_runtime_mesh_assets_last(),out_preflight->diagnostics,sizeof(out_preflight->diagnostics));}
         free(mesh_assets);
     }
+    RuntimeRigidResultFree(rigid);
     return ok;
 }
 
@@ -223,6 +234,16 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
         }
     }
 
+    RuntimeRigidResult *rigid=NULL;
+    json_object *rigid_root=json_tokener_parse(json_text);
+    bool rigid_ok=rigid_root && RuntimeRigidResultPrepare(rigid_root,runtime_scene_path_copy,&rigid,out_summary->diagnostics,sizeof(out_summary->diagnostics)) && RuntimeRigidResultMeshesMatch(rigid,mesh_assets,out_summary->diagnostics,sizeof(out_summary->diagnostics));
+    if(rigid_root)json_object_put(rigid_root);
+    if(!rigid_ok) {
+        RuntimeRigidResultFree(rigid);free(json_text);
+        ray_tracing_runtime_mesh_asset_set_free(mesh_assets);free(mesh_assets);
+        ray_tracing_runtime_curve_asset_set_free(curve_assets);free(curve_assets);
+        return false;
+    }
     snprintf(animSettings.runtimeScenePath,
              sizeof(animSettings.runtimeScenePath),
              "%s",
@@ -230,7 +251,8 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
     char previous_context[PATH_MAX];
     snprintf(previous_context, sizeof(previous_context), "%s", RuntimeSurfaceSamplingScenePathContext());
     if (RuntimeSurfaceSamplingSetScenePathContext(runtime_scene_path_copy)) {
-        ok = runtime_scene_bridge_apply_json(json_text, out_summary);
+        ok = runtime_scene_bridge_apply_json_prepared(json_text, out_summary,rigid);
+        if(ok)rigid=NULL;
         (void)RuntimeSurfaceSamplingSetScenePathContext(previous_context);
     } else {
         runtime_scene_bridge_preflight_diag(out_summary, "invalid surface resource scene path context");
@@ -259,6 +281,7 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
         ray_tracing_runtime_mesh_asset_set_free(mesh_assets);
         ray_tracing_runtime_curve_asset_set_free(curve_assets);
     }
+    RuntimeRigidResultFree(rigid);
     free(json_text);
     free(mesh_assets);
     free(curve_assets);
