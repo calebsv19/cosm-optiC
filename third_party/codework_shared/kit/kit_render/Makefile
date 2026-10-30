@@ -159,3 +159,15 @@ endif
 test-native-font: | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(shell $(PKG_CONFIG) --cflags sdl2 SDL2_ttf) -Iinclude src/kit_render_native_font.c tests/kit_render_native_font_test.c $(shell $(PKG_CONFIG) --libs sdl2 SDL2_ttf) $(NATIVE_FONT_FRAMEWORKS) -lm -o $(OBJ_DIR)/kit_render_native_font_test
 	$(OBJ_DIR)/kit_render_native_font_test "$(NATIVE_FONT_TEST_FONT)"
+
+# Optional native glyph oracle. Caller supplies font and isolated output paths.
+EXTERNAL_TEXT_PIXEL_BIN := $(OBJ_DIR)/kit_render_external_text_pixel_test
+$(EXTERNAL_TEXT_PIXEL_BIN): tests/kit_render_external_text_pixel_test.c $(LIB) vk-renderer-lib $(CORE_THEME_DIR)/build/libcore_theme.a $(CORE_FONT_DIR)/build/libcore_font.a $(CORE_BASE_DIR)/build/libcore_base.a | $(OBJ_DIR)
+ifeq ($(KIT_RENDER_ENABLE_VK),1)
+	$(CC) $(CFLAGS) $(VK_ENABLE_CFLAGS) $(INC) $< $(LIB) $(VK_RENDERER_DIR)/build/lib/libvkrenderer.a $(VK_RUNTIME_DIR)/build/lib/libvkruntime.a $(CORE_THEME_DIR)/build/libcore_theme.a $(CORE_FONT_DIR)/build/libcore_font.a $(CORE_BASE_DIR)/build/libcore_base.a $(VULKAN_LIBS) $(SDL_LIBS) $(filter-out -lSDL2,$(SDL_TTF_LIBS)) $(APPLE_FW) -lm -o $@
+else
+	@echo "external-text-pixel-harness requires KIT_RENDER_ENABLE_VK=1"
+	@false
+endif
+.PHONY: external-text-pixel-harness
+external-text-pixel-harness: $(EXTERNAL_TEXT_PIXEL_BIN)
