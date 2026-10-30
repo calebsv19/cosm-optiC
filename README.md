@@ -4,10 +4,14 @@
 C/SDL2 scene editor and renderer with both legacy `2D` paths and a shipped
 native `3D` runtime ladder.
 
-Version status (October 18, 2026): released desktop **0.19.0** and independent
-registered worker **0.13.0**. Decision Two publication, selected-host package
-verification, Registry promotion and signed-snapshot verification are complete. See
+Version status (October 30, 2026): released desktop **0.20.0** and independent
+registered worker **0.14.0**. Publication, Registry promotion and signed-snapshot
+verification are complete. The release desktop is installed locally, and the
+selected Linux PC long worker is activated and qualified. See
 [version attribution and release checks](docs/release_versions.md).
+
+For development, start with the [Main Edit runbook](docs/main_edit_worktree.md)
+and [current behavior and qualification limits](docs/current_truth.md).
 
 Identity note:
 

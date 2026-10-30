@@ -1,3 +1,12 @@
+## Development entry — October 30, 2026
+
+- [Main Edit: source lane, installed development-app identity and resume steps](main_edit_worktree.md)
+- [Current behavior and qualification limits](current_truth.md)
+- [Released desktop 0.20.0 / worker 0.14.0 attribution](release_versions.md)
+- [Candidate future work and roadmap interpretation](future_intent.md)
+
+The dated updates below retain their original scope and acceptance boundaries.
+
 ## October28 — curated uniform-scale assets
 
 [Uniform-scale preparation and qualification](rigid_uniform_assets.md) now supports bracket0.55 and channel0.85/0.52 with native source certificates. Kinetic Machinery Spill qualifies only through tick587; energy fails588 and native continuation refuses1218. No15s/settled-aftermath claim.

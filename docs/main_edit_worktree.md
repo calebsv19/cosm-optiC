@@ -1,3 +1,25 @@
+## Start here after the October 30 release
+
+Continue functional development in `<workspace>/_worktrees/ray_tracing_main_edit`
+on `codex/ray-tracing-main-edit`. Canonical and Main Edit are clean with matching
+content at this handoff; both use app `0.20.0` / worker `0.14.0`. Main Edit retains
+integration commits, so equal content does not require equal commit IDs or zero
+ahead counts. Use the [fresh source readback](#start-or-resume-readback) before
+each new slice; dated entries below are historical evidence.
+
+The installed `~/Desktop/optiC.app` is the authenticated 0.20.0 release. The
+separate `~/Desktop/optiC Main Edit.app` was inspected on October 30 and still
+identifies the October 21 development build from dirty source at `060bc5b`, with
+version baseline `0.18.0`. It does not represent the reconciled source. When a
+new slice needs GUI proof, use the [isolated development package workflow](#continue-functional-work)
+to build and verify that slice's exact identity before reviewing it. Source
+reconciliation alone does not refresh either installed app.
+
+Read [current truth](current_truth.md) for implemented behavior and physical/
+visual limits, and [release versions](release_versions.md) for package/runtime
+attribution. The [future-intent notes](future_intent.md) retain candidate work;
+select a bounded next task rather than treating an old roadmap entry as active.
+
 ## October 30 — accepted 0.20.0 / worker 0.14.0 release baseline
 
 Published source `2886958f96c86e49e53095fa4af6754b349c62c2` is adopted back into
@@ -788,7 +810,7 @@ remains at the aligned foundation baseline until separately adopted. See
 `docs/editor_workspace.md` for tests and open acceptance. Read fresh Git state
 before resuming; historical snapshots below are not current lane identity.
 
-Last verified: 2026-09-04
+Runbook reviewed: 2026-10-30. Historical verification snapshots retain their dates.
 
 This is the RayTracing pilot runbook for the CodeWork Persistent Main-Edit
 Worktree Contract (`MEW1`). Public clones can use this document without the
