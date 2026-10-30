@@ -494,7 +494,7 @@ int main(int argc, char** argv) {
     animSettings.spaceMode = SPACE_MODE_3D;
     snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", argv[2]);
     if(argc==4 && !strcmp(argv[3],"--dm2"))dm2_sampler_contract();
-    if(argc==4 && !strncmp(argv[3],"--rigid-ui",10)) rigid_ui_validation_begin();
+    if(argc==4 && (!strncmp(argv[3],"--rigid-ui",10) || !strcmp(argv[3],"--shared-fields-hud"))) rigid_ui_validation_begin();
     assert(InitializeSceneEditor(&editor));
     active_editor = &editor;
     if(getenv("OPTIC_UI_REQUIRE_VALIDATION")) {
@@ -512,7 +512,7 @@ int main(int argc, char** argv) {
     if(argc==4 && !strcmp(argv[3],"--rigid-ui")) {rigid_ui_acceptance(&editor);DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--rigid-ui-baseline")) {rigid_ui_baseline(&editor);DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--preview-shared-ui")) {preview_shared_ui_native_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
-    if(argc==4 && !strcmp(argv[3],"--shared-fields-hud")) {shared_fields_hud_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--shared-fields-hud")) {shared_fields_hud_acceptance(&editor);DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--shared-ui")) {shared_editor_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--material-mcp-legacy-save")) {
         assert(SceneEditorChromeActionsSaveAuthoring());DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;

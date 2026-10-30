@@ -4,6 +4,9 @@
 #include "editor/scene_editor_document_rigid.h"
 #include "../src/editor/scene_editor_rigid_job.h"
 #include "render/vk_shared_device.h"
+#include "render/font_runtime.h"
+#include "render/text_draw.h"
+#include "render/text_upload_policy.h"
 static void rigid_ui_validation_begin(void) {
     SDL_Window *seed=SDL_CreateWindow("UI validation device",0,0,64,64,SDL_WINDOW_VULKAN|SDL_WINDOW_HIDDEN);assert(seed);
     VkRendererConfig cfg;vk_renderer_config_set_defaults(&cfg);cfg.enable_validation=VK_TRUE;
@@ -29,6 +32,15 @@ static void rigid_ui_pair(SceneEditor *e,SDL_Rect r) {
     rigid_ui_settle(e);
 }
 static void rigid_ui_acceptance(SceneEditor *e) {
+    /* Equal raster sizes at different logical sizes must not alias ownership.
+     * At2x, logical13 and a renderer-independent logical26 both load26pt. */
+    TTF_Font *small=ray_tracing_font_runtime_get_ui_regular(e->renderer,13,10);
+    TTF_Font *large=ray_tracing_font_runtime_get_ui_regular(NULL,26,10);
+    assert(small && large && small!=large);
+    int sw=0,lw=0;assert(ray_tracing_text_measure_utf8(e->renderer,small,"Camera",&sw,NULL));
+    assert(ray_tracing_text_measure_utf8(e->renderer,large,"Camera",&lw,NULL));
+    assert(lw>sw*1.8 && lw<sw*2.2);
+
     capture(e,"ordinary.ppm");
     SceneEditorWorkspaceProfileSelect(e,SCENE_WORKSPACE_RENDER);assert(SceneEditorTimelineActivate());rigid_ui_settle(e);
     unsigned long long revision=SceneEditorDocumentRevision();

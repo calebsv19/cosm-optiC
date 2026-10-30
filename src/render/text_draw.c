@@ -74,7 +74,7 @@ void ray_tracing_text_register_font_source(TTF_Font* font,
         entry->font = font;
         entry->generation = ray_tracing_font_runtime_generation();
     }
-    kit_render_external_text_register_font_source(font,
+    kit_render_external_text_register_font_source_native_pixels(font,
                                                   path,
                                                   logical_point_size,
                                                   loaded_point_size,

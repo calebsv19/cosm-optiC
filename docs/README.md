@@ -350,3 +350,5 @@ October 27 successor: [receiver face qualification](rigid_receiver_face.md) and 
 [Latest wrench jaw diagnosis and atomic source/energy refusal](rigid_wrench_jaw_refusal.md): tick316 rejected, valid315-tick prefix retained; six full asset controls unchanged.
 
 - [Exact rigid result duration and retained continuation](rigid_result_duration.md)
+
+- [Native text fidelity and pixel mapping](text_fidelity.md)

@@ -55,3 +55,10 @@ configuration; they do not attach to a user's open renderer.
 The subsequent menu/settings, editor and field/panel/HUD slices complete those
 shared integrations. Local macOS package and installed Main Edit verification pass.
 See [current rollout scope and remaining preview work](ui_fields_panels_runtime_hud.md).
+
+## October 30 text-only module update
+
+The original table/pin above records the window-foundation checkpoint. Main Edit
+now imports only kit_render 0.16.0 from committed shared `683068a` for its optional
+native glyph-pixel policy. The remaining modules stay at their retained source.
+See [text fidelity](text_fidelity.md); no window/render ownership changed.

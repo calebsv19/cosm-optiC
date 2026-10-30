@@ -3674,3 +3674,13 @@ pixels against the pre-refinement baseline. Existing compact-window pane hiding
 and explicit restoration remain. See [workflow](rigid_scene_workflow.md).
 This is Main Edit UI development on app0.20.0/worker0.14.0; release/worker activation
 and backend solver qualification retain their separate existing boundaries.
+
+## October 30 — native text pixel fidelity
+
+UI text now opts into the additive kit_render 0.16.0 native-pixel policy from
+shared `683068a`. High-density glyphs retain their exact drawable texel dimensions;
+measurement, wrapping and pixel-snapped drawing agree. The font cache separates
+logical and raster sizes across DPI/zoom combinations. Existing fonts, hinting,
+layout policy, palette and image sampling remain. Shared CPU/GPU glyph oracles,
+actual 1x/2x editor/field/HUD checks, affected editor regressions and headless smoke
+qualify this source slice. [Details and proof scope](text_fidelity.md).

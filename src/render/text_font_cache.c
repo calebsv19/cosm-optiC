@@ -12,6 +12,7 @@
 typedef struct RayTracingFontCacheEntry {
     char path[384];
     int point_size;
+    int logical_point_size;
     TTF_Font* font;
 } RayTracingFontCacheEntry;
 
@@ -31,18 +32,18 @@ static bool same_path(const char* a, const char* b) {
     return strcmp(a, b) == 0;
 }
 
-static TTF_Font* find_cached_font(const char* path, int point_size) {
+static TTF_Font* find_cached_font(const char* path, int point_size, int logical_point_size) {
     size_t i = 0;
     for (i = 0; i < g_font_cache_count; ++i) {
         RayTracingFontCacheEntry* entry = &g_font_cache[i];
-        if (entry->point_size == point_size && same_path(entry->path, path)) {
+        if (entry->point_size == point_size && entry->logical_point_size == logical_point_size && same_path(entry->path, path)) {
             return entry->font;
         }
     }
     return NULL;
 }
 
-static void cache_font(const char* path, int point_size, TTF_Font* font) {
+static void cache_font(const char* path, int point_size, int logical_point_size, TTF_Font* font) {
     RayTracingFontCacheEntry* entry = NULL;
     if (!path || !font || point_size <= 0) {
         return;
@@ -58,6 +59,7 @@ static void cache_font(const char* path, int point_size, TTF_Font* font) {
     strncpy(entry->path, path, sizeof(entry->path) - 1);
     entry->path[sizeof(entry->path) - 1] = '\0';
     entry->point_size = point_size;
+    entry->logical_point_size = logical_point_size;
     entry->font = font;
 }
 
@@ -194,8 +196,8 @@ static TTF_Font* open_cached_font_from_resolved(const RayTracingResolvedFont* re
         if (loaded_point_size < resolved->text_run.logical_point_size) {
             loaded_point_size = resolved->text_run.logical_point_size;
         }
-        if (find_cached_font(candidate, loaded_point_size)) {
-            return find_cached_font(candidate, loaded_point_size);
+        if (find_cached_font(candidate, loaded_point_size, resolved->text_run.logical_point_size)) {
+            return find_cached_font(candidate, loaded_point_size, resolved->text_run.logical_point_size);
         }
         font = open_font_with_search(candidate,
                                      loaded_point_size,
@@ -212,6 +214,7 @@ static TTF_Font* open_cached_font_from_resolved(const RayTracingResolvedFont* re
                                                   resolved->text_run.kerning_enabled);
             cache_font(loaded_path[0] ? loaded_path : candidate,
                        loaded_point_size,
+                       resolved->text_run.logical_point_size,
                        font);
             return font;
         }
