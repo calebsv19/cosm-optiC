@@ -209,15 +209,9 @@ if [ -f "$MOLTENVK_DYLIB" ]; then
         mkdir -p "$VK_RUNTIME_DIR" 2>/dev/null || true
     fi
     if [ -d "$VK_RUNTIME_DIR" ]; then
-        cat >"$VK_ICD_FILE" <<EOF
-{
-  "file_format_version": "1.0.0",
-  "ICD": {
-    "library_path": "$MOLTENVK_DYLIB",
-    "api_version": "1.3.0"
-  }
-}
-EOF
+        printf '%s\n' '{' '  "file_format_version": "1.0.0",' '  "ICD": {' \
+            "    \"library_path\": \"$MOLTENVK_DYLIB\"," \
+            '    "api_version": "1.3.0"' '  }' '}' >"$VK_ICD_FILE"
         if [ -z "${VK_ICD_FILENAMES:-}" ]; then
             export VK_ICD_FILENAMES="$VK_ICD_FILE"
         fi

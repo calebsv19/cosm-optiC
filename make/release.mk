@@ -73,10 +73,13 @@ release-local-artifact: release-bundle-audit
 	@rm -f "$(RELEASE_APP_ZIP)" "$(RELEASE_APP_ZIP).sha256" "$(RELEASE_MANIFEST)"
 	@/usr/bin/ditto -c -k --sequesterRsrc --keepParent "$(PACKAGE_APP_DIR)" "$(RELEASE_APP_ZIP)"
 	@/usr/bin/shasum -a 256 "$(RELEASE_APP_ZIP)" > "$(RELEASE_APP_ZIP).sha256"
-	@printf 'product=%s\nprogram=%s\nversion=%s\nplatform=%s\narch=%s\nformat=zip\nchannel=stable\nartifact=%s\nsha256=%s\nsigned=false\nnotarized=false\n' \
-		"$(RELEASE_PRODUCT_NAME)" "$(RELEASE_PROGRAM_KEY)" "$(RELEASE_VERSION)" \
+	@{ printf 'product=%s\nprogram=%s\nversion=%s\nbundle_id=%s\nplatform=%s\narch=%s\nformat=zip\nchannel=stable\nartifact=%s\nsha256=%s\n' \
+		"$(RELEASE_PRODUCT_NAME)" "$(RELEASE_PROGRAM_KEY)" "$(RELEASE_VERSION)" "$(RELEASE_BUNDLE_ID)" \
 		"$(RELEASE_PLATFORM)" "$(RELEASE_ARCH)" "$$(/usr/bin/basename "$(RELEASE_APP_ZIP)")" \
-		"$$(/usr/bin/awk '{print $$1}' "$(RELEASE_APP_ZIP).sha256")" > "$(RELEASE_MANIFEST)"
+		"$$(/usr/bin/awk '{print $$1}' "$(RELEASE_APP_ZIP).sha256")"; \
+		printf 'target_os=macOS\ntarget_arch=%s\ntarget_variant=desktop-app\nrelease_platform=macOS\nrelease_arch=%s\nzip=%s\nsigned=ad-hoc\nnotarized=0\n' \
+		"$(RELEASE_ARCH)" "$(RELEASE_ARCH)" "$$(/usr/bin/basename "$(RELEASE_APP_ZIP)")"; \
+	} > "$(RELEASE_MANIFEST)"
 	@echo "release-local-artifact complete: $(RELEASE_APP_ZIP)"
 
 release-output-root-contract:
