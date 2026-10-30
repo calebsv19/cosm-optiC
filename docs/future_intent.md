@@ -1,6 +1,16 @@
 # Ray Tracing Future Intent
 
-Last updated: 2026-09-22
+Last updated: 2026-10-30
+
+## Development entry after the 0.20.0 release
+
+The current source baseline is app 0.20.0 / worker 0.14.0. Start a new bounded
+slice through the [Main Edit runbook](main_edit_worktree.md), using
+[current truth](current_truth.md) and [release attribution](release_versions.md)
+for accepted behavior and remaining qualification limits. The roadmap below
+retains earlier design intent; its priority and completion claims must be checked
+against the selected feature's current source and contract before resuming it.
+This release closeout does not select a new renderer, UI or physics workstream.
 
 ## Direction
 
