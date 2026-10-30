@@ -1,3 +1,25 @@
+## October 30 — desktop 0.20.0 / worker 0.14.0 released and activated
+
+Release source `2886958f96c86e49e53095fa4af6754b349c62c2`, tag `v0.20.0`,
+passed signed/notarized desktop and independently versioned worker publication,
+public readback, metadata, Registry CAS and signed-snapshot verification. The
+separate ordinary read-only release check is terminal, valid and `current_exact`.
+See [version and package attribution](release_versions.md).
+
+The exact release desktop was installed and launched locally with a confirmed
+rollback. Installed bytes, native process path and menu-window identity are
+verified; unavailable image capture does not add screenshot or interaction proof.
+Worker 0.14.0 versioned installation is verified on the home server and Linux PC.
+The selected Linux PC long runtime additionally passes current-pointer activation,
+loaded supervisor/coordinator identity, dispatch admission, a bounded native frame
+canary and fresh readiness with no blockers. The independent fast-worker hold is
+preserved. Other host/role runtime activation is not inferred from package presence.
+
+Canonical and persistent Main Edit source are reconciled at app 0.20.0 / worker
+0.14.0. This release consumes immutable Ball results; it adds no numerical solver
+to optiC and does not extend the scene-specific physical or human visual acceptance
+limits recorded below.
+
 ## October 29 — reviewed source checkpoint and release preparation
 
 Human-authorized Main Edit engineering is checkpointed at `f53cc03`, with the
