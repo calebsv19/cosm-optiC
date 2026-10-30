@@ -11,4 +11,7 @@ bool SceneEditorSharedUiButton(SDL_Renderer *,SDL_Rect,const char *,bool,SDL_Col
 void SceneEditorSharedUiModalButton(SDL_Renderer *,unsigned,unsigned,SDL_Rect,const char *,bool,SDL_Color,RayTracingThemePalette);
 void SceneEditorSharedUiPanelButton(SDL_Renderer *,unsigned,unsigned,SDL_Rect,const char *,bool,bool);
 void SceneEditorSharedUiExclude(SDL_Rect);
+/* Semantic identity of the accepted activation; never a raw pointer hit. */
+bool SceneEditorSharedUiActivationIs(unsigned domain,unsigned key);
+bool SceneEditorSharedUiFocusIs(unsigned domain,unsigned key);
 #endif

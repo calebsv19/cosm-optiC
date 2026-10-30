@@ -1,4 +1,5 @@
 #include "editor/scene_editor_shared_ui.h"
+#include "scene_editor_rigid_panel.h"
 #include "editor/scene_editor_scene_commands.h"
 #include "editor/scene_editor_render_control.h"
 #include "editor/scene_editor_atmosphere_panel.h"
@@ -55,6 +56,7 @@ static void scene_editor_session_runtime_update_dirty_objects(void) {
 static void scene_editor_session_runtime_prepare_frame(SceneEditor* editor) {
     /* A hidden or collapsed inspector must never retain last frame hit targets. */
     SceneEditorSurfaceMaterialPanelInvalidateControls();
+    SceneEditorRigidPanelClearControls();
     SceneEditorAtmospherePanelBeginFrame();
     (void)SceneEditorAgentControlPoll();
     SceneEditorRenderPoll();

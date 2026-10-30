@@ -126,6 +126,23 @@ have bounded timeouts (default 60 seconds per operation). Closing the app does
 not cancel an already started local preparation; a completed portable output can
 be opened later. Pause affects playback, not the already running producer.
 
+## Compact result panel
+
+The Render workspace keeps playback state, accepted source tick, body count and
+Choose result / Validate / Save scene / Run profile actions together. Details is
+a transient UI disclosure for provenance hashes, body roles and the retained COM
+readout; it does not edit or persist the scene. Existing timeline controls own
+play, pause, step and seek. Below the editor's existing compact-width threshold,
+side panes hide; restoring panes continues through the existing layout owner.
+
+Buttons use the shared editor's release/capture/focus route and recheck current
+eligibility at dispatch. Run profile requires a saved scene and no active local
+preparation or picker. Raw legacy pointer calls cannot bypass accepted shared
+activation. Resize, document changes, hidden panes and picker ownership invalidate
+stale input. Document, result validation, save and producer actions keep their
+existing owners, including the existing rule that Undo does not clear the dirty
+flag until Save.
+
 ## Verification
 
 `make -C ray_tracing rigid-workflow-probe` builds the native retained-document,
@@ -154,3 +171,13 @@ Run profiles may set optional `wall_seconds` as an integer decimal string in
 1..1800; old profiles keep the 60-second default. This budget includes recording
 and independent replay; it does not change simulated time or automatically
 extend a deadline. See [duration qualification](rigid_result_duration.md).
+
+Native UI acceptance is available through the existing contained
+`scene-editor-workspace-visual-test` build target. Run its executable with
+`<isolated-runtime> <copied-prepared-scene.json> --rigid-ui`; the fixture uses a
+validated Vulkan device and requires the existing 180-tick BR5 prepared scene.
+It exercises actual editor routing, keyboard release, outside release, picker
+cancel, hidden/disabled owners, scene interruption, Save/reopen and exact evaluated
+playback poses. Keep runtime config, output and font/shader resources isolated.
+Use actual 1x and 2x display modes and inspect the captured normal/narrow/Details
+views. This UI proof does not rerun or expand physical qualification.

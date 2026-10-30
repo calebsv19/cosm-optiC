@@ -3660,3 +3660,17 @@ A separately certified trailing-corner event now transfers moving edge contact i
 ## October 26 successor — landing into receiver edge support
 
 A separately admitted lower receiver now accepts landing from the retained detached state. The tilted impact and remaining-tick support retain pose/velocity, positive reaction/slip, the original work ledger, physical gates and full rollback. The representative case lands in tick114, continues through120 and safely refuses after128 before the next face switch. See [retained landing profile](rigid_retained_landing.md). General concave landing/settling remains separate.
+
+## October 30 — compact rigid-result UI refinement
+
+Main Edit presents rigid playback status and actions in a compact two-column
+panel. Transient Details holds the existing provenance, body-role and COM
+readouts. Shared accepted-action identity and dispatch-time eligibility guard
+legacy callbacks; hidden panels discard painted hit targets. Existing document,
+save, playback, producer and scientific rendering owners are unchanged. Native
+1x/2x production-route interaction, picker cancellation, disabled controls,
+Save/reopen and evaluated-pose checks pass, with 1,275,750 exact unchanged viewport
+pixels against the pre-refinement baseline. Existing compact-window pane hiding
+and explicit restoration remain. See [workflow](rigid_scene_workflow.md).
+This is Main Edit UI development on app0.20.0/worker0.14.0; release/worker activation
+and backend solver qualification retain their separate existing boundaries.

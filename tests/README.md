@@ -1087,3 +1087,13 @@ and retained evidence contract are documented in
 
 
 Angular support continuation: see `tests/qualify_rigid_angular_support.py` in Ball Main Edit and `docs/rigid_angular_support.md`; normal/sanitizer numerical reference, repeat, rollback and immutable replay are separate from rendered appearance.
+
+## Compact rigid-result panel acceptance
+
+Build `scene-editor-workspace-visual-test` into an explicit task-owned
+`BUILD_DIR_BASE`. Its `--rigid-ui` mode uses the isolated BR5 prepared scene through
+the real editor event/render route: release/outside release, F6 keyboard focus,
+window/scene interruption, picker cancel, disabled Run, Save/reopen and exact
+playback poses. It captures ordinary, normal, Details, compact-view, narrow and
+reopened states. See `docs/rigid_scene_workflow.md` for runtime/resource isolation.
+The acceptance fixture enables a validated Vulkan device; run at actual 1x/2x.

@@ -479,6 +479,7 @@ static void verify_viewport_gestures(SceneEditor *editor) {verify_viewport_gestu
 #include "editor/scene_editor_shared_ui.h"
 #include "scene_editor_shared_ui_acceptance.h"
 #include "scene_editor_shared_fields_hud_acceptance.h"
+#include "scene_editor_rigid_ui_acceptance.h"
 #include "preview_shared_ui_native_test.h"
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -493,6 +494,7 @@ int main(int argc, char** argv) {
     animSettings.spaceMode = SPACE_MODE_3D;
     snprintf(animSettings.runtimeScenePath, sizeof(animSettings.runtimeScenePath), "%s", argv[2]);
     if(argc==4 && !strcmp(argv[3],"--dm2"))dm2_sampler_contract();
+    if(argc==4 && !strncmp(argv[3],"--rigid-ui",10)) rigid_ui_validation_begin();
     assert(InitializeSceneEditor(&editor));
     active_editor = &editor;
     if(getenv("OPTIC_UI_REQUIRE_VALIDATION")) {
@@ -507,6 +509,8 @@ int main(int argc, char** argv) {
      * only after the actual native window has settled and painted. */
     for(int i=0;i<3;i++) {SDL_Delay(40);SDL_PumpEvents();SceneEditorSessionRuntimeRender(&editor);}
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && !strcmp(argv[3],"--rigid-ui")) {rigid_ui_acceptance(&editor);DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--rigid-ui-baseline")) {rigid_ui_baseline(&editor);DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--preview-shared-ui")) {preview_shared_ui_native_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--shared-fields-hud")) {shared_fields_hud_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--shared-ui")) {shared_editor_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}

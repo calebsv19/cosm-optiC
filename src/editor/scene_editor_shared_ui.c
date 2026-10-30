@@ -28,6 +28,7 @@ static struct {
     unsigned modal,scope;int workspace;unsigned long long revision;
     char document_path[4096], selected_object[128];
     bool dispatching,ready,blocked_release,keyboard_focus;
+    KitUiSurfaceKey dispatch_key;
 } ui;
 static void cancel(void) {
     kit_ui_interaction_reset(&ui.controls.interaction);ui.controls.activation_count=0;
@@ -136,6 +137,7 @@ bool SceneEditorSharedUiRoute(SceneEditor *editor,SDL_Event *e) {
             KitRenderRect r=ui.controls.controls[i].bounds;
             SDL_Event activation={0};activation.type=SDL_MOUSEBUTTONDOWN;activation.button.windowID=editor->window?SDL_GetWindowID(editor->window):0;
             activation.button.button=SDL_BUTTON_LEFT;activation.button.clicks=1;activation.button.x=r.x+r.width/2;activation.button.y=r.y+r.height/2;
+            ui.dispatch_key=ui.controls.keys[i];
             ui.dispatching=true;SceneEditorSessionRuntimeHandleEvent(editor,&activation);ui.dispatching=false;
             ui.controls.activation_count=0;ui.ready=false;
             scope();break;
@@ -198,4 +200,12 @@ void SceneEditorSharedUiPanelButton(SDL_Renderer *r,unsigned domain,unsigned key
     if(scene_editor_shared_field_paint(r,bounds,label))return;
     RayTracingThemePalette palette=SceneEditorChromeShellResolvePalette();
     SceneEditorSharedUiModalButton(r,domain,key,bounds,label,enabled,selected?palette.accent_primary:palette.button_fill,palette);
+}
+
+bool SceneEditorSharedUiActivationIs(unsigned domain,unsigned key) {
+    return ui.dispatching && ui.dispatch_key.domain==domain && ui.dispatch_key.value==key;
+}
+bool SceneEditorSharedUiFocusIs(unsigned domain,unsigned key) {
+    KitUiSurfaceKey found={0};
+    return kit_ui_surface_key(&ui.controls,ui.controls.interaction.focused_id,&found) && found.domain==domain && found.value==key;
 }
