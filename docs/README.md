@@ -28,7 +28,7 @@ Start here for public repository documentation.
 Main Edit rigid motion: [accepted result playback, exact time and source-frame mapping](rigid_result_playback.md).
 
 Current versions: [source, desktop and worker status, proposed targets and release
-attribution checks](release_versions.md) (verified October 18, 2026).
+attribution checks](release_versions.md) (verified October 30, 2026).
 
 Rough-glass checkpoint: [qualified behavior, presets and limits](rough_glass_qualification.md).
 Transport contract: [physical glass in Disney V2](physical_glass_transport.md).

@@ -1,5 +1,35 @@
 # optiC version status
 
+Release and runtime records verified October 30, 2026. Desktop, worker, local
+installation and selected runtime identities are separate surfaces.
+
+| Surface | Verified version | Meaning |
+| --- | --- | --- |
+| Canonical and Main Edit app `VERSION` | `0.20.0` | Released desktop baseline; clean source reconciliation |
+| Canonical and Main Edit `WORKER_VERSION` | `0.14.0` | Independently versioned authenticated worker |
+| Registered public desktop | `0.20.0` | Publication, Registry and signed snapshot independently verified |
+| Registered headless worker | `0.14.0` | Current `ray_tracing_headless_worker` production record |
+| Versioned worker installation | `0.14.0` | Package contents verified on the home server and Linux PC |
+| Selected active runtime | `0.14.0` | Linux PC long role: current pointer, native identity, coordinator admission and representative canary verified |
+| Local desktop installation | `0.20.0` | Exact signed/notarized release installed and launched; confirmed rollback retained |
+
+Release source commit `2886958f96c86e49e53095fa4af6754b349c62c2` is published as
+`v0.20.0`. Desktop ZIP SHA-256:
+`9c458498284804775c34e06e838c6a340c0b787d046cf9c143e90a55a1fd9b9d`.
+Worker archive SHA-256:
+`997fe4c3f29375fbe5cd08b788ba03c21790b476521545ae42cd371cb63301cb`.
+See the [GitHub release](https://github.com/calebsv19/cosm-optiC/releases/tag/v0.20.0).
+
+Independent release verification is terminal, valid and `current_exact`. Fresh
+selected-runtime readback reports ready with no blockers. This qualification is
+for `linuxpc-long`; the independent fast-worker hold remains unchanged. Versioned
+installation on another host does not establish its active/default runtime.
+The local app's installed bytes and normal process/window identity are verified;
+image capture was unavailable, so no new screenshot-based acceptance is claimed.
+The physical and visual limits in [current truth](current_truth.md) still apply.
+
+## Historical status verified October 18 and reconciled October 29
+
 Release records verified October 18, 2026; development reconciliation verified October 29, 2026. Version labels identify separate surfaces; a source
 checkout, desktop package and worker package need not share a version number.
 

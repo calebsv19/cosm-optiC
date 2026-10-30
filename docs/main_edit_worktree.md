@@ -1,3 +1,18 @@
+## October 30 — accepted 0.20.0 / worker 0.14.0 release baseline
+
+Published source `2886958f96c86e49e53095fa4af6754b349c62c2` is adopted back into
+the persistent Main Edit lane. Its three matching packaging repairs were protected
+in `aff82a8`, then accepted canonical version changes were merged at `a945066`.
+Both lanes were clean with the exact released tree
+`04835108d059e22e174e86411ba16d7b4b50cf74`; no reset or discarded work was used.
+Only source-local release documentation follows this baseline.
+
+The release desktop is installed and running locally. Selected worker runtime
+activation and native canary qualification passed for Linux PC long; the separate
+fast-worker hold is preserved. [Version attribution](release_versions.md) separates
+release, installation and active runtime proof. Historical dated entries below
+retain their original versions and stop boundaries.
+
 ## October 29 — reviewed source checkpoint and release preparation
 
 Human-authorized Main Edit engineering is checkpointed at `f53cc03`, with the
