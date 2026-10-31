@@ -1,3 +1,19 @@
+## October 31 — camera framework released: desktop 0.21.0 / worker 0.15.0
+
+The camera checkpoint `5e1f27a` is released at `8be3d53`, tag `v0.21.0`.
+Signed/notarized desktop publication, independent worker publication, public
+metadata/readback, Registry CAS and signed snapshot all pass. The exact desktop
+is installed and launches locally with a confirmed prior-app rollback. Worker
+0.15.0 is active on Linux PC long; installed/runtime/coordinator identities,
+service canary and independent readiness pass. See [release identities](release_versions.md).
+
+The dated source-only entries below describe their original checkpoints; this
+entry supersedes their release/version status. Numerical, source-adapter,
+fractional-render and human visual acceptance limits remain in force. A saved
+Mac-authored event proposal was refused by Linux's exact geometry re-derivation
+check; its portability is not established by publication or service readiness.
+See [camera qualification](camera_framework_qualification.md).
+
 ## Camera framework source checkpoint preparation
 
 The combined camera stages have a maintained `test-camera-framework` gate in the stable test lane and a sanitizer companion. [Qualification and render handoff](camera_framework_qualification.md) defines generic camera behavior, source-specific adapters, integer-render sampling, portable job acceptance and the separate Linux installed-worker canary. Source checkpointing does not update installed apps, worker runtimes or release versions.

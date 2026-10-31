@@ -1,9 +1,11 @@
-## Development entry — October 30, 2026
+## Development entry — October 31, 2026
 
 - [Main Edit: source lane, installed development-app identity and resume steps](main_edit_worktree.md)
 - [Current behavior and qualification limits](current_truth.md)
-- [Released desktop 0.20.0 / worker 0.14.0 attribution](release_versions.md)
+- [Released desktop 0.21.0 / worker 0.15.0 attribution](release_versions.md)
 - [Candidate future work and roadmap interpretation](future_intent.md)
+
+- [Camera framework qualification and Linux portability limits](camera_framework_qualification.md)
 
 The dated updates below retain their original scope and acceptance boundaries.
 
@@ -37,7 +39,7 @@ Start here for public repository documentation.
 Main Edit rigid motion: [accepted result playback, exact time and source-frame mapping](rigid_result_playback.md).
 
 Current versions: [source, desktop and worker status, proposed targets and release
-attribution checks](release_versions.md) (verified October 30, 2026).
+attribution checks](release_versions.md) (verified October 31, 2026).
 
 Rough-glass checkpoint: [qualified behavior, presets and limits](rough_glass_qualification.md).
 Transport contract: [physical glass in Disney V2](physical_glass_transport.md).

@@ -1,5 +1,33 @@
 # optiC version status
 
+Release and runtime records verified October 31, 2026.
+
+| Surface | Verified version | Meaning |
+| --- | --- | --- |
+| Canonical and reconciled Main Edit source | `0.21.0` / `0.15.0` | Camera checkpoint adopted and released |
+| Public desktop | `0.21.0` | Signed/notarized; publication, metadata, Registry and signed snapshot verified |
+| Registered headless worker | `0.15.0` | Independently authenticated Linux x86_64 package |
+| Versioned worker installation | `0.15.0` | Exact package trees verified on home server and Linux PC |
+| Selected active runtime | `0.15.0` | Linux PC long: installed identity, coordinator admission and service canary pass |
+| Local desktop installation | `0.21.0` | Exact release installed and launched; one confirmed prior-app rollback retained |
+
+Release source `8be3d538de20a836b871ce8b84a3f160aaa033fb`, tag `v0.21.0`,
+contains camera checkpoint `5e1f27a69dce5844696bd8b8a8126d870c35cc6f`.
+Desktop ZIP SHA-256:
+`5a82b95661044b65de4f503971e5d36f6b1a8b0363813cc4c05e608ad5b58513`.
+Worker archive SHA-256:
+`9bebc202b5d857a2b89062e4e386569e2667dbb975af7efc74ac803efbdd04be`.
+See the [GitHub release](https://github.com/calebsv19/cosm-optiC/releases/tag/v0.21.0).
+
+Independent release readback is terminal, valid and `current_exact`, with
+`runtime_ready=true` and no blockers for the selected Linux PC long role.
+Versioned presence on the home server does not establish active runtime there.
+The independent fast-worker hold is preserved. The camera qualification and
+cross-platform saved-proposal limits are tracked in
+[camera framework qualification](camera_framework_qualification.md).
+
+## Historical status verified October 30
+
 Release and runtime records verified October 30, 2026. Desktop, worker, local
 installation and selected runtime identities are separate surfaces.
 

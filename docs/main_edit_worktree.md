@@ -1,3 +1,18 @@
+## Start here after the October 31 camera release
+
+Continue in the existing `<workspace>/_worktrees/ray_tracing_main_edit` checkout
+on `codex/ray-tracing-main-edit`. Camera checkpoint `5e1f27a` is released as
+`v0.21.0`, source `8be3d53`, with app `0.21.0` / worker `0.15.0`. The release
+version and documentation commits are reconciled into this same lane at closeout;
+use the [fresh readback](#start-or-resume-readback) before new development.
+
+The exact `~/Desktop/optiC.app` release is installed and launches. This operation
+does not refresh `optiC Main Edit.app`; build an isolated development package for
+new GUI proof. Linux PC long runs the authenticated 0.15.0 package and passes its
+service canary. See [release attribution](release_versions.md) and
+[camera qualification and portability limits](camera_framework_qualification.md).
+Dated entries below preserve their original checkpoint state.
+
 ## October 31 — combined camera framework checkpoint
 
 The accumulated camera/sequence/event work is consolidated on the registered

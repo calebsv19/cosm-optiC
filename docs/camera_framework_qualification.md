@@ -1,6 +1,6 @@
 # Camera framework qualification and render handoff
 
-The camera framework is an opt-in source feature. Existing scenes without a
+The camera framework ships as an opt-in feature in desktop 0.21.0 and worker 0.15.0. Existing scenes without a
 camera rig retain the legacy camera path. See [named cameras and clocks](camera_sequence.md),
 [event planning](event_camera_planning.md), and [recorded sources and delivery](sequence_sources_and_multiview.md).
 
@@ -83,3 +83,27 @@ Do not interpret a local macOS job-runner result as Linux installed-worker proof
 Uniform PTS, frame count and provenance are technical acceptance. Occlusion,
 readability, cut purpose, camera speed/roll and image noise remain visual
 acceptance. Keep that review distinct from a successful encoder or solver.
+
+## October 31 release qualification
+
+Camera checkpoint `5e1f27a` is included in release `v0.21.0` (`8be3d53`).
+Fresh normal/sanitized framework tests, contained desktop/headless release gates,
+Linux package self-test and the activated Linux PC long service canary pass.
+
+The first camera-specific installed Linux preflight refused the retained
+Mac-authored event proposal with `resolved pose/proposal does not match
+authenticated event geometry`. The original scene and refusal are preserved.
+Exact serialized proposal portability across these native platforms remains
+unqualified; the runtime guard must remain enabled. Source contracts and
+service-canary success do not establish portable event-plan execution, long-job
+packaging, chunk recovery or human visual acceptance.
+
+A Linux-native successor, authored by the existing proposal/select/attach owner
+with the same event intent, differs in three bounds coordinates by at most
+`4.440892098500626e-16` (comparison tolerance `1e-9`). That successor passes the
+installed 0.15.0 renderer's unchanged exact guard and renders the edited sequence.
+This demonstrates native re-authoring, while the original serialized Mac plan
+remains refused. The host FFmpeg lacks `libx264`; the maintained H.264 assembly
+command therefore fails there. An explicitly labelled canary-only MPEG-4 delivery
+copy retains the frame/hash/timing/decode checks; it does not qualify H.264
+installation or change the shipped tool.
