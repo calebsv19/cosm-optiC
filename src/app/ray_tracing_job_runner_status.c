@@ -190,6 +190,7 @@ bool ray_tracing_job_runner_write_status_to_stream(FILE *file,
     json_write_string(file, record->stderr_path);
     fprintf(file, ",\n");
     fprintf(file, "  \"pid\": %ld,\n", (long)record->pid);
+    fprintf(file, "  \"completion_verified\": %s,\n", record->completion_verified ? "true" : "false");
     fprintf(file, "  \"exit_code\": %d,\n", record->exit_code);
     fprintf(file, "  \"overwrite_policy\": ");
     json_write_string(file, record->overwrite_policy);
@@ -628,7 +629,18 @@ static bool ray_tracing_job_runner_summary_is_valid(const char *path) {
     if (!path || !path[0]) return false;
     root = json_object_from_file(path);
     if (!root) return false;
-    valid = json_object_is_type(root, json_type_object);
+    json_object *schema=NULL,*rendered=NULL,*frames=NULL,*render=NULL,*count=NULL;
+    valid = json_object_is_type(root, json_type_object) &&
+        json_object_object_get_ex(root,"schema_version",&schema) &&
+        json_object_is_type(schema,json_type_string) &&
+        !strcmp(json_object_get_string(schema),"ray_tracing_headless_summary_v1") &&
+        json_object_object_get_ex(root,"rendered_frames",&rendered) &&
+        json_object_is_type(rendered,json_type_boolean) && json_object_get_boolean(rendered) &&
+        json_object_object_get_ex(root,"frames_rendered",&frames) &&
+        json_object_is_type(frames,json_type_int) && json_object_get_int(frames)>0 &&
+        json_object_object_get_ex(root,"render",&render) &&
+        json_object_object_get_ex(render,"frame_count",&count) &&
+        json_object_is_type(count,json_type_int) && json_object_get_int(count)==json_object_get_int(frames);
     json_object_put(root);
     return valid;
 }

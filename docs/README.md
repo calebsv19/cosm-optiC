@@ -7,6 +7,8 @@
 
 - [Camera framework qualification and Linux portability limits](camera_framework_qualification.md)
 
+- [Portable event plans, encoder admission and verified native queued recovery](camera_delivery_reliability.md)
+
 The dated updates below retain their original scope and acceptance boundaries.
 
 ## October28 — curated uniform-scale assets

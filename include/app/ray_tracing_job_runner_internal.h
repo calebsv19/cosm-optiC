@@ -66,6 +66,7 @@ typedef struct RayTracingDetachedJobRecord {
     int durable_frames_completed;
     int resume_from_frame;
     bool resume_available;
+    bool completion_verified; /* Fresh wait proof; ordinary status is observational. */
     int worker_protocol_version;
     char execution_mode[32];
     char immutable_request_sha256[65];

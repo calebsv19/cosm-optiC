@@ -25,6 +25,9 @@ bool ray_tracing_job_runner_print_status(FILE *out,
                                          const char *jobs_root_override,
                                          char *out_diagnostics,
                                          size_t out_diagnostics_size);
+/* 0 verified native completion; 1 failed/unverified; 124 timeout, same job remains. */
+int ray_tracing_job_runner_wait(FILE *, const char *, const char *, const char *,
+                                int, char *, size_t);
 bool ray_tracing_job_runner_cancel(const char *argv0,
                                    const char *job_id,
                                    const char *jobs_root_override,

@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import subprocess
 from sequence_video import assemble, read, sha, _require
+from sequence_encoder import encoding_args, preflight_encoder
+from sequence_job import submit_and_wait
 from sequence_temporal_review import temporal_review, verify_video
 
 
@@ -18,11 +20,15 @@ def state(row):
     return {k: row.get(k) for k in ('frame', 'rate', 'presentation_time', 'simulation_time', 'source_tick', 'source_revision', 'bodies', 'cache')}
 
 
-def deliver(request_path, camera_ids, output, cli, ffmpeg='ffmpeg', ffprobe='ffprobe', include_edit=True, existing_frames=None):
+def deliver(request_path, camera_ids, output, cli, ffmpeg='ffmpeg', ffprobe='ffprobe', include_edit=True, existing_frames=None, encoder='libx264', runner=None, wait_timeout=300):
+    _require(1 <= wait_timeout <= 86400, 'Native wait timeout must be 1..86400 seconds')
+    _require(existing_frames is not None or runner is not None or cli is not None, 'Select native CLI or job runner')
     output = Path(output).resolve()
     _require(not output.exists(), 'Delivery output must be new')
     request = read(request_path)
-    scene_path = Path(request['scene']['runtime_scene_path']).resolve()
+    scene_path = Path(request['scene']['runtime_scene_path'])
+    if not scene_path.is_absolute(): scene_path = Path(request_path).resolve().parent / scene_path
+    scene_path = scene_path.resolve()
     scene = read(scene_path)
     author = scene['extensions']['ray_tracing']['authoring']
     seq, rig = author['sequence'], author['camera_rig']
@@ -33,6 +39,7 @@ def deliver(request_path, camera_ids, output, cli, ffmpeg='ffmpeg', ffprobe='ffp
     if existing_frames is not None:
         expected = set(camera_ids) | ({'edit'} if include_edit else set())
         _require(set(existing_frames) == expected, 'Frame manifest must name exactly the requested views')
+    readiness = preflight_encoder(ffmpeg, ffprobe, encoder)
     output.mkdir(parents=True)
     rate = Fraction(seq['rate']['numerator'], seq['rate']['denominator'])
     start, count = seq['range']['start_frame'], seq['range']['frame_count']
@@ -45,6 +52,7 @@ def deliver(request_path, camera_ids, output, cli, ffmpeg='ffmpeg', ffprobe='ffp
             folder = output / label
             folder.mkdir()
             req = copy.deepcopy(request)
+            req['scene']['runtime_scene_path'] = str(scene_path)
             req['scene'].pop('camera_id', None)
             if camera:
                 req['scene']['camera_id'] = camera
@@ -58,12 +66,15 @@ def deliver(request_path, camera_ids, output, cli, ffmpeg='ffmpeg', ffprobe='ffp
                 env = dict(os.environ, RAY_TRACING_PROGRAM_ROOT=str(folder / 'program'), XDG_CONFIG_HOME=str(folder / 'config'))
                 (folder / 'program').mkdir()
                 with (folder / 'native.log').open('w') as log:
-                    subprocess.run([str(cli), '--request', str(native_request), '--render', '--summary', str(folder / 'native.json'), '--summary-file-only'], cwd=folder, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
+                    if runner:
+                        submit_and_wait(runner, native_request, folder, wait_timeout, env=env)
+                    else:
+                        subprocess.run([str(cli), '--request', str(native_request), '--render', '--summary', str(folder / 'native.json'), '--summary-file-only'], cwd=folder, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
                 frames = folder / 'render' / 'frames'
             else:
                 frames = Path(existing_frames[camera or "edit"]).resolve()
             video = folder / 'video.mp4'
-            proof = assemble(scene_path, frames, video, ffmpeg, ffprobe, camera)
+            proof = assemble(scene_path, frames, video, ffmpeg, ffprobe, camera, encoder)
             _require(proof['stream']['width'] == request['render']['width'] and proof['stream']['height'] == request['render']['height'], 'View dimensions do not match the delivery request')
             rows = [read(Path(str(frames / f'frame_{i:04d}.bmp') + '.sequence.json')) for i in range(start, start + count)]
             physical = [state(row) for row in rows]
@@ -86,11 +97,11 @@ def deliver(request_path, camera_ids, output, cli, ffmpeg='ffmpeg', ffprobe='ffp
             command += ['-c', 'copy', str(matrix)]
         else:
             layout = '|'.join(f'{(i % columns)*width}_{(i//columns)*height}' for i in range(len(angles)))
-            command += ['-filter_complex', f'xstack=inputs={len(angles)}:layout={layout}:fill=black[v]', '-map', '[v]', '-frames:v', str(count), '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p', '-video_track_timescale', str(rate.numerator), '-movie_timescale', str(rate.numerator), str(matrix)]
+            command += ['-filter_complex', f'xstack=inputs={len(angles)}:layout={layout}:fill=black[v]', '-map', '[v]', '-frames:v', str(count), *encoding_args(encoder), '-pix_fmt', 'yuv420p', '-video_track_timescale', str(rate.numerator), '-movie_timescale', str(rate.numerator), str(matrix)]
         subprocess.run(command, check=True)
         verify_video(matrix, rate, count, ffmpeg, ffprobe)
         _require(sha(scene_path) == scene_hash and all(sha(p) == h for p, h in allpins.items()), 'Inputs changed during delivery')
-        result = dict(schema='ray_sequence_multiview_v1', ok=True, rate=str(rate), frame_count=count, duration=str(Fraction(count, 1)/rate), scene_sha256=scene_hash, synchronized_states_sha256=hashlib.sha256(json.dumps(baseline, sort_keys=True, separators=(',', ':')).encode()).hexdigest(), views=proofs, matrix=dict(path=str(matrix), sha256=sha(matrix), columns=columns, camera_order=camera_ids), visual_acceptance='review_required', review_checklist=['target/contact readability', 'occlusion and framing', 'cut purpose and direction', 'roll and speed changes', 'shimmer, noise and exposure continuity'])
+        result = dict(encoder=encoder, encoder_readiness=readiness, schema='ray_sequence_multiview_v1', ok=True, rate=str(rate), frame_count=count, duration=str(Fraction(count, 1)/rate), scene_sha256=scene_hash, synchronized_states_sha256=hashlib.sha256(json.dumps(baseline, sort_keys=True, separators=(',', ':')).encode()).hexdigest(), views=proofs, matrix=dict(path=str(matrix), sha256=sha(matrix), columns=columns, camera_order=camera_ids), visual_acceptance='review_required', review_checklist=['target/contact readability', 'occlusion and framing', 'cut purpose and direction', 'roll and speed changes', 'shimmer, noise and exposure continuity'])
         (output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
         return result
     except BaseException as exc:
@@ -103,9 +114,14 @@ if __name__ == '__main__':
     p.add_argument('--request', type=Path, required=True)
     p.add_argument('--camera', action='append', required=True)
     p.add_argument('--output', type=Path, required=True)
-    p.add_argument('--cli', type=Path, required=True)
+    p.add_argument('--cli', type=Path)
+    p.add_argument('--runner', type=Path, help='Submit and verify completion through the native worker protocol')
+    p.add_argument('--wait-timeout', type=int, default=300)
     p.add_argument('--no-edit', action='store_true')
     p.add_argument('--frames-manifest', type=Path, help='JSON mapping edit and requested camera IDs to existing native frame directories; skips rendering')
+    p.add_argument('--encoder', choices=('libx264', 'mpeg4'), default='libx264')
+    p.add_argument('--ffmpeg', default='ffmpeg')
+    p.add_argument('--ffprobe', default='ffprobe')
     a = p.parse_args()
-    r = deliver(a.request, a.camera, a.output, a.cli.resolve(), include_edit=not a.no_edit, existing_frames=read(a.frames_manifest) if a.frames_manifest else None)
+    r = deliver(a.request, a.camera, a.output, (a.cli.resolve() if a.cli else None), runner=(a.runner.resolve() if a.runner else None), wait_timeout=a.wait_timeout, ffmpeg=a.ffmpeg, ffprobe=a.ffprobe, encoder=a.encoder, include_edit=not a.no_edit, existing_frames=read(a.frames_manifest) if a.frames_manifest else None)
     print(json.dumps({k: r[k] for k in ('ok', 'frame_count', 'duration')}))

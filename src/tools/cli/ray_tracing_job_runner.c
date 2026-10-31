@@ -1,12 +1,14 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <errno.h>
 
 #include "app/ray_tracing_job_runner.h"
 
 static void usage(const char *argv0) {
     fprintf(stderr,
-            "usage: %s <submit|status|cancel|reconcile> [--request <request.json|job.json>|--job-id <job_id>] [--jobs-root <path>]\n",
+            "usage: %s <submit|status|wait|cancel|reconcile> [--request <request.json|job.json>|--job-id <job_id>] [--jobs-root <path>] [--timeout-seconds <1..86400>]\n",
             argv0 ? argv0 : "ray_tracing_job_runner");
 }
 
@@ -15,6 +17,7 @@ int main(int argc, char **argv) {
     const char *request_path = NULL;
     const char *job_id = NULL;
     const char *jobs_root = NULL;
+    int timeout = 60;
     bool overwrite = false;
     bool resume = false;
     char diagnostics[256] = {0};
@@ -36,6 +39,10 @@ int main(int argc, char **argv) {
             job_id = argv[++i];
         } else if (strcmp(argv[i], "--jobs-root") == 0 && i + 1 < argc) {
             jobs_root = argv[++i];
+        } else if (strcmp(argv[i], "--timeout-seconds") == 0 && i+1<argc) {
+            char *end=NULL;errno=0;long value=strtol(argv[++i],&end,10);
+            if(errno||!end||*end||value<1||value>86400){usage(argv[0]);return 2;}
+            timeout=(int)value;
         } else if (strcmp(argv[i], "--overwrite") == 0) {
             overwrite = true;
         } else if (strcmp(argv[i], "--resume") == 0) {
@@ -47,6 +54,15 @@ int main(int argc, char **argv) {
             usage(argv[0]);
             return 2;
         }
+    }
+
+    /* A bounded wait reconciles only its selected job, never unrelated history. */
+    if (strcmp(mode, "wait") == 0) {
+        if(!job_id){usage(argv[0]);return 2;}
+        int code=ray_tracing_job_runner_wait(stdout,argv[0],job_id,jobs_root,
+                                            timeout,diagnostics,sizeof(diagnostics));
+        if(code)fprintf(stderr,"ray_tracing_job_runner wait: %s\n",diagnostics);
+        return code;
     }
 
     {

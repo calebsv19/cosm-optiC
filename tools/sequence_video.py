@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+from sequence_encoder import encoding_args, preflight_encoder
 
 def _require(condition, message='Invalid sequence input, receipt or video schedule'):
     if not condition:
@@ -17,7 +18,8 @@ def read(path):
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
-def assemble(scene_path, frames, output, ffmpeg='ffmpeg', ffprobe='ffprobe', camera_id=None):
+def assemble(scene_path, frames, output, ffmpeg='ffmpeg', ffprobe='ffprobe', camera_id=None, encoder='libx264'):
+    readiness = preflight_encoder(ffmpeg, ffprobe, encoder)
     scene_path, frames, output = map(Path, (scene_path, frames, output))
     scene_hash = sha(scene_path)
     scene = read(scene_path)
@@ -82,7 +84,7 @@ def assemble(scene_path, frames, output, ffmpeg='ffmpeg', ffprobe='ffprobe', cam
         pins[str(receipt_path)] = sha(receipt_path)
     encoded = False
     try:
-        subprocess.run([ffmpeg, '-v', 'error', '-n', '-framerate', str(rate), '-start_number', str(start), '-i', str(frames / 'frame_%04d.bmp'), '-frames:v', str(count), '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-video_track_timescale', str(rate.numerator), '-movie_timescale', str(rate.numerator), str(output)], check=True)
+        subprocess.run([ffmpeg, '-v', 'error', '-n', '-framerate', str(rate), '-start_number', str(start), '-i', str(frames / 'frame_%04d.bmp'), '-frames:v', str(count), *encoding_args(encoder), '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-video_track_timescale', str(rate.numerator), '-movie_timescale', str(rate.numerator), str(output)], check=True)
         encoded = True
         probe = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-show_streams', '-show_frames', '-show_entries', 'stream=width,height,avg_frame_rate,time_base,duration,duration_ts,nb_frames:frame=best_effort_timestamp', '-of', 'json', str(output)]))
         stream = probe['streams'][0]
@@ -93,7 +95,7 @@ def assemble(scene_path, frames, output, ffmpeg='ffmpeg', ffprobe='ffprobe', cam
         subprocess.run([ffmpeg, '-v', 'error', '-i', str(output), '-f', 'null', '-'], check=True)
         _require(sha(scene_path) == scene_hash)
         _require(all((sha(p) == digest for p, digest in pins.items())))
-        proof = dict(ok=True, schema='ray_sequence_video_v1', rate=str(rate), frame_count=count, duration=str(Fraction(count, 1) / rate), stream=stream, all_pts_exact=True, decoded=True, input_hashes=pins, scene_sha256=scene_hash, video_sha256=sha(output))
+        proof = dict(ok=True, encoder=encoder, encoder_readiness=readiness, schema='ray_sequence_video_v1', rate=str(rate), frame_count=count, duration=str(Fraction(count, 1) / rate), stream=stream, all_pts_exact=True, decoded=True, input_hashes=pins, scene_sha256=scene_hash, video_sha256=sha(output))
         output.with_suffix(output.suffix + '.json').write_text(json.dumps(proof, indent=2) + '\n')
         return proof
     except BaseException:
@@ -104,13 +106,20 @@ def assemble(scene_path, frames, output, ffmpeg='ffmpeg', ffprobe='ffprobe', cam
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--camera-id', help='Fixed named view; omit to follow authored shots')
-    p.add_argument('--scene', type=Path, required=True)
-    p.add_argument('--frames', type=Path, required=True)
-    p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--scene', type=Path)
+    p.add_argument('--frames', type=Path)
+    p.add_argument('--output', type=Path)
     p.add_argument('--ffmpeg', default=shutil.which('ffmpeg'))
     p.add_argument('--ffprobe', default=shutil.which('ffprobe'))
+    p.add_argument('--encoder', choices=('libx264', 'mpeg4'), default='libx264')
+    p.add_argument('--preflight', action='store_true', help='Check actual encoder readiness without rendering')
     a = p.parse_args()
-    result = assemble(a.scene, a.frames, a.output, a.ffmpeg, a.ffprobe, a.camera_id)
+    if a.preflight:
+        print(json.dumps(preflight_encoder(a.ffmpeg, a.ffprobe, a.encoder)))
+        return
+    if not all((a.scene, a.frames, a.output)):
+        p.error('--scene, --frames and --output are required for assembly')
+    result = assemble(a.scene, a.frames, a.output, a.ffmpeg, a.ffprobe, a.camera_id, a.encoder)
     print(json.dumps({k: result[k] for k in ['ok', 'rate', 'frame_count', 'duration']}))
 if __name__ == '__main__':
     main()

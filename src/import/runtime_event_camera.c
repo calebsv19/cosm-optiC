@@ -83,20 +83,11 @@ bool RuntimeEventCameraValidateResult(json_object *scene,
   if (!RuntimeEventCameraValidate(scene, d, n))
     return false;
   for (size_t i = 0; i < json_object_array_length(list); i++) {
-    json_object *e = json_object_array_get_idx(list, i), *resolved = NULL;
+    json_object *e = json_object_array_get_idx(list, i);
     EventRequest r;
     InspectionOrbit orbit;
-    if (!EventResolve(scene, result, eg(e, "intent"),
-                      json_object_get_int(eg(e, "selection")), &r, &orbit, NULL,
-                      NULL, &resolved, d, n))
+    if (!EventRetainedResolve(scene, result, e, &r, &orbit, NULL, NULL, d, n))
       return false;
-    bool same = EventEqual(resolved, eg(e, "resolved")) &&
-                json_object_get_boolean(eg(resolved, "usable"));
-    json_object_put(resolved);
-    if (!same)
-      return ef(
-          d, n,
-          "resolved pose/proposal does not match authenticated event geometry");
     json_object *c = camera(scene, r.camera_id);
     double p[3], scale = json_object_get_double(eg(scene, "world_scale"));
     if (!isfinite(scale) || scale <= 0 || !ev(eg(c, "position"), p, 3) ||
@@ -152,10 +143,9 @@ bool RuntimeEventCameraApply(const TimelineEvaluationContext *c,
     if (!result)
       return false;
     if (!cache[i].ready) {
-      if (!EventResolve(loaded, result, eg(e, "intent"),
-                        json_object_get_int(eg(e, "selection")),
-                        &cache[i].request, &cache[i].orbit, &cache[i].focus,
-                        &cache[i].pivot, NULL, NULL, 0))
+      if (!EventRetainedResolve(loaded, result, e, &cache[i].request,
+                                &cache[i].orbit, &cache[i].focus,
+                                &cache[i].pivot, NULL, 0))
         return false;
       if (cache[i].request.dolly &&
           !EventLeadBuild(&cache[i].request, &cache[i].orbit, &cache[i].focus,

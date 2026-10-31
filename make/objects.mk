@@ -9,6 +9,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/import/event_camera_plan.o \
 	$(BUILD_DIR)/import/event_camera_lead.o \
 	$(BUILD_DIR)/import/event_camera_json.o \
+	$(BUILD_DIR)/import/event_camera_validation.o \
+	$(BUILD_DIR)/import/event_camera_retained.o \
 	$(BUILD_DIR)/import/event_camera_authoring.o \
 	$(BUILD_DIR)/import/runtime_inspection.o \
 	$(BUILD_DIR)/import/runtime_sequence_source.o \
@@ -413,6 +415,8 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(NATIVE3D_AUDIT_DEPS)
 
 RAY_TRACING_JOB_RUNNER_DEPS = \
+	$(BUILD_DIR)/app/ray_tracing_sequence_recovery.o \
+	$(BUILD_DIR)/app/ray_tracing_job_completion.o \
 	$(BUILD_DIR)/app/ray_tracing_job_runner.o \
 	$(BUILD_DIR)/app/ray_tracing_frame_recovery.o \
 	$(BUILD_DIR)/app/ray_tracing_headless_job_bundle.o \

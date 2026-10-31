@@ -7,12 +7,12 @@ import struct
 import subprocess
 
 
-def verify_video(path, rate, count, ffmpeg='ffmpeg', ffprobe='ffprobe'):
-    p = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-show_streams', '-show_frames', '-show_entries', 'stream=avg_frame_rate,time_base,duration_ts:frame=best_effort_timestamp', '-of', 'json', str(path)]))
+def verify_video(path, rate, count, ffmpeg='ffmpeg', ffprobe='ffprobe', timeout=None):
+    p = json.loads(subprocess.check_output([ffprobe, '-v', 'error', '-select_streams', 'v:0', '-show_streams', '-show_frames', '-show_entries', 'stream=avg_frame_rate,time_base,duration_ts:frame=best_effort_timestamp', '-of', 'json', str(path)], timeout=timeout))
     s = p['streams'][0]
     if len(p['frames']) != count or Fraction(s['avg_frame_rate']) != rate or int(s['duration_ts'])*Fraction(s['time_base']) != Fraction(count, 1)/rate or any(int(f['best_effort_timestamp'])*Fraction(s['time_base']) != Fraction(i, 1)/rate for i, f in enumerate(p['frames'])):
         raise ValueError('Nonuniform matrix PTS or changed duration')
-    subprocess.run([ffmpeg, '-v', 'error', '-i', str(path), '-f', 'null', '-'], check=True)
+    subprocess.run([ffmpeg, '-v', 'error', '-i', str(path), '-f', 'null', '-'], check=True, timeout=timeout)
 
 
 def forward(row):

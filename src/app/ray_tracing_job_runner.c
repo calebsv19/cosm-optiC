@@ -20,6 +20,7 @@
 #include "app/agent_render_request.h"
 #include "app/ray_tracing_durable_io.h"
 #include "app/ray_tracing_frame_recovery.h"
+#include "app/ray_tracing_sequence_recovery.h"
 #include "app/ray_tracing_headless_job_bundle.h"
 #include "app/ray_tracing_worker_client.h"
 
@@ -241,6 +242,10 @@ static bool write_canonical_request_file(const char *path,
     fprintf(file, "  \"scene\": {\n");
     fprintf(file, "    \"runtime_scene_path\": ");
     json_write_string(file, request->runtime_scene_path);
+    if (request->camera_id[0]) {
+        fprintf(file, ",\n    \"camera_id\": ");
+        json_write_string(file, request->camera_id);
+    }
     fprintf(file, "\n  },\n");
     fprintf(file, "  \"volume\": {\n");
     fprintf(file, "    \"enabled\": %s,\n", request->volume_enabled ? "true" : "false");
@@ -632,6 +637,9 @@ bool ray_tracing_job_runner_submit(const char *argv0,
         request.overwrite = true;
     }
     if (resume) {
+        if (!ray_tracing_sequence_recovery_validate(&request, request.start_frame,
+                recovery_scan.durable_prefix_count, out_diagnostics, out_diagnostics_size))
+            return false;
         if (recovery_scan.first_invalid_frame >= 0) {
             snprintf(out_diagnostics,
                      out_diagnostics_size,

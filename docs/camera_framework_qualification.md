@@ -1,3 +1,15 @@
+## October 31 — source follow-up: portable plans and verified queued delivery
+
+Main Edit now separates exact saved-plan integrity from bounded derived-geometry
+validation, admits existing schema-v1 plans without native re-authoring, and keeps
+the reviewed seed with source/framing/visibility checks. Explicit encoder profiles
+perform real encode/timing/decode admission before rendering or native queue
+submission. Named camera IDs survive staging; sequence resume validates retained
+receipts, and native `wait` requires completion evidence, with same-ID timeout
+continuation. [Usage, numeric policy, verification and boundaries](camera_delivery_reliability.md).
+This is development after the 0.21.0 / worker 0.15.0 release; installed packages
+and production fleet activation retain their separate identities.
+
 # Camera framework qualification and render handoff
 
 The camera framework ships as an opt-in feature in desktop 0.21.0 and worker 0.15.0. Existing scenes without a

@@ -1,5 +1,6 @@
 #include "animation/sequence_frame_receipt.h"
 #include <inttypes.h>
+#include "import/runtime_event_camera.h"
 #include "app/ray_tracing_sha256.h"
 #include <stdio.h>
 #include <string.h>
@@ -28,6 +29,7 @@ bool SequenceFrameReceiptWrite(const char *path,const RayEvaluatedSceneSnapshot 
     fprintf(f,"{\"schema\":\"ray_sequence_frame_v1\",\"frame\":%" PRId64 ",\"rate\":[%u,%u],",
         s->frame.sample.absolute_frame,s->frame.rate.frames_per_second_numerator,s->frame.rate.frames_per_second_denominator);
     fprintf(f,"\"scene_sha256\":\"%s\",\"image_sha256\":\"%s\",",scene_hash,image_hash);
+    if(!strncmp(s->camera.inspection_id,"event_",6))fprintf(f,"\"event_validation_policy\":\"%s\",",RAY_EVENT_GEOMETRY_VALIDATION_POLICY);
     if(s->camera.rig_revision){
         fprintf(f,"\"camera_id\":\"%s\",\"shot_id\":\"%s\",\"camera_clock_policy\":%d,\"camera_selected\":%s,",s->camera.target_id,s->camera.shot_id,s->camera.clock_policy,s->camera.selected?"true":"false");
         fprintf(f,"\"camera_yaw\":%.17g,\"camera_pitch\":%.17g,\"camera_fov_y\":%.17g,\"camera_zoom\":%.17g,\"camera_aspect\":%.17g,\"camera_has_orientation_frame\":%s,\"camera_frame\":[",s->camera.yaw_radians,s->camera.pitch_radians,s->camera.fov_y_degrees,s->camera.zoom,s->camera.aspect_ratio,s->camera.has_orientation_frame?"true":"false");

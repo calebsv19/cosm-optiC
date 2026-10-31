@@ -10,6 +10,10 @@ verification are complete. The release desktop is installed locally, and the
 selected Linux PC long worker is activated and qualified. See
 [version attribution and release checks](docs/release_versions.md).
 
+The current Main Edit source adds [portable event-plan validation, encoder
+preflight and verified native queued recovery](docs/camera_delivery_reliability.md);
+these follow-up changes require a later package than the release above.
+
 For development, start with the [Main Edit runbook](docs/main_edit_worktree.md)
 and [current behavior and qualification limits](docs/current_truth.md).
 

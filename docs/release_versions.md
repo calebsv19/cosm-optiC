@@ -26,6 +26,11 @@ The independent fast-worker hold is preserved. The camera qualification and
 cross-platform saved-proposal limits are tracked in
 [camera framework qualification](camera_framework_qualification.md).
 
+Main Edit reliability development after this release uses the same baseline
+version labels. Its portable-plan validation, encoder admission and verified
+native queue changes are source-qualified separately and are not included in
+the immutable `v0.21.0` / worker `0.15.0` packages.
+
 ## Historical status verified October 30
 
 Release and runtime records verified October 30, 2026. Desktop, worker, local

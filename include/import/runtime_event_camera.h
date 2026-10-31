@@ -2,6 +2,7 @@
 #define RUNTIME_EVENT_CAMERA_H
 #include "import/runtime_rigid_result.h"
 #include <json-c/json.h>
+#define RAY_EVENT_GEOMETRY_VALIDATION_POLICY "ray_event_geometry_validation_v1"
 bool RuntimeEventCameraValidate(json_object *, char *, size_t);
 bool RuntimeEventCameraValidateResult(json_object *, const RuntimeRigidResult *,
                                       char *, size_t);

@@ -88,6 +88,7 @@ static inline bool etoken(const char *s, size_t cap) {
 json_object *EventCanonical(json_object *);
 bool EventEqual(json_object *, json_object *);
 bool EventHash(json_object *, char[65]);
+bool EventProposalHash(json_object *, json_object *, json_object *, char[65]);
 typedef struct EventFocus {
   TimelineVec3 point, low, high;
   int bodies[2];
@@ -113,6 +114,12 @@ bool EventFocusOccluded(const RuntimeRigidResult *, uint64_t,
 bool EventResolve(json_object *, const RuntimeRigidResult *, json_object *, int,
                   EventRequest *, InspectionOrbit *, EventFocus *, EventFocus *,
                   json_object **, char *, size_t);
+/* ray_event_geometry_validation_v1: exact retained-content/dependency hashes;
+ * bounded comparison only for the enumerated derived geometric quantities. */
+bool EventResolvedEquivalent(json_object *, json_object *);
+bool EventRetainedResolve(json_object *, const RuntimeRigidResult *, json_object *,
+                          EventRequest *, InspectionOrbit *, EventFocus *,
+                          EventFocus *, char *, size_t);
 #ifdef RAY_RIGID_RESULT_ENABLED
 const RuntimeRigidResult *RuntimeRigidResultCurrent(void);
 #endif

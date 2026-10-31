@@ -2,7 +2,7 @@
 .PHONY: test-sequence-clock test-sequence-clock-sanitize
 SEQUENCE_CLOCK_SRC := src/animation/sequence_time.c src/animation/sequence_clock.c src/animation/timeline_clock.c
 SEQUENCE_CLOCK_HEADERS := include/animation/sequence_time.h include/animation/sequence_clock.h include/animation/timeline_clock.h src/animation/sequence_time_internal.h
-SEQUENCE_CLOCK_FLAGS := -std=c11 -Wall -Wextra -Werror -pedantic -Iinclude
+SEQUENCE_CLOCK_FLAGS := -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Werror -pedantic -Iinclude
 $(BUILD_DIR)/tests/sequence_clock_test: tests/sequence_clock_test.c $(SEQUENCE_CLOCK_SRC) $(SEQUENCE_CLOCK_HEADERS)
 	@mkdir -p $(dir $@)
 	$(CLANG_CC) $(SEQUENCE_CLOCK_FLAGS) tests/sequence_clock_test.c $(SEQUENCE_CLOCK_SRC) -lm -o $@
@@ -103,3 +103,29 @@ test-event-camera-lead-sanitize:
 test-camera-framework: test-sequence-clock test-sequence-clock-json test-camera-sequence test-inspection-orbit test-event-camera-geometry test-event-camera-lead
 	python3 -B tests/integration/test_sequence_catalog.py
 test-camera-framework-sanitize: test-sequence-clock-sanitize test-sequence-clock-json-sanitize test-camera-sequence-sanitize test-inspection-orbit-sanitize test-event-camera-geometry-sanitize test-event-camera-lead-sanitize
+
+.PHONY: test-event-camera-validation test-event-camera-validation-sanitize
+EVENT_VALIDATION_SRC := tests/event_camera_validation_test.c src/import/event_camera_validation.c src/import/event_camera_json.c src/app/ray_tracing_sha256.c
+test-event-camera-validation:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CC) $(CFLAGS) $(CPPFLAGS) $(EVENT_VALIDATION_SRC) -o $(BUILD_DIR)/tests/event_camera_validation_test $(LDFLAGS)
+	$(BUILD_DIR)/tests/event_camera_validation_test
+test-event-camera-validation-sanitize:
+	@mkdir -p $(BUILD_DIR)/tests
+	$(CC) $(CFLAGS) $(CPPFLAGS) -fsanitize=address,undefined -fno-omit-frame-pointer $(EVENT_VALIDATION_SRC) -o $(BUILD_DIR)/tests/event_camera_validation_sanitize $(LDFLAGS)
+	$(BUILD_DIR)/tests/event_camera_validation_sanitize
+
+test-camera-framework: test-event-camera-validation
+test-camera-framework-sanitize: test-event-camera-validation-sanitize
+
+.PHONY: test-sequence-encoder test-sequence-job-recovery
+test-sequence-encoder:
+	python3 -B tests/integration/check_sequence_encoder.py
+test-sequence-job-recovery: ray-tracing-job-runner ray-tracing-worker-runtime ray-tracing-render-headless
+	@test -n "$(SEQUENCE_RECOVERY_FIXTURE)" -a -n "$(SEQUENCE_RECOVERY_OUTPUT)" || (echo "Set SEQUENCE_RECOVERY_FIXTURE and a new SEQUENCE_RECOVERY_OUTPUT"; exit 2)
+	python3 -B tests/integration/check_sequence_job_recovery.py --fixture "$(SEQUENCE_RECOVERY_FIXTURE)" --out "$(SEQUENCE_RECOVERY_OUTPUT)" --runner "$(RAY_TRACING_JOB_RUNNER_BIN)"
+
+.PHONY: test-sequence-job-reporting
+test-sequence-job-reporting:
+	python3 -B tests/integration/check_sequence_job_reporting.py
+test-camera-framework: test-sequence-job-reporting

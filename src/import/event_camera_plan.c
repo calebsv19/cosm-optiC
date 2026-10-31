@@ -95,6 +95,21 @@ static json_object *base_dependencies(json_object *scene) {
       ec(eg(eg(eg(scene, "extensions"), "ray_tracing"), "rigid_result")));
   return o;
 }
+bool EventProposalHash(json_object *scene, json_object *intent,
+                       json_object *resolved, char out[65]) {
+  json_object *payload = ec(resolved), *input = base_dependencies(scene);
+  if (!payload || !input) {
+    if (payload) json_object_put(payload);
+    if (input) json_object_put(input);
+    return false;
+  }
+  json_object_object_del(payload, "proposal_sha256");
+  json_object_object_add(input, "intent", ec(intent));
+  json_object_object_add(input, "resolved", payload);
+  bool ok = EventHash(input, out);
+  json_object_put(input);
+  return ok;
+}
 json_object *RuntimeEventCameraDependencies(json_object *scene,
                                             json_object *entry) {
   json_object *o = base_dependencies(scene),
@@ -193,12 +208,8 @@ bool EventResolve(json_object *scene, const RuntimeRigidResult *result,
     json_object_object_add(o, "lead_visibility_samples",
                            json_object_new_int(17));
   }
-  json_object *hash_input = base_dependencies(scene);
-  json_object_object_add(hash_input, "intent", ec(intent));
-  json_object_object_add(hash_input, "resolved", ec(o));
   char hash[65];
-  bool ok = EventHash(hash_input, hash);
-  json_object_put(hash_input);
+  bool ok = EventProposalHash(scene, intent, o, hash);
   if (!ok) {
     json_object_put(o);
     return false;

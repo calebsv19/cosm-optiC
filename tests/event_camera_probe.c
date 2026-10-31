@@ -29,6 +29,20 @@ int main(int argc, char **argv) {
   }
   json_object *scene = json_object_from_file(argv[1]);
   char diagnostic[512] = {0};
+  if (!strcmp(argv[2], "--hash-retained-test")) {
+    if (argc != 5) return 4;
+    json_object *candidate = json_object_from_file(argv[3]);
+    json_object *entry = json_object_array_get_idx(eg(ea(candidate), "event_cameras"), 0);
+    char hash[65];
+    bool ok = entry && EventProposalHash(candidate, eg(entry, "intent"), eg(entry, "resolved"), hash);
+    json_object *value = json_object_new_object();
+    if (ok) {
+      json_object_object_add(value, "proposal_sha256", json_object_new_string(hash));
+      ok = save(argv[4], value);
+    }
+    json_object_put(value); if(candidate) json_object_put(candidate); json_object_put(scene);
+    return ok ? 0 : 6;
+  }
   if (!strcmp(argv[2], "--propose")) {
     if (argc != 5)
       return 4;
