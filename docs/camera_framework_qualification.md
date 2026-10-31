@@ -107,3 +107,12 @@ remains refused. The host FFmpeg lacks `libx264`; the maintained H.264 assembly
 command therefore fails there. An explicitly labelled canary-only MPEG-4 delivery
 copy retains the frame/hash/timing/decode checks; it does not qualify H.264
 installation or change the shipped tool.
+
+The final installed Linux foreground canary passes both the edited and independent
+views: 102 frames each at 24 FPS, exactly 17/4 seconds, exact PTS and full decode.
+All 102 physical-state and 96 non-cut camera pose/lens comparisons pass, including
+cuts, moving lead, exact frozen Hold bodies, Hold orbit and Resume. Maximum consumed
+source tick is 290; sealed inputs and all installed package hashes remain unchanged.
+This proof uses the native-authored successor and canary MPEG-4 delivery described
+above. It is separate from the scheduled service canary; production queue packaging
+and chunk recovery remain unqualified for this recorded-source fixture.

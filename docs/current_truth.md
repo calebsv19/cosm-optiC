@@ -12,7 +12,11 @@ entry supersedes their release/version status. Numerical, source-adapter,
 fractional-render and human visual acceptance limits remain in force. A saved
 Mac-authored event proposal was refused by Linux's exact geometry re-derivation
 check; its portability is not established by publication or service readiness.
-See [camera qualification](camera_framework_qualification.md).
+A Linux-native successor passes the installed foreground camera canary: both
+102-frame/24-FPS views have exact PTS, full decode and matching physical states,
+with cuts, moving lead and Hold/orbit/Resume. Canary MPEG-4 delivery passes; host
+H.264 and production queue/chunk recovery remain unqualified. See
+[camera qualification](camera_framework_qualification.md).
 
 ## Camera framework source checkpoint preparation
 
