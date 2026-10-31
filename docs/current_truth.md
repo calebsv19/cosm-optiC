@@ -1,3 +1,16 @@
+## October 31 — Linux camera leak checking completed
+
+The exact released source `805c1c9` (`v0.22.0`, worker `0.16.0`) now passes all
+seven camera framework sanitizer gates on native Linux with ASan/UBSan and leak
+detection enabled. The compatible runner reports `TracerPid: 0`. A clean control
+exits zero; a deliberate 123-byte leak is detected and exits nonzero before the
+product tests run. No leak or sanitizer error was observed in these seven gates.
+This closes the earlier ptrace execution blocker for this bounded suite; it is
+not whole-application or long-render leak qualification. Installed packages,
+activation and service state were not changed. Distributed recovery and abrupt
+power-loss qualification remain outside this follow-up.
+[Repeatable verification and environment requirements](camera_delivery_reliability.md#linux-leak-checking).
+
 ## October 31 — reliability release: desktop 0.22.0 / worker 0.16.0
 
 Checkpoint `06d4e8a` is included in release `v0.22.0`, source `805c1c9`.

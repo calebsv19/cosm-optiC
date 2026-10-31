@@ -150,7 +150,41 @@ for interfaces such as `strnlen`. Select the actual Clang executable for these
 qualify and explicitly select a compatible support directory; preserve compiler
 diagnostics instead of disabling warnings to obtain a pass.
 
-Linux sanitizer execution may be blocked when the remote execution environment
-uses `ptrace`; LeakSanitizer reports that restriction explicitly. Preserve that
-failure and distinguish it from normal strict gates and sanitizer passes on
-another host. Do not report the blocked Linux leak check as passed.
+## Linux leak checking
+
+Run the sanitizer suite from an ordinary untraced Linux process. A traced agent
+shell can make LeakSanitizer abort before it checks product memory. Check the
+process's `TracerPid` in `/proc/self/status`; a compatible execution reports zero.
+Keep `detect_leaks=1`; do not use a suppression or disable leak checking to turn an
+incompatible environment into a pass.
+
+```sh
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+LSAN_OPTIONS=exitcode=87 UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1 \
+make BUILD_TOOLCHAIN=clang CLANG_CC=clang BUILD_DIR_BASE=<fresh-build> \
+  test-camera-framework-sanitize
+```
+
+The October 31 follow-up qualifies exact release source `805c1c9` with seven
+sanitizer targets: sequence clock, clock JSON, camera sequence, inspection orbit,
+event geometry, event lead and event validation. Its runner first verifies both a
+clean allocation/free control and a deliberately leaking control (123 bytes,
+nonzero exit with an explicit leak report), then runs the gates. All seven pass
+with address/undefined-behavior checks and Linux leak detection enabled. No product
+code changed. This bounds the result to the exercised camera tests.
+
+For the internal CodeWork cross-host workflow, the maintained
+`<workspace>/bin/linux_pc_optic_camera_sanitizer_request.py` accepts a source
+archive, source commit, thread ID and local report-inbox root. It stages a
+hash-bound fixed helper through the existing PC report-inbox lane. The outer
+runner executes that helper without a traced agent shell. No caller-selected
+command, test target or sanitizer override is accepted. The helper writes its
+result and logs beneath the thread's `vps/camera_sanitizers/`, preserves failed
+reproducers, and retires successful scratch only after a process-consumer check.
+An uncertain submission must be inspected under its existing thread identity.
+The fixed `retire-current-thread-request` action can retire an earlier successful
+scratch tree only with that result's exact digest and a passing consumer check.
+
+Preserve the original ptrace failure as historical evidence; its successor is a
+verified Linux pass, not a rewritten old test receipt. This does not qualify
+whole-renderer memory use, distributed recovery or abrupt power-loss behavior.
