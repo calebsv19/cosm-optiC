@@ -33,6 +33,7 @@ include $(MAKE_DIR)/rules-tools.mk
 include $(MAKE_DIR)/rules-test.mk
 include $(MAKE_DIR)/rules-atmosphere-optics.mk
 include $(MAKE_DIR)/rules-motion-timing.mk
+include $(MAKE_DIR)/rules-sequence-clock.mk
 include $(MAKE_DIR)/rules-atmosphere.mk
 include $(MAKE_DIR)/rules-memory-check.mk
 include $(MAKE_DIR)/package-macos.mk

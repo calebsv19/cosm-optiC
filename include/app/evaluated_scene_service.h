@@ -38,4 +38,7 @@ bool RayEvaluatedSceneCaptureSampleWithPlayback(
     bool clamped,
     RayEvaluatedSceneServiceResult* out_result);
 
+/* Derive an independent viewport-bound event view; no shared settings mutation. */
+bool RayEvaluatedSceneBindViewport(const RayEvaluatedSceneSnapshot*,int,int,RayEvaluatedSceneSnapshot*);
+bool RayEvaluatedSceneCaptureViewSample(TimelineSample sample,const char *camera_id,RayEvaluatedSceneServiceResult *out_result);
 #endif

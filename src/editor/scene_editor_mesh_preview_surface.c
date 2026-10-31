@@ -1,3 +1,4 @@
+#include "editor/scene_editor_event_planner.h"
 #include "editor/scene_editor_material_perf.h"
 #include "render/runtime_surface_graph.h"
 #include "editor/scene_editor_material_stack.h"
@@ -89,6 +90,7 @@ static uint64_t scene_editor_mesh_surface_signature(
     SceneEditorMeshDisplayMode mode) {
     RuntimeSceneBridge3DPrimitiveSeedState seeds = {0};
     uint64_t hash = UINT64_C(1469598103934665603);
+    uint64_t event_stamp=SceneEditorEventPlannerGeometryStamp();hash=scene_editor_mesh_surface_hash(hash,&event_stamp,sizeof(event_stamp));
     hash = scene_editor_mesh_surface_hash(hash, projector, sizeof(*projector));
     hash = scene_editor_mesh_surface_hash(hash, &active_mode, sizeof(active_mode));
     hash = scene_editor_mesh_surface_hash(hash, &selected_object_index,
@@ -187,6 +189,8 @@ static SceneEditorMeshSurfacePoint3 scene_editor_mesh_surface_world(
     CoreObjectVec3 local,
     const CoreMeshAssetRuntimeContract* contract,
     const RayTracingRuntimeMeshAssetInstance* instance) {
+    double source[]={local.x,local.y,local.z},world[3];
+    if(SceneEditorEventPlannerWorldPoint(instance->object_id,source,world))return (SceneEditorMeshSurfacePoint3){world[0],world[1],world[2]};
     SceneEditorMeshSurfacePoint3 pivot = {0.0, 0.0, 0.0};
     SceneEditorMeshSurfacePoint3 point;
     if (instance->rotation_pivot_policy == RAY_TRACING_RUNTIME_MESH_ROTATION_PIVOT_CUSTOM) {
@@ -216,6 +220,8 @@ static SceneEditorMeshSurfacePoint3 scene_editor_mesh_surface_world(
 static SceneEditorMeshPreviewShadeNormal scene_editor_mesh_surface_world_normal(
     CoreObjectVec3 local,
     const RayTracingRuntimeMeshAssetInstance* instance) {
+    double source[]={local.x,local.y,local.z},world[3];
+    if(instance&&SceneEditorEventPlannerWorldDirection(instance->object_id,source,world))return (SceneEditorMeshPreviewShadeNormal){world[0],world[1],world[2]};
     SceneEditorMeshSurfacePoint3 normal = {local.x, local.y, local.z};
     if (!instance) return (SceneEditorMeshPreviewShadeNormal){normal.x, normal.y, normal.z};
     if (fabs(instance->scale_x) > 1e-12) normal.x /= instance->scale_x;

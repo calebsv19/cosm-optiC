@@ -1,3 +1,47 @@
+## Camera framework source checkpoint preparation
+
+The combined camera stages have a maintained `test-camera-framework` gate in the stable test lane and a sanitizer companion. [Qualification and render handoff](camera_framework_qualification.md) defines generic camera behavior, source-specific adapters, integer-render sampling, portable job acceptance and the separate Linux installed-worker canary. Source checkpointing does not update installed apps, worker runtimes or release versions.
+
+## October 31: moving event dolly lead-in
+
+Opt-in event intents now accept a radial dolly lead using existing M5 rest-to-rest limits, fixed future-event aim and exact arrival at the existing Hold orbit. The explicitly opened Events Target page exposes kind/scale; MCP owns full intent limits. Presentation-driven seeking/cuts, retained source guards, shared history and Save/reopen remain in the same owners. See [contract and limits](event_camera_planning.md#moving-dolly-lead-in). Contact-event discovery still requires an admitted physics event stream. Source development only; installed/release versions unchanged.
+
+## October 31 — minimal event planner and recorded surface picking
+
+Render now has an explicitly opened Events tab with Target/View/Review pages, recorded mesh surface focus/pivot picking, candidate guides and guarded Apply through the existing native/MCP document/history owner. A separate inspector shows presentation, simulation, active camera-motion and inspection clocks plus source phase navigation connected to the timeline. Events world geometry and its pick ray share the recorded affine mapping; closing the tab restores ordinary authoring. Native 1280×800/1024×720 UI, actual stdio draft/read/pick, stale guards, Undo/Redo/Save/reopen and camera/legacy playback regressions pass. See [event contract and UI/MCP limits](event_camera_planning.md). Source only; no solver, installed or release change.
+
+## October 30 — event-aware camera placement implemented
+
+Recorded rigid events now support COM/pair/bounds/source-point/side/world focus, separate pivots, FOV/margin/offset/view preferences, three hash-bound proposals, stationary event lead-in, target-aimed M5 Hold orbit and explicit endpoint/aim behavior on Resume. Native/MCP retained selection and atomic replan use shared history and Save/reopen; cuts do not retime a plan. Pure/sanitizer geometry, native source/framing/continuity/refusal checks and actual editor/MCP acceptance pass. See [contract and limits](event_camera_planning.md). Source only; no new physics, installation or release.
+
+## October 30 — recorded volume sources and synchronized delivery complete
+
+Stages 7–8 add pinned complete VF3D v1 Play/Hold/Resume and synchronized edited/angle/matrix video delivery. Native complete-field Hold, provenance/refusal tests, exact 3-second volume and 4.25-second collision comparisons, frame-folder reassembly and focused regressions pass. Automatic temporal diagnostics retain an explicit visual-review boundary. Stages 0–8 now have bounded working implementations; additional source families and framing/polish remain future work. Source only; no solver, installation or release change. See [source limits and delivery commands](sequence_sources_and_multiview.md).
+
+## October 30 — inspection and authoring Stages 5–6 complete
+
+Main Edit adds exact Hold-boundary recorded-target orbits with M5 timing, dependency locks and schema-7 provenance; native/MCP source, camera and shot editing uses shared history and Save/reopen. Separate clock readouts retain presentation, simulation, camera and inspection meanings. Full build, strict/sanitizer orbit gates, native frozen-state/partial-endpoint proof, real UI/MCP and exact 4.25-second output pass. Source only: no new physics, installation or release. See [contract and usage](inspection_sequence_authoring.md). Additional adapters and synchronized multiview remain Stages 7–8.
+
+## October 30 — named cameras and shot clocks (Stages 3–4)
+
+Main Edit adds a strict saved camera rig with stable identities, detached independent views and complete shot selection. Continuous, selected-time and explicit clip clocks derive from the saved schedule. Camera routes/aim use the existing path owner; body/source time remains unchanged by view selection. Snapshot schema 6 authenticates camera clock/pose/lens provenance, and native receipts expose it. [Contract and usage](camera_sequence.md). Source development only: no installation, release, new physics, orbit authoring or UI authoring.
+
+## October 30 — sequence Stage 2 implemented and qualified
+
+Main Edit adds saved play/hold/resume sequences over authenticated rigid results. Body geometry uses exact source ticks while the existing camera and authored lights use presentation time. Snapshot provenance, overlay save/reopen, native image receipts and constant rational video timing are enforced. Full application/headless build and focused regressions pass; 54 native samples compare 324 body poses exactly. Both 24 FPS and 30000/1001 FPS videos have exact PTS and duration. No new physics, named cameras, installed-app or release changes. [Usage and limits](sequence_playback.md). Stage 3 is independent named cameras.
+
+## October 30 — sequence clock Stages 0–1
+
+Main Edit adds a detached `ray_sequence_clock_v1` C contract/evaluator with exact
+rational output duration, presentation/simulation/segment-local clocks, contiguous
+play/hold mapping, exact source-tick admission and transactional refusal. Strict
+C11 and ASan/UBSan each pass2757checks; an independent Fraction oracle passes2799
+samples. Seven adjacent timing/route/orientation/timeline gates pass. No runtime
+consumer, saved-scene schema, camera selection, video integration, UI or installed
+app behavior is enabled. Stage2 source binding and evaluated-frame integration
+are next. Source remains on0.20.0/worker0.14.0; no release action.
+See [sequence clock contract](sequence_clock.md).
+
 ## October 30 — desktop 0.20.0 / worker 0.14.0 released and activated
 
 Release source `2886958f96c86e49e53095fa4af6754b349c62c2`, tag `v0.20.0`,

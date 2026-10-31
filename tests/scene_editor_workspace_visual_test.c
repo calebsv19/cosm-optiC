@@ -480,6 +480,10 @@ static void verify_viewport_gestures(SceneEditor *editor) {verify_viewport_gestu
 #include "scene_editor_shared_ui_acceptance.h"
 #include "scene_editor_shared_fields_hud_acceptance.h"
 #include "scene_editor_rigid_ui_acceptance.h"
+#include "scene_editor_sequence_acceptance.h"
+#include "animation/event_camera_geometry.h"
+#include "scene_editor_event_camera_acceptance.h"
+#include "scene_editor_event_planner_acceptance.h"
 #include "preview_shared_ui_native_test.h"
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -509,6 +513,9 @@ int main(int argc, char** argv) {
      * only after the actual native window has settled and painted. */
     for(int i=0;i<3;i++) {SDL_Delay(40);SDL_PumpEvents();SceneEditorSessionRuntimeRender(&editor);}
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && (!strcmp(argv[3],"--event-planner")||!strcmp(argv[3],"--event-planner-reopen"))){event_planner_acceptance(&editor,argv[2],!strcmp(argv[3],"--event-planner-reopen"));DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && (!strcmp(argv[3],"--event-camera")||!strcmp(argv[3],"--event-camera-reopen"))){event_camera_acceptance(&editor,argv[2],!strcmp(argv[3],"--event-camera-reopen"));DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && (!strcmp(argv[3],"--sequence")||!strcmp(argv[3],"--sequence-reopen"))){sequence_acceptance(&editor,argv[2],!strcmp(argv[3],"--sequence-reopen"));DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--rigid-ui")) {rigid_ui_acceptance(&editor);DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--rigid-ui-baseline")) {rigid_ui_baseline(&editor);DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--preview-shared-ui")) {preview_shared_ui_native_acceptance(&editor);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}

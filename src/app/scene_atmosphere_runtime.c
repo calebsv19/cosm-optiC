@@ -1,3 +1,4 @@
+#include "import/runtime_sequence_source.h"
 #define _XOPEN_SOURCE 700
 #include "app/scene_atmosphere_runtime.h"
 #include "app/scene_atmosphere_assets.h"
@@ -143,6 +144,7 @@ bool SceneAtmosphereFrameForAttachment(const SceneAtmosphereAttachment* value,co
     free(ids);return ok;
 }
 bool SceneAtmosphereRuntimeFrame(const char* scene_path,const TimelineEvaluationContext* frame,int64_t* out,char* d,size_t n) {
+    if(RuntimeSequenceVolumeActive())return RuntimeSequenceVolumeFrame(frame,out)||fail(d,n,"sequence volume source sample unavailable");
     return SceneAtmosphereFrameForAttachment(&active,scene_path,frame,out,d,n);
 }
 bool SceneAtmosphereRuntimeSimulation(const char* scene_path,const TimelineEvaluationContext* frame,
@@ -169,6 +171,7 @@ bool SceneAtmosphereRuntimeSimulation(const char* scene_path,const TimelineEvalu
         return fail(d,n,"Selected cache frame escapes the project or is a symlink.");
     if(!ray_tracing_sha256_file(verified,digest) ||
         !ray_tracing_sha256_file(path,manifest_digest)) return fail(d,n,"cannot identify selected atmosphere cache bytes");
+    if(!RuntimeSequenceVolumeVerify(verified,digest,manifest_digest,selected)) return fail(d,n,"sequence_volume pinned bytes changed; reload the admitted source");
     char water_digest[65],water_manifest[65],combined[129];
     if(!SceneAtmosphereRuntimeWaterDigest(scene_path,frame,water_digest,water_manifest,d,n)) return false;
     if(water_digest[0]) {

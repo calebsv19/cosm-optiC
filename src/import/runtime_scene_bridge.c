@@ -1,4 +1,6 @@
+#include "import/runtime_sequence_source.h"
 #include "import/runtime_rigid_result.h"
+#include "import/runtime_camera_rig.h"
 #include "import/runtime_scene_lighting_writeback.h"
 #include <fisics/extensions.h>
 
@@ -80,6 +82,8 @@ static void scaffold_state_reset(void) {
 static bool s_empty_after_failure;
 void runtime_scene_bridge_clear_failed_generation(void) {
     RuntimeRigidResultCommit(NULL);
+    RuntimeSequenceReset();
+    RuntimeCameraRigReset();
     scene_defaults_reset();
     scaffold_state_reset();
     RuntimeSurfaceMappingReset();
@@ -934,6 +938,7 @@ bool runtime_scene_bridge_apply_json_prepared(const char *runtime_scene_json,
     animSettings.sceneSource = SCENE_SOURCE_RUNTIME_SCENE;
     animSettings.useFluidScene = false;
 
+    if(!RuntimeSequenceLoad(root)||!RuntimeCameraRigLoad(root,world_scale)){runtime_scene_bridge_clear_failed_generation();json_object_put(root);return false;}
     RuntimeRigidResultCommit(rigid);
     s_empty_after_failure = false;
     runtime_scene_bridge_preflight_diag(out_summary, "ok");
@@ -971,18 +976,12 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
         json_object_put(overlay_root);
         return false;
     }
-    /* Editor overlays replace the ray_tracing namespace. Managed asset
-       ownership is persisted by the backend, not reconstructed by the editor. */
+    /* These declarations belong to retained owners, not generated UI overlays. */
     {
-        json_object *extensions = NULL, *ray = NULL, *managed = NULL;
-        json_object *overlay_extensions = NULL, *overlay_ray = NULL;
-        if (json_object_object_get_ex(runtime_root, "extensions", &extensions) &&
-            json_object_object_get_ex(extensions, "ray_tracing", &ray) &&
-            json_object_object_get_ex(ray, "managed_mesh_assets", &managed) &&
-            json_object_object_get_ex(overlay_root, "extensions", &overlay_extensions) &&
-            json_object_object_get_ex(overlay_extensions, "ray_tracing", &overlay_ray) &&
-            json_object_is_type(overlay_ray, json_type_object)) {
-            json_object_object_add(overlay_ray, "managed_mesh_assets", json_object_get(managed));
+        json_object *extensions=NULL,*ray=NULL,*oe=NULL,*overlay_ray=NULL;
+        if(json_object_object_get_ex(runtime_root,"extensions",&extensions)&&json_object_object_get_ex(extensions,"ray_tracing",&ray)&&json_object_object_get_ex(overlay_root,"extensions",&oe)&&json_object_object_get_ex(oe,"ray_tracing",&overlay_ray)&&json_object_is_type(overlay_ray,json_type_object)){
+            const char *keys[]={"managed_mesh_assets","rigid_result"};
+            for(size_t i=0;i<2;i++){json_object *value=NULL;json_object_object_del(overlay_ray,keys[i]);if(json_object_object_get_ex(ray,keys[i],&value))json_object_object_add(overlay_ray,keys[i],json_object_get(value));}
         }
     }
     /* Retained authoring is authoritative. Legacy overlays cannot reconstruct
@@ -998,7 +997,7 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
             json_object_object_get_ex(orr,"authoring",&oa) &&
             json_object_is_type(oa,json_type_object)) {
             const char *keys[]={"scene_timeline","motion_paths","motion_plans","atmosphere_attachment",
-                                "camera_focus_target"};
+                                "camera_focus_target","sequence","camera_rig","inspection_moves","sequence_volume","event_cameras"};
             for(size_t i=0;i<sizeof(keys)/sizeof(keys[0]);++i) {
                 json_object *value=NULL;
                 json_object_object_del(oa,keys[i]);

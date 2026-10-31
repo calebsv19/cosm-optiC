@@ -181,3 +181,5 @@ This renumbers captured BMP frames from `data/runtime/frames/default/` by defaul
 Read the subdirectory READMEs under `src/` and `include/` for subsystem-specific notes.
 
 - [Bounded friction-bearing flat-face support](docs/rigid_friction_support.md).
+
+Camera sequencing, independent clocks, recorded-state inspection and event planning are documented in [camera framework qualification](docs/camera_framework_qualification.md), including supported source adapters and release/render acceptance boundaries.

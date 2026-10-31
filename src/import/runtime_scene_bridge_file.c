@@ -1,3 +1,4 @@
+#include "import/runtime_sequence_source.h"
 #include "import/runtime_scene_bridge.h"
 #include "import/runtime_rigid_result.h"
 bool runtime_scene_bridge_apply_json_prepared(const char *,RuntimeSceneBridgePreflight *,RuntimeRigidResult *);
@@ -89,7 +90,7 @@ bool runtime_scene_bridge_preflight_file(const char *runtime_scene_path,
         runtime_scene_bridge_preflight_diag(out_preflight, "invalid surface resource scene path context");
         ok = false;
     }
-    if(ok) {json_object *root=json_tokener_parse(json_text);ok=root && RuntimeRigidResultPrepare(root,runtime_scene_path,&rigid,out_preflight->diagnostics,sizeof(out_preflight->diagnostics));if(root)json_object_put(root);}
+    if(ok) {json_object *root=json_tokener_parse(json_text);ok=root && RuntimeSequenceValidate(root,runtime_scene_path,out_preflight->diagnostics,sizeof(out_preflight->diagnostics)) && RuntimeRigidResultPrepare(root,runtime_scene_path,&rigid,out_preflight->diagnostics,sizeof(out_preflight->diagnostics));if(root)json_object_put(root);}
     free(json_text);
     if (ok) {
         RayTracingRuntimeCurveAssetSet *curve_assets =
@@ -236,7 +237,7 @@ static bool runtime_scene_bridge_apply_file_with_options(const char *runtime_sce
 
     RuntimeRigidResult *rigid=NULL;
     json_object *rigid_root=json_tokener_parse(json_text);
-    bool rigid_ok=rigid_root && RuntimeRigidResultPrepare(rigid_root,runtime_scene_path_copy,&rigid,out_summary->diagnostics,sizeof(out_summary->diagnostics)) && RuntimeRigidResultMeshesMatch(rigid,mesh_assets,out_summary->diagnostics,sizeof(out_summary->diagnostics));
+    bool rigid_ok=rigid_root && RuntimeSequenceValidate(rigid_root,runtime_scene_path_copy,out_summary->diagnostics,sizeof(out_summary->diagnostics)) && RuntimeRigidResultPrepare(rigid_root,runtime_scene_path_copy,&rigid,out_summary->diagnostics,sizeof(out_summary->diagnostics)) && RuntimeRigidResultMeshesMatch(rigid,mesh_assets,out_summary->diagnostics,sizeof(out_summary->diagnostics));
     if(rigid_root)json_object_put(rigid_root);
     if(!rigid_ok) {
         RuntimeRigidResultFree(rigid);free(json_text);

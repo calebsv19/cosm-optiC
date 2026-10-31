@@ -2,6 +2,7 @@
 #define RAY_TRACING_EVALUATED_SCENE_SNAPSHOT_H
 
 #include <stdbool.h>
+#include "animation/sequence_clock.h"
 #include "motion/motion_frame.h"
 #include <stddef.h>
 #include <stdint.h>
@@ -9,7 +10,7 @@
 #include "animation/timeline_document.h"
 #include "animation/timeline_light_motion.h"
 
-#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 4u
+#define RAY_EVALUATED_SCENE_SNAPSHOT_SCHEMA_VERSION 7u
 #define RAY_EVALUATED_SCENE_DIAGNOSTICS_CAPACITY 256u
 #define RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY 64u
 
@@ -84,6 +85,13 @@ typedef struct RayEvaluatedLight {
 } RayEvaluatedLight;
 
 typedef struct RayEvaluatedCamera {
+    char target_id[64], shot_id[64];
+    char inspection_id[64];
+    SequenceTime inspection_time;
+    int clock_policy;
+    SequenceTime motion_time;
+    uint64_t rig_revision;
+    bool selected;
     bool valid;
     bool uses_authored_path;
     TimelineVec3 position;
@@ -148,6 +156,8 @@ typedef struct RayEvaluatedSceneSnapshot {
     bool reverse_direction;
     bool clamped;
     TimelineEvaluationContext frame;
+    bool has_sequence;
+    SequenceEvaluation sequence;
     RayEvaluatedSceneIdentity identity;
     RayEvaluatedLight light;
     RayEvaluatedCamera camera;
@@ -165,6 +175,8 @@ typedef struct RayEvaluatedSceneSnapshotInputs {
     bool reverse_direction;
     bool clamped;
     TimelineEvaluationContext frame;
+    bool has_sequence;
+    SequenceEvaluation sequence;
     RayEvaluatedSceneIdentity identity;
     RayEvaluatedLight light;
     RayEvaluatedCamera camera;

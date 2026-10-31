@@ -18,6 +18,7 @@ typedef struct RayTracingAgentRenderRequest {
     char schema_version[64];
     char run_id[128];
     char runtime_scene_path[PATH_MAX];
+    char camera_id[64]; /* Empty selects the authored shot. */
     bool has_compound_scene_ingestion_path;
     char compound_scene_ingestion_path[PATH_MAX];
     bool volume_enabled;

@@ -1,3 +1,4 @@
+#include "editor/scene_editor_event_planner.h"
 #include "editor/scene_editor_motion_paths.h"
 #include "editor/scene_editor_timeline.h"
 #include "editor/scene_editor_object_move_gizmo.h"
@@ -371,6 +372,7 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
         hover_object_index = SceneEditorViewportPickObject(&projector,mouse_x,mouse_y);
     }
 
+    SceneEditorEventPlannerViewportPrepare(&projector);
     SceneEditorDigestOverlayRenderObjectLayer(renderer,
                                               &projector,
                                               &digest,
@@ -459,6 +461,7 @@ int SceneEditorDigestOverlayRender(SDL_Renderer* renderer,
 
 
 
+    SceneEditorEventPlannerViewport(renderer,&projector);
     if (clip_was_enabled) {
         SDL_RenderSetClipRect(renderer, &previous_clip);
     } else {

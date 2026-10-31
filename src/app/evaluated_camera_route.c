@@ -5,19 +5,19 @@
 #include <string.h>
 #include <math.h>
 #include "import/runtime_scene_bridge.h"
-bool EvaluatedCameraRouteSample(const Camera *camera, double z, const Path *path,
+bool EvaluatedCameraRouteSampleTarget(const char *target, const Camera *camera, double z, const Path *path,
     const CameraPath3D *depth, double normalized_t, int width, int height,
     const TimelineFrameSnapshot *snapshot, PreviewCameraSample *out) {
   MotionPathBinding binding;
-  if (!MotionPathsRuntimeBinding("camera/main", &binding))
+  if (!MotionPathsRuntimeBinding(target, &binding))
     return PreviewCameraSampleEvaluateTimeline(camera, z, path, depth, normalized_t,
-        width, height, snapshot, "camera/main", out);
+        width, height, snapshot, target, out);
   TimelineFrameSnapshot orientation = *snapshot;
   bool has_route = false; double progress = 0;
   orientation.property_count = 0;
   for (size_t i = 0; i < snapshot->property_count; ++i) {
     const TimelinePropertyEvaluationResult *p = &snapshot->properties[i];
-    if (!strcmp(p->track.target_id, "camera/main") &&
+    if (!strcmp(p->track.target_id, target) &&
         !strcmp(p->track.property_id, MOTION_CAMERA_PROGRESS_PROPERTY)) {
       has_route = true; progress = p->track.value.as.scalar;
     } else orientation.properties[orientation.property_count++] = *p;
@@ -45,20 +45,20 @@ bool EvaluatedCameraRouteSample(const Camera *camera, double z, const Path *path
   PreviewCameraSample result;
   TimelineVec3 position;
   if (!PreviewCameraSampleEvaluateTimeline(camera, z, path, depth, normalized_t,
-          width, height, &orientation, "camera/main", &result) ||
-      !MotionPathsRuntimeTargetPosition("camera/main", progress, &position)) return false;
+          width, height, &orientation, target, &result) ||
+      !MotionPathsRuntimeTargetPosition(target, progress, &position)) return false;
   result.position_x = position.x; result.position_y = position.y; result.position_z = position.z;
   result.uses_authored_path = true;
-  if(!EvaluatedCameraOrientation(&binding,progress,&result))return false;
+  if(!EvaluatedCameraOrientationTarget(target,&binding,progress,&result))return false;
   *out = result;
   return true;
 }
 
 /* Preserve the established focus-target precedence after final translation.
  * Doing this before route placement aims from the wrong camera position. */
-void EvaluatedCameraApplyFocusTarget(PreviewCameraSample *sample) {
+void EvaluatedCameraApplyFocusTargetFor(const char *target, PreviewCameraSample *sample) {
   MotionPathBinding binding;
-  if (!MotionPathsRuntimeBinding("camera/main", &binding) || !binding.use_focus_target || binding.camera_orientation) return;
+  if (!MotionPathsRuntimeBinding(target, &binding) || !binding.use_focus_target || binding.camera_orientation) return;
   RuntimeSceneBridge3DScaffoldState scaffold = {0};
   runtime_scene_bridge_get_last_3d_scaffold_state(&scaffold);
   if (!sample || !scaffold.has_camera_focus_target) return;
@@ -70,3 +70,6 @@ void EvaluatedCameraApplyFocusTarget(PreviewCameraSample *sample) {
   if (horizontal>1e-9) sample->yaw_radians=atan2(dx,-dy);
   sample->pitch_radians=fmax(-limit,fmin(limit,atan2(dz,horizontal)));
 }
+
+bool EvaluatedCameraRouteSample(const Camera *c,double z,const Path *p,const CameraPath3D *d,double t,int w,int h,const TimelineFrameSnapshot *s,PreviewCameraSample *o){return EvaluatedCameraRouteSampleTarget("camera/main",c,z,p,d,t,w,h,s,o);}
+void EvaluatedCameraApplyFocusTarget(PreviewCameraSample *s){EvaluatedCameraApplyFocusTargetFor("camera/main",s);}

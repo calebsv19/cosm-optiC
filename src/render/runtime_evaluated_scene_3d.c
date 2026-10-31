@@ -1,5 +1,6 @@
 #include "render/runtime_evaluated_scene_3d.h"
 #include "import/runtime_rigid_result.h"
+#include "import/runtime_camera_rig.h"
 
 #include <string.h>
 
@@ -45,7 +46,7 @@ bool RuntimeEvaluatedScene3DApply(
         RayEvaluatedSceneSnapshotValidate(snapshot) != TIMELINE_STATUS_OK) {
         return false;
     }
-    if(!RuntimeRigidResultSnapshotMatches(snapshot))return false;
+    if(!RuntimeRigidResultSnapshotMatches(snapshot)||!RuntimeCameraRigSnapshotMatches(snapshot))return false;
     light = runtime_evaluated_scene_find_light(&copied_scene->lightSet,
                                                &snapshot->light,
                                                snapshot->source);
@@ -94,6 +95,7 @@ bool RuntimeEvaluatedScene3DApply(
     copied_scene->camera.orientationForward=vec3(orientation->forward[0],orientation->forward[1],orientation->forward[2]);
     copied_scene->camera.orientationUp=vec3(orientation->up[0],orientation->up[1],orientation->up[2]);
     copied_scene->camera.zoom = snapshot->camera.zoom;
+    copied_scene->camera.fovYDegrees = snapshot->camera.fov_y_degrees;
     copied_scene->hasCamera = snapshot->camera.valid;
     return copied_scene->hasLight && copied_scene->hasCamera;
 }

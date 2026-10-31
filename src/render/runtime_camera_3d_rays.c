@@ -55,7 +55,7 @@ bool RuntimeCameraProjector3D_Build(const RuntimeCamera3D* camera,
     }
     projector.nearPlane = near_plane;
     projector.tanHalfFovY =
-        tan((kRuntimeCameraProjectorDefaultFovYDegrees * M_PI / 180.0) * 0.5) / zoom;
+        tan(((isfinite(camera->fovYDegrees)&&camera->fovYDegrees>=1&&camera->fovYDegrees<179?camera->fovYDegrees:kRuntimeCameraProjectorDefaultFovYDegrees) * M_PI / 180.0) * 0.5) / zoom;
     projector.tanHalfFovX = projector.tanHalfFovY * aspect;
 
     if (!(projector.tanHalfFovY > 1e-6) || !(projector.tanHalfFovX > 1e-6)) {

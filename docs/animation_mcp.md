@@ -79,3 +79,5 @@ Direct Light job images are compared exactly across Save/reopen. Disney V2 jobs
 verify completion, artifacts and identical retained timeline source; a native
 fixed-sampling comparison qualifies exact fresh-reopen pixels separately from
 per-job stochastic sampling.
+
+Event-camera lead intents support strict stationary or radial dolly movement, with presentation-driven fixed arrival and M5 limits. Use the existing candidates/select/draft owners; see [the moving lead contract](event_camera_planning.md#moving-dolly-lead-in).

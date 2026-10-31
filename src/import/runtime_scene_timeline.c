@@ -1,5 +1,6 @@
 #include "motion/scene_motion_plans.h"
 #include "import/runtime_scene_timeline.h"
+#include "import/runtime_camera_rig.h"
 #include "motion/scene_motion_paths.h"
 #include "import/runtime_scene_object_timeline.h"
 #include "runtime_scene_timeline_consumers.h"
@@ -93,7 +94,7 @@ bool RuntimeSceneTimelineValidateScene(json_object* scene,char* diagnostics,size
         const TimelineTrack* track=&candidate->tracks[i];
         if(!track->enabled) continue;
         if(!strncmp(track->target_id,"camera/",7)) {
-            if(strcmp(track->target_id,"camera/main")) status=TIMELINE_STATUS_TARGET_NOT_FOUND;
+            if(!RuntimeCameraRigTargetExists(scene,track->target_id)) status=TIMELINE_STATUS_TARGET_NOT_FOUND;
         } else if(!strncmp(track->target_id,"light/",6)) {
             json_object* lights=NULL;size_t matches=0;
             json_object_object_get_ex(scene,"lights",&lights);

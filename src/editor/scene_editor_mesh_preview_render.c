@@ -1,3 +1,4 @@
+#include "editor/scene_editor_event_planner.h"
 #include "editor/scene_editor_object_transform_preview.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_mesh_preview_render.h"
@@ -159,6 +160,8 @@ static SceneEditorMeshPreviewPoint3 scene_editor_mesh_preview_world_point(
     CoreObjectVec3 local,
     const CoreMeshAssetRuntimeContract* contract,
     const RayTracingRuntimeMeshAssetInstance* instance) {
+    double source[]={local.x,local.y,local.z},world[3];
+    if(SceneEditorEventPlannerWorldPoint(instance->object_id,source,world))return (SceneEditorMeshPreviewPoint3){world[0],world[1],world[2]};
     const SceneEditorMeshPreviewPoint3 pivot =
         scene_editor_mesh_preview_pivot(contract, instance);
     SceneEditorMeshPreviewPoint3 point = {

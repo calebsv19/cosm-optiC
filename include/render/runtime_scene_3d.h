@@ -161,6 +161,7 @@ typedef struct {
     Vec3 orientationForward, orientationUp;
     double zoom;
     double nearPlane;
+    double fovYDegrees; /* zero keeps the legacy 55-degree projector */
 } RuntimeCamera3D;
 
 typedef struct {

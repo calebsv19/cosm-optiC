@@ -1,10 +1,61 @@
 # RayTracing Timeline Foundation
 
+## Event-aware camera geometry
+
+`event_camera_geometry.*` solves and checks event framing and target-aimed camera
+frames, reusing MotionFrame and M5 inspection scheduling. App import modules resolve
+authenticated source focus, canonical proposals/dependencies and retained event
+evaluation. The editor owner selects/replans through shared history/MCP. See
+[the event-camera contract](../../docs/event_camera_planning.md).
+
+## Recorded volumes and synchronized delivery — Stages 7–8
+
+`runtime_sequence_source.c` selects the rigid or pinned complete VF3D adapter,
+reusing the exact sequence evaluator. Existing atmosphere/import owners prepare
+whole recorded fields. `sequence_multiview.py` composes native per-view rendering,
+validated uniform encoding and a synchronized matrix; `sequence_temporal_review.py`
+measures changes and leaves visual acceptance explicit. See
+[the source and delivery contract](../../docs/sequence_sources_and_multiview.md).
+
+## Inspection and retained editing — Stages 5–6
+
+`inspection_orbit.*` supplies analytic circular geometry over the existing M5
+rest-to-rest schedule. `runtime_inspection*` binds it to exact recorded Hold states
+and retained dependency locks. Editor sequence modules own transactional changes,
+native controls and MCP through shared history; they do not step the solver.
+Schema-7 snapshots retain exact inspection time alongside source and camera clocks.
+See [authoring and qualification](../../docs/inspection_sequence_authoring.md).
+
+## Named cameras and shots — Stages 3–4
+
+`camera_sequence.*` owns deterministic selection and exact continuous/selected/clip
+clocks over a complete shot schedule. `runtime_camera_rig.c` owns strict saved JSON,
+authenticated per-view evaluation and legacy physical-reader compatibility. Existing
+camera channels, route geometry and aim/orientation evaluators are reused. No global
+active-camera mutation or wall-clock accumulator is introduced. See
+[the saved rig and native usage](../../docs/camera_sequence.md).
+
+
 This directory owns authored frame meaning, detached property-track evaluation,
 and immutable evaluated-frame snapshots. It exposes a transactional copied-scene
 application seam, but does not mutate live global scene state, invalidate
 renderer caches, persist data, own editor state/playback, step simulations, or
 schedule wall-clock work.
+
+## Sequence clock foundation — Stages 0–1
+
+`sequence_clock.*` adds an opt-in, allocation-free evaluator for exact rational
+presentation, segment-local and simulation time. A versioned in-memory document
+partitions output frames into continuous play/hold segments over one declared
+exact-tick source envelope. It refuses unsupported sampling and commits outputs
+only on success. `SequenceClockDuration` reports exact encoded duration, distinct
+from the final image PTS. Legacy timeline contexts remain compatible. See [contract, verification and next stages](../../docs/sequence_clock.md).
+
+Stage 2 now binds authenticated rigid results through `runtime_rigid_sequence.c`,
+persists strict JSON through `sequence_clock_json.c`, carries schema-5 snapshot
+provenance, writes native frame receipts and validates uniform rational video.
+See [Stage 2 usage and limits](../../docs/sequence_playback.md). Camera selection
+and general simulation adapters remain later stages.
 
 ## TAF0 ownership audit
 
@@ -345,3 +396,7 @@ subframe seeking, actual generated triangle translation, unchanged base transfor
 invalid edits, undo/redo and save/reopen. The companion
 `tests/integration/check_object_timeline_render_parity.py` checks fresh headless
 renders at six frames against that saved authoring result.
+
+### Event dolly lead
+
+`event_camera_lead.c` is the analytic straight-line, M5 fixed-arrival rest-to-rest lead into an already-solved event pose. It preserves the future-event aim/lens, exact start/end poses, and presentation-time seeking. It does not change rigid source time or generalize the path geometry owner. Import parsing/resolution lives in `src/import/event_camera_lead.c`; UI controls remain under the explicitly opened Events tab. See `docs/event_camera_planning.md`.

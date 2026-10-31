@@ -1,3 +1,26 @@
+## October 31 — combined camera framework checkpoint
+
+The accumulated camera/sequence/event work is consolidated on the registered
+`codex/ray-tracing-main-edit` lane. It includes independent presentation/source/
+camera clocks, named cameras and shots, rigid and complete VF3D sequence adapters,
+Hold inspection, synchronized delivery, event focus/placement, the explicitly
+opened Events planner and a bounded radial dolly lead.
+
+The fresh full application/headless/job-runner/probe build, normal/sanitized
+framework gates, aggregate C suite, workflow/export/custody checks, native rigid
+event and complete-volume/multiview tests, relocated scene evaluation and local
+detached job-runner canary pass. Existing native normal/compact UI and MCP
+history/Save/reopen proof is reused only after exact behavior-source hash checks.
+See [camera qualification and release handoff](camera_framework_qualification.md).
+
+App `0.20.0` / worker `0.14.0` remain the development version baselines. This
+checkpoint does not change canonical, installed apps, published packages, worker
+runtimes or Registry current. Release preparation must adopt the reviewed source,
+bind both desktop and headless worker identities, and qualify the selected Linux
+worker with a short canary before an expensive render. Integer-frame render
+sampling, source-specific event adapters and qualified source coverage remain
+explicit limits. Historical dated entries below retain their original state.
+
 ## Start here after the October 30 release
 
 Continue functional development in `<workspace>/_worktrees/ray_tracing_main_edit`

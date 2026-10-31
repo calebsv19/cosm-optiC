@@ -1,5 +1,6 @@
 #include "motion/scene_motion_plans.h"
 #include "motion/scene_motion_paths.h"
+#include "import/runtime_camera_rig.h"
 #include "import/runtime_scene_object_timeline.h"
 #include <math.h>
 #include <stdio.h>
@@ -105,7 +106,7 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
                 *enabled = member(o, "enabled");
     bool camera = member(o, "target_id") != NULL;
     if ((camera ? (!string_field(o, "target_id", b->target_id, sizeof(b->target_id)) ||
-                    (strcmp(b->target_id, "camera/main") && (strncmp(b->target_id, "light/", 6) || !b->target_id[6])) || member(o, "object_id"))
+                    ((strncmp(b->target_id,"camera/",7)||!b->target_id[7]) && (strncmp(b->target_id, "light/", 6) || !b->target_id[6])) || member(o, "object_id"))
                 : !string_field(o, "object_id", b->object_id, sizeof(b->object_id))) ||
         strlen(b->object_id) + 7 >= TIMELINE_ID_CAPACITY ||
         !string_field(o, "path_id", b->path_id, sizeof(b->path_id)) ||
@@ -132,11 +133,11 @@ bool MotionPathsParse(json_object *a, MotionPaths *out, char *m, size_t n) {
       b->end_roll_enabled=json_object_get_boolean(enabled_end);b->camera_orientation=json_object_get_int(mode);
       if(!isfinite(b->start_roll)||!isfinite(b->end_roll)||fabs(b->start_roll)>36000||fabs(b->end_roll)>36000||
          b->camera_orientation<0||b->camera_orientation>2||
-         (strcmp(b->target_id,"camera/main") && b->camera_orientation))return fail(m,n,"invalid orientation roll/mode");
+         (strncmp(b->target_id,"camera/",7) && b->camera_orientation))return fail(m,n,"invalid orientation roll/mode");
     }
     json_object *focus = member(o, "use_focus_target");
     if (focus) {
-      if (strcmp(b->target_id, "camera/main") || !json_object_is_type(focus, json_type_boolean))
+      if (strncmp(b->target_id, "camera/",7) || !json_object_is_type(focus, json_type_boolean))
         return fail(m, n, "focus target is a camera-only boolean");
       b->use_focus_target = json_object_get_boolean(focus);
     }
@@ -235,7 +236,7 @@ json_object *MotionPathsToJson(const MotionPaths *d) {
     json_object_object_add(o, "path_id", json_object_new_string(b->path_id));
     json_object_object_add(o, "enabled", json_object_new_boolean(b->enabled));
     json_object_object_add(o, "placement", json_object_new_string("on_path"));
-    if (!strcmp(b->target_id, "camera/main"))
+    if (!strncmp(b->target_id, "camera/",7))
       json_object_object_add(o, "use_focus_target", json_object_new_boolean(b->use_focus_target));
     if (!b->target_id[0]) {
       json_object_object_add(o,"follow_direction",json_object_new_boolean(b->follow_direction));
@@ -292,7 +293,7 @@ bool MotionPathsValidateScene(json_object *scene,
       if (!strcmp(text(json_object_array_get_idx(objects, j), "object_id"),
                   b->object_id))
         ++found;
-    if (b->target_id[0]) found = !strcmp(b->target_id, "camera/main");
+    if (b->target_id[0]) found = RuntimeCameraRigTargetExists(scene,b->target_id);
     if (!strncmp(b->target_id, "light/", 6)) {
       json_object *lights = member(scene, "lights");
       for (size_t j = 0; json_object_is_type(lights, json_type_array) && j < json_object_array_length(lights); ++j) {

@@ -6,4 +6,8 @@ void EvaluatedCameraApplyFocusTarget(PreviewCameraSample *sample);
 bool EvaluatedCameraRouteSample(const Camera *camera, double z, const Path *path,
     const CameraPath3D *depth, double normalized_t, int width, int height,
     const TimelineFrameSnapshot *snapshot, PreviewCameraSample *out);
+bool EvaluatedCameraRouteSampleTarget(const char *target, const Camera *camera, double z, const Path *path,
+    const CameraPath3D *depth, double normalized_t, int width, int height,
+    const TimelineFrameSnapshot *snapshot, PreviewCameraSample *out);
+void EvaluatedCameraApplyFocusTargetFor(const char *target, PreviewCameraSample *sample);
 #endif

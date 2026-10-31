@@ -156,6 +156,8 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
             RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY) {
         return TIMELINE_STATUS_INVALID_SNAPSHOT;
     }
+    if(snapshot->camera.inspection_id[0] && (!snapshot->camera.rig_revision || strnlen(snapshot->camera.inspection_id,64)>=64 || !snapshot->camera.inspection_time.denominator))return TIMELINE_STATUS_INVALID_SNAPSHOT;
+    if(snapshot->camera.rig_revision && (snapshot->camera.clock_policy<1 || snapshot->camera.clock_policy>3 || strnlen(snapshot->camera.target_id,64)>=64 || strncmp(snapshot->camera.target_id,"camera/",7) || !snapshot->camera.target_id[7] || !snapshot->camera.shot_id[0] || strnlen(snapshot->camera.shot_id,64)>=64 || !snapshot->camera.motion_time.denominator))return TIMELINE_STATUS_INVALID_SNAPSHOT;
     status = TimelineEvaluationContextBuild(snapshot->frame.rate,
                                             snapshot->frame.range,
                                             snapshot->frame.sample,
@@ -164,6 +166,19 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
         !TimelineEvaluationContextsReferToSameSample(&snapshot->frame, &rebuilt)) {
         return TIMELINE_STATUS_INVALID_SNAPSHOT;
     }
+    if(snapshot->has_sequence) {
+        const SequenceEvaluation *q=&snapshot->sequence;
+        if(q->version!=SEQUENCE_CLOCK_VERSION ||
+           !TimelineEvaluationContextsReferToSameSample(&snapshot->frame,&q->presentation_context) ||
+           !q->presentation_time.denominator || !q->simulation_time.denominator || !q->segment_time.denominator ||
+           !TimelineRateIsValid(q->source.rate) || q->source_tick<q->source.first_tick || q->source_tick>q->source.last_tick ||
+           !ray_evaluated_digest_valid(q->source.revision))
+            return TIMELINE_STATUS_INVALID_SNAPSHOT;
+    }
+    if(snapshot->has_sequence && snapshot->simulation.valid &&
+       (snapshot->simulation.source_frame_index!=(int64_t)snapshot->sequence.source_tick ||
+        snapshot->simulation.source_rate.frames_per_second_numerator!=snapshot->sequence.source.rate.frames_per_second_numerator ||
+        snapshot->simulation.source_rate.frames_per_second_denominator!=snapshot->sequence.source.rate.frames_per_second_denominator)) return TIMELINE_STATUS_INVALID_SNAPSHOT;
     if (snapshot->source == RAY_EVALUATED_SCENE_SOURCE_AUTHORED_TIMELINE &&
         (!snapshot->light.path_progress_provenance.valid ||
          !snapshot->light.property_provenance.valid ||
@@ -210,6 +225,9 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
              (!transform->has_position || !transform->has_orientation_quaternion ||
               !transform->rigid_body_id || !ray_evaluated_digest_valid(transform->rigid_result_revision) ||
               !ray_evaluated_digest_valid(transform->rigid_physical_input_sha256))) ||
+            (snapshot->has_sequence && transform->source==RAY_EVALUATED_OBJECT_TRANSFORM_RIGID_RESULT &&
+             (transform->source_tick!=snapshot->sequence.source_tick ||
+              strcmp(transform->rigid_result_revision,snapshot->sequence.source.revision))) ||
             !TimelineEvaluationContextsReferToSameSample(
                 &snapshot->frame, &transform->frame)) {
             return TIMELINE_STATUS_INVALID_SNAPSHOT;
@@ -251,6 +269,8 @@ TimelineStatus RayEvaluatedSceneSnapshotBuild(
     snapshot.reverse_direction = inputs->reverse_direction;
     snapshot.clamped = inputs->clamped;
     snapshot.frame = inputs->frame;
+    snapshot.has_sequence=inputs->has_sequence;
+    if(inputs->has_sequence)snapshot.sequence=inputs->sequence;
     snapshot.identity = inputs->identity;
     snapshot.light = inputs->light;
     if (!snapshot.light.path_progress_provenance.valid &&

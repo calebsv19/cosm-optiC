@@ -1,8 +1,12 @@
+#include "import/runtime_event_camera.h"
+#include "import/runtime_sequence_source.h"
 #define _DARWIN_C_SOURCE
 #ifdef RAY_RIGID_RESULT_ENABLED
 #include "core_scene.h"
 #include "core_scene_compile.h"
 #include "import/runtime_scene_timeline.h"
+#include "import/runtime_camera_rig.h"
+#include "import/runtime_inspection.h"
 #include "import/scene_timeline_document_io.h"
 #include "render/runtime_surface_sampling.h"
 #include "runtime_rigid_result_internal.h"
@@ -37,6 +41,9 @@ bool RuntimeRigidResultValidateReference(json_object *scene, char *d,
                                          size_t n) {
   bool physical = get(get(scene, "extensions"), "rigid_scene") != NULL;
   json_object *r = reference(scene);
+  json_object *a=get(get(get(scene,"extensions"),"ray_tracing"),"authoring"),*sequence=NULL;
+  if(a && json_object_object_get_ex(a,"sequence",&sequence) && !r && !get(a,"sequence_volume"))
+    return fail(d,n,"sequence requires an authenticated rigid result");
   if (!physical && !r)
     return true;
   if (!physical || !json_object_is_type(r, json_type_object) ||
@@ -67,11 +74,15 @@ bool RuntimeRigidResultPrepare(json_object *scene, const char *path,
                               sizeof(bundle))
               .code != CORE_OK)
     return fail(d, n, "rigid result requires a file-backed scene path");
-  if (!RuntimeRigidBundleRead(
-          bundle, str(r, "result_revision"),
-          json_object_to_json_string_ext(scene, JSON_C_TO_STRING_PLAIN), out, d,
-          n))
-    return false;
+  /* The retained physical reader predates named cameras. Preserve every object
+     claim; only independently validated camera routes leave this projection. */
+  json_object *physical_scene=RuntimeCameraRigPhysicalScene(scene);
+  if(!physical_scene)return fail(d,n,"invalid camera rig physical projection");
+  bool bundle_ok=RuntimeRigidBundleRead(bundle,str(r,"result_revision"),
+      json_object_to_json_string_ext(physical_scene,JSON_C_TO_STRING_PLAIN),out,d,n);
+  json_object_put(physical_scene);
+  if(!bundle_ok)return false;
+  if(!RuntimeInspectionValidateResult(scene,*out)){RuntimeRigidResultFree(*out);*out=NULL;return fail(d,n,"inspection target does not match authenticated result");}
   json_object *objects = get(scene, "objects");
   for (size_t b = 0; b < (*out)->result.body_count; b++) {
     for (size_t i = 0; json_object_is_type(objects, json_type_array) &&
@@ -91,7 +102,11 @@ bool RuntimeRigidResultPrepare(json_object *scene, const char *path,
   json_object *author = get(get(get(scene, "extensions"), "ray_tracing"),
                             "authoring"),
               *timeline = get(author, "scene_timeline");
-  if (timeline) {
+  if (!RuntimeRigidSequencePrepare(scene,*out,d,n)) {
+    RuntimeRigidResultFree(*out);*out=NULL;return false;
+  }
+  if(!RuntimeEventCameraValidateResult(scene,*out,d,n)){RuntimeRigidResultFree(*out);*out=NULL;return false;}
+  if (timeline && !(*out)->has_sequence) {
     TimelineDocument *document = malloc(sizeof(*document));
     uint32_t tick;
     bool valid = document &&
@@ -131,9 +146,18 @@ void RuntimeRigidResultCommit(RuntimeRigidResult *r) {
   current = r;
 }
 bool RuntimeRigidResultActive(void) { return current != NULL; }
+const RuntimeRigidResult *RuntimeRigidResultCurrent(void) {return current;}
+TimelineStatus RuntimeRigidResultSequence(const TimelineEvaluationContext *c,SequenceEvaluation *out,bool *present) {
+  return RuntimeRigidSequenceEvaluate(current,c,out,present);
+}
+uint64_t RuntimeRigidResultSequenceRevision(void) {return current?current->sequence_revision:0;}
+
 bool RuntimeRigidResultClock(TimelineRate *rate, TimelineRange *range) {
   if (!current)
     return false;
+  if(current->has_sequence) {
+    *rate=current->sequence.rate;*range=current->sequence.range;return true;
+  }
   *rate = (TimelineRate){240, 1};
   *range = (TimelineRange){0, current->result.endpoint_tick + 1};
   return true;
@@ -168,13 +192,17 @@ TimelineStatus RuntimeRigidResultCapture(const TimelineEvaluationContext *c,
   if (!current)
     return TIMELINE_STATUS_OK;
   uint32_t tick;
+  SequenceEvaluation sequence;bool has_sequence=false;
+  if(RuntimeRigidResultSequence(c,&sequence,&has_sequence)!=TIMELINE_STATUS_OK)
+    return TIMELINE_STATUS_INVALID_SNAPSHOT;
+  if(has_sequence) tick=(uint32_t)sequence.source_tick;
   if (!c || !count || c->local_frame > INT64_MAX ||
-      core_scene_rigid_result_tick(&current->result, (int64_t)c->local_frame,
+      (!has_sequence && core_scene_rigid_result_tick(&current->result, (int64_t)c->local_frame,
                                    c->sample.subframe_numerator,
                                    c->sample.subframe_denominator,
                                    c->rate.frames_per_second_numerator,
                                    c->rate.frames_per_second_denominator, &tick)
-              .code != CORE_OK)
+              .code != CORE_OK))
     return TIMELINE_STATUS_INVALID_SNAPSHOT;
   if (*count + current->result.body_count > capacity)
     return TIMELINE_STATUS_CAPACITY_EXCEEDED;
@@ -216,6 +244,13 @@ static bool tick_at_t(double t, uint32_t *tick) {
     return false;
   if (RuntimeSceneTimelineClock(&rate, &range) != TIMELINE_STATUS_OK)
     RuntimeRigidResultClock(&rate, &range);
+  if(current->has_sequence) {
+    double frame=t*(double)(range.frame_count-1),nearest=round(frame);
+    if(fabs(frame-nearest)>1e-9 || nearest<0 || nearest>(double)(range.frame_count-1))return false;
+    SequenceEvaluation value;
+    if(SequenceClockEvaluate(&current->sequence,(TimelineSample){range.start_frame+(int64_t)nearest,0,1},&value)!=SEQUENCE_OK)return false;
+    *tick=(uint32_t)value.source_tick;return true;
+  }
   if (core_scene_rigid_result_tick(&current->result,
                                    (int64_t)range.frame_count - 1, 0, 1,
                                    rate.frames_per_second_numerator,
@@ -370,6 +405,9 @@ bool RuntimeRigidResultMeshesMatch(const RuntimeRigidResult *r,
 bool RuntimeRigidResultSnapshotMatches(const RayEvaluatedSceneSnapshot *s) {
   if (!s)
     return false;
+  SequenceEvaluation sequence={0};bool present=false;
+  if(RuntimeSequenceEvaluate(&s->frame,&sequence,&present)!=TIMELINE_STATUS_OK ||
+     s->has_sequence!=present || (present && !SequenceClockEvaluationsEqual(&sequence,&s->sequence)))return false;
   RayEvaluatedObjectTransform expected[RAY_RIGID_RESULT_MAX_BODIES] = {0};
   size_t count = 0;
   if (RuntimeRigidResultCapture(&s->frame, expected, RAY_RIGID_RESULT_MAX_BODIES, &count) !=
@@ -413,11 +451,16 @@ bool RuntimeRigidResultValidateScene(json_object *scene, char *d, size_t n) {
 }
 
 #else
+TimelineStatus RuntimeRigidResultSequence(const TimelineEvaluationContext *c,SequenceEvaluation *out,bool *present) {
+  if(!c||!out||!present)return TIMELINE_STATUS_INVALID_ARGUMENT;*present=false;return TIMELINE_STATUS_OK;
+}
+uint64_t RuntimeRigidResultSequenceRevision(void){return 0;}
+
 #include "import/runtime_rigid_result.h"
 #include <stdio.h>
 bool RuntimeRigidResultStrictJSON(const char *s) { return s != NULL; }
 bool RuntimeRigidResultSnapshotMatches(const RayEvaluatedSceneSnapshot *s) {
-  if (!s)
+  if (!s || s->has_sequence)
     return false;
   for (size_t i = 0; i < s->object_transform_count; i++)
     if (s->object_transforms[i].source ==
@@ -434,7 +477,10 @@ bool RuntimeRigidResultValidateReference(json_object *s, char *d, size_t n) {
   }
   if (ray)
     json_object_object_get_ex(ray, "rigid_result", &result);
-  if (rigid || result) {
+  json_object *author=NULL,*sequence=NULL;
+  bool has_sequence=ray&&json_object_object_get_ex(ray,"authoring",&author)&&author&&
+    json_object_object_get_ex(author,"sequence",&sequence);
+  if (rigid || result || has_sequence) {
     if (d && n)
       snprintf(d, n,
                "rigid_scene execution unsupported: build requires reviewed "

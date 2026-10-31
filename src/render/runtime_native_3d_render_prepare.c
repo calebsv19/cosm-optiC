@@ -1,3 +1,4 @@
+#include "app/evaluated_scene_service.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_native_3d_render_internal.h"
 
@@ -1148,6 +1149,11 @@ bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
             "evaluated scene snapshot is invalid");
         return false;
     }
+    RayEvaluatedSceneSnapshot viewport_snapshot;
+    if(!RayEvaluatedSceneBindViewport(evaluated_scene,width,height,&viewport_snapshot)) {
+        runtime_native_3d_prepare_frame_set_diag("evaluated event camera viewport is invalid or narrower than its framing contract");return false;
+    }
+    evaluated_scene=&viewport_snapshot;
     frame_index = evaluated_scene->frame.sample.absolute_frame;
     if (frame_index < 0 || frame_index > INT_MAX) {
         runtime_native_3d_prepare_frame_set_diag(

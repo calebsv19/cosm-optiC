@@ -1,4 +1,5 @@
 #include "editor/scene_editor_shared_ui.h"
+#include "app/evaluated_scene_service.h"
 #include "motion/scene_motion_plans.h"
 #include "scene_editor_timeline_ui.h"
 #include "scene_editor_timeline_curve.h"
@@ -79,7 +80,7 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
         if(item->group) {
             bool closed=false;for(size_t j=0;j<u->collapsed_count;++j) if(!strcmp(item->target,u->collapsed[j])) closed=true;
             SceneEditorDocumentObjectInfo object;
-            const char* name=!strncmp(item->target,"camera/",7)?"Camera":item->target+6;
+            const char* name=!strncmp(item->target,"camera/",7)?(!strcmp(item->target,"camera/main")?"Camera":item->target+7):item->target+6;
             if(!strncmp(item->target,"object/",7)) name=SceneEditorDocumentObjectById(item->target+7,&object)?object.name:item->target+7;
             snprintf(groups[row],sizeof(groups[row]),"%s  %s",closed?">":"v",name);
             text(r,groups[row],l->gutter.x+8,y+3,ink);
@@ -150,6 +151,10 @@ void SceneEditorTimelineDrawDock(SDL_Renderer* r,const TimelineUI* u,const Timel
     if(have_keys) snprintf(context,sizeof(context),"%zu selected | Shift-click: extend selection | Arrows: scrub",keys.count);
     else snprintf(context,sizeof(context),"Right-click lane: create key. Click diamond: select. Ruler: scrub.");
     SceneEditorMotionFeedback(d,selected,s->transport.sample,context,sizeof(context));
+    RayEvaluatedSceneServiceResult clocks;if(RayEvaluatedSceneCaptureSample(s->transport.sample,&clocks)&&clocks.snapshot.camera.rig_revision){
+      const RayEvaluatedCamera *c=&clocks.snapshot.camera;double simulation=clocks.snapshot.has_sequence?(double)clocks.snapshot.sequence.simulation_time.numerator/clocks.snapshot.sequence.simulation_time.denominator:0;
+      snprintf(context,sizeof(context),"P %.3fs | Sim %.3fs | %s %.3fs | %s %.3fs",clocks.snapshot.frame.local_time_seconds,simulation,c->target_id,(double)c->motion_time.numerator/c->motion_time.denominator,c->inspection_id[0]?c->inspection_id:"inspection",c->inspection_id[0]?(double)c->inspection_time.numerator/c->inspection_time.denominator:0);
+    }
     const char* error=SceneEditorTimelineSelectionStatus();
     bool rejected=error[0]!=0;
     text(r,key_help[0]?key_help:u->feedback[0]?u->feedback:rejected?error:context,l->footer.x+444,l->footer.y+7,muted);

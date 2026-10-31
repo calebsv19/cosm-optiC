@@ -113,12 +113,35 @@ METHODS={
     'material_set_layer_value':('material.set_layer_value','Edit an enabled M3 layer by stable ID through the shared UI validator; unsupported source families are refused.',{'object_id':{'type':'string'},'layer_id':{'type':'string'},'group':{'enum':['','placement','parameters']},'property':{'type':'string'},'value':{'type':'number'}}),
 }
 
+METHODS.update({
+ 'sequence_read_section':('sequence.read_section','Read one bounded saved section or clock readback for large camera edits.',{'section':{'enum':['sequence','camera_rig','inspection_moves','sequence_volume','event_cameras','clocks']}}),
+ 'sequence_event_planner_read':('sequence.event_planner_read','Read transient event draft, independent clocks and drawn viewport token without scene mutation.',{}),
+ 'sequence_event_draft':('sequence.event_draft','Load a validated transient event draft and explicitly open the minimal Events tab. Scene/history unchanged until event_select.',{'intent':{'type':'object'}}),
+ 'sequence_event_pick':('sequence.event_pick','Query an actual recorded mesh surface in the drawn Events viewport at the selected event tick. Returns a body-local point; does not change the draft or scene.',{'x':{'type':'integer','minimum':0},'y':{'type':'integer','minimum':0},'viewport_token':{'type':'integer','minimum':1},'expected_revision':{'type':'integer','minimum':0}}),
+ 'sequence_event_candidates':('sequence.event_candidates','Resolve three event views from an immutable recorded state without editing the scene.',{'intent':{'type':'object'}}),
+ 'sequence_event_select':('sequence.event_select','Select a reviewed event proposal and retain a stationary lead-in, aimed orbit and explicit Resume policy through shared Undo.',{'intent':{'type':'object'},'candidate':{'type':'integer','minimum':0,'maximum':2},'proposal_sha256':{'type':'string','minLength':64,'maxLength':64}}),
+ 'sequence_event_remove':('sequence.event_remove','Remove an event plan and unlock its retained camera/shot seeds through shared Undo.',{'id':{'type':'string'}}),
+ 'sequence_read':('sequence.read','Read saved sequence, cameras, shot edit, inspection summaries and exact clock readback.',{}),
+ 'sequence_apply':('sequence.apply','Apply a complete typed authoring slice atomically through shared Undo; stale inspection dependencies refuse.',{'changes':{'type':'object','additionalProperties':False,'properties':{key:{'description':'Complete native-validated declaration, or null to remove.'} for key in ('sequence','camera_rig','inspection_moves','scene_timeline','motion_paths','motion_plans','sequence_volume','event_cameras')}}}),
+ 'sequence_source_setup':('sequence.source_setup','Bind the admitted rigid result with an explicit qualified prefix and final hold.',{}),
+ 'sequence_segment_split':('sequence.segment_split','Split the source segment at a local output frame, preserving mapping and duration.',{'frame':{'type':'integer','minimum':1}}),
+ 'sequence_segment_boundary':('sequence.segment_boundary','Move a source boundary while retaining total output duration; recompile source starts and enforce qualified coverage.',{'id':{'type':'string'},'end_frame':{'type':'integer','minimum':1}}),
+ 'sequence_segment_mode':('sequence.segment_mode','Set play/hold and recompute subsequent exact source starts; coverage and inspection locks are revalidated.',{'id':{'type':'string'},'kind':{'enum':['play','hold']}}),
+ 'sequence_setup':('sequence.setup','Create a named camera rig from the existing timeline and camera.',{}),
+ 'sequence_camera_upsert':('sequence.camera_upsert','Create or replace one complete camera definition.',{'camera':{'type':'object'}}),
+ 'sequence_camera_remove':('sequence.camera_remove','Remove an unreferenced named camera; dangling shots/locks refuse.',{'camera_id':{'type':'string'}}),
+ 'sequence_clock_set':('sequence.clock_set','Set a camera continuous, selected or clip clock with exact rational values.',{'camera_id':{'type':'string'},'clock':{'type':'object'}}),
+ 'sequence_shots_set':('sequence.shots_set','Replace the complete gap-free shot schedule without retiming simulation.',{'shots':{'type':'array','items':{'type':'object'}}}),
+ 'sequence_inspect':('sequence.inspect','Capture a recorded rigid target and source camera at an exact Hold; create a bounded orbit shot. Limits are world units and seconds.',{'id':{'type':'string','minLength':1,'maxLength':39,'description':'Stable letters/digits/underscore/hyphen identifier; native validator enforces it.'},'camera_id':{'type':'string'},'target_id':{'type':'string'},'start_frame':{'type':'integer','minimum':0},'frame_count':{'type':'integer','minimum':2},'angle':number(-25.132741228718345,25.132741228718345),'max_speed':{'type':'number','exclusiveMinimum':0},'acceleration':{'type':'number','exclusiveMinimum':0},'braking':{'type':'number','exclusiveMinimum':0}}),
+ 'sequence_inspection_remove':('sequence.inspection_remove','Remove an inspection lock through shared Undo. Its derived camera/shot remain editable.',{'id':{'type':'string'}}),
+})
+
 
 def tool_list():
     result=[]
     for name,(method,description,fields) in METHODS.items():
         properties=dict(fields)
-        if method not in ('mesh.read','mesh.import_status','motion_plan.read','follower_orientation.read','path.list','path.read','animation.read','animation.track_read','scene.read','scene.connect','material.list','material.read','material.response_read','object.list','object.read','camera.read','lighting.read','render.read','render.status','render.results'):properties['expected_revision']={'type':'integer','minimum':0}
+        if method not in ('sequence.event_planner_read','sequence.event_pick','sequence.event_candidates','sequence.read','sequence.read_section','mesh.read','mesh.import_status','motion_plan.read','follower_orientation.read','path.list','path.read','animation.read','animation.track_read','scene.read','scene.connect','material.list','material.read','material.response_read','object.list','object.read','camera.read','lighting.read','render.read','render.status','render.results'):properties['expected_revision']={'type':'integer','minimum':0}
         result.append({'name':name,'description':description,'inputSchema':{
             'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}})
     return result

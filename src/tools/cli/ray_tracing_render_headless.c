@@ -1,4 +1,5 @@
 #include "render/runtime_surface_graph.h"
+#include "animation/sequence_frame_receipt.h"
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -517,13 +518,16 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   -1);
     RuntimeScene3DBuilder_TimingReset();
     (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-    if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+    if (!(request->camera_id[0]?RayEvaluatedSceneCaptureViewSample(evaluated_sample,request->camera_id,&evaluated_scene):RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) || !RayEvaluatedSceneBindViewport(&evaluated_scene.snapshot,request->width,request->height,&evaluated_scene.snapshot)) {
         snprintf(preflight.diagnostics,
                  sizeof(preflight.diagnostics),
                  "evaluated-scene capture failed at frame %d: %.800s",
                  request->start_frame,
                  evaluated_scene.status_line);
         preflight.prepared_frame = false;
+    } else if ((evaluated_scene.snapshot.has_sequence || evaluated_scene.snapshot.camera.rig_revision) && request->video_enabled) {
+        snprintf(preflight.diagnostics,sizeof(preflight.diagnostics),"sequence video requires tools/sequence_video.py; disable legacy output.video");
+        preflight.prepared_frame=false;
     } else if (!ray_tracing_headless_apply_inspection_evaluated_camera(
                    request, &evaluated_scene)) {
         snprintf(preflight.diagnostics,
@@ -866,7 +870,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
 
         ray_tracing_headless_compound_ingestion_init(&compound_ingestion);
 
-        if (!RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) {
+        if (!(request->camera_id[0]?RayEvaluatedSceneCaptureViewSample(evaluated_sample,request->camera_id,&evaluated_scene):RayEvaluatedSceneCaptureSample(evaluated_sample, &evaluated_scene)) || !RayEvaluatedSceneBindViewport(&evaluated_scene.snapshot,request->width,request->height,&evaluated_scene.snapshot)) {
             snprintf(preflight.diagnostics,
                      sizeof(preflight.diagnostics),
                      "evaluated-scene capture failed at frame %d: %.800s",
@@ -1063,6 +1067,11 @@ static int run_render(const RayTracingAgentRenderRequest *request,
             free(pixels);
             *out_preflight = preflight;
             return frame_status;
+        }
+        if (!SequenceFrameReceiptWrite(frame_path,&evaluated_scene.snapshot,request->runtime_scene_path,request->overwrite)) {
+            snprintf(preflight.diagnostics,sizeof(preflight.diagnostics),"sequence frame receipt failed");
+            ray_tracing_headless_compound_ingestion_free(&compound_ingestion);
+            free(pixels);*out_preflight=preflight;return 12;
         }
         if (!ray_tracing_headless_write_photon_surface_diagnostics(
                 request, frame_index)) {

@@ -4,29 +4,31 @@
 #include "import/runtime_scene_bridge.h"
 #include "motion/scene_motion_plans.h"
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 #define AIM_STEPS 2048
 static struct {
   bool valid;
   uint64_t paths, plans;
+  char camera_id[64];
   double target[3];
   MotionFrame frames[AIM_STEPS + 1];
 } aim;
-static bool direction(double progress, const double target[3], double f[3]) {
+static bool direction(const char *target_id, double progress, const double target[3], double f[3]) {
   TimelineVec3 p;
-  if (!MotionPathsRuntimeTargetPosition("camera/main", progress, &p))
+  if (!MotionPathsRuntimeTargetPosition(target_id, progress, &p))
     return false;
   f[0] = target[0] - p.x;
   f[1] = target[1] - p.y;
   f[2] = target[2] - p.z;
   return f[0] * f[0] + f[1] * f[1] + f[2] * f[2] > 1e-18;
 }
-bool EvaluatedCameraOrientation(const MotionPathBinding *b, double progress,
+bool EvaluatedCameraOrientationTarget(const char *target_id, const MotionPathBinding *b, double progress,
                                 PreviewCameraSample *sample) {
   if (!b->camera_orientation)
     return true;
   MotionFrame frame;
-  if (!MotionPathsRuntimeFrame("camera/main", progress, &frame)) {
+  if (!MotionPathsRuntimeFrame(target_id, progress, &frame)) {
     sample->orientation_fallback = true;
     return true;
   }
@@ -42,15 +44,15 @@ bool EvaluatedCameraOrientation(const MotionPathBinding *b, double progress,
                           scaffold.camera_focus_target_z};
       uint64_t paths = MotionPathsRuntimeRevision(),
                plans = MotionPlansRuntimeRevision();
-      if (!aim.valid || aim.paths != paths || aim.plans != plans ||
+      if (!aim.valid || strcmp(aim.camera_id,target_id) || aim.paths != paths || aim.plans != plans ||
           memcmp(aim.target, target, sizeof(target))) {
         aim.valid = false;
         MotionFrame initial;
         double f[3];
-        if (!MotionPathsRuntimeFrame("camera/main", 0, &initial))
+        if (!MotionPathsRuntimeFrame(target_id, 0, &initial))
           return false;
         MotionFrameRoll(&initial, -b->start_roll * 0.017453292519943295);
-        if (direction(0, target, f)) {
+        if (direction(target_id, 0, target, f)) {
           double up[3] = {b->start_up[0], b->start_up[1], b->start_up[2]};
           if (up[0] * up[0] + up[1] * up[1] + up[2] * up[2] < 1e-18)
             up[2] = 1;
@@ -61,11 +63,12 @@ bool EvaluatedCameraOrientation(const MotionPathBinding *b, double progress,
         } else
           aim.frames[0] = initial;
         for (int i = 1; i <= AIM_STEPS; ++i) {
-          if (direction((double)i / AIM_STEPS, target, f))
+          if (direction(target_id, (double)i / AIM_STEPS, target, f))
             MotionFrameTransport(&aim.frames[i - 1], f, &aim.frames[i]);
           else
             aim.frames[i] = aim.frames[i - 1];
         }
+        snprintf(aim.camera_id,sizeof(aim.camera_id),"%s",target_id);
         aim.paths = paths;
         aim.plans = plans;
         memcpy(aim.target, target, sizeof(target));
@@ -73,7 +76,7 @@ bool EvaluatedCameraOrientation(const MotionPathBinding *b, double progress,
       }
       double t = fmax(0, fmin(1, progress)), f[3];
       int index = (int)floor(t * AIM_STEPS);
-      if (direction(t, target, f))
+      if (direction(target_id, t, target, f))
         MotionFrameTransport(&aim.frames[index], f, &frame);
       else {
         frame = aim.frames[index];
@@ -92,3 +95,5 @@ bool EvaluatedCameraOrientation(const MotionPathBinding *b, double progress,
       atan2(frame.forward[2], hypot(frame.forward[0], frame.forward[1]));
   return true;
 }
+
+bool EvaluatedCameraOrientation(const MotionPathBinding *b,double p,PreviewCameraSample *s){return EvaluatedCameraOrientationTarget("camera/main",b,p,s);}

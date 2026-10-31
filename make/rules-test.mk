@@ -1,4 +1,5 @@
 STABLE_TEST_TARGETS := \
+	test-camera-framework \
 	test \
 	test-procedural-surface-recipe-contract \
 	test-procedural-surface-field-contract \

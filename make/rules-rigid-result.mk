@@ -2,7 +2,7 @@
 # a refusal stub until core_scene's reviewed result API is imported normally.
 RIGID_SCENE_CORE_DIR ?= $(if $(wildcard $(CORE_SCENE_DIR)/include/core_scene_rigid_result.h),$(CORE_SCENE_DIR),$(CODEWORK_WORKSPACE_ROOT)/shared/core/core_scene)
 RIGID_RESULT_ENABLED := $(if $(wildcard $(RIGID_SCENE_CORE_DIR)/include/core_scene_rigid_result.h),1,0)
-RIGID_RESULT_APP_OBJS := $(BUILD_DIR)/import/runtime_rigid_result.o $(BUILD_DIR)/import/runtime_rigid_bundle.o $(BUILD_DIR)/import/runtime_rigid_asset_metadata.o
+RIGID_RESULT_APP_OBJS := $(BUILD_DIR)/import/runtime_rigid_sequence.o $(BUILD_DIR)/import/runtime_rigid_result.o $(BUILD_DIR)/import/runtime_rigid_bundle.o $(BUILD_DIR)/import/runtime_rigid_asset_metadata.o
 ifeq ($(RIGID_RESULT_ENABLED),1)
 .PHONY: rigid-result-inputs-check
 rigid-result-inputs-check:
@@ -40,7 +40,7 @@ $(BUILD_DIR)/tests/rigid_result_profile_probe: tests/rigid_result_profile_probe.
 # sanitizer qualification or a numerical solver qualification.
 RIGID_ASAN_FLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer
 RIGID_ASAN_CORE := $(patsubst $(BUILD_DIR)/rigid_core/%.o,$(BUILD_DIR)/rigid_asan/core/%.o,$(RIGID_RESULT_CORE_OBJS))
-RIGID_ASAN_APP := $(BUILD_DIR)/rigid_asan/import/runtime_rigid_result.o $(BUILD_DIR)/rigid_asan/import/runtime_rigid_bundle.o $(BUILD_DIR)/rigid_asan/import/runtime_rigid_asset_metadata.o
+RIGID_ASAN_APP := $(BUILD_DIR)/rigid_asan/import/runtime_rigid_sequence.o $(BUILD_DIR)/rigid_asan/import/runtime_rigid_result.o $(BUILD_DIR)/rigid_asan/import/runtime_rigid_bundle.o $(BUILD_DIR)/rigid_asan/import/runtime_rigid_asset_metadata.o
 $(BUILD_DIR)/rigid_asan/core/%.o: $(RIGID_SCENE_CORE_DIR)/src/%.c $(wildcard $(RIGID_SCENE_CORE_DIR)/include/core_scene_rigid*.h)
 	@mkdir -p $(dir $@)
 	$(CLANG_CC) $(CSTD) $(CFLAGS) -I$(TIMER_HUD_DIR)/external -Werror $(RIGID_ASAN_FLAGS) -c $< -o $@

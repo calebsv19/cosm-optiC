@@ -43,3 +43,7 @@ bool RuntimeRigidResultStrictJSON(const char *text);
 
 /* Owned inspection copy; no mutable cache/solver access. Caller puts JSON. */
 json_object *RuntimeRigidResultInspection(void);
+
+TimelineStatus RuntimeRigidResultSequence(const TimelineEvaluationContext *context,
+    SequenceEvaluation *out,bool *present);
+uint64_t RuntimeRigidResultSequenceRevision(void);

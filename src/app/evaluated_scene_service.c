@@ -1,6 +1,8 @@
+#include "import/runtime_sequence_source.h"
 #include "motion/scene_motion_plans.h"
 #include "app/evaluated_scene_service.h"
 #include "import/runtime_rigid_result.h"
+#include "import/runtime_camera_rig.h"
 #include "app/scene_atmosphere_runtime.h"
 
 #include "animation/timeline_property_registry.h"
@@ -132,6 +134,9 @@ static bool ray_evaluated_capture_camera(const TimelineEvaluationContext* contex
     TimelineFrameSnapshot snapshot;
     TimelineStatus status;
     if (!out_camera || !context) return false;
+    bool handled=false;
+    if(!RuntimeCameraRigEvaluate(context,NULL,out_camera,&handled))return false;
+    if(handled)return true;
     status = RuntimeSceneTimelineSample(context->sample, &snapshot);
     if (status == TIMELINE_STATUS_OK) {
         if (!EvaluatedCameraRouteSample(&sceneSettings.camera,
@@ -148,6 +153,7 @@ static bool ray_evaluated_capture_camera(const TimelineEvaluationContext* contex
     } else return false;
     EvaluatedCameraApplyFocusTarget(&sample);
     memset(out_camera, 0, sizeof(*out_camera));
+    snprintf(out_camera->target_id,sizeof(out_camera->target_id),"camera/main");
     out_camera->valid = sample.valid;
     out_camera->uses_authored_path = sample.uses_authored_path;
     out_camera->position.x = sample.position_x;
@@ -443,7 +449,7 @@ static bool ray_evaluated_build_authored(
     inputs.clamped = clamped;
     inputs.frame = animation_context;
     inputs.identity.scene_revision = cache_stats.generation;
-    inputs.identity.timeline_revision = RuntimeSceneTimelineRevision();
+    inputs.identity.timeline_revision = RuntimeSceneTimelineRevision() ^ RuntimeSequenceRevision() ^ RuntimeCameraRigRevision();
     inputs.identity.timeline_revision ^= RayEvaluatedTimelineFingerprint(
         &document->timeline, &document->spatial_path, &document->spatial_path_3d);
     ray_evaluated_copy_light_base(&light_state.lights[target.light_index],
@@ -480,6 +486,8 @@ static bool ray_evaluated_build_authored(
     }
     status=RuntimeObjectTimelineCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
     if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"object timeline evaluation failed");return false;}
+    status=RuntimeSequenceEvaluate(&inputs.frame,&inputs.sequence,&inputs.has_sequence);
+    if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"sequence source sample unavailable");return false;}
     status=RuntimeRigidResultCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
     if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"rigid result exact tick unavailable");return false;}
     inputs.invalidation_domains |= object_transform_count?TIMELINE_INVALIDATION_RIGID_TRANSFORM:0;
@@ -490,6 +498,9 @@ static bool ray_evaluated_build_authored(
     if(!SceneAtmosphereRuntimeSimulation(animSettings.runtimeScenePath,&inputs.frame,
         &inputs.simulation,out_result->status_line,sizeof(out_result->status_line))) {
         out_result->status=TIMELINE_STATUS_INVALID_SNAPSHOT;out_result->valid=false;return false;
+    }
+    if(inputs.has_sequence && inputs.simulation.valid && !RuntimeSequenceVolumeActive()) {
+        ray_evaluated_fail(out_result,TIMELINE_STATUS_INVALID_SNAPSHOT,"sequence mode does not admit animated simulation caches");return false;
     }
     if(inputs.simulation.valid) inputs.invalidation_domains |= TIMELINE_INVALIDATION_VOLUME;
     inputs.invalidation_domains |= frame_snapshot.invalidation_domains;
@@ -539,7 +550,7 @@ static bool ray_evaluated_build_legacy(
     inputs.clamped = clamped;
     inputs.frame = *context;
     inputs.identity.scene_revision = cache_stats.generation;
-    inputs.identity.timeline_revision = RuntimeSceneTimelineRevision();
+    inputs.identity.timeline_revision = RuntimeSceneTimelineRevision() ^ RuntimeSequenceRevision() ^ RuntimeCameraRigRevision();
     if (light_state.valid && light_state.light_count > 0) {
         ray_evaluated_copy_light_base(&light_state.lights[0],
                                       "legacy/first-light", &inputs.light);
@@ -588,6 +599,8 @@ static bool ray_evaluated_build_legacy(
     }
     status=RuntimeObjectTimelineCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
     if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"object timeline evaluation failed");return false;}
+    status=RuntimeSequenceEvaluate(&inputs.frame,&inputs.sequence,&inputs.has_sequence);
+    if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"sequence source sample unavailable");return false;}
     status=RuntimeRigidResultCapture(&inputs.frame,object_transforms,RAY_EVALUATED_OBJECT_TRANSFORM_CAPACITY,&object_transform_count);
     if(status!=TIMELINE_STATUS_OK) {ray_evaluated_fail(out_result,status,"rigid result exact tick unavailable");return false;}
     inputs.invalidation_domains |= object_transform_count?TIMELINE_INVALIDATION_RIGID_TRANSFORM:0;
@@ -598,6 +611,9 @@ static bool ray_evaluated_build_legacy(
     if(!SceneAtmosphereRuntimeSimulation(animSettings.runtimeScenePath,&inputs.frame,
         &inputs.simulation,out_result->status_line,sizeof(out_result->status_line))) {
         out_result->status=TIMELINE_STATUS_INVALID_SNAPSHOT;out_result->valid=false;return false;
+    }
+    if(inputs.has_sequence && inputs.simulation.valid && !RuntimeSequenceVolumeActive()) {
+        ray_evaluated_fail(out_result,TIMELINE_STATUS_INVALID_SNAPSHOT,"sequence mode does not admit animated simulation caches");return false;
     }
     if(inputs.simulation.valid) inputs.invalidation_domains |= TIMELINE_INVALIDATION_VOLUME;
     inputs.invalidation_domains |= TIMELINE_INVALIDATION_LIGHTING |
@@ -670,6 +686,7 @@ TimelineStatus RayEvaluatedSceneResolveTimelineClock(
     if (!out_rate || !out_range) {
         return TIMELINE_STATUS_INVALID_ARGUMENT;
     }
+    if(RuntimeCameraRigClock(out_rate,out_range))return TIMELINE_STATUS_OK;
     TimelineStatus scene_clock = RuntimeSceneTimelineClock(&rate, &range);
     if (scene_clock == TIMELINE_STATUS_OK) {
         *out_rate = rate;
@@ -677,7 +694,7 @@ TimelineStatus RayEvaluatedSceneResolveTimelineClock(
         return TIMELINE_STATUS_OK;
     }
     if (scene_clock != TIMELINE_STATUS_TARGET_NOT_FOUND) return scene_clock;
-    if (RuntimeRigidResultClock(&rate,&range)) {
+    if (RuntimeSequenceClock(&rate,&range)) {
         *out_rate=rate;*out_range=range;return TIMELINE_STATUS_OK;
     }
     if (RuntimeSceneLightTimelineGetLast(&document)) {
@@ -784,6 +801,11 @@ bool RayEvaluatedSceneCaptureForElapsed(
 
     if (!out_result) return false;
     memset(out_result, 0, sizeof(*out_result));
+    if(RuntimeCameraRigClock(&rate,&range)){
+        status=RayEvaluatedTimelineSampleFromElapsed(rate,range,elapsed_seconds,mode,&sample,&reverse_direction,&clamped);
+        if(status!=TIMELINE_STATUS_OK)return false;
+        return RayEvaluatedSceneCaptureSampleWithPlayback(sample,mode,reverse_direction,clamped,out_result);
+    }
     status = RuntimeSceneTimelineClock(&rate, &range);
     if (status == TIMELINE_STATUS_OK) {
         status = RayEvaluatedTimelineSampleFromElapsed(rate, range, elapsed_seconds,
@@ -836,4 +858,13 @@ bool RayEvaluatedSceneCaptureForElapsed(
     }
     return ray_evaluated_build_legacy(&context, mode, reverse_direction,
                                       clamped, out_result);
+}
+
+bool RayEvaluatedSceneCaptureViewSample(TimelineSample sample,const char *camera_id,RayEvaluatedSceneServiceResult *out){
+    if(!out||!camera_id)return false;
+    RayEvaluatedSceneServiceResult candidate;if(!RayEvaluatedSceneCaptureSample(sample,&candidate))return false;
+    bool handled=false;if(!RuntimeCameraRigEvaluate(&candidate.snapshot.frame,camera_id,&candidate.snapshot.camera,&handled))return false;
+    if(!handled&&strcmp(camera_id,"camera/main"))return false;
+    if(RayEvaluatedSceneSnapshotValidate(&candidate.snapshot)!=TIMELINE_STATUS_OK)return false;
+    *out=candidate;return true;
 }

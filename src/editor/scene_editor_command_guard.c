@@ -1,3 +1,5 @@
+#include "editor/scene_editor_event_planner.h"
+#include "editor/scene_editor_sequence_panel.h"
 #include "editor/scene_editor_scene_commands.h"
 #include "editor/scene_editor_motion_paths.h"
 #include "scene_editor_motion_plan_panel.h"
@@ -17,4 +19,4 @@
 #include "editor/scene_editor_rename.h"
 #include "editor/scene_editor_object_move_gizmo.h"
 #include "editor/scene_editor_surface_material_panel.h"
-bool SceneEditorCommandInteractionActive(void) {return SceneEditorMotionPlanPanelInteractionActive() || MotionOrientationPanelInteractionActive() || SceneEditorMotionPathPanelInteractionActive() || SceneEditorRenderAuthoringDraftActive() || SceneEditorTimelineInteractionActive() || SceneEditorSceneDialogActive() || SceneEditorRenderActive() || SceneEditorRenderPanelDraftActive() || BezierEditorLightingSliderActive() || SceneEditorCameraGestureActive() || SceneEditorLightGestureActive() || SceneEditorCameraInspectorActive() || SceneEditorRenameActive() || SceneEditorObjectMoveGizmoActiveAxis()!=SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE || SceneEditorTransformPanelInteractionActive() || SceneEditorSurfaceMaterialPanelActive() || SceneEditorSurfaceMaterialHeaderModal() || SceneEditorAtmospherePanelInteractionActive() || SceneEditorAtmosphereGestureActive() || SceneEditorLifecycleClosePending();}
+bool SceneEditorCommandInteractionActive(void) {return SceneEditorEventPlannerInteraction() || SceneEditorSequencePanelActive() || SceneEditorMotionPlanPanelInteractionActive() || MotionOrientationPanelInteractionActive() || SceneEditorMotionPathPanelInteractionActive() || SceneEditorRenderAuthoringDraftActive() || SceneEditorTimelineInteractionActive() || SceneEditorSceneDialogActive() || SceneEditorRenderActive() || SceneEditorRenderPanelDraftActive() || BezierEditorLightingSliderActive() || SceneEditorCameraGestureActive() || SceneEditorLightGestureActive() || SceneEditorCameraInspectorActive() || SceneEditorRenameActive() || SceneEditorObjectMoveGizmoActiveAxis()!=SCENE_EDITOR_BEZIER_3D_GIZMO_AXIS_NONE || SceneEditorTransformPanelInteractionActive() || SceneEditorSurfaceMaterialPanelActive() || SceneEditorSurfaceMaterialHeaderModal() || SceneEditorAtmospherePanelInteractionActive() || SceneEditorAtmosphereGestureActive() || SceneEditorLifecycleClosePending();}

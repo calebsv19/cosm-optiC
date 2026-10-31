@@ -25,7 +25,8 @@ bool SceneAtmosphereRuntimeSnapshotMatches(const char* scene,const RayEvaluatedS
     if(!SceneAtmosphereRuntimeSimulation(scene,&snapshot->frame,&identity,d,n)) return false;
     const RayEvaluatedSimulationIdentity* recorded=&snapshot->simulation;
     if(identity.valid!=recorded->valid || (identity.valid &&
-       (identity.source_frame_index!=recorded->source_frame_index || identity.cache_revision!=recorded->cache_revision ||
+       (identity.source!=recorded->source || identity.frame_index!=recorded->frame_index || identity.source_frame_index!=recorded->source_frame_index || identity.cache_revision!=recorded->cache_revision ||
+        identity.source_rate.frames_per_second_numerator!=recorded->source_rate.frames_per_second_numerator || identity.source_rate.frames_per_second_denominator!=recorded->source_rate.frames_per_second_denominator || identity.frame_offset!=recorded->frame_offset || identity.frame_stride!=recorded->frame_stride || identity.subframe_numerator!=recorded->subframe_numerator || identity.subframe_denominator!=recorded->subframe_denominator || identity.interpolation!=recorded->interpolation ||
         strcmp(identity.cache_id,recorded->cache_id) || strcmp(identity.content_digest,recorded->content_digest)))) {
         if(d && n) snprintf(d,n,"Cache changed after scene evaluation; reevaluate the frame.");return false;
     }

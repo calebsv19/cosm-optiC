@@ -1,0 +1,85 @@
+# Camera framework qualification and render handoff
+
+The camera framework is an opt-in source feature. Existing scenes without a
+camera rig retain the legacy camera path. See [named cameras and clocks](camera_sequence.md),
+[event planning](event_camera_planning.md), and [recorded sources and delivery](sequence_sources_and_multiview.md).
+
+## Supported contract
+
+Every output frame has a declared presentation sample, simulation mapping,
+selected camera, camera-motion time and evaluated pose/lens. A cut selects a
+view without changing video duration or simulation progression. Named cameras
+can use continuous, selected-time or explicit clip clocks. Event plans instead
+use presentation samples independently of shot selection.
+
+Play/Hold/Resume consumes qualified recorded states. Hold repeats the exact
+recorded state while the camera can move. Supported sequence source adapters
+are authenticated rigid results and complete pinned raw VF3D v1 volumes. The
+rigid event planner adds focus/pivot references, reviewed event placement,
+stationary or radial dolly lead, aimed Hold orbit and explicit Resume policy.
+Volume targeting, particle sources and automatic contact discovery are separate
+adapters; they are not implied by generic camera movement.
+
+Native rendered sequence qualification is for integer presentation samples and
+one temporal sample per output frame. Fractional camera evaluation is supported,
+but rigid mesh render preparation currently refuses fractional presentation
+samples, including within Hold. Do not enable shutter interpolation or motion
+blur on the strength of camera-only subframe tests. M5 rest-to-rest motion has
+piecewise acceleration, not a jerk-limited blend.
+
+## Maintained gates
+
+Use a fresh output root instead of cleaning an existing build:
+
+```sh
+make BUILD_TOOLCHAIN=clang BUILD_DIR_BASE=<fresh-build-root> \
+  all ray-tracing-render-headless ray-tracing-job-runner \
+  event-camera-probe camera-rig-probe rigid-result-consumer-probe \
+  volume-sequence-probe scene-editor-workspace-visual-test
+make BUILD_TOOLCHAIN=clang BUILD_DIR_BASE=<fresh-build-root> \
+  test-camera-framework test-camera-framework-sanitize
+```
+
+`test-camera-framework` is part of `test-stable`. It covers exact sequence
+clocks, strict saved-clock parsing, camera clock policies, inspection motion,
+event geometry, moving leads and the MCP catalog. The sanitizer companion
+checks the same C owners with ASan/UBSan.
+
+Recorded-source acceptance needs a compact caller-supplied qualified fixture;
+it does not rerun the solver. Run
+`tests/integration/check_event_camera_lead_runtime.py --help` for the native
+stationary/moving-event qualification inputs. Complete volume qualification uses
+`tests/integration/check_volume_sequence.py`; `--skip-delivery` restricts it to
+adapter checks. The retained native UI harness exercises Events, stdio MCP,
+history, Save and fresh reopen at normal and compact sizes. Source hashes must
+match the reviewed UI build before reusing its visual evidence.
+
+Run the aggregate C test runner after the combined source build, along with
+worker export tests and a relocated scene snapshot/native job-runner canary.
+Do not interpret a local macOS job-runner result as Linux installed-worker proof.
+
+## Release and Linux render handoff
+
+1. Checkpoint and review the complete camera source scope in the development
+   branch. Record the source commit and test evidence; do not use a version label
+   as an executable identity.
+2. Prepare desktop and headless worker through the existing release owner.
+   Keep their versions, package digests, protocol/checkpoint compatibility and
+   selected worker capabilities distinct. New saved behavior requires a worker
+   containing these evaluators.
+3. Verify the portable job contains its complete saved camera/sequence intent,
+   meshes and immutable recorded results or pinned volume data. Do not fall back
+   to the old camera if a declaration is unsupported. Preserve relative assets
+   and source/dependency hashes; avoid hand-editing a resolved event plan.
+4. On the selected Linux worker, run a short canary with a moving lead, Hold,
+   Resume, a deliberate cut and a detached view. Compare exact frame/tick/source
+   identities and pose/lens values under declared numerical tolerances. Qualify
+   chunking or recovery separately if the long job uses it.
+5. Review composition stills and a short preview at the intended aspect ratio.
+   Set explicit FPS, frame count, source coverage, sampling and output storage
+   before queueing the expensive job. A longer Hold can extend presentation;
+   later physical motion requires additional qualified source states.
+
+Uniform PTS, frame count and provenance are technical acceptance. Occlusion,
+readability, cut purpose, camera speed/roll and image noise remain visual
+acceptance. Keep that review distinct from a successful encoder or solver.

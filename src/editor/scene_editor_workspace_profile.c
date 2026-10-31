@@ -1,3 +1,4 @@
+#include "editor/scene_editor_event_planner.h"
 #include "editor/scene_editor_shared_ui.h"
 #include "editor/scene_editor_render_authoring.h"
 #include "editor/scene_editor_scene_commands.h"
@@ -42,6 +43,7 @@ void SceneEditorWorkspaceProfileSelect(SceneEditor* editor, SceneEditorWorkspace
         SceneEditorChromeShellSetActionFeedback("Fluid sources support camera/light authoring in Render.", 2500);
         return;
     }
+    if(active==SCENE_WORKSPACE_RENDER&&profile!=SCENE_WORKSPACE_RENDER)SceneEditorEventPlannerOpen(false);
     SceneEditorTimelinePause();
     SceneEditorTimelineReleaseFocus();
     SceneEditorToolStateReset();

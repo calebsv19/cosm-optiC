@@ -1,6 +1,11 @@
+#include "import/runtime_event_camera.h"
+#include "render/runtime_surface_sampling.h"
+#include "import/runtime_sequence_source.h"
 #include "import/runtime_scene_bridge_json_utils.h"
 #include "render/runtime_surface_mapping.h"
 #include "import/runtime_scene_timeline.h"
+#include "import/runtime_camera_rig.h"
+#include "import/runtime_inspection.h"
 #include "app/scene_atmosphere_runtime.h"
 
 #include "import/runtime_rigid_result.h"
@@ -269,7 +274,11 @@ bool runtime_scene_bridge_validate_root(json_object *root, RuntimeSceneBridgePre
     out_preflight->light_count = runtime_scene_bridge_json_array_len_or_zero(root, "lights");
     out_preflight->camera_count = runtime_scene_bridge_json_array_len_or_zero(root, "cameras");
     if (!RuntimeSurfaceMappingValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
+    if (!RuntimeEventCameraValidate(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
+    if (!RuntimeInspectionValidate(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
+    if (!RuntimeCameraRigValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
     if (!RuntimeSceneTimelineValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
+    if (!RuntimeSequenceValidate(root,RuntimeSurfaceSamplingScenePathContext(),out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
     if (!SceneAtmosphereValidateScene(root,out_preflight->diagnostics,sizeof(out_preflight->diagnostics))) return false;
     if (!runtime_scene_bridge_validate_visual_proxies(root,out_preflight)) return false;
     out_preflight->valid_contract = true;

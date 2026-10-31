@@ -15,6 +15,7 @@
 #include "editor/scene_editor_agent_material.h"
 #include "editor/scene_editor_agent_object.h"
 #include "editor/scene_editor_agent_camera.h"
+#include "editor/scene_editor_sequence.h"
 #include "editor/scene_editor_agent_animation.h"
 #include "editor/scene_editor_agent_paths.h"
 #include "editor/scene_editor_agent_motion.h"
@@ -59,6 +60,7 @@ json_object* SceneEditorAgentControlDispatch(json_object* request) {
     if(SceneEditorAgentAnimationReadOnly(name)) {
         ok=SceneEditorAgentAnimationDispatch(name,params,response,message,sizeof(message));goto done;
     }
+    if(SceneEditorSequenceReadOnly(name)){ok=SceneEditorSequenceDispatch(name,params,response,message,sizeof(message));goto done;}
     if(SceneEditorAgentCameraReadOnly(name)) {
         ok=SceneEditorAgentCameraDispatch(name,params,response,message,sizeof(message));goto done;
     }
@@ -101,6 +103,8 @@ json_object* SceneEditorAgentControlDispatch(json_object* request) {
         ok=SceneEditorAgentPathsDispatch(name,params,response,message,sizeof(message));
     } else if(!strncmp(name,"animation.",10)) {
         ok=SceneEditorAgentAnimationDispatch(name,params,response,message,sizeof(message));
+    } else if(!strncmp(name,"sequence.",9)){
+        ok=SceneEditorSequenceDispatch(name,params,response,message,sizeof(message));
     } else if(!strncmp(name,"camera.",7)) {
         ok=SceneEditorAgentCameraDispatch(name,params,response,message,sizeof(message));
     } else if(!strncmp(name,"mesh.",5)) {

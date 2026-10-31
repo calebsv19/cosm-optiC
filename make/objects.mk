@@ -1,4 +1,20 @@
 NATIVE3D_AUDIT_DEPS = \
+	$(BUILD_DIR)/animation/inspection_orbit.o \
+	$(BUILD_DIR)/animation/event_camera_geometry.o \
+	$(BUILD_DIR)/animation/event_camera_lead.o \
+	$(BUILD_DIR)/app/evaluated_event_camera_viewport.o \
+	$(BUILD_DIR)/import/runtime_event_camera.o \
+	$(BUILD_DIR)/import/event_camera_focus.o \
+	$(BUILD_DIR)/import/event_camera_pick.o \
+	$(BUILD_DIR)/import/event_camera_plan.o \
+	$(BUILD_DIR)/import/event_camera_lead.o \
+	$(BUILD_DIR)/import/event_camera_json.o \
+	$(BUILD_DIR)/import/event_camera_authoring.o \
+	$(BUILD_DIR)/import/runtime_inspection.o \
+	$(BUILD_DIR)/import/runtime_sequence_source.o \
+	$(BUILD_DIR)/import/runtime_inspection_dependencies.o \
+	$(BUILD_DIR)/animation/camera_sequence.o \
+	$(BUILD_DIR)/import/runtime_camera_rig.o \
 	$(BUILD_DIR)/render/runtime_transport_weight_probe_3d.o \
 	$(BUILD_DIR)/render/runtime_native_3d_pixel_probe.o \
 	$(BUILD_DIR)/app/scene_atmosphere_assets.o \
@@ -992,3 +1008,6 @@ DEP := $(sort \
 	$(RAY_TRACING_WORKER_RUNTIME_DEPS:.o=.d) \
 	$(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_OBJ:.o=.d) \
 	$(RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS:.o=.d))
+
+# Sequence Stage2: app-local clock/codec/receipt integration, no shared source edits.
+NATIVE3D_AUDIT_DEPS += $(BUILD_DIR)/animation/sequence_clock.o $(BUILD_DIR)/animation/sequence_time.o $(BUILD_DIR)/animation/sequence_frame_receipt.o $(BUILD_DIR)/import/sequence_clock_json.o

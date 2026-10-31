@@ -208,6 +208,13 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                           request_path);
         return false;
     }
+    json_object *camera_id_value=NULL;
+    if(json_object_object_get_ex(scene,"camera_id",&camera_id_value)){
+        if(!json_object_is_type(camera_id_value,json_type_string)||json_object_get_string_len(camera_id_value)<8||json_object_get_string_len(camera_id_value)>=64||strlen(json_object_get_string(camera_id_value))!=(size_t)json_object_get_string_len(camera_id_value)||strncmp(json_object_get_string(camera_id_value),"camera/",7)){
+            agent_render_request_set_diagf(out_diagnostics,out_diagnostics_size,"invalid scene.camera_id");json_object_put(root);return false;
+        }
+        snprintf(request.camera_id,sizeof(request.camera_id),"%s",json_object_get_string(camera_id_value));
+    }
     if (json_object_object_get_ex(scene, "compound_scene_ingestion_path", &volume)) {
         if (!json_object_is_type(volume, json_type_string) ||
             !RayTracingResolveRequestInputPath(request_dir,
