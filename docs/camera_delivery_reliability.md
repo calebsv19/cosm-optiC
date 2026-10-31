@@ -1,9 +1,10 @@
 # Portable event plans and verified native sequence delivery
 
-This follow-up is source development after desktop 0.21.0 / worker 0.15.0.
-Those published packages retain their original qualification and limitations.
-A source version label does not establish that an installed executable includes
-these changes. Build and qualify the selected source before using the commands.
+These changes ship in desktop 0.22.0 / worker 0.16.0, release `v0.22.0`.
+The older 0.21.0 / worker 0.15.0 packages retain their original behavior.
+[Release and installed-runtime identities](release_versions.md) remain distinct
+from source labels. Python delivery tools use the checked-out source workflow;
+the worker package provides the native renderer, job runner and worker runtime.
 
 ## Portable retained event plans
 

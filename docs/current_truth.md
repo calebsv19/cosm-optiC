@@ -1,14 +1,17 @@
-## October 31 — source follow-up: portable plans and verified queued delivery
+## October 31 — reliability release: desktop 0.22.0 / worker 0.16.0
 
-Main Edit now separates exact saved-plan integrity from bounded derived-geometry
-validation, admits existing schema-v1 plans without native re-authoring, and keeps
-the reviewed seed with source/framing/visibility checks. Explicit encoder profiles
-perform real encode/timing/decode admission before rendering or native queue
-submission. Named camera IDs survive staging; sequence resume validates retained
-receipts, and native `wait` requires completion evidence, with same-ID timeout
-continuation. [Usage, numeric policy, verification and boundaries](camera_delivery_reliability.md).
-This is development after the 0.21.0 / worker 0.15.0 release; installed packages
-and production fleet activation retain their separate identities.
+Checkpoint `06d4e8a` is included in release `v0.22.0`, source `805c1c9`.
+Portable retained-plan validation, explicit encoder admission and verified native
+queued delivery/recovery are now shipped. Exact signed/notarized desktop
+installation/startup, worker publication, Registry/snapshot and Linux PC long
+activation/admission/service-canary readbacks pass. Source qualification includes
+Mac strict ASan/UBSan and Linux strict normal/functional checks; Linux leak
+checking remains blocked by the execution environment's ptrace restriction.
+The unchanged Mac event plan passes Linux; MPEG-4 passes, while unavailable
+H.264 fails preflight before work. Native queue recovery is distinct from
+production fleet chunk recovery and hard power-loss pair reconciliation.
+[Usage, numeric policy and continuation](camera_delivery_reliability.md).
+[Exact release identities and boundaries](release_versions.md).
 
 ## October 31 — camera framework released: desktop 0.21.0 / worker 0.15.0
 

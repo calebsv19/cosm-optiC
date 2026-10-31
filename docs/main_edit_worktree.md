@@ -1,26 +1,29 @@
-## October 31 — source follow-up: portable plans and verified queued delivery
+## October 31 — reliability release: desktop 0.22.0 / worker 0.16.0
 
-Main Edit now separates exact saved-plan integrity from bounded derived-geometry
-validation, admits existing schema-v1 plans without native re-authoring, and keeps
-the reviewed seed with source/framing/visibility checks. Explicit encoder profiles
-perform real encode/timing/decode admission before rendering or native queue
-submission. Named camera IDs survive staging; sequence resume validates retained
-receipts, and native `wait` requires completion evidence, with same-ID timeout
-continuation. [Usage, numeric policy, verification and boundaries](camera_delivery_reliability.md).
-This is development after the 0.21.0 / worker 0.15.0 release; installed packages
-and production fleet activation retain their separate identities.
+Checkpoint `06d4e8a` is included in release `v0.22.0`, source `805c1c9`.
+Portable retained-plan validation, explicit encoder admission and verified native
+queued delivery/recovery are now shipped. Exact signed/notarized desktop
+installation/startup, worker publication, Registry/snapshot and Linux PC long
+activation/admission/service-canary readbacks pass. Source qualification includes
+Mac strict ASan/UBSan and Linux strict normal/functional checks; Linux leak
+checking remains blocked by the execution environment's ptrace restriction.
+The unchanged Mac event plan passes Linux; MPEG-4 passes, while unavailable
+H.264 fails preflight before work. Native queue recovery is distinct from
+production fleet chunk recovery and hard power-loss pair reconciliation.
+[Usage, numeric policy and continuation](camera_delivery_reliability.md).
+[Exact release identities and boundaries](release_versions.md).
 
 ## Start here after the October 31 camera release
 
 Continue in the existing `<workspace>/_worktrees/ray_tracing_main_edit` checkout
-on `codex/ray-tracing-main-edit`. Camera checkpoint `5e1f27a` is released as
-`v0.21.0`, source `8be3d53`, with app `0.21.0` / worker `0.15.0`. The release
+on `codex/ray-tracing-main-edit`. Reliability checkpoint `06d4e8a` is released as
+`v0.22.0`, source `805c1c9`, with app `0.22.0` / worker `0.16.0`. The release
 version and documentation commits are reconciled into this same lane at closeout;
 use the [fresh readback](#start-or-resume-readback) before new development.
 
 The exact `~/Desktop/optiC.app` release is installed and launches. This operation
 does not refresh `optiC Main Edit.app`; build an isolated development package for
-new GUI proof. Linux PC long runs the authenticated 0.15.0 package and passes its
+new GUI proof. Linux PC long runs the authenticated 0.16.0 package and passes its
 service canary. See [release attribution](release_versions.md) and
 [camera qualification and portability limits](camera_framework_qualification.md).
 Dated entries below preserve their original checkpoint state.

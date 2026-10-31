@@ -1,5 +1,34 @@
 # optiC version status
 
+Release and selected runtime verified October 31, 2026.
+
+| Surface | Verified version | Meaning |
+| --- | --- | --- |
+| Canonical and reconciled Main Edit source | `0.22.0` / `0.16.0` | Reliability checkpoint adopted and released |
+| Public desktop | `0.22.0` | Signed/notarized; publication, metadata, Registry and snapshot verified |
+| Registered headless worker | `0.16.0` | Independently authenticated Linux x86_64 package |
+| Versioned worker installation | `0.16.0` | Exact package trees verified on home server and Linux PC |
+| Selected active runtime | `0.16.0` | Linux PC long: installed identity, loaded coordinator/admission and service canary pass |
+| Local desktop installation | `0.22.0` | Exact release installed and launched; one confirmed 0.21.0 rollback retained |
+
+Release source `805c1c92e769c76ccdb7181a509315d372c05f1f`, tag `v0.22.0`,
+contains reliability checkpoint `06d4e8ab84f6ee80879fb99deb34d1cbed115070`.
+Desktop ZIP SHA-256:
+`9b850492b5eeb282d8808d8b7dc29e85e443bf59720e7a26ca9dbe7017c3e2e7`.
+Worker archive SHA-256:
+`a12b78f0b8d3955687439eb3eceeb6157f8d7183a403937d6740a8208a666eb7`.
+See the [GitHub release](https://github.com/calebsv19/cosm-optiC/releases/tag/v0.22.0)
+and [public agent manifest](https://ecosystem.calebsv.tech/agents/programs/optic.json).
+
+Independent ordinary release readback is terminal, valid and `current_exact`,
+with `runtime_ready=true` for Linux PC long. Versioned home-server presence is
+separate from activation there; the independent fast hold is preserved. The
+[reliability contract](camera_delivery_reliability.md) defines numerical bounds,
+codec readiness, same-job continuation and native recovery limits. Production
+fleet chunk recovery and hard power-loss reconciliation remain separate.
+
+## Historical status verified October 31 — desktop 0.21.0 / worker 0.15.0
+
 Release and runtime records verified October 31, 2026.
 
 | Surface | Verified version | Meaning |
