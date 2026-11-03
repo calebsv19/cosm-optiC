@@ -102,7 +102,7 @@ def main():
     assert saved['lights'][1]==scene['lights'][1] and saved['lights'][0]['producer_metadata']==scene['lights'][0]['producer_metadata']
     assert saved['extensions']['ray_tracing']['authoring']['environment']['producer_metadata']==authoring['environment']['producer_metadata']
     assert saved['extensions']['ray_tracing']['authoring']['light_settings']['producer_metadata']==authoring['light_settings']['producer_metadata']
-    receipt=json.loads((out/'cross-save-as-receipt.json').read_text());receipt.update(native_ui_save_as_undo_redo=True,fresh_process_ui_and_mcp_reopen=True,source_assets_offline=True,native_switch_failure_rollback=True)
+    receipt=json.loads((out/'cross-save-as-receipt.json').read_text());receipt.update(native_ui_save_as_undo_redo=True,fresh_process_ui_and_mcp_reopen=True,source_assets_offline=True,native_switch_failure_rollback=True, directory_sync_warning_ui_and_control=True, stale_baseline_preserved=True)
     ui=json.loads((out/'cross-ui/scene_runtime.json').read_text());mcp=json.loads((out/'cross-mcp/scene_runtime.json').read_text());assert ui['extensions']['t1_provenance']==mcp['extensions']['t1_provenance']==scene['extensions']['t1_provenance']
     assert ui['objects'][1:]==mcp['objects'][1:]==scene['objects'][1:]
     assert ui['extensions']['ray_tracing']['authoring']['atmosphere_attachment']==mcp['extensions']['ray_tracing']['authoring']['atmosphere_attachment']==authoring['atmosphere_attachment']

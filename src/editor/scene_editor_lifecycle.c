@@ -60,8 +60,8 @@ bool SceneEditorLifecycleHandleEvent(SceneEditor* editor, SDL_Event* event) {
         for (int i=0;i<3;++i) if (SDL_PointInRect(&point,&choices[i])) {
             if (i==2) { pending=false; fprintf(stderr,"[editor lifecycle] close cancelled\n"); }
             else if (i==0 && !SceneEditorChromeActionsSaveAuthoring()) {
-                snprintf(error,sizeof(error),"Save failed. The editor remains open; resolve the error or cancel.");
-                fprintf(stderr,"[editor lifecycle] close blocked: save failed\n");
+                snprintf(error,sizeof(error),"%s",SceneEditorChromeActionsSaveError());
+                fprintf(stderr,"[editor lifecycle] close blocked: %s\n",error);
             } else {
                 fprintf(stderr,"[editor lifecycle] leaving editor: %s; %s\n",reason,
                     i==0 ? "saved" : "without saving");

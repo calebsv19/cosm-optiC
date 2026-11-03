@@ -1025,6 +1025,14 @@ static bool document_parent_path(const char* path, char* out, size_t out_size) {
     return true;
 }
 
+bool document_sync_directory(const char* path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return false;
+    bool synced = !document_fail(SCENE_DOCUMENT_FAIL_DIRECTORY_SYNC) && fsync(fd) == 0;
+    close(fd);
+    return synced;
+}
+
 bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
     s_document.last_save_published = false;
     char lock_path[PATH_MAX] = {0};
@@ -1037,7 +1045,7 @@ bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
     size_t serialized_size = 0u;
     int lock_fd = -1;
     int temp_fd = -1;
-    int dir_fd = -1;
+    bool owns_temp = false;
     bool ok = false;
     if (!s_document.root || !document_parent_path(s_document.path, parent, sizeof(parent))) {
         document_diag(diagnostics, diagnostics_size, "no runtime scene document is open");
@@ -1079,6 +1087,7 @@ bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
         document_diag(diagnostics, diagnostics_size, "failed to create runtime scene temporary file");
         goto done;
     }
+    owns_temp = true;
     for (size_t written = 0u; written < serialized_size;) {
         ssize_t count = write(temp_fd, serialized + written, serialized_size - written);
         if (count <= 0) {
@@ -1101,15 +1110,14 @@ bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
         document_diag(diagnostics, diagnostics_size, "failed to commit runtime scene atomically");
         goto done;
     }
-    temp_path[0] = '\0';
+    owns_temp = false;
     s_document.last_save_published = true;
     free(s_document.baseline_bytes);
     s_document.baseline_bytes = new_baseline;
     new_baseline = NULL;
     s_document.baseline_size = serialized_size;
     s_document.dirty = false;
-    dir_fd = open(parent, O_RDONLY);
-    if (document_fail(SCENE_DOCUMENT_FAIL_DIRECTORY_SYNC) || dir_fd < 0 || fsync(dir_fd) != 0) {
+    if (!document_sync_directory(parent)) {
         document_diag(diagnostics, diagnostics_size, "runtime scene committed but directory sync failed");
         goto done;
     }
@@ -1117,8 +1125,7 @@ bool SceneEditorDocumentSave(char* diagnostics, size_t diagnostics_size) {
     ok = true;
 done:
     if (temp_fd >= 0) close(temp_fd);
-    if (temp_path[0]) unlink(temp_path);
-    if (dir_fd >= 0) close(dir_fd);
+    if (owns_temp) unlink(temp_path);
     free(disk);
     free(serialized);
     free(new_baseline);
@@ -1166,15 +1173,23 @@ bool SceneEditorDocumentMergeOverlayAndSave(const char* overlay_json,
     s_document.root = merged_root;
     s_document.dirty = true;
     s_document.revision += 1u;
-    if (!SceneEditorDocumentSave(diagnostics, diagnostics_size)) {
-        if(!s_document.last_save_published) {
-            json_object_put(s_document.root);s_document.root=previous_root;
-            s_document.dirty=previous_dirty;s_document.revision=previous_revision;
-        } else json_object_put(previous_root);
+    bool synced = SceneEditorDocumentSave(diagnostics, diagnostics_size);
+    if (!s_document.last_save_published) {
+        json_object_put(s_document.root);
+        s_document.root = previous_root;
+        s_document.dirty = previous_dirty;
+        s_document.revision = previous_revision;
         return false;
     }
     json_object_put(previous_root);
-    return document_apply_saved_file(diagnostics, diagnostics_size);
+    char apply_message[256];
+    if (!document_apply_saved_file(apply_message, sizeof(apply_message))) {
+        if (diagnostics && diagnostics_size)
+            snprintf(diagnostics, diagnostics_size, "Scene committed%s; runtime reload failed: %s",
+                     synced ? "" : " but directory sync failed", apply_message);
+        return false;
+    }
+    return synced;
 }
 
 static bool document_adopt_candidate(const char* candidate_path,const char* expected_hash,

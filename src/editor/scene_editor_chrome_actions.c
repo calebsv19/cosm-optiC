@@ -79,7 +79,14 @@ bool SceneEditorChromeActionsSaveAuthoring(void) {
             return false;
         }
     }
-    SaveAllSettings();
+    if (!SaveAllSettingsChecked()) {
+        snprintf(save_error,sizeof(save_error),"%s",
+                 animSettings.sceneSource == SCENE_SOURCE_RUNTIME_SCENE
+                     ? "Scene committed. Local settings save did not complete."
+                     : "Local settings save did not complete.");
+        SceneEditorChromeShellSetActionFeedback(save_error,12000);
+        return false;
+    }
     return true;
 }
 

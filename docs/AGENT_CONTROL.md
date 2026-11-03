@@ -264,3 +264,10 @@ use the existing owner. Old v1 matrices remain verifiable. See
 No new native command/schema, renderer kernel or catalog change: 80 tools remain.
 App/worker versions remain 0.18.0/0.11.0. Stop at the bounded recovery checkpoint;
 partial sample accumulation, remote resume and measured calibration are separate.
+
+When Save reports that the scene committed but directory sync failed, read the
+active path, revision and dirty state before taking another action. The file
+is visible and its durability is uncertain. A Save As that switched scenes
+returns the new path and a warning in the command message. Its dependencies
+stay with the new scene. A stale-baseline refusal preserves the externally
+changed file and the current working edits.

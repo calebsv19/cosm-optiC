@@ -28,19 +28,19 @@ static bool destination(const char* path,char* resolved,char* parent) {
     if(!realpath(copy[0]?copy:"/",parent)) return false;
     return snprintf(resolved,PATH_MAX,"%s/%s",parent,name)<PATH_MAX;
 }
-static bool publish(const char* path,const char* bytes,char* message,size_t size) {
+static bool publish(const char* path,const char* bytes,bool* directory_synced,char* message,size_t size) {
     char temp[PATH_MAX];if(snprintf(temp,sizeof(temp),"%s.lifecycle-XXXXXX",path)>=PATH_MAX) return false;
     int fd=mkstemp(temp);if(fd<0) return refuse(message,size,"Cannot stage destination scene.");
     bool ok=true;size_t length=strlen(bytes);
     for(size_t at=0;at<length;) {ssize_t n=write(fd,bytes+at,length-at);if(n<0 && errno==EINTR) continue;if(n<=0) {ok=false;break;}at+=n;}
-    if(fsync(fd)!=0) ok=false;close(fd);
+    if(fsync(fd)!=0) ok=false;
+    if(close(fd)!=0) ok=false;
     /* Atomic no-clobber publication, including racing writers. */
     if(ok && link(temp,path)!=0) ok=false;
     unlink(temp);
     if(!ok) return refuse(message,size,"Destination exists or scene publication failed; nothing overwritten.");
     char parent[PATH_MAX],unused[PATH_MAX];destination(path,unused,parent);
-    fd=open(parent,O_RDONLY);bool synced=fd>=0 && fsync(fd)==0;if(fd>=0) close(fd);
-    if(!synced) {unlink(path);return refuse(message,size,"Destination directory sync failed.");}
+    *directory_synced = document_sync_directory(parent);
     return true;
 }
 bool SceneEditorSceneCommand(const char* operation,const char* path,unsigned long long revision,char* message,size_t size) {
@@ -63,6 +63,7 @@ bool SceneEditorSceneCommand(const char* operation,const char* path,unsigned lon
     if(!SceneEditorAgentControlReservePath(target,message,size)) return false;
     if(relocating && !SceneEditorSaveAsAssetsBegin(target,asset_stage,sizeof(asset_stage),message,size)) {SceneEditorAgentControlReleaseReservedPath();return false;}
     bool published=false;
+    bool directory_synced=true;
     if(!opening) {
         const char* bytes=saving?json_object_to_json_string_ext(document_authoring_root(),JSON_C_TO_STRING_PRETTY|JSON_C_TO_STRING_NOSLASHESCAPE):
             "{\"schema_family\":\"codework_scene\",\"schema_variant\":\"scene_runtime_v1\",\"schema_version\":1,\"scene_id\":\"new_scene\",\"space_mode_default\":\"3d\",\"unit_system\":\"meters\",\"world_scale\":1,\"objects\":[],\"lights\":[{\"light_id\":\"main_light\",\"kind\":\"point\",\"position\":{\"x\":1,\"y\":-2,\"z\":3},\"intensity\":7.5,\"radius\":0}],\"extensions\":{\"ray_tracing\":{\"authoring\":{\"camera_path\":{\"mode\":\"BEZIER_CUBIC\",\"points\":[{\"x\":0,\"y\":-4,\"rotation\":3.141592653589793,\"handleLink\":false}]},\"camera_path_depth\":{\"points\":[{\"z\":2,\"lookPitch\":-0.463647609}]}}}}}";
@@ -72,13 +73,20 @@ bool SceneEditorSceneCommand(const char* operation,const char* path,unsigned lon
             json_object_object_add(seed,"scene_id",json_object_new_string(id));
             bytes=json_object_to_json_string_ext(seed,JSON_C_TO_STRING_PRETTY);
         }
-        bool saved=publish(target,bytes,message,size);if(seed) json_object_put(seed);
+        bool saved=publish(target,bytes,&directory_synced,message,size);if(seed) json_object_put(seed);
         if(!saved) {
             char recovery[512];if(!SceneEditorSaveAsAssetsFinish(asset_stage,false,recovery,sizeof(recovery))) snprintf(message,size,"%s",recovery);
             SceneEditorAgentControlReleaseReservedPath();return false;
         }published=true;
     }
     if(!SceneEditorDocumentSwitch(target,saving,message,size)) {
+        if (published && !directory_synced) {
+            bool finalized = SceneEditorSaveAsAssetsFinish(asset_stage,true,message,size);
+            snprintf(message,size,"Destination committed but directory sync and scene switch failed. "
+                     "Original scene remains active.%s", finalized ? "" : " Asset stage retained.");
+            SceneEditorAgentControlReleaseReservedPath();
+            return false;
+        }
         if(published) unlink(target);char recovery[512];
         if(!SceneEditorSaveAsAssetsFinish(asset_stage,false,recovery,sizeof(recovery))) snprintf(message,size,"%s",recovery);
         SceneEditorAgentControlReleaseReservedPath();return false;
@@ -87,7 +95,12 @@ bool SceneEditorSceneCommand(const char* operation,const char* path,unsigned lon
     if(!SceneEditorSaveAsAssetsFinish(asset_stage,true,message,size)) {
         /* Scene and assets remain valid; retained staging is a cleanup condition,
            never report an unapplied command and invite replay. */
-        snprintf(message,size,"Scene switched successfully; staging retained: %.300s",asset_stage);return true;
+        snprintf(message,size,"Scene switched%s; staging retained: %.300s",
+                 directory_synced ? "" : " but directory sync failed",asset_stage);return true;
+    }
+    if (!directory_synced) {
+        snprintf(message,size,"Scene committed and switched, but directory sync failed. Durability is uncertain.");
+        return true;
     }
     snprintf(message,size,"Scene %s accepted; previous saved file preserved.",operation);return true;
 }

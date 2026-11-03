@@ -8,6 +8,7 @@
 json_object* document_authoring_root(void);
 /* Caller frees the working/Undo/Redo resource snapshot. */
 char* document_dependency_roots_json(void);
+bool document_sync_directory(const char* path);
 bool document_begin_command(char* diagnostics, size_t size);
 bool document_finish_command(char* diagnostics, size_t size);
 void document_rollback_command(void);

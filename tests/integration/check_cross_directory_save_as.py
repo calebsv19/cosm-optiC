@@ -33,13 +33,18 @@ assert not list(collision.glob('.optic-save-as-*')) and not Path(str(collision/'
 # Capture an unsaved base edit and keep shared history after moving project roots.
 b.mutate('object_rename',object_id='surface',name='Working copied surface');dirty=b.state();assert dirty['dirty']
 copy=parent/'cross-mcp/scene_runtime.json';saved=b.mutate('scene_save_as',True,scene_path=str(copy));assert saved['scene_path']==str(copy) and not saved['dirty'] and saved['attachment']==initial['attachment'];assert b.call('editor_catalog')['scene_path']==str(copy)
+assert "directory sync failed" in saved["message"],saved
 assert original.read_bytes()==source_bytes and copy.read_bytes()!=source_bytes
 for rel,h in hashes.items():
  assert hashlib.sha256((copy.parent/rel).read_bytes()).hexdigest()==h and hashlib.sha256((parent/rel).read_bytes()).hexdigest()==h
  assert (parent/rel).stat().st_ino!=(copy.parent/rel).stat().st_ino
 other.call('scene_undo',{'expected_revision':initial['revision']},False);assert other.state()['scene_path']==str(copy)
 b.mutate('scene_undo');assert b.call('object_read',{'object_id':'surface'})['object']==source['objects'][0]
-b.mutate('scene_redo');assert b.call('object_read',{'object_id':'surface'})['object']['display_name']=='Working copied surface';b.mutate('scene_save')
+b.mutate('scene_redo');assert b.call('object_read',{'object_id':'surface'})['object']['display_name']=='Working copied surface'
+prior=copy.read_bytes(); external=prior+b'\n'; copy.write_bytes(external); pending=b.state()
+refused=b.call('scene_save',{'expected_revision':pending['revision']},False)
+assert 'changed concurrently' in str(refused) and copy.read_bytes()==external and b.state()==pending
+copy.write_bytes(prior); b.mutate('scene_save')
 # Render original and relocated scenes with identical working geometry/materials.
 # Rename does not change raster content; exact Direct Light output must match.
 images={}
