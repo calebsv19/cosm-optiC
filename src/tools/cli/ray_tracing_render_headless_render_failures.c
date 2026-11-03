@@ -1,3 +1,4 @@
+#include <string.h>
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include <stdio.h>
@@ -15,7 +16,8 @@ int ray_tracing_headless_note_render_frame_failed(
     if (!request || !preflight || !temporal_progress) return 9;
     preflight->render_trace_ms += ray_tracing_elapsed_ms_since(stage_started_at);
     preflight->render_frames_ms += ray_tracing_elapsed_ms_since(stage_started_at);
-    snprintf(preflight->diagnostics,
+    if (!request->spectral.count || !strcmp(preflight->diagnostics,"ok"))
+        snprintf(preflight->diagnostics,
              sizeof(preflight->diagnostics),
              "failed to render frame: prepare=%.320s acceleration=%.320s",
              RuntimeNative3DPrepareFrameLastDiagnostics(),

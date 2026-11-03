@@ -1,3 +1,4 @@
+#include "tools/ray_tracing_headless_spectral.h"
 #include "render/runtime_surface_graph.h"
 #include "animation/sequence_frame_receipt.h"
 #ifndef _POSIX_C_SOURCE
@@ -211,10 +212,17 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   request_path,
                                   -1);
 
+    if (request->spectral.count && !RayTracingHeadlessSpectral_SceneSupported(request->runtime_scene_path)) {
+        snprintf(preflight.diagnostics, sizeof(preflight.diagnostics),
+                 "spectral V3 requires a meter-scale static scene with two objects, no RGB lights or authoring extensions");
+        *out_preflight = preflight;
+        return 3;
+    }
     LoadAllSettings();
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.interactiveMode = false;
-    animSettings.integratorMode3D = (int)request->integrator_3d;
+    animSettings.integratorMode3D = request->spectral.count ? RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT
+                                                          : (int)request->integrator_3d;
     animSettings.temporalFrames3D = request->temporal_frames;
     if (request->has_tiled_renderer_override) {
         animSettings.useTiledRenderer = request->tiled_renderer_override;
@@ -471,6 +479,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   request_path,
                                   -1);
     preflight.route = RayTracingModeBackend_ResolveRoute();
+    if (request->spectral.count) preflight.route.integratorMode3D = request->integrator_3d;
     preflight.route_native_3d = RayTracingModeBackend_IsNative3D(&preflight.route);
     if (!preflight.route_native_3d) {
         snprintf(preflight.diagnostics,
@@ -561,6 +570,12 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(
         &preflight.dynamic_water_cache_stats);
     preflight.caustic_cache_prep_ms = frame.causticCachePrepMs;
+    if (preflight.prepared_frame && request->spectral.count &&
+        !RayTracingHeadlessSpectral_Run(request, &frame, NULL, &preflight.spectral_readout,
+                                       preflight.diagnostics, sizeof(preflight.diagnostics))) {
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        preflight.prepared_frame = false;
+    }
     if (preflight.prepared_frame) {
         if(SceneAtmosphereRuntimeRead()->present) {
             preflight.volume_attached=frame.scene.volume.enabled;
@@ -972,7 +987,11 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         }
 
         (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-        if (!RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedSceneAndMutation(
+        bool frame_ok = request->spectral.count
+            ? RayTracingHeadlessSpectral_Render(request, &evaluated_scene.snapshot, pixels,
+                                               &preflight.spectral_readout, preflight.diagnostics,
+                                               sizeof(preflight.diagnostics))
+            : RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedSceneAndMutation(
                 pixels,
                 preflight.route.integratorMode3D,
                 request->width,
@@ -989,7 +1008,8 @@ static int run_render(const RayTracingAgentRenderRequest *request,
                 compound_ingestion.active
                     ? ray_tracing_headless_compound_ingestion_mutate : NULL,
                 compound_ingestion.active ? &compound_ingestion : NULL,
-                &stats)) {
+                &stats);
+        if (!frame_ok) {
             frame_status = ray_tracing_headless_note_render_frame_failed(request,
                                                                         &preflight,
                                                                         &temporal_progress,
@@ -1185,6 +1205,10 @@ int main(int argc, char **argv) {
                                                     diagnostics,
                                                     sizeof(diagnostics))) {
         fprintf(stderr, "ray_tracing_render_headless: %s\n", diagnostics);
+        return 2;
+    }
+    if (request.spectral.count && (job_id || job_status_path || photon_capture)) {
+        fprintf(stderr, "spectral pencil requires local headless execution without V2 photon capture\n");
         return 2;
     }
     {

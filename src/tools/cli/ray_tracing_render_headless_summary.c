@@ -1,3 +1,4 @@
+#include "tools/ray_tracing_headless_spectral.h"
 #include "tools/ray_tracing_render_headless_internal.h"
 
 #include "app/ray_tracing_request_utils.h"
@@ -225,6 +226,8 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, ",\n");
     fprintf(file, "  \"volume_visible\": %s,\n",
             request->volume_visible ? "true" : "false");
+    if (request->spectral.count && preflight->prepared_frame)
+        RayTracingHeadlessSpectral_Write(file, request, &preflight->spectral_readout, preflight->rendered_frames);
     fprintf(file, "  \"integrator_3d\": ");
     RayTracingJsonWriteString(file,
                       ray_tracing_agent_render_request_integrator_label(

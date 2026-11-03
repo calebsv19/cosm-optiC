@@ -1,0 +1,121 @@
+{
+  "schema_family": "codework_geometry",
+  "schema_variant": "mesh_asset_runtime_v1",
+  "schema_version": 1,
+  "asset_id": "spectral_prism",
+  "source_asset_id": "spectral_prism",
+  "asset_type": "solid_mesh",
+  "local_bounds": {
+    "min": {
+      "x": 0,
+      "y": -0.2,
+      "z": -0.05
+    },
+    "max": {
+      "x": 0.6928203230275509,
+      "y": 0.2,
+      "z": 0.05
+    }
+  },
+  "topology_flags": {
+    "closed_volume": true,
+    "manifold_expected": true
+  },
+  "mesh": {
+    "vertex_count": 6,
+    "triangle_count": 8,
+    "vertices": [
+      {
+        "x": 0,
+        "y": -0.2,
+        "z": -0.05
+      },
+      {
+        "x": 0,
+        "y": 0.2,
+        "z": -0.05
+      },
+      {
+        "x": 0.6928203230275509,
+        "y": -0.2,
+        "z": -0.05
+      },
+      {
+        "x": 0,
+        "y": -0.2,
+        "z": 0.05
+      },
+      {
+        "x": 0,
+        "y": 0.2,
+        "z": 0.05
+      },
+      {
+        "x": 0.6928203230275509,
+        "y": -0.2,
+        "z": 0.05
+      }
+    ],
+    "triangles": [
+      {
+        "a": 0,
+        "b": 1,
+        "c": 2,
+        "surface_group_id": "glass"
+      },
+      {
+        "a": 3,
+        "b": 5,
+        "c": 4,
+        "surface_group_id": "glass"
+      },
+      {
+        "a": 0,
+        "b": 3,
+        "c": 4,
+        "surface_group_id": "glass"
+      },
+      {
+        "a": 0,
+        "b": 4,
+        "c": 1,
+        "surface_group_id": "glass"
+      },
+      {
+        "a": 1,
+        "b": 4,
+        "c": 5,
+        "surface_group_id": "glass"
+      },
+      {
+        "a": 1,
+        "b": 5,
+        "c": 2,
+        "surface_group_id": "glass"
+      },
+      {
+        "a": 2,
+        "b": 5,
+        "c": 3,
+        "surface_group_id": "glass"
+      },
+      {
+        "a": 2,
+        "b": 3,
+        "c": 0,
+        "surface_group_id": "glass"
+      }
+    ]
+  },
+  "surface_groups": [
+    {
+      "group_id": "glass",
+      "semantic": "glass",
+      "triangle_span": {
+        "start": 0,
+        "count": 8
+      }
+    }
+  ],
+  "extensions": {}
+}

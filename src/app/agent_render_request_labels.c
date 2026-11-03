@@ -15,6 +15,7 @@ const char *ray_tracing_agent_render_request_volume_kind_label(int kind) {
 }
 
 const char *ray_tracing_agent_render_request_integrator_label(RayTracing3DIntegratorId id) {
+    if (id == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) return "disney_v3_spectral";
     switch (RayTracingIntegratorCatalog_Clamp3DToShipped((int)id)) {
         case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
             return "disney_v2";

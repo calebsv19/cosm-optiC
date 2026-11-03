@@ -173,7 +173,25 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                           RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA);
         return false;
     }
-    if (strcmp(value, RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA) != 0) {
+    const bool spectral_schema = strcmp(value, "ray_tracing_agent_render_request_v2") == 0;
+    json_object *mode_object = json_object_object_get(root, "render");
+    const char *mode = NULL;
+    bool spectral_mode = RayTracingJsonGetString(mode_object, "integrator_3d", &mode) &&
+                         strcmp(mode, "disney_v3_spectral") == 0;
+    if (spectral_mode != spectral_schema ||
+        (spectral_schema && !agent_render_request_parse_spectral(root, &request.spectral)) ||
+        (!spectral_schema && json_object_object_get(root, "spectral"))) {
+        RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size,
+            "spectral request requires v2, disney_v3_spectral and supported pencil fields");
+        json_object_put(root);
+        return false;
+    }
+    if (spectral_schema) {
+        RayTracingCopyString(request.schema_version, sizeof(request.schema_version), value);
+        request.has_denoise_enabled_override = true;
+        request.denoise_enabled_override = false;
+    }
+    if (!spectral_schema && strcmp(value, RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA) != 0) {
         const char *actual_schema = value;
         agent_render_request_set_diagf(out_diagnostics,
                           out_diagnostics_size,
@@ -308,7 +326,8 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             request.denoise_enabled_override = bool_value;
         }
         if (RayTracingJsonGetString(render, "integrator_3d", &value)) {
-            request.integrator_3d = agent_render_request_parse_integrator_3d(value);
+            request.integrator_3d = spectral_schema ? RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL
+                                                   : agent_render_request_parse_integrator_3d(value);
             request.has_integrator_3d_override = true;
         }
     }

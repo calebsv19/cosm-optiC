@@ -367,6 +367,12 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/agent_render_request.o \
 	$(BUILD_DIR)/app/agent_render_request_defaults.o \
+	$(BUILD_DIR)/app/agent_render_request_spectral.o \
+	$(BUILD_DIR)/render/runtime_spectral_pencil.o \
+	$(BUILD_DIR)/render/runtime_spectral_observer.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_capture.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_headless_photon_termination.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_headless_spectral.o \
 	$(BUILD_DIR)/app/agent_render_request_helpers.o \
 	$(BUILD_DIR)/app/agent_render_request_labels.o \
 	$(BUILD_DIR)/app/agent_render_request_validate.o \

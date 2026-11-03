@@ -12,9 +12,12 @@
 #include "render/runtime_disney_v2_caustic_sidecar_3d.h"
 #include "render/runtime_ray_3d.h"
 
+#include "render/runtime_spectral_pencil.h"
+
 #define RAY_TRACING_AGENT_RENDER_REQUEST_SCHEMA "ray_tracing_agent_render_request_v1"
 
 typedef struct RayTracingAgentRenderRequest {
+    RuntimeSpectralPencil spectral;
     char schema_version[64];
     char run_id[128];
     char runtime_scene_path[PATH_MAX];

@@ -75,6 +75,7 @@ typedef struct RayTracingHeadlessObjectAuditEntry {
 } RayTracingHeadlessObjectAuditEntry;
 
 typedef struct RayTracingHeadlessPreflight {
+    RuntimeSpectralReadout spectral_readout;
     bool request_loaded;
     bool scene_applied;
     bool volume_attached;

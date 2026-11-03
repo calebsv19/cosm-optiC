@@ -1,5 +1,53 @@
 # RayTracing Headless Agent Render CLI
 
+
+## Disney V3 Spectral pencil instrument
+
+Select `render.integrator_3d = "disney_v3_spectral"` with
+`schema_version = "ray_tracing_agent_render_request_v2"`. The [prism request](../tests/fixtures/spectral_prism/request.json)
+is an executable example with a portable scene and mesh. From the checkout run
+`make test-headless-spectral-prism` for the numerical gates. To keep the image, build
+`make ray-tracing-render-headless` and run the resulting CLI with
+`--request tests/fixtures/spectral_prism/request.json --render`. The fixture writes
+`build/agent_runs/spectral_prism/frames/frame_0000.bmp`. Use a fresh output root for a replay.
+
+This mode follows one collimated source through one outward-wound closed glass solid
+onto one flat, unit-albedo matte detector. The request binds the optics by scene object
+ID. Geometry, camera projection, ray intersection and dielectric interfaces are native
+renderer operations. Existing saved RGB requests retain their selector and default.
+
+* Author the ordinary geometry in meters at world scale 1, with no scene-level
+  extensions or lights. Use a closed mesh asset for the glass.
+  The detector must be a plane. The only object extension supported is the mesh
+  path in `line_drawing.runtime_mesh_path`. The source and camera start in air.
+* Set a finite `origin_m`, a nonzero `direction`, and 1–16 strictly increasing
+  discrete `lines` from 380 through 780 vacuum nm. Each line has integrated
+  `watts` and a nonnegative glass `absorption_per_m`. Exact line summation
+  preserves each authored power without a sampling-PDF correction.
+* Select `glass = "constant"` and `constant_ior`, or `"schott_n_bk7"` for the
+  three-term Sellmeier fit at catalog conditions. The fit uses standard-air
+  wavelength in micrometers and refractive index relative to air. The path keeps
+  its vacuum wavelength across every boundary. [SCHOTT optical glass datasheet](https://media.schott.com/api/public/content/41e799d0bf874807a0bb8e702fbb75b5?v=54856406)
+* Each transmitted branch receives the unpolarized Fresnel power fraction and
+  Beer–Lambert attenuation over its actual internal path length. Camera
+  transmission also carries the squared incident/transmitted index ratio.
+  TIR continues inside the solid. Partial Fresnel reflections leave the measured
+  transmitted beam. A 32-interface path limit is reported in each probe.
+* `receiver_radius_m` is the radius of a normalized circular detector response.
+  For line flux Φ its radiance inside the footprint is Φ/(π²r²) on the illuminated
+  face. Each camera line traces its own path to that face. Camera throughput
+  weights its raw CIE 1931 XYZ contribution. `exposure` scales summed XYZ before
+  D65 linear sRGB conversion, per-channel clipping and sRGB display encoding.
+* `--preflight` reports `spectral_pencil` with line wavelength, index, deviation,
+  final direction, position, interface count, internal length, forward path watts
+  and optical-axis camera throughput. Use `receiver_hit` to interpret a position
+  as a screen measurement. On render, `spectral_center_pixel_xyz` gives the raw
+  pre-exposure pixel at (width/2, height/2), with integer division.
+* S2 selects a single static undenoised local frame, with a maximum of 4096
+  pixels along either axis. General light spectra, rough or nested media, photon
+  map gathering, video, checkpointing, worker jobs and desktop selection are
+  outside this request contract. The v1 request remains the RGB contract.
+
 ## Photon runtime reports
 
 When `inspection.caustic_photon_render_prep_population_enabled` is true, completed

@@ -27,6 +27,7 @@ bool agent_render_request_json_get_rgb(json_object* owner,
                                        double* out_b);
 int agent_render_request_parse_volume_source_kind(const char* kind_label,
                                                   const char* path);
+bool agent_render_request_parse_spectral(json_object *root, RuntimeSpectralPencil *out);
 RayTracing3DIntegratorId agent_render_request_parse_integrator_3d(const char* label);
 int agent_render_request_parse_inspection_preset(const char* label);
 bool agent_render_request_parse_trace_route(const char* label,

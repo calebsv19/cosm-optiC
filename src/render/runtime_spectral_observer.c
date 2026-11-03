@@ -9,16 +9,20 @@ _Static_assert(sizeof(observer) / sizeof(observer[0]) ==
                    RUNTIME_SPECTRAL_MAX_NM - FIRST_AIR_NM + 1,
                "observer grid must cover the transport domain");
 
-Vec3 RuntimeSpectral_CIE1931(double vacuum_nm) {
-    if (!(vacuum_nm >= RUNTIME_SPECTRAL_MIN_NM && vacuum_nm <= RUNTIME_SPECTRAL_MAX_NM))
-        return vec3(0, 0, 0);
+double RuntimeSpectral_StandardAirNm(double vacuum_nm) {
     /* CIE 11664-1 tabulates standard-air wavelengths. Convert the argument
      * only; observer sensitivity is dimensionless. Peck & Reeder (1972),
      * https://doi.org/10.1364/JOSA.62.000958, vacuum wavenumber in um^-1. */
     double sigma = 1000.0 / vacuum_nm;
     double sigma2 = sigma * sigma;
     double n = 1.0 + 1e-8 * (8060.51 + 2480990.0 / (132.274 - sigma2) + 17455.7 / (39.32957 - sigma2));
-    double index = vacuum_nm / n - FIRST_AIR_NM;
+    return vacuum_nm / n;
+}
+
+Vec3 RuntimeSpectral_CIE1931(double vacuum_nm) {
+    if (!(vacuum_nm >= RUNTIME_SPECTRAL_MIN_NM && vacuum_nm <= RUNTIME_SPECTRAL_MAX_NM))
+        return vec3(0, 0, 0);
+    double index = RuntimeSpectral_StandardAirNm(vacuum_nm) - FIRST_AIR_NM;
     unsigned i = (unsigned)index;
     double fraction = index - i;
     if (fraction == 0)
