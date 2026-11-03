@@ -71,6 +71,7 @@
 #include "test_support.h"
 
 int run_test_runner_runtime_tests(void);
+int run_test_runtime_spectral(void);
 int run_test_config_animation_tests(void);
 int run_test_ui_menu_contract_tests(void);
 int run_test_menu_render_workflow_tests(void);
@@ -156,6 +157,7 @@ int test_runner_main(int argc, char** argv) {
         {"runtime_caustic_photon_volume_segment_normalization_3d",
          run_test_runtime_caustic_photon_volume_segment_normalization_3d_tests},
         {"runtime_caustic_lens_transport_3d", run_test_runtime_caustic_lens_transport_3d_tests},
+        {"runtime_spectral", run_test_runtime_spectral},
         {"runtime_caustic_photon_emit_3d", run_test_runtime_caustic_photon_emit_3d_tests},
         {"runtime_light_radiometry_3d", run_test_runtime_light_set_3d_tests},
         {"runtime_caustic_photon_direct_consumer_3d",

@@ -473,6 +473,7 @@ TEST_OBJ := $(BUILD_DIR)/tests/test_runner.o $(BUILD_DIR)/tests/test_runner_regi
 	$(BUILD_DIR)/tests/test_runtime_caustic_bootstrap_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_beam_map_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_lens_transport_3d.o \
+	$(BUILD_DIR)/tests/test_runtime_spectral.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_emit_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_caustic_photon_direct_consumer_3d.o \
 	$(BUILD_DIR)/tests/test_runtime_photon_receiver_routing.o \

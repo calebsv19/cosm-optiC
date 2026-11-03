@@ -1628,6 +1628,10 @@ visual-harness: $(APP_TARGET)
 visual-artifact: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_visual_artifact.sh
 
+.PHONY: test-runtime-spectral-source
+test-runtime-spectral-source: $(TEST_BIN)
+	TEST_RUNNER_GROUP=runtime_spectral $(TEST_BIN)
+
 test: $(APP_TARGET) $(TEST_BIN)
 	./$(TEST_BIN)
 
