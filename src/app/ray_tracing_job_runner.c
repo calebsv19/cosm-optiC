@@ -551,6 +551,11 @@ bool ray_tracing_job_runner_submit(const char *argv0,
         diag_set(out_diagnostics, out_diagnostics_size, diagnostics);
         return false;
     }
+    if (request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
+        diag_set(out_diagnostics, out_diagnostics_size,
+                 "Disney V3 spectral requires local headless execution. Detached workers lack spectral transport.");
+        return false;
+    }
     if (overwrite && resume) {
         diag_set(out_diagnostics, out_diagnostics_size, "overwrite and resume are mutually exclusive");
         return false;

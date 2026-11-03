@@ -178,11 +178,21 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     const char *mode = NULL;
     bool spectral_mode = RayTracingJsonGetString(mode_object, "integrator_3d", &mode) &&
                          strcmp(mode, "disney_v3_spectral") == 0;
+    json_object *selector;
+    if (json_object_object_get_ex(mode_object, "integrator_3d", &selector) &&
+        (!json_object_is_type(selector, json_type_string) ||
+         strlen(mode) != (size_t)json_object_get_string_len(selector) ||
+         (!spectral_mode && strcmp(mode, ray_tracing_agent_render_request_integrator_label(
+                                             agent_render_request_parse_integrator_3d(mode)))))) {
+        RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size, "unknown render.integrator_3d");
+        json_object_put(root);
+        return false;
+    }
     if (spectral_mode != spectral_schema ||
         (spectral_schema && !agent_render_request_parse_spectral(root,request_dir, &request.spectral)) ||
         (!spectral_schema && json_object_object_get(root, "spectral"))) {
         RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size,
-            "spectral request requires v2, disney_v3_spectral and supported pencil fields");
+            "spectral V3 requires a v2 local request, supported optical fields, one serial frame and one temporal pass with denoise off");
         json_object_put(root);
         return false;
     }

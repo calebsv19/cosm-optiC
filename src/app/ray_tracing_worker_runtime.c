@@ -346,12 +346,22 @@ int ray_tracing_worker_runtime_run(const char *request_message_path,
         set_diag(diagnostics, diagnostics_size, "renderer build digest mismatch");
         return 22;
     }
-    if (!activate_recovery_authority(&request,
-                                     protocol_diagnostics,
-                                     sizeof(protocol_diagnostics))) {
-        set_diag(diagnostics, diagnostics_size, protocol_diagnostics);
-        return 30;
+    /* The payload declares its own renderer. Even a sender using the older
+     * baseline bit mask must negotiate V3 before claiming recovery or work. */
+    json_object *payload = json_object_from_file(request.request_path);
+    json_object *schema = NULL;
+    if (!json_object_is_type(payload, json_type_object)) {
+        json_object_put(payload);
+        (void)emit_interruption(&request, &sequence, 23, "invalid render request");
+        set_diag(diagnostics, diagnostics_size, "invalid render request");
+        return 23;
     }
+    if (json_object_object_get_ex(payload, "schema_version", &schema) &&
+        json_object_is_type(schema, json_type_string) &&
+        !strcmp(json_object_get_string(schema), "ray_tracing_agent_render_request_v2")) {
+        request.required_capability_bits |= RAY_TRACING_WORKER_CAP_SPECTRAL_V3;
+    }
+    json_object_put(payload);
     ray_tracing_worker_capabilities_defaults(&capabilities);
     snprintf(capabilities.renderer_build_sha256,
              sizeof(capabilities.renderer_build_sha256),
@@ -365,6 +375,12 @@ int ray_tracing_worker_runtime_run(const char *request_message_path,
         (void)emit_interruption(&request, &sequence, 23, protocol_diagnostics);
         set_diag(diagnostics, diagnostics_size, protocol_diagnostics);
         return 23;
+    }
+    if (!activate_recovery_authority(&request,
+                                     protocol_diagnostics,
+                                     sizeof(protocol_diagnostics))) {
+        set_diag(diagnostics, diagnostics_size, protocol_diagnostics);
+        return 30;
     }
     if (!install_signal_handlers()) {
         (void)emit_interruption(&request, &sequence, 24, "failed to install signal handlers");

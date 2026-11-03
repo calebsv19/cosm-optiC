@@ -254,6 +254,10 @@ static double DefaultForwardFalloffDistance(void) {
 }
 
 bool SaveAnimationConfigChecked(void) {
+    if (!RayTracingIntegratorCatalog_Is3DShipped(animSettings.integratorMode3D)) {
+        fprintf(stderr, "Unsupported 3D integrator in legacy animation settings.\n");
+        return false;
+    }
     if (!config_io_ensure_parent_directory_for_file(ANIMATION_CONFIG_RUNTIME_FILE)) {
         fprintf(stderr, "Error: Failed to prepare runtime config lane for %s\n", ANIMATION_CONFIG_RUNTIME_FILE);
         return false;
@@ -466,10 +470,10 @@ void SaveAnimationConfig(void) { (void)SaveAnimationConfigChecked(); }
 
 void LoadAnimationConfig(void) {
     const char* loaded_path = NULL;
-    animSettings.startFrameIndex = 0;
-    animSettings.resumeFromExistingFrames = false;
     FILE* file = OpenAnimationConfigRead(&loaded_path);
     if (!file) {
+        animSettings.startFrameIndex = 0;
+        animSettings.resumeFromExistingFrames = false;
         printf("INFO: Animation config file not found (tried %s, %s, %s); using defaults.\n",
                ANIMATION_CONFIG_RUNTIME_FILE,
                ANIMATION_CONFIG_DEFAULT_FILE,
@@ -482,9 +486,26 @@ void LoadAnimationConfig(void) {
 
     struct json_object* config = config_io_parse_json_file(file, "animation config", true);
     if (!config) {
+        animSettings.startFrameIndex = 0;
+        animSettings.resumeFromExistingFrames = false;
         return;
     }
 
+    /* A legacy animation file cannot describe spectral transport. Reject the
+     * file before applying its settings instead of converting an explicit ID. */
+    json_object *saved_integrator = NULL;
+    bool has_integrator = json_object_object_get_ex(config, "integratorMode3D", &saved_integrator) ||
+                          json_object_object_get_ex(config, "integrator_mode_3d", &saved_integrator);
+    if (has_integrator &&
+        (!json_object_is_type(saved_integrator, json_type_int) ||
+         json_object_get_int64(saved_integrator) != json_object_get_int(saved_integrator) ||
+         !RayTracingIntegratorCatalog_Is3DShipped(json_object_get_int(saved_integrator)))) {
+        fprintf(stderr, "Cannot load animation settings with an unsupported 3D integrator.\n");
+        json_object_put(config);
+        return;
+    }
+    animSettings.startFrameIndex = 0;
+    animSettings.resumeFromExistingFrames = false;
     struct json_object* temp;
     struct json_object* authored_environment_temp = NULL;
     struct json_object* authored_environment_key_temp = NULL;
@@ -661,13 +682,8 @@ void LoadAnimationConfig(void) {
         animSettings.rouletteThreshold = json_object_get_double(temp);
     if (json_object_object_get_ex(config, "integratorMode", &temp))
         animSettings.integratorMode = json_object_get_int(temp);
-    if (json_object_object_get_ex(config, "integratorMode3D", &temp)) {
-        animSettings.integratorMode3D = json_object_get_int(temp);
-    } else if (json_object_object_get_ex(config, "integrator_mode_3d", &temp)) {
-        animSettings.integratorMode3D = json_object_get_int(temp);
-    } else {
-        animSettings.integratorMode3D = RayTracingIntegratorCatalog_Default3D();
-    }
+    animSettings.integratorMode3D = has_integrator ? json_object_get_int(saved_integrator)
+                                                  : RayTracingIntegratorCatalog_Default3D();
     RayTracingIntegratorCatalog_NormalizeAnimationConfig(&animSettings);
     if (json_object_object_get_ex(config, "previewDuration", &temp)) {
         animSettings.previewDuration = json_object_get_double(temp);

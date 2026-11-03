@@ -15,7 +15,16 @@ static void scene_lifecycle_acceptance(SceneEditor* editor,const char* scene) {
     char parent[4096],created[4096],copy[4096];snprintf(parent,sizeof(parent),"%s",scene);*strrchr(parent,'/')=0;
     snprintf(created,sizeof(created),"%s/ui-created.json",parent);snprintf(copy,sizeof(copy),"%s/ui-save-as.json",parent);
     SceneEditorAgentControlPoll();unsigned long long original=SceneEditorDocumentRevision();
-    lifecycle_ui(editor,0+3,created);assert(SceneEditorDocumentRevision()>original);assert(SceneEditorDocumentObjectCount()==0);
+    char invalid[4096],why[256];
+    snprintf(invalid,sizeof(invalid),"%s/refused-preset.json",parent);
+    setenv("OPTIC_NEW_SCENE_INTEGRATOR","disney_v3_spectral",1);
+    assert(!SceneEditorSceneCommand("create",invalid,original,why,sizeof(why)));
+    assert(access(invalid,F_OK)!=0 && SceneEditorDocumentRevision()==original);
+    setenv("OPTIC_NEW_SCENE_INTEGRATOR","disney_v2",1);
+    lifecycle_ui(editor,0+3,created);
+    assert(SceneEditorRenderOptionsGet().integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
+    setenv("OPTIC_NEW_SCENE_INTEGRATOR","direct_light",1);
+    assert(SceneEditorDocumentRevision()>original);assert(SceneEditorDocumentObjectCount()==0);
     int index=-1;char message[512];assert(SceneEditorDocumentCreatePrimitive("box",&index,message,sizeof(message)));
     unsigned long long dirty=SceneEditorDocumentRevision();
     assert(!SceneEditorSceneCommand("open",scene,dirty,message,sizeof(message)));assert(SceneEditorDocumentIsDirty());
@@ -24,6 +33,7 @@ static void scene_lifecycle_acceptance(SceneEditor* editor,const char* scene) {
     assert(SceneEditorDocumentRedo(message,sizeof(message)));assert(SceneEditorDocumentObjectCount()==1);
     assert(SceneEditorChromeActionsSaveAuthoring());
     lifecycle_ui(editor,2,created);assert(SceneEditorDocumentObjectCount()==0);
+    assert(SceneEditorRenderOptionsGet().integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
     lifecycle_ui(editor,2,copy);assert(SceneEditorDocumentObjectCount()==1);
     lifecycle_ui(editor,2,scene);
     pid_t pid=fork();assert(pid>=0);

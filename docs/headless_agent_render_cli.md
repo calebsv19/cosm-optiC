@@ -1,6 +1,35 @@
 # RayTracing Headless Agent Render CLI
 
 
+## Selecting a qualified renderer
+
+Disney V3 Spectral is available on the local headless route using a v2 request
+with explicit spectra and a supported receiver. Successful preflight returns
+`spectral_execution` with the effective film schedule and capabilities.
+The local film uses one serial pass for one static frame. The request may spell
+out `temporal_frames: 1`, `frame_count: 1`, `denoise_enabled: false` and
+`use_tiled_renderer: false`. Additional temporal passes, tiles, explicit worker
+scheduling, denoise and checkpoint/resume require a different route. Detached
+submission rejects spectral requests before creating a job. Worker protocol v1
+reserves optional capability bit 7 for spectral transport.
+
+The editor's New Scene command seeds Direct Light. To create new scenes with
+the RGB Disney V2 preset, start the editor with
+`OPTIC_NEW_SCENE_INTEGRATOR=disney_v2`. Set this to `direct_light` to roll
+back. The editor saves the selected preset in
+`extensions.ray_tracing.editor_render_integrator_v1`. Opening a saved scene
+uses its own preset. Older documents use their historical rendering settings.
+The panel still offers an explicit per-render selection. Existing readers use
+their own historical settings when they ignore the additive editor preference.
+Explicit V3 authoring uses the versioned headless request format.
+
+Run `make test-headless-spectral-compatibility` to exercise the renderer and
+local worker contract. For the 512 × 288 default-qualification measurements,
+run `python3 tests/integration/measure_spectral_default_budget.py --cli <renderer> --output <new-report.json>`
+on macOS or Linux. The report includes full-process wall time and peak resident
+memory, three warmed timing samples and two independent higher-budget
+references for per-band receiver power and center-pixel radiance.
+
 ## Participating volumes in headless Disney V3
 
 The [slab request](../tests/fixtures/spectral_volume/request.json) illuminates

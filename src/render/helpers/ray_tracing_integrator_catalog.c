@@ -73,7 +73,7 @@ int RayTracingIntegratorCatalog_Default3D(void) {
 }
 
 bool RayTracingIntegratorCatalog_Is3DShipped(int value) {
-    switch (RayTracingIntegratorCatalog_Clamp3D(value)) {
+    switch (value) {
         case RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT:
         case RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE:
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:

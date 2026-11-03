@@ -54,6 +54,15 @@ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as c:
  assert not json.loads(response)['ok']
 created=parent/'mcp-created.json';fresh=b.mutate('scene_create',scene_path=str(created));assert not fresh['dirty'] and not b.call('object_list')['objects']
 assert b.call('editor_catalog')['scene_path']==str(created)
+assert b.call('render_read')['render']['settings']['integrator']=='direct_light'
+assert json.loads(created.read_text())['extensions']['ray_tracing']['editor_render_integrator_v1']=='direct_light'
+assert json.loads((parent/'ui-created.json').read_text())['extensions']['ray_tracing']['editor_render_integrator_v1']=='disney_v2'
+unsupported=parent/'unsupported-integrator.json'
+bad=json.loads(created.read_text())
+bad['extensions']['ray_tracing']['editor_render_integrator_v1']='disney_v3_spectral'
+unsupported.write_text(json.dumps(bad))
+b.call('scene_open',{'scene_path':str(unsupported),'expected_revision':fresh['revision']},False)
+assert b.state()['scene_path']==str(created)
 # Open copied legacy/physical scene, inspect exact retained metadata and render via MCP.
 b.mutate('scene_open',True,scene_path=str(copy));assert b.state()['attachment']==initial_state['attachment']
 assert b.call('object_list')['objects'];saved_root=json.loads(copy.read_text());assert saved_root['objects'][:len(initial['objects'])]==initial['objects'];assert saved_root['extensions']['t1_provenance']==initial['extensions']['t1_provenance']

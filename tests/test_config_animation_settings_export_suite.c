@@ -50,6 +50,20 @@ static int test_animation_integrator_split_roundtrip_and_default_3d(void) {
     assert_true("integrator_split_roundtrip_3d_persisted",
                 animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY);
 
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
+    assert_true("legacy_v2_save", SaveAnimationConfigChecked());
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL;
+    assert_true("legacy_format_refuses_spectral_id", !SaveAnimationConfigChecked());
+    LoadAnimationConfig();
+    assert_true("failed_save_kept_v2_selection",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
+    assert_true("write_unsupported_legacy_id", write_text_file(kRuntimeAnimationConfigPath,
+                "{\"integratorMode3D\":6,\"integratorMode\":0}"));
+    animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_MATERIAL;
+    LoadAnimationConfig();
+    assert_true("unsupported_file_does_not_apply_or_clamp",
+                animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_MATERIAL &&
+                animSettings.integratorMode == RAY_TRACING_2D_INTEGRATOR_HYBRID);
     restore_runtime_animation_config(backup, backup_size);
     return 0;
 }

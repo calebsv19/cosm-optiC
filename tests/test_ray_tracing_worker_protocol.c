@@ -134,6 +134,11 @@ int main(void) {
                     RAY_TRACING_WORKER_REQUIRED_CAPABILITIES,
                     diagnostics,
                     sizeof(diagnostics)));
+    expect_true("worker refuses spectral transport before execution",
+                !ray_tracing_worker_capabilities_negotiate(&capabilities,
+                    RAY_TRACING_WORKER_PROTOCOL_VERSION,
+                    RAY_TRACING_WORKER_REQUIRED_CAPABILITIES | RAY_TRACING_WORKER_CAP_SPECTRAL_V3,
+                    diagnostics, sizeof(diagnostics)));
     expect_true("runtime version comes from canonical worker version",
                 strcmp(capabilities.worker_runtime_version,
                        RAY_TRACING_WORKER_RUNTIME_VERSION) == 0);

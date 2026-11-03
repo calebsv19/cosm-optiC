@@ -10,6 +10,7 @@
 #include "app/ray_tracing_sha256.h"
 #include "editor/object_editor_selection_tracker.h"
 #include "editor/scene_editor_document.h"
+#include "editor/scene_editor_render_control.h"
 #include "editor/scene_editor_agent_control.h"
 #include "scene_editor_document_transaction.h"
 
@@ -133,6 +134,12 @@ static json_object* document_parse_valid(const char* bytes, const char* scene_pa
         return NULL;
     }
     json_tokener_free(tokener);
+    int preset;
+    if (!SceneEditorReadRenderPreset(root, &preset)) {
+        json_object_put(root);
+        document_diag(diagnostics, diagnostics_size, "Unsupported editor render integrator in scene.");
+        return NULL;
+    }
     char prior_context[PATH_MAX];
     snprintf(prior_context,sizeof(prior_context),"%s",RuntimeSurfaceSamplingScenePathContext());
     bool context_ok=RuntimeSurfaceSamplingSetScenePathContext(scene_path);

@@ -7,12 +7,13 @@ source "$SCRIPT_DIR/lib/common.sh"
 ROOT_DIR="$(ray_tracing_root_dir)"
 RUNNER="$(ray_tracing_tool_path ray_tracing_job_runner "$ROOT_DIR")"
 INTEGRATOR="${RAY_TRACING_CHECKPOINT_TEST_INTEGRATOR:-diffuse_bounce}"
-RUN_ROOT="$ROOT_DIR/build/agent_runs/ray_tracing/tile_batch_checkpoint_phase_d_$INTEGRATOR"
+[[ "$INTEGRATOR" =~ ^[a-z0-9_]+$ ]] || { echo "Invalid integrator label" >&2; exit 1; }
+RUN_ROOT="$(ray_tracing_test_reset_work_root "tile_batch_checkpoint_phase_d_$INTEGRATOR" "$ROOT_DIR")"
+[[ -n "$RUN_ROOT" && -d "$RUN_ROOT" ]] || exit 1
 JOBS_ROOT="$RUN_ROOT/jobs"
 SCENE="$ROOT_DIR/config/samples/ps4d_runtime_scene_visual_test.json"
 REFERENCE_OUTPUT="$RUN_ROOT/reference_output"
 
-rm -rf "$RUN_ROOT"
 mkdir -p "$JOBS_ROOT"
 
 write_request() {
@@ -126,7 +127,7 @@ do
   test -s "$stage_root/checkpoints/frame_0000/current.json"
   grep -q '"checkpoint_schema_version": 3' \
     "$stage_root/checkpoints/frame_0000/current.json"
-  python3 - "$JOBS_ROOT/$resumed_job/result_summary.json" <<'PY'
+  python3 - "$JOBS_ROOT/$resumed_job/result_summary.json" "$JOBS_ROOT/$resumed_job/worker_events" <<'PY'
 import json
 import sys
 with open(sys.argv[1], encoding="utf-8") as handle:
@@ -138,12 +139,14 @@ assert checkpoint["resumed_tiles_in_subpass"] > 0
 assert checkpoint["tile_batch_generations_written"] > 0
 assert checkpoint["total_write_ms"] > 0.0
 assert checkpoint["maximum_write_ms"] > 0.0
+# JSON may escape directory separators. Inspect the committed generation name.
+from pathlib import Path
+import re
+events = [json.loads(path.read_text()) for path in Path(sys.argv[2]).glob("*.json")]
+references = [Path(e["reference_path"]) for e in events if e["message_type"] == "checkpoint_reference"]
+assert any(re.fullmatch(r"generation_[0-9]{20}\.rtck", p.name) for p in references)
+assert all(".tmp." not in p.name for p in references), references
 PY
-  if grep -q '"reference_path":"[^"]*\\.tmp\\.' \
-    "$JOBS_ROOT/$resumed_job"/worker_events/*.json 2>/dev/null; then
-    echo "partial checkpoint generation was selected for stage $stage" >&2
-    exit 1
-  fi
 done
 
 echo "ray tracing Phase D tile-batch checkpoint transaction matrix passed"

@@ -53,14 +53,48 @@ bool SceneEditorRenderOptionsValid(const SceneEditorRenderOptions* o) {
     return o && o->width>=16 && o->width<=2048 && o->height>=16 && o->height<=2048 && o->temporal_frames>=1 && o->temporal_frames<=32 && o->frame>=0 && o->frame<=1000000000 &&
         (o->integrator==RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) && (o->integrator!=RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || o->temporal_frames==1);
 }
-SceneEditorRenderOptions SceneEditorRenderOptionsGet(void) {return options;}
+static int editor_integrator(const char *label) {
+    if (!strcmp(label, "direct_light")) return RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
+    if (!strcmp(label, "disney_v2")) return RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
+    return -1;
+}
+
+bool SceneEditorWriteNewRenderPreset(json_object *root, const char *label) {
+    json_object *ext = get(get(root, "extensions"), "ray_tracing");
+    if (!label || !*label) label = "direct_light";
+    if (!ext || editor_integrator(label) < 0) return false;
+    return json_object_object_add(ext, "editor_render_integrator_v1", json_object_new_string(label)) == 0;
+}
+
+bool SceneEditorReadRenderPreset(json_object *root, int *integrator) {
+    json_object *ext = get(get(root, "extensions"), "ray_tracing");
+    json_object *value;
+    *integrator = -1;
+    if (!json_object_object_get_ex(ext, "editor_render_integrator_v1", &value)) return true;
+    if (!json_object_is_type(value, json_type_string)) return false;
+    const char *label = json_object_get_string(value);
+    if (strlen(label) != (size_t)json_object_get_string_len(value)) return false;
+    *integrator = editor_integrator(label);
+    return *integrator >= 0;
+}
+
+SceneEditorRenderOptions SceneEditorRenderOptionsGet(void) {
+    SceneEditorRenderOptions selected = options;
+    int preset;
+    if (!SceneEditorRenderLatestId()[0] &&
+        SceneEditorReadRenderPreset(document_authoring_root(), &preset) && preset >= 0) {
+        selected.integrator = preset;
+        if (preset == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT) selected.temporal_frames = 1;
+    }
+    return selected;
+}
 const char* SceneEditorRenderLatestId(void) {return !strcmp(render.scene,SceneEditorDocumentPath())?render.id:"";}
 bool SceneEditorRenderActive(void) {return render.active;}
-static json_object* options_json(void) {
-    json_object* o=json_object_new_object();json_object_object_add(o,"width",json_object_new_int(options.width));json_object_object_add(o,"height",json_object_new_int(options.height));json_object_object_add(o,"temporal_frames",json_object_new_int(options.temporal_frames));json_object_object_add(o,"frame",json_object_new_int(options.frame));json_object_object_add(o,"integrator",json_object_new_string(options.integrator==0?"direct_light":"disney_v2"));if(options.sample_sequence)json_object_object_add(o,"sample_sequence",json_object_new_int64(options.sample_sequence));return o;
+static json_object* options_json(SceneEditorRenderOptions selected) {
+    json_object* o=json_object_new_object();json_object_object_add(o,"width",json_object_new_int(selected.width));json_object_object_add(o,"height",json_object_new_int(selected.height));json_object_object_add(o,"temporal_frames",json_object_new_int(selected.temporal_frames));json_object_object_add(o,"frame",json_object_new_int(selected.frame));json_object_object_add(o,"integrator",json_object_new_string(selected.integrator==0?"direct_light":"disney_v2"));if(selected.sample_sequence)json_object_object_add(o,"sample_sequence",json_object_new_int64(selected.sample_sequence));return o;
 }
 static json_object* receipt(void) {
-    json_object* o=json_object_new_object();json_object_object_add(o,"schema_version",json_object_new_string("optic_editor_render_v1"));json_object_object_add(o,"job_id",json_object_new_string(render.id));json_object_object_add(o,"state",json_object_new_string(render.state));json_object_object_add(o,"editor_pid",json_object_new_int(getpid()));json_object_object_add(o,"scene_path",json_object_new_string(render.scene));json_object_object_add(o,"scene_revision",json_object_new_int64(render.scene_revision));json_object_object_add(o,"source_sha256",json_object_new_string(render.source_hash));json_object_object_add(o,"settings",options_json());json_object_object_add(o,"sample_sequence",json_object_new_int64(render.sample_sequence));json_object_object_add(o,"primitive_count",json_object_new_int64(render.primitive_count));json_object_object_add(o,"triangle_count",json_object_new_int64(render.triangle_count));json_object_object_add(o,"enabled_lights",json_object_new_int64(render.enabled_lights));json_object_object_add(o,"volume_enabled",json_object_new_boolean(render.volume_enabled));json_object_object_add(o,"volume_attached",json_object_new_boolean(render.volume_attached));json_object_object_add(o,"diagnostic",json_object_new_string(render.diagnostic));json_object_object_add(o,"cancel_requested",json_object_new_boolean(render.cancel_requested));json_object_object_add(o,"completed_subpasses",json_object_new_int(render.completed_subpasses));json_object_object_add(o,"total_subpasses",json_object_new_int(render.total_subpasses));json_object_object_add(o,"completed_tiles",json_object_new_int64(render.completed_tiles));json_object_object_add(o,"total_tiles",json_object_new_int64(render.total_tiles));json_object_object_add(o,"output_verified",json_object_new_boolean(render.verified));json_object_object_add(o,"image_path",json_object_new_string(render.image));json_object_object_add(o,"image_sha256",json_object_new_string(render.image_hash));return o;
+    json_object* o=json_object_new_object();json_object_object_add(o,"schema_version",json_object_new_string("optic_editor_render_v1"));json_object_object_add(o,"job_id",json_object_new_string(render.id));json_object_object_add(o,"state",json_object_new_string(render.state));json_object_object_add(o,"editor_pid",json_object_new_int(getpid()));json_object_object_add(o,"scene_path",json_object_new_string(render.scene));json_object_object_add(o,"scene_revision",json_object_new_int64(render.scene_revision));json_object_object_add(o,"source_sha256",json_object_new_string(render.source_hash));json_object_object_add(o,"settings",options_json(options));json_object_object_add(o,"sample_sequence",json_object_new_int64(render.sample_sequence));json_object_object_add(o,"primitive_count",json_object_new_int64(render.primitive_count));json_object_object_add(o,"triangle_count",json_object_new_int64(render.triangle_count));json_object_object_add(o,"enabled_lights",json_object_new_int64(render.enabled_lights));json_object_object_add(o,"volume_enabled",json_object_new_boolean(render.volume_enabled));json_object_object_add(o,"volume_attached",json_object_new_boolean(render.volume_attached));json_object_object_add(o,"diagnostic",json_object_new_string(render.diagnostic));json_object_object_add(o,"cancel_requested",json_object_new_boolean(render.cancel_requested));json_object_object_add(o,"completed_subpasses",json_object_new_int(render.completed_subpasses));json_object_object_add(o,"total_subpasses",json_object_new_int(render.total_subpasses));json_object_object_add(o,"completed_tiles",json_object_new_int64(render.completed_tiles));json_object_object_add(o,"total_tiles",json_object_new_int64(render.total_tiles));json_object_object_add(o,"output_verified",json_object_new_boolean(render.verified));json_object_object_add(o,"image_path",json_object_new_string(render.image));json_object_object_add(o,"image_sha256",json_object_new_string(render.image_hash));return o;
 }
 static bool write_json(const char* path,json_object* o) {
     RayTracingDurableOutput out;bool ok=ray_tracing_durable_output_begin(&out,path);if(ok) {ok=fputs(json_object_to_json_string_ext(o,JSON_C_TO_STRING_PRETTY),out.stream)>=0;if(ok) ok=ray_tracing_durable_output_commit(&out);else ray_tracing_durable_output_abort(&out);}return ok;
@@ -130,7 +164,7 @@ void SceneEditorRenderShutdown(void) {
     else release();
 }
 json_object* SceneEditorRenderRead(void) {
-    SceneEditorRenderPoll();json_object* o=json_object_new_object();json_object_object_add(o,"fixed_sampling_supported",json_object_new_boolean(true));json_object_object_add(o,"settings",options_json());json_object_object_add(o,"active",json_object_new_boolean(render.active));json_object_object_add(o,"latest_job_id",json_object_new_string(SceneEditorRenderLatestId()));return o;
+    SceneEditorRenderPoll();json_object* o=json_object_new_object();json_object_object_add(o,"fixed_sampling_supported",json_object_new_boolean(true));json_object_object_add(o,"settings",options_json(SceneEditorRenderOptionsGet()));json_object_object_add(o,"active",json_object_new_boolean(render.active));json_object_object_add(o,"latest_job_id",json_object_new_string(SceneEditorRenderLatestId()));return o;
 }
 json_object* SceneEditorRenderJobRead(const char* id,bool results,char* message,size_t size) {
     SceneEditorRenderPoll();char root[4096],path[4096];struct stat st;

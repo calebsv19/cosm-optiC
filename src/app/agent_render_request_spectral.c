@@ -266,7 +266,8 @@ bool agent_render_request_parse_spectral(json_object *root, const char *dir, Run
         !ONLY(json_object_object_get(root, "output"), "root", "overwrite") ||
         (progress && !ONLY(progress, "summary_path", "progress_path")) ||
         (inspection && !ONLY(inspection, "camera_position", "camera_look_at", "camera_zoom")) ||
-        !ONLY(r, "integrator_3d", "width", "height") ||
+        !ONLY(r, "integrator_3d", "width", "height", "temporal_frames", "denoise_enabled",
+              "use_tiled_renderer", "frame_count") ||
         !(mapping
               ? ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "receiver_radius_m", "exposure",
                      "surface_map", "exterior_ior", "glass_roughness", "receiver_reflectance",
@@ -277,6 +278,19 @@ bool agent_render_request_parse_spectral(json_object *root, const char *dir, Run
 
     /* The common RGB parser accepts partial vectors and coerces dimensions.
      * The calibration request requires finite camera coordinates and a bounded film. */
+    /* Accept an explicit request for the same single, unfiltered pass as omission. */
+    const char *off_fields[] = {"denoise_enabled", "use_tiled_renderer"};
+    for (size_t i = 0; i < 2; ++i) {
+        json_object *v;
+        if (json_object_object_get_ex(r, off_fields[i], &v) &&
+            (!json_object_is_type(v, json_type_boolean) || json_object_get_boolean(v))) return false;
+    }
+    int ignored_count;
+    const char *single_fields[] = {"frame_count", "temporal_frames"};
+    for (size_t i = 0; i < 2; ++i) {
+        if (json_object_object_get_ex(r, single_fields[i], NULL) &&
+            !integer(r, single_fields[i], 1, 1, &ignored_count)) return false;
+    }
     const char *dims[] = {"width", "height"};
     for (size_t i = 0; i < 2; ++i) {
         json_object *v = json_object_object_get(r, dims[i]);

@@ -227,6 +227,11 @@ static void write_path(FILE *f, const RuntimeSpectralPathReadout *hit, const cha
 void RayTracingHeadlessSpectral_Write(FILE *f, const RayTracingAgentRenderRequest *request,
                                       const RuntimeSpectralReadout *out, bool rendered) {
     const RuntimeSpectralPencil *p = &request->spectral;
+    fputs("  \"spectral_execution\":{\"route\":\"local_headless\","
+          "\"film_schedule\":\"serial_scanlines\",\"film_threads\":1,"
+          "\"frames\":1,\"temporal_passes\":1,\"denoise\":false,"
+          "\"tile_checkpoint_resume\":false,\"worker_supported\":false,"
+          "\"editor_supported\":false,\"map_cache_scope\":\"process\"},\n", f);
     if (rendered)
         fprintf(f, "  \"spectral_center_pixel_xyz\":[%.17g,%.17g,%.17g],\n", out->center_pixel_xyz.x,
                 out->center_pixel_xyz.y, out->center_pixel_xyz.z);

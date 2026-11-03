@@ -5,6 +5,9 @@
 #include <json-c/json.h>
 #include "editor/scene_editor_pane_host.h"
 typedef struct SceneEditorRenderOptions {int width,height,temporal_frames,frame,integrator;uint32_t sample_sequence;} SceneEditorRenderOptions;
+/* The seed is written only at create. Older documents carry no preference. */
+bool SceneEditorWriteNewRenderPreset(json_object *root, const char *label);
+bool SceneEditorReadRenderPreset(json_object *root, int *integrator);
 bool SceneEditorRenderOptionsValid(const SceneEditorRenderOptions* options);
 SceneEditorRenderOptions SceneEditorRenderOptionsGet(void);
 bool SceneEditorRenderStart(const char* request_id,const SceneEditorRenderOptions* options,unsigned long long revision,char* message,size_t size);
