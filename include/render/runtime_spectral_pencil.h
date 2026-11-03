@@ -2,6 +2,7 @@
 #define RENDER_RUNTIME_SPECTRAL_PENCIL_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include "render/runtime_spectral_profile.h"
 #include "render/runtime_ray_3d.h"
 
@@ -9,16 +10,22 @@
 #define RUNTIME_SPECTRAL_PENCIL_MAX_LINES 16
 typedef struct {
     double vacuum_nm, watts, absorption_per_m;
+    uint64_t sample_id;
 } RuntimeSpectralPencilLine;
 
-enum { SPECTRAL_MAP_LIGHTS = 4, SPECTRAL_MAP_KNOTS = 32, SPECTRAL_MAP_BINS = 128,
-       SPECTRAL_MAP_MAX_BANDS = SPECTRAL_MAP_BINS + SPECTRAL_MAP_LIGHTS * RUNTIME_SPECTRAL_PENCIL_MAX_LINES };
+enum {
+    SPECTRAL_MAP_LIGHTS = 4,
+    SPECTRAL_MAP_KNOTS = 32,
+    SPECTRAL_MAP_BINS = 128,
+    SPECTRAL_MAP_MAX_BANDS = SPECTRAL_MAP_BINS + SPECTRAL_MAP_LIGHTS * RUNTIME_SPECTRAL_PENCIL_MAX_LINES
+};
 typedef struct {
     Vec3 origin, direction;
-    double aperture_m;
+    double aperture_m, angular_radius_rad;
+    const char *spectrum_model; /* Static parser-owned label; NULL for tabulated and line sources. */
     int nlines, nknots;
     RuntimeSpectralLine lines[RUNTIME_SPECTRAL_PENCIL_MAX_LINES];
-    RuntimeSpectralKnot knots[SPECTRAL_MAP_KNOTS];
+    RuntimeSpectralKnot knots[129]; /* generated spectrum grid, at most four resolved peaks */
 } RuntimeSpectralLamp;
 typedef struct {
     bool enabled;
@@ -32,7 +39,22 @@ typedef struct {
 } RuntimeSpectralMapConfig;
 
 typedef struct {
+    int count;
+    double points[SPECTRAL_MAP_KNOTS][2];
+} RuntimeSpectralCurve;
+
+typedef struct {
+    RuntimeSpectralCurve response;
+    bool quantum_efficiency;
+} RuntimeSpectralSensor;
+
+typedef struct {
     RuntimeSpectralMapConfig map;
+    double exterior_ior, glass_roughness;
+    RuntimeSpectralCurve reflectance;
+    bool use_scene_texture;
+    int sensor_count, display_sensor;
+    RuntimeSpectralSensor sensors[4];
     char glass_id[64], receiver_id[64];
     Vec3 origin_m, direction;
     double constant_ior, receiver_radius_m, exposure;
@@ -42,7 +64,7 @@ typedef struct {
 } RuntimeSpectralPencil;
 
 typedef struct {
-    Vec3 position, direction;
+    Vec3 position, direction, receiver_rgb;
     double weight, glass_m, vacuum_nm;
     int interfaces, primitive;
     bool receiver, receiver_front, depth_limited;
@@ -64,11 +86,18 @@ typedef struct {
 typedef struct {
     RuntimeSpectralMapStats map;
     Vec3 center_pixel_xyz;
+    double sensor_signal[4];
     RuntimeSpectralPathReadout forward[RUNTIME_SPECTRAL_PENCIL_MAX_LINES];
     RuntimeSpectralPathReadout camera[RUNTIME_SPECTRAL_PENCIL_MAX_LINES];
     double ior[RUNTIME_SPECTRAL_PENCIL_MAX_LINES];
 } RuntimeSpectralReadout;
+bool RuntimeSpectralLamp_PrepareModel(RuntimeSpectralLamp *lamp, double watts, double temperature,
+                                      int peaks, const double center[4], const double sigma[4],
+                                      const double weight[4]);
+double RuntimeSpectral_Uniform64(uint64_t id);
+double RuntimeSpectralCurve_Value(const RuntimeSpectralCurve *curve, double nm);
 double RuntimeSpectralPencil_Index(const RuntimeSpectralPencil *p, double vacuum_nm);
-bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p, const RuntimeSpectralPencilLine *line,
-                                 double index, Ray3D ray, bool camera, RuntimeSpectralPathReadout *out);
+bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p,
+                                 const RuntimeSpectralPencilLine *line, double index, Ray3D ray,
+                                 bool camera, RuntimeSpectralPathReadout *out);
 #endif

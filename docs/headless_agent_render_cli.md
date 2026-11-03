@@ -1,6 +1,60 @@
 # RayTracing Headless Agent Render CLI
 
 
+## Disney V3 spectral emitters, sensors and materials
+
+The [solar disk request](../tests/fixtures/spectral_optics/request.json) renders a
+5770 K blackbody through the prism with a finite angular radius and two simultaneous
+sensor readings. Build the headless CLI and pass
+`--request tests/fixtures/spectral_optics/request.json --render`. Run
+`make test-headless-spectral-optics` for the metamer, emitter, sensor, rough glass,
+procedural texture, optical thickness and incidence checks.
+
+**Emitters.** Each `spectral.surface_map.sources[]` entry accepts the S3 line and
+continuum tables below, or a `spectrum` object with one of these types. All generated
+spectra normalize to `visible_watts` integrated over 380–780 vacuum nm.
+
+| Type | Fields and interpretation |
+| --- | --- |
+| `blackbody` | `kelvin` from 500 to 100000. Uses Planck wavelength density on a 4 nm grid. |
+| `gaussian_mixture` | `peaks` contains one to four triples of center nm, standard deviation nm (0.01–400), and nonnegative relative peak height. Each peak contributes nodes at half-sigma intervals. The tabulation tapers to zero beyond six sigma. Use the exact-line input for atomic power. |
+| `rgb_approximation` | `linear_rgb` contains three values in [0,1]. The explicit compatibility model weights 610, 545 and 455 nm Gaussian primaries of 20 nm standard deviation. Measured SPDs can use the continuum table directly. |
+
+Set `angular_radius_deg` on any source to give its planar aperture a uniform-radiance
+angular disk. Zero gives a collimated source. A solar radius of 0.265° gives a 0.53°
+diameter. Forward paths sample a uniform projected angular disk (cosine-weighted solid
+angle). Direct illumination integrates 64 equal projected-area samples with aperture
+and visibility tests. Atmospheric absorption and sky radiance require separate inputs.
+
+**Sensors.** The optional `spectral.sensors` array accepts one to four scalar
+channels. Each has a `type` of `radiometric` or `quantum_efficiency` and a
+piecewise-linear `response` table of two to 32 `[vacuum_nm, sensitivity]` pairs.
+Use increasing wavelengths with endpoints 380 and 780 and sensitivity in [0,1].
+All channels integrate the same band radiance in one render. The radiometric result
+has units W m⁻² sr⁻¹. The QE result has units electrons s⁻¹ m⁻² sr⁻¹ and multiplies
+energy by λ/(hc) once, with λ in meters. Results appear in request order in
+`spectral_center_sensor_signals`, before exposure. Optional zero-based
+`spectral.display_sensor` displays that channel as grayscale across the frame.
+Choose exposure for the selected units. The default display and independent raw
+XYZ measurement use the CIE observer. Band midpoints approximate continuum integrals.
+
+**Materials.** These optional fields belong to `spectral` when using the surface map.
+
+| Field | Behavior |
+| --- | --- |
+| `exterior_ior` | Constant index of the surrounding medium (1–3, default 1). Source and camera begin in that medium. Glass and exterior indices use the same reference. |
+| `glass_roughness` | Zero selects smooth ballistic transmission and TIR. Positive values up to 1 use the native solid dielectric Smith GGX reflection/transmission sampler with α = roughness². The camera averages 16 seeded paths through rough interfaces per band. Forward samples carry flux and camera samples carry radiance. |
+| `receiver_reflectance` | Bounded 380–780 nm table in the same format as sensor response. Multiplies direct and gathered Lambertian radiance on the named receiver. |
+| `receiver_texture` | `scene_rgb_approximation` opts the named receiver into the native matte material and procedural texture at each camera hit. RGB channels from the native material are interpolated at 455/545/610 nm, held at the endpoints and clamped to [0,1]. This factor multiplies the spectral reflectance curve. |
+
+Texture authoring can use a single named matte receiver entry in
+`extensions.ray_tracing.authoring.object_materials` with its packed object color
+and native procedural controls (none, rust or fog). Additional receiver planes
+keep their neutral response. The transport contract has one closed dielectric
+and one homogeneous exterior. Sensor, display and terminal receiver color can
+change independently of the incident-flux map. Preflight lists the effective
+source models and the explicit RGB receiver approximation.
+
 ## Disney V3 spectral surface photon map
 
 The [broadband prism request](../tests/fixtures/spectral_surface_map/request.json) sends
@@ -43,10 +97,11 @@ candidates, build and film milliseconds are diagnostic fields. Within one CLI
 process the preflight map can serve the render. Geometry, optical profile, source,
 sampling and gather settings enter the key. Camera and exposure are independent.
 
-This mode supports a static scene with one closed smooth dielectric mesh and flat,
+The base S3 request supports a static scene with one closed smooth dielectric mesh and flat,
 unit-albedo matte receivers. It follows the transmitted beam and total internal
 reflections. Partial Fresnel reflections leave that beam. Volume deposition,
-rough surfaces, subsequent diffuse bounces and disk checkpoints require later work.
+subsequent diffuse bounces and disk checkpoints require later work. Use the S4
+material settings above for rough solid dielectric transport.
 
 ## Disney V3 Spectral pencil instrument
 

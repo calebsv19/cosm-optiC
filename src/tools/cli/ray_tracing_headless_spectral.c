@@ -4,11 +4,66 @@
 #include "render/runtime_spectral_observer.h"
 #include <json-c/json.h>
 #include <math.h>
+#include <limits.h>
 #include <string.h>
 
 /* Reject unsupported scene-level lighting, authoring layers and distance units
  * before loading their resources. Native scene preparation owns all geometry. */
-bool RayTracingHeadlessSpectral_SceneSupported(const char *path, bool mapping) {
+static bool receiver_materials(json_object *ext, const RuntimeSpectralPencil *p) {
+    if (!ext) return true;
+    if (!json_object_is_type(ext, json_type_object)) return false;
+    if (!json_object_object_length(ext)) return true;
+    if (!p->use_scene_texture || json_object_object_length(ext) != 1) return false;
+    json_object *rt = json_object_object_get(ext, "ray_tracing"),
+                *auth = json_object_object_get(rt, "authoring");
+    json_object *items = json_object_object_get(auth, "object_materials");
+    if (!json_object_is_type(rt, json_type_object) || json_object_object_length(rt) != 1 ||
+        !json_object_is_type(auth, json_type_object) || json_object_object_length(auth) != 1 ||
+        !json_object_is_type(items, json_type_array) || json_object_array_length(items) != 1)
+        return false;
+    json_object *entry = json_object_array_get_idx(items, 0);
+    json_object *id = json_object_object_get(entry, "object_id");
+    if (!json_object_is_type(entry, json_type_object) || !json_object_is_type(id, json_type_string) ||
+        strcmp(json_object_get_string(id), p->receiver_id))
+        return false;
+    /* Limit authoring to scalar matte texture controls consumed by the
+     * scene bridge. Glass and light behavior are owned by the spectral request. */
+    static const struct {
+        const char *key;
+        double lo, hi;
+        bool integer;
+    } fields[] = {{"object_color", 0, 0xffffff, true},
+                  {"material_id", 0, 0, true},
+                  {"texture_id", 0, 2, true},
+                  {"texture_pattern_mode", 0, 3, true},
+                  {"texture_seed", 0, INT_MAX, true},
+                  {"texture_scale", .0001, 10000, false},
+                  {"texture_offset_u", -10000, 10000, false},
+                  {"texture_offset_v", -10000, 10000, false},
+                  {"texture_strength", 0, 1, false},
+                  {"texture_coverage", 0, 1, false},
+                  {"texture_grain", 0, 1, false},
+                  {"texture_edge_softness", 0, 1, false},
+                  {"texture_contrast", 0, 1, false},
+                  {"texture_flow", 0, 1, false},
+                  {"texture_color_depth", 0, 1, false},
+                  {"texture_surface_damage", 0, 1, false}};
+    json_object_object_foreach(entry, key, value) {
+        if (!strcmp(key, "object_id")) continue;
+        size_t n = 0;
+        while (n < sizeof(fields) / sizeof(fields[0]) && strcmp(key, fields[n].key))
+            ++n;
+        if (n == sizeof(fields) / sizeof(fields[0]) ||
+            !(json_object_is_type(value, json_type_int) ||
+              (!fields[n].integer && json_object_is_type(value, json_type_double))))
+            return false;
+        double v = json_object_get_double(value);
+        if (!(v >= fields[n].lo && v <= fields[n].hi)) return false;
+    }
+    return true;
+}
+bool RayTracingHeadlessSpectral_SceneSupported(const char *path, const RuntimeSpectralPencil *p) {
+    bool mapping = p->map.source_count > 0;
     json_object *scene = json_object_from_file(path);
     if (!scene) return false;
     json_object *ext = json_object_object_get(scene, "extensions");
@@ -17,12 +72,12 @@ bool RayTracingHeadlessSpectral_SceneSupported(const char *path, bool mapping) {
     json_object *objects = json_object_object_get(scene, "objects");
     json_object *lights = json_object_object_get(scene, "lights");
     bool ok =
-        json_object_is_type(units, json_type_string) &&
-        !strcmp(json_object_get_string(units), "meters") &&
+        json_object_is_type(units, json_type_string) && !strcmp(json_object_get_string(units), "meters") &&
         (json_object_is_type(scale, json_type_int) || json_object_is_type(scale, json_type_double)) &&
-        json_object_get_double(scale) == 1 &&
-        (!ext || (json_object_is_type(ext, json_type_object) && !json_object_object_length(ext))) &&
-        json_object_is_type(objects, json_type_array) && (mapping ? json_object_array_length(objects) >= 2 && json_object_array_length(objects) <= 64 : json_object_array_length(objects) == 2) &&
+        json_object_get_double(scale) == 1 && receiver_materials(ext, p) &&
+        json_object_is_type(objects, json_type_array) &&
+        (mapping ? json_object_array_length(objects) >= 2 && json_object_array_length(objects) <= 64
+                 : json_object_array_length(objects) == 2) &&
         (!lights || (json_object_is_type(lights, json_type_array) && !json_object_array_length(lights)));
     for (size_t i = 0; ok && i < json_object_array_length(objects); ++i) {
         json_object *obj = json_object_array_get_idx(objects, i);
@@ -53,7 +108,9 @@ static bool closed_mesh(const char *id) {
 
 static bool supported(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p) {
     bool glass = false, receiver = false;
-    if ((!p->map.source_count && scene->primitiveCount != 2) || scene->volume.enabled || scene->curveInstanceCount) return false;
+    if ((!p->map.source_count && scene->primitiveCount != 2) || scene->volume.enabled ||
+        scene->curveInstanceCount)
+        return false;
     for (int i = 0; i < scene->lightSet.lightCount; ++i) {
         const RuntimeLightSource3D *l = &scene->lightSet.lights[i];
         if (l->enabled && l->origin != RUNTIME_LIGHT_SOURCE_3D_ORIGIN_COMPAT_SCENE_LIGHT) return false;
@@ -62,7 +119,8 @@ static bool supported(const RuntimeScene3D *scene, const RuntimeSpectralPencil *
         const RuntimePrimitive3D *prim = &scene->primitives[i];
         if (!strcmp(prim->source.objectId, p->glass_id))
             glass = prim->kind == RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH && closed_mesh(p->glass_id);
-        else if (prim->kind != RUNTIME_PRIMITIVE_3D_KIND_PLANE) return false;
+        else if (prim->kind != RUNTIME_PRIMITIVE_3D_KIND_PLANE)
+            return false;
         if (!strcmp(prim->source.objectId, p->receiver_id))
             receiver = prim->kind == RUNTIME_PRIMITIVE_3D_KIND_PLANE;
     }
@@ -88,9 +146,10 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
     const RuntimeSpectralPencil *p = &request->spectral;
     const RuntimeScene3D *scene = &frame->scene;
     if (!supported(scene, p)) {
-        snprintf(diag, size,
-                 "spectral V3 requires one named closed glass solid, a named matte receiver and compatible planes, and only the "
-                 "spectral source");
+        snprintf(
+            diag, size,
+            "spectral V3 requires one named closed glass solid, a named matte receiver and compatible planes, and only the "
+            "spectral source");
         return false;
     }
     if (p->map.source_count) {
@@ -106,8 +165,10 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
     double radius2 = p->receiver_radius_m * p->receiver_radius_m;
     for (int i = 0; i < p->count; ++i) {
         out->ior[i] = RuntimeSpectralPencil_Index(p, p->lines[i].vacuum_nm);
-        if (!RuntimeSpectralPencil_Trace(scene, p, &p->lines[i], out->ior[i], source, false, &out->forward[i]) ||
-            !RuntimeSpectralPencil_Trace(scene, p, &p->lines[i], out->ior[i], center, true, &out->camera[i]))
+        if (!RuntimeSpectralPencil_Trace(scene, p, &p->lines[i], out->ior[i], source, false,
+                                         &out->forward[i]) ||
+            !RuntimeSpectralPencil_Trace(scene, p, &p->lines[i], out->ior[i], center, true,
+                                         &out->camera[i]))
             goto invalid_boundary;
         /* Unit-albedo diffuse detector, normalized circular spatial response. */
         response[i] = vec3_scale(RuntimeSpectral_CIE1931(p->lines[i].vacuum_nm),
@@ -129,7 +190,9 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
                     xyz = vec3_add(xyz, vec3_scale(response[i], hit.weight));
             }
             if (x == frame->width / 2 && y == frame->height / 2) out->center_pixel_xyz = xyz;
-            RayTracingHeadlessSpectral_Pixel(pixels + ((size_t)y * frame->width + x)*RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES, xyz, p->exposure);
+            RayTracingHeadlessSpectral_Pixel(pixels + ((size_t)y * frame->width + x) *
+                                                          RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES,
+                                             xyz, p->exposure);
         }
     }
     return true;
@@ -164,9 +227,26 @@ static void write_path(FILE *f, const RuntimeSpectralPathReadout *hit, const cha
 void RayTracingHeadlessSpectral_Write(FILE *f, const RayTracingAgentRenderRequest *request,
                                       const RuntimeSpectralReadout *out, bool rendered) {
     const RuntimeSpectralPencil *p = &request->spectral;
-    if (rendered) fprintf(f, "  \"spectral_center_pixel_xyz\":[%.17g,%.17g,%.17g],\n", out->center_pixel_xyz.x,
-            out->center_pixel_xyz.y, out->center_pixel_xyz.z);
-    if (p->map.source_count) { RayTracingHeadlessSpectralMap_Write(f, &out->map, rendered); return; }
+    if (rendered)
+        fprintf(f, "  \"spectral_center_pixel_xyz\":[%.17g,%.17g,%.17g],\n", out->center_pixel_xyz.x,
+                out->center_pixel_xyz.y, out->center_pixel_xyz.z);
+    if (rendered && p->sensor_count) {
+        fprintf(f, "  \"spectral_center_sensor_signals\":[");
+        for (int i = 0; i < p->sensor_count; ++i)
+            fprintf(f, "%s%.17g", i ? "," : "", out->sensor_signal[i]);
+        fprintf(f, "],\n");
+    }
+    if (p->map.source_count) {
+        fprintf(f,"  \"spectral_source_models\":[");
+        for(int i=0;i<p->map.source_count;++i) {
+            const RuntimeSpectralLamp *lamp=&p->map.sources[i];
+            fprintf(f,"%s\"%s\"",i ? "," : "",lamp->spectrum_model ? lamp->spectrum_model : "tabulated_and_lines");
+        }
+        fprintf(f,"],\n");
+        if(p->use_scene_texture) fprintf(f,"  \"spectral_receiver_texture\":\"scene_rgb_approximation\",\n");
+        RayTracingHeadlessSpectralMap_Write(f, &out->map, rendered);
+        return;
+    }
     fprintf(f, "  \"spectral_pencil\": [");
     for (int i = 0; i < p->count; ++i) {
         double cosine = vec3_dot(p->direction, out->forward[i].direction);

@@ -214,9 +214,9 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
 
     const bool spectral = request->integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL;
     if (spectral && !RayTracingHeadlessSpectral_SceneSupported(
-                        request->runtime_scene_path, request->spectral.map.source_count != 0)) {
+                        request->runtime_scene_path, &request->spectral)) {
         snprintf(preflight.diagnostics, sizeof(preflight.diagnostics),
-                 "spectral V3 requires a meter-scale static scene with supported glass and matte receivers, no RGB lights or authoring extensions");
+                 "spectral V3 requires a meter-scale static scene with supported glass and matte receivers, and compatible material authoring");
         *out_preflight = preflight;
         return 3;
     }

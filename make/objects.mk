@@ -371,6 +371,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \
 	$(BUILD_DIR)/render/runtime_spectral_surface_map.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_headless_spectral_map.o \
+	$(BUILD_DIR)/render/runtime_spectral_emitter.o \
 	$(BUILD_DIR)/render/runtime_spectral_pencil.o \
 	$(BUILD_DIR)/render/runtime_spectral_observer.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_capture.o \
