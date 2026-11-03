@@ -16,7 +16,7 @@ int ray_tracing_headless_note_render_frame_failed(
     if (!request || !preflight || !temporal_progress) return 9;
     preflight->render_trace_ms += ray_tracing_elapsed_ms_since(stage_started_at);
     preflight->render_frames_ms += ray_tracing_elapsed_ms_since(stage_started_at);
-    if (!request->spectral.count || !strcmp(preflight->diagnostics,"ok"))
+    if (request->integrator_3d != RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL || !strcmp(preflight->diagnostics,"ok"))
         snprintf(preflight->diagnostics,
              sizeof(preflight->diagnostics),
              "failed to render frame: prepare=%.320s acceleration=%.320s",

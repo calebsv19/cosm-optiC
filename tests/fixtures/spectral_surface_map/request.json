@@ -1,0 +1,69 @@
+{
+  "schema_version": "ray_tracing_agent_render_request_v2",
+  "run_id": "broadband_prism",
+  "scene": {
+    "runtime_scene_path": "../spectral_prism/scene_runtime.json"
+  },
+  "render": {
+    "integrator_3d": "disney_v3_spectral",
+    "width": 201,
+    "height": 41
+  },
+  "inspection": {
+    "camera_zoom": 3.5,
+    "camera_position": {
+      "x": 0.9,
+      "y": 0.257,
+      "z": 0
+    },
+    "camera_look_at": {
+      "x": 1,
+      "y": 0.257,
+      "z": 0
+    }
+  },
+  "spectral": {
+    "glass_id": "prism",
+    "receiver_id": "screen",
+    "glass": "schott_n_bk7",
+    "receiver_radius_m": 0.0008,
+    "exposure": 2.2e-05,
+    "surface_map": {
+      "enabled": true,
+      "photons_per_source": 8192,
+      "bins": 24,
+      "seed": 19,
+      "absorption_per_m": 0,
+      "sources": [
+        {
+          "origin_m": [
+            -0.12855752193730788,
+            -0.1532088886237956,
+            -0.0
+          ],
+          "direction": [
+            0.6427876096865394,
+            0.766044443118978,
+            0
+          ],
+          "aperture_m": 0.0005,
+          "lines": [],
+          "continuum": [
+            [
+              380,
+              0.0025
+            ],
+            [
+              780,
+              0.0025
+            ]
+          ]
+        }
+      ]
+    }
+  },
+  "output": {
+    "root": "../../../build/agent_runs/spectral_surface_map",
+    "overwrite": false
+  }
+}

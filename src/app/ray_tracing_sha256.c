@@ -4,12 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
-typedef struct RayTracingSha256Context {
-    uint32_t state[8];
-    uint64_t bit_count;
-    unsigned char block[64];
-    size_t block_size;
-} RayTracingSha256Context;
+
 
 static const uint32_t k_sha256[64] = {
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u,
@@ -97,7 +92,7 @@ static void sha256_transform(RayTracingSha256Context *context,
     context->state[7] += h;
 }
 
-static void sha256_init(RayTracingSha256Context *context) {
+void ray_tracing_sha256_init(RayTracingSha256Context *context) {
     static const uint32_t initial[8] = {
         0x6a09e667u, 0xbb67ae85u, 0x3c6ef372u, 0xa54ff53au,
         0x510e527fu, 0x9b05688cu, 0x1f83d9abu, 0x5be0cd19u
@@ -157,13 +152,21 @@ static void digest_to_hex(const unsigned char digest[32],
     out_hex[64] = '\0';
 }
 
+void ray_tracing_sha256_update(RayTracingSha256Context *context, const void *bytes, size_t size) {
+    sha256_update(context, bytes, size);
+}
+void ray_tracing_sha256_finish_hex(RayTracingSha256Context *context, char out_hex[RAY_TRACING_SHA256_HEX_SIZE]) {
+    unsigned char digest[32];
+    sha256_finish(context,digest);
+    digest_to_hex(digest,out_hex);
+}
 bool ray_tracing_sha256_bytes(const void *data,
                               size_t size,
                               char out_hex[RAY_TRACING_SHA256_HEX_SIZE]) {
     RayTracingSha256Context context;
     unsigned char digest[32];
     if ((!data && size > 0u) || !out_hex) return false;
-    sha256_init(&context);
+    ray_tracing_sha256_init(&context);
     sha256_update(&context, (const unsigned char *)data, size);
     sha256_finish(&context, digest);
     digest_to_hex(digest, out_hex);
@@ -180,7 +183,7 @@ bool ray_tracing_sha256_file(const char *path,
     if (!path || !path[0] || !out_hex) return false;
     file = fopen(path, "rb");
     if (!file) return false;
-    sha256_init(&context);
+    ray_tracing_sha256_init(&context);
     while ((read_size = fread(buffer, 1u, sizeof(buffer), file)) > 0u) {
         sha256_update(&context, buffer, read_size);
     }

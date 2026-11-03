@@ -226,7 +226,7 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, ",\n");
     fprintf(file, "  \"volume_visible\": %s,\n",
             request->volume_visible ? "true" : "false");
-    if (request->spectral.count && preflight->prepared_frame)
+    if ((request->integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) && preflight->prepared_frame)
         RayTracingHeadlessSpectral_Write(file, request, &preflight->spectral_readout, preflight->rendered_frames);
     fprintf(file, "  \"integrator_3d\": ");
     RayTracingJsonWriteString(file,

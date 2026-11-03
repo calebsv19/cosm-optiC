@@ -212,16 +212,18 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   request_path,
                                   -1);
 
-    if (request->spectral.count && !RayTracingHeadlessSpectral_SceneSupported(request->runtime_scene_path)) {
+    const bool spectral = request->integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL;
+    if (spectral && !RayTracingHeadlessSpectral_SceneSupported(
+                        request->runtime_scene_path, request->spectral.map.source_count != 0)) {
         snprintf(preflight.diagnostics, sizeof(preflight.diagnostics),
-                 "spectral V3 requires a meter-scale static scene with two objects, no RGB lights or authoring extensions");
+                 "spectral V3 requires a meter-scale static scene with supported glass and matte receivers, no RGB lights or authoring extensions");
         *out_preflight = preflight;
         return 3;
     }
     LoadAllSettings();
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.interactiveMode = false;
-    animSettings.integratorMode3D = request->spectral.count ? RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT
+    animSettings.integratorMode3D = spectral ? RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT
                                                           : (int)request->integrator_3d;
     animSettings.temporalFrames3D = request->temporal_frames;
     if (request->has_tiled_renderer_override) {
@@ -479,7 +481,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                                   request_path,
                                   -1);
     preflight.route = RayTracingModeBackend_ResolveRoute();
-    if (request->spectral.count) preflight.route.integratorMode3D = request->integrator_3d;
+    if (spectral) preflight.route.integratorMode3D = request->integrator_3d;
     preflight.route_native_3d = RayTracingModeBackend_IsNative3D(&preflight.route);
     if (!preflight.route_native_3d) {
         snprintf(preflight.diagnostics,
@@ -570,7 +572,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     RuntimeDynamicGeometryAcceleration3D_SnapshotWaterCacheDiagnostics(
         &preflight.dynamic_water_cache_stats);
     preflight.caustic_cache_prep_ms = frame.causticCachePrepMs;
-    if (preflight.prepared_frame && request->spectral.count &&
+    if (preflight.prepared_frame && spectral &&
         !RayTracingHeadlessSpectral_Run(request, &frame, NULL, &preflight.spectral_readout,
                                        preflight.diagnostics, sizeof(preflight.diagnostics))) {
         RuntimeNative3DPreparedFrame_Free(&frame);
@@ -987,7 +989,7 @@ static int run_render(const RayTracingAgentRenderRequest *request,
         }
 
         (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
-        bool frame_ok = request->spectral.count
+        bool frame_ok = (request->integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)
             ? RayTracingHeadlessSpectral_Render(request, &evaluated_scene.snapshot, pixels,
                                                &preflight.spectral_readout, preflight.diagnostics,
                                                sizeof(preflight.diagnostics))
@@ -1207,7 +1209,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "ray_tracing_render_headless: %s\n", diagnostics);
         return 2;
     }
-    if (request.spectral.count && (job_id || job_status_path || photon_capture)) {
+    if (request.integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL && (job_id || job_status_path || photon_capture)) {
         fprintf(stderr, "spectral pencil requires local headless execution without V2 photon capture\n");
         return 2;
     }

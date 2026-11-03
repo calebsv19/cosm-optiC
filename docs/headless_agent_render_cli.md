@@ -1,6 +1,53 @@
 # RayTracing Headless Agent Render CLI
 
 
+## Disney V3 spectral surface photon map
+
+The [broadband prism request](../tests/fixtures/spectral_surface_map/request.json) sends
+1 W distributed uniformly over 380–780 vacuum nm through N-BK7 glass onto a matte
+screen. Build with `make ray-tracing-render-headless`, then run the CLI with
+`--request tests/fixtures/spectral_surface_map/request.json --render`. The BMP is
+under `build/agent_runs/spectral_surface_map/frames/`. Run
+`make test-headless-spectral-surface-map` for the independent optical and replay checks.
+
+Select the v2 request schema and `disney_v3_spectral`. The `spectral` block uses
+the glass, primary receiver, exposure and glass-index settings described below.
+In place of the pencil source fields, supply `surface_map` with these settings.
+
+| Field | Meaning |
+| --- | --- |
+| `enabled` | Include gathered surface caustics. False gives the direct-light control. |
+| `photons_per_source`, `seed` | Deterministic launch count per source (up to 262144) and sampling seed. |
+| `bins` | Number of equal-width continuum intervals across the visible domain (1–128). Each distinct line has its own channel. |
+| `absorption_per_m` | Nonnegative uniform bulk coefficient in inverse meters or a piecewise-linear table of wavelength and coefficient covering the visible domain. |
+| `sources` | One to four collimated disks. Give each an `origin_m`, `direction`, positive disk radius `aperture_m`, and its spectrum. |
+| `continuum`, `lines` (per source) | Ordered pairs of wavelength and W/nm for a linear SPD (2–32 knots), and wavelength and integrated W for exact lines (up to 16). An unused component may be empty. |
+
+The launch sampler draws uniformly over disk area and samples the combined radiant
+power distribution. Each path starts with visible source watts divided by the
+launch count. It keeps its sampled wavelength through refraction, Fresnel transmission,
+total internal reflection and Beer–Lambert absorption. A path reaching a matte plane
+after a glass interaction deposits its remaining watts once. A camera hit gathers
+deposits on the same plane, side and spectral channel. For distance *d* within
+`receiver_radius_m` = *r*, the unit-albedo Lambertian radiance contribution is
+`watts × 2(1 − d²/r²)/(π²r²)`. Direct disk illumination is evaluated separately with
+visibility and incidence cosine. Each camera channel traces its own dielectric path.
+The film sums band-integrated radiance times camera throughput and the CIE observer
+at the band midpoint or exact line. The continuum approximation can be refined by
+increasing the band count together with the photon budget.
+
+`--preflight` reports `spectral_surface_map` with its SHA-256 key, deposit counts,
+watts and flux-weighted world centroids by band. Rendering adds center-pixel
+band-integrated radiance and raw `spectral_center_pixel_xyz`. Record size, gather
+candidates, build and film milliseconds are diagnostic fields. Within one CLI
+process the preflight map can serve the render. Geometry, optical profile, source,
+sampling and gather settings enter the key. Camera and exposure are independent.
+
+This mode supports a static scene with one closed smooth dielectric mesh and flat,
+unit-albedo matte receivers. It follows the transmitted beam and total internal
+reflections. Partial Fresnel reflections leave that beam. Volume deposition,
+rough surfaces, subsequent diffuse bounces and disk checkpoints require later work.
+
 ## Disney V3 Spectral pencil instrument
 
 Select `render.integrator_3d = "disney_v3_spectral"` with

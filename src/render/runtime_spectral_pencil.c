@@ -15,12 +15,12 @@ double RuntimeSpectralPencil_Index(const RuntimeSpectralPencil *p, double vacuum
 
 /* The source and camera start in air. Follow specular transmission and TIR.
  * Fresnel-reflected branches at partial interfaces leave this ballistic probe. */
-bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p, int line,
+bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p, const RuntimeSpectralPencilLine *line,
                                  double index, Ray3D ray, bool camera, RuntimeSpectralPathReadout *out) {
     const RuntimeMaterialPayload3D material = {.hasGlassTransportOverride = true};
     bool inside = false;
-    *out = (RuntimeSpectralPathReadout){.weight = camera ? 1 : p->lines[line].watts};
-    out->vacuum_nm = p->lines[line].vacuum_nm;
+    *out = (RuntimeSpectralPathReadout){.weight = camera ? 1 : line->watts};
+    out->vacuum_nm = line->vacuum_nm;
     for (int depth = 0; depth < 32; ++depth) {
         HitInfo3D hit;
         out->direction = ray.direction;
@@ -30,9 +30,11 @@ bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpect
         out->position = hit.position;
         if (inside) {
             out->glass_m += hit.t;
-            out->weight *= exp(-p->lines[line].absorption_per_m * hit.t);
+            out->weight *= exp(-line->absorption_per_m * hit.t);
         }
-        if (!strcmp(hit.source.objectId, p->receiver_id)) {
+        if (hit.source.kind == RUNTIME_PRIMITIVE_3D_KIND_PLANE &&
+            (p->map.source_count || !strcmp(hit.source.objectId, p->receiver_id))) {
+            out->primitive = hit.primitiveIndex;
             out->receiver = true;
             out->receiver_front =
                 vec3_dot(ray.direction, scene->primitives[hit.primitiveIndex].shape.plane.normal) < 0;

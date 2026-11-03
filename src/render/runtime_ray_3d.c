@@ -400,6 +400,14 @@ Vec3 HitInfo3D_ShadingNormalForReflection(const HitInfo3D* hit, Vec3 view_direct
     return vec3_length(candidate) > 1e-9 ? candidate : geometric;
 }
 
+static _Thread_local bool inclusive_triangle_edges;
+
+bool RuntimeRay3D_SetInclusiveTriangleEdges(bool enabled) {
+    bool previous = inclusive_triangle_edges;
+    inclusive_triangle_edges = enabled;
+    return previous;
+}
+
 bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                     const RuntimeTriangle3D* triangle,
                                     int triangle_index,
@@ -439,13 +447,16 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
     inv_det = 1.0 / det;
     tvec = vec3_sub(ray->origin, triangle->p0);
     bary_v = vec3_dot(tvec, pvec) * inv_det;
-    if (bary_v < 0.0 || bary_v > 1.0) {
+    /* Shared diagonals can round outside both adjacent faces. In the
+     * inclusive convention allow only floating-point barycentric roundoff. */
+    const double edge_slack = inclusive_triangle_edges ? 8.0 * DBL_EPSILON : 0.0;
+    if (bary_v < -edge_slack || bary_v > 1.0 + edge_slack) {
         return false;
     }
 
     qvec = vec3_cross(tvec, edge1);
     bary_w = vec3_dot(ray->direction, qvec) * inv_det;
-    if (bary_w < 0.0 || (bary_v + bary_w) > 1.0) {
+    if (bary_w < -edge_slack || (bary_v + bary_w) > 1.0 + edge_slack) {
         return false;
     }
 
@@ -454,6 +465,10 @@ bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
         return false;
     }
 
+    if (inclusive_triangle_edges) {
+        bary_v = fmin(1.0, fmax(0.0, bary_v));
+        bary_w = fmin(1.0 - bary_v, fmax(0.0, bary_w));
+    }
     bary_u = 1.0 - bary_v - bary_w;
     HitInfo3D_Reset(&hit);
     hit.t = t;

@@ -170,6 +170,8 @@ void RuntimeRay3D_ResolveTriangleNormals(const RuntimeTriangle3D* triangle,
                                         Vec3* out_geometric_normal,
                                         Vec3* out_shading_normal);
 
+/* Scoped per tracing thread. Return the previous edge convention for restoration. */
+bool RuntimeRay3D_SetInclusiveTriangleEdges(bool enabled);
 bool RuntimeRay3D_IntersectTriangle(const Ray3D* ray,
                                     const RuntimeTriangle3D* triangle,
                                     int triangle_index,
