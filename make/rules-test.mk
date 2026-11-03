@@ -1628,6 +1628,10 @@ visual-harness: $(APP_TARGET)
 visual-artifact: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	tests/integration/run_ray_tracing_visual_artifact.sh
 
+.PHONY: test-headless-spectral-volume
+test-headless-spectral-volume: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/test_headless_spectral_volume.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
 .PHONY: test-headless-spectral-optics
 test-headless-spectral-optics: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/test_headless_spectral_optics.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)

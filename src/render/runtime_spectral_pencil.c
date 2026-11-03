@@ -2,6 +2,7 @@
 #include "render/runtime_dielectric_transport_3d.h"
 #include "render/runtime_spectral_observer.h"
 #include "render/runtime_physical_glass_3d.h"
+#include "render/runtime_spectral_volume.h"
 #include <math.h>
 #include <string.h>
 
@@ -35,12 +36,21 @@ bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpect
     bool inside = false;
     *out = (RuntimeSpectralPathReadout){.weight = camera ? 1 : line->watts};
     out->vacuum_nm = line->vacuum_nm;
-    for (int depth = 0; depth < 32; ++depth) {
+    for (int step = 0; out->interfaces < 32; ++step) {
         HitInfo3D hit;
         out->direction = ray.direction;
-        if (!RuntimeRay3D_TraceSceneFirstHit(scene, &ray, 1e-8, RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE,
-                                             &hit))
-            return !inside;
+        bool surface = RuntimeRay3D_TraceSceneFirstHit(scene, &ray, 1e-8,
+                                                       RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE, &hit);
+        if (p->active_volume && !inside) {
+            bool restart;
+            if (step >= 1024 ||
+                !RuntimeSpectralVolume_Segment(p->active_volume, line, &ray, surface ? hit.t : INFINITY,
+                                               camera, step, out, &restart))
+                return false;
+            if (out->volume_absorbed) return true;
+            if (restart) continue;
+        }
+        if (!surface) return !inside;
         out->position = hit.position;
         if (inside) {
             out->glass_m += hit.t;
@@ -71,11 +81,13 @@ bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpect
         ++out->interfaces;
         if (p->glass_roughness > 0 && from != to) {
             RuntimePhysicalGlass3DSample sample;
-            uint64_t id = (line->sample_id * UINT64_C(0x9e3779b97f4a7c15)) ^ ((uint64_t)depth << 3);
+            uint64_t id = (line->sample_id * UINT64_C(0x9e3779b97f4a7c15)) ^ ((uint64_t)step << 3);
             if (!RuntimePhysicalGlass3D_Sample(
                     &material, normal, ray.direction, from, to, RuntimeSpectral_Uniform64(id),
-                    RuntimeSpectral_Uniform64(id + 1), RuntimeSpectral_Uniform64(id + 2), &sample))
+                    RuntimeSpectral_Uniform64(id + 1), RuntimeSpectral_Uniform64(id + 2), &sample)) {
+                out->weight = 0;
                 return true; /* native microsurface roulette, zero contribution */
+            }
             out->weight *= sample.weight;
             if (!sample.reflected) {
                 if (!camera) out->weight *= (to / from) * (to / from); /* radiance to photon flux */

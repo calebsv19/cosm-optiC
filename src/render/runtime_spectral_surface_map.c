@@ -1,6 +1,7 @@
 #include "render/runtime_spectral_surface_map.h"
 #include "app/ray_tracing_sha256.h"
 #include "render/runtime_caustic_photon_surface_kernel_3d.h"
+#include "render/runtime_spectral_volume.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -20,6 +21,7 @@ struct RuntimeSpectralSurfaceMap {
     int *heads;
     size_t mask;
     int count, continuum_bins;
+    double band_nm[SPECTRAL_MAP_MAX_BANDS];
     double direct_watts[SPECTRAL_MAP_LIGHTS][SPECTRAL_MAP_MAX_BANDS];
 };
 
@@ -33,6 +35,7 @@ void RuntimeSpectralSurfaceMap_Key(const RuntimeSpectralPencil *p, const Runtime
     const char version[] = "optic-spectral-surface-v1";
     ray_tracing_sha256_update(&h, version, sizeof(version));
     ray_tracing_sha256_update(&h, p->map.config_hash, 64);
+    if (p->active_volume) ray_tracing_sha256_update(&h, RuntimeSpectralVolume_Digest(p->active_volume), 64);
     ray_tracing_sha256_update(&h, p->glass_id, strlen(p->glass_id) + 1);
     ray_tracing_sha256_update(&h, p->receiver_id, strlen(p->receiver_id) + 1);
     ray_tracing_sha256_update(&h, &p->constant_ior, sizeof(p->constant_ior));
@@ -160,8 +163,10 @@ static bool populate(RuntimeSpectralSurfaceMap *m, const RuntimeSpectralPencil *
                theta = 2 * M_PI * RuntimeSpectral_Uniform64(id + 2);
         Vec3 pos =
             vec3_add(s->origin, vec3_add(vec3_scale(u, r * cos(theta)), vec3_scale(v, r * sin(theta))));
+        int b = band_for(m, st, draw.nm, draw.measure);
+        if (b < 0) return false;
         RuntimeSpectralPencilLine line = {draw.nm, watts,
-                                          RuntimeSpectralSurfaceMap_Absorption(cfg, draw.nm), id};
+                                          RuntimeSpectralSurfaceMap_Absorption(cfg, draw.nm), id, b};
         Vec3 direction = s->direction;
         if (s->angular_radius_rad > 0)
             direction =
@@ -172,6 +177,19 @@ static bool populate(RuntimeSpectralSurfaceMap *m, const RuntimeSpectralPencil *
                                          RuntimeRay3D_Make(pos, direction), false, &hit))
             return false;
         ++st->launched;
+        if (p->active_volume) {
+            RuntimeSpectralBand *r = &st->bands[b];
+            r->launched_w += watts;
+            r->optical_loss_w += watts - hit.weight;
+            if (hit.volume_absorbed)
+                r->absorbed_w += hit.weight;
+            else if (hit.depth_limited)
+                r->limited_w += hit.weight;
+            else if (hit.receiver)
+                r->receiver_w += hit.weight;
+            else
+                r->escaped_w += hit.weight;
+        }
         if (hit.depth_limited) {
             ++st->depth_limited;
             continue;
@@ -180,12 +198,11 @@ static bool populate(RuntimeSpectralSurfaceMap *m, const RuntimeSpectralPencil *
             ++st->missed;
             continue;
         }
-        if (!hit.interfaces) {
+        if (!hit.interfaces && !hit.scatters) {
             ++st->direct_arrivals;
             continue;
         }
-        int b = band_for(m, st, draw.nm, draw.measure);
-        if (b < 0) return false;
+
         Deposit *d = &m->records[m->count];
         *d = (Deposit){.position = hit.position,
                        .incident = hit.direction,
@@ -222,6 +239,8 @@ RuntimeSpectralSurfaceMap *RuntimeSpectralSurfaceMap_Build(const RuntimeSpectral
     RuntimeSpectralSurfaceMap *m = calloc(1, sizeof(*m));
     if (!m) return NULL;
     bands(m, cfg, st);
+    for (int b = 0; b < st->band_count; ++b)
+        m->band_nm[b] = st->bands[b].nm;
     if (!cfg->enabled) return m;
     size_t n = (size_t)cfg->source_count * cfg->samples, capacity = 1;
     while (capacity < n)
@@ -240,6 +259,7 @@ RuntimeSpectralSurfaceMap *RuntimeSpectralSurfaceMap_Build(const RuntimeSpectral
         RuntimeSpectral_Free(profile);
         if (!ok) goto fail;
     }
+    if (p->active_volume) RuntimeSpectralVolume_ScatterStats(p->active_volume, st);
     st->deposits = m->count;
     return m;
 fail:
@@ -247,9 +267,9 @@ fail:
     return NULL;
 }
 
-static double direct_direction(Vec3 direction, const RuntimeSpectralLamp *s, double watts,
-                               const RuntimeScene3D *scene, const RuntimeSpectralPathReadout *hit,
-                               const RuntimePlane3D *plane) {
+static double direct_direction(const RuntimeSpectralVolume *volume, double nm, Vec3 direction,
+                               const RuntimeSpectralLamp *s, double watts, const RuntimeScene3D *scene,
+                               const RuntimeSpectralPathReadout *hit, const RuntimePlane3D *plane) {
     if (!watts) return 0;
     double cosine = vec3_dot(direction, plane->normal);
     double projected = vec3_dot(s->direction, direction);
@@ -265,6 +285,7 @@ static double direct_direction(Vec3 direction, const RuntimeSpectralLamp *s, dou
                                          &first) ||
         first.primitiveIndex != hit->primitive)
         return 0;
+    if (volume) watts *= RuntimeSpectralVolume_Transmission(volume, ray, t, nm);
     return watts * fabs(cosine) / projected / (M_PI * M_PI * s->aperture_m * s->aperture_m);
 }
 double RuntimeSpectralSurfaceMap_Radiance(const RuntimeSpectralSurfaceMap *m,
@@ -277,12 +298,14 @@ double RuntimeSpectralSurfaceMap_Radiance(const RuntimeSpectralSurfaceMap *m,
         const RuntimeSpectralLamp *s = &p->map.sources[i];
         double watts = m->direct_watts[i][band];
         if (s->angular_radius_rad == 0)
-            L += direct_direction(s->direction, s, watts, scene, hit, plane);
+            L += direct_direction(p->active_volume, m->band_nm[band], s->direction, s, watts, scene, hit,
+                                  plane);
         else if (watts > 0) {
             /* Equal projected-area quadrature across the disk, including penumbra. */
             for (int j = 0; j < 64; ++j) {
                 Vec3 direction = disk_direction(s, (j + .5) / 64, j * 2.399963229728653);
-                L += direct_direction(direction, s, watts / 64, scene, hit, plane);
+                L += direct_direction(p->active_volume, m->band_nm[band], direction, s, watts / 64, scene,
+                                      hit, plane);
             }
         }
     }

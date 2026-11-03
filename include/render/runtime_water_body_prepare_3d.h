@@ -35,6 +35,8 @@ typedef struct RuntimeWaterBodyPrepare3DReport {
     RuntimeWaterBodyMesh3DReport geometry;
 } RuntimeWaterBodyPrepare3DReport;
 
+/* Returns owned resolved heights in native scene coordinates. */
+bool RuntimeWaterBodyPrepare3D_Field(const RuntimeWaterSurfaceFrame *water,int scene_object_index,RuntimeWaterBodyMesh3DDesc *field,float **heights,RuntimeWaterBodyPrepare3DReport *counts,char *out_diagnostics,size_t out_diagnostics_size);
 bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
                                       const RuntimeWaterSurfaceFrame* water,
                                       int scene_object_index,

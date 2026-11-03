@@ -11,6 +11,7 @@
 typedef struct {
     double vacuum_nm, watts, absorption_per_m;
     uint64_t sample_id;
+    int band;
 } RuntimeSpectralPencilLine;
 
 enum {
@@ -48,7 +49,24 @@ typedef struct {
     bool quantum_efficiency;
 } RuntimeSpectralSensor;
 
+typedef enum {
+    SPECTRAL_VOLUME_NONE,
+    SPECTRAL_VOLUME_BOX,
+    SPECTRAL_VOLUME_VF3D,
+    SPECTRAL_VOLUME_WATER
+} RuntimeSpectralVolumeKind;
 typedef struct {
+    RuntimeSpectralVolumeKind kind;
+    RuntimeSpectralCurve absorption, scattering;
+    double g, cell_m;
+    Vec3 lo, hi;
+    int frame_index;
+    char path[4096], profile_hash[65];
+} RuntimeSpectralVolumeConfig;
+typedef struct RuntimeSpectralVolume RuntimeSpectralVolume;
+typedef struct {
+    RuntimeSpectralVolumeConfig volume;
+    RuntimeSpectralVolume *active_volume; /* borrowed during headless preparation/render */
     RuntimeSpectralMapConfig map;
     double exterior_ior, glass_roughness;
     RuntimeSpectralCurve reflectance;
@@ -66,12 +84,18 @@ typedef struct {
 typedef struct {
     Vec3 position, direction, receiver_rgb;
     double weight, glass_m, vacuum_nm;
-    int interfaces, primitive;
+    int interfaces, primitive, scatters;
+    double inscattered, single_scatter;
+    bool volume_absorbed;
     bool receiver, receiver_front, depth_limited;
 } RuntimeSpectralPathReadout;
 
 typedef struct {
     double nm, width_nm, watts, center_radiance;
+    double center_single, center_multiple;
+    double launched_w, receiver_w, escaped_w, absorbed_w, limited_w, optical_loss_w;
+    double first_scatter_w, higher_scatter_w, cosine_sum;
+    unsigned long long collisions;
     Vec3 moment;
     unsigned count;
 } RuntimeSpectralBand;
@@ -81,6 +105,9 @@ typedef struct {
     unsigned long long candidates;
     double build_ms, film_ms;
     bool reused;
+    char volume_digest[65], volume_source_sha[65], volume_frame_sha[65];
+    int volume_frame;
+    double volume_time, volume_dt;
     RuntimeSpectralBand bands[SPECTRAL_MAP_MAX_BANDS];
 } RuntimeSpectralMapStats;
 typedef struct {

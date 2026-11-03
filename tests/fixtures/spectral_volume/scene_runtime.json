@@ -1,0 +1,109 @@
+{
+  "schema_family": "codework_scene",
+  "schema_variant": "scene_runtime_v1",
+  "schema_version": 1,
+  "scene_id": "spectral_volume_receiver",
+  "space_mode_default": "3d",
+  "unit_system": "meters",
+  "world_scale": 1.0,
+  "objects": [
+    {
+      "object_id": "screen",
+      "object_type": "plane_primitive",
+      "space_mode_intent": "2d",
+      "dimensional_mode": "plane_locked",
+      "locked_plane": "yz",
+      "transform": {
+        "position": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "rotation": {
+          "x": 0.0,
+          "y": 0.0,
+          "z": 0.0
+        },
+        "scale": {
+          "x": 1.0,
+          "y": 1.0,
+          "z": 1.0
+        }
+      },
+      "primitive": {
+        "kind": "plane_primitive",
+        "width": 2,
+        "height": 2,
+        "frame": {
+          "origin": {
+            "x": 1,
+            "y": 0,
+            "z": 0
+          },
+          "axis_u": {
+            "x": 0,
+            "y": 1,
+            "z": 0
+          },
+          "axis_v": {
+            "x": 0,
+            "y": 0,
+            "z": -1
+          },
+          "normal": {
+            "x": -1,
+            "y": 0,
+            "z": 0
+          }
+        }
+      },
+      "flags": {
+        "visible": true,
+        "locked": false,
+        "selectable": true
+      }
+    }
+  ],
+  "materials": [
+    {
+      "material_id": "mat_receiver_floor",
+      "kind": "lambert",
+      "albedo": [
+        0.64,
+        0.63,
+        0.58
+      ]
+    },
+    {
+      "material_id": "mat_glass_sphere",
+      "kind": "dielectric",
+      "albedo": [
+        0.92,
+        0.97,
+        1.0
+      ]
+    }
+  ],
+  "lights": [],
+  "cameras": [
+    {
+      "camera_id": "spectral_camera",
+      "kind": "perspective",
+      "position": {
+        "x": 0.9,
+        "y": 0.265,
+        "z": 0
+      },
+      "target": {
+        "x": 1,
+        "y": 0.265,
+        "z": 0
+      },
+      "yaw": 1.5707963267948966,
+      "look_pitch": 0
+    }
+  ],
+  "constraints": [],
+  "hierarchy": [],
+  "extensions": {}
+}

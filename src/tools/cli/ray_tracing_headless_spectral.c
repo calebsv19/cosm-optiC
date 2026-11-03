@@ -76,7 +76,7 @@ bool RayTracingHeadlessSpectral_SceneSupported(const char *path, const RuntimeSp
         (json_object_is_type(scale, json_type_int) || json_object_is_type(scale, json_type_double)) &&
         json_object_get_double(scale) == 1 && receiver_materials(ext, p) &&
         json_object_is_type(objects, json_type_array) &&
-        (mapping ? json_object_array_length(objects) >= 2 && json_object_array_length(objects) <= 64
+        (mapping ? json_object_array_length(objects) >= (p->glass_id[0] ? 2u : 1u) && json_object_array_length(objects) <= 64
                  : json_object_array_length(objects) == 2) &&
         (!lights || (json_object_is_type(lights, json_type_array) && !json_object_array_length(lights)));
     for (size_t i = 0; ok && i < json_object_array_length(objects); ++i) {
@@ -107,7 +107,7 @@ static bool closed_mesh(const char *id) {
 }
 
 static bool supported(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p) {
-    bool glass = false, receiver = false;
+    bool glass = p->volume.kind && !p->glass_id[0], receiver = false;
     if ((!p->map.source_count && scene->primitiveCount != 2) || scene->volume.enabled ||
         scene->curveInstanceCount)
         return false;
@@ -148,7 +148,7 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
     if (!supported(scene, p)) {
         snprintf(
             diag, size,
-            "spectral V3 requires one named closed glass solid, a named matte receiver and compatible planes, and only the "
+            "spectral V3 requires supported dielectric geometry, a named matte receiver, compatible planes, and only the "
             "spectral source");
         return false;
     }

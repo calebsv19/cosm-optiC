@@ -67,12 +67,12 @@ static bool emitter_model(json_object *obj, RuntimeSpectralLamp *lamp) {
     double temperature = 0, center[4], sigma[4], weight[4];
     int peaks = 0;
     if (!strcmp(kind, "blackbody")) {
-        lamp->spectrum_model="blackbody";
+        lamp->spectrum_model = "blackbody";
         if (!ONLY(obj, "type", "visible_watts", "kelvin") ||
             !number(json_object_object_get(obj, "kelvin"), 500, 100000, &temperature))
             return false;
     } else if (!strcmp(kind, "gaussian_mixture")) {
-        lamp->spectrum_model="gaussian_mixture";
+        lamp->spectrum_model = "gaussian_mixture";
         json_object *a = json_object_object_get(obj, "peaks");
         if (!ONLY(obj, "type", "visible_watts", "peaks") || !json_object_is_type(a, json_type_array) ||
             json_object_array_length(a) < 1 || json_object_array_length(a) > 4)
@@ -87,7 +87,7 @@ static bool emitter_model(json_object *obj, RuntimeSpectralLamp *lamp) {
                 return false;
         }
     } else if (!strcmp(kind, "rgb_approximation")) {
-        lamp->spectrum_model="rgb_approximation";
+        lamp->spectrum_model = "rgb_approximation";
         Vec3 rgb;
         if (!ONLY(obj, "type", "visible_watts", "linear_rgb") ||
             !vector(json_object_object_get(obj, "linear_rgb"), &rgb) ||
@@ -211,7 +211,49 @@ static bool parse_map(json_object *obj, RuntimeSpectralMapConfig *m) {
     return json && ray_tracing_sha256_bytes(json, strlen(json), m->config_hash);
 }
 
-bool agent_render_request_parse_spectral(json_object *root, RuntimeSpectralPencil *out) {
+static bool volume_config(json_object *obj, const char *dir, RuntimeSpectralVolumeConfig *v) {
+    const char *kind;
+    if (!RayTracingJsonGetString(obj, "kind", &kind)) return false;
+    if (!strcmp(kind, "homogeneous")) {
+        if (!ONLY(obj, "kind", "bounds_min_m", "bounds_max_m", "sigma_a_per_m", "sigma_s_per_m", "g",
+                  "cell_m") ||
+            !vector(json_object_object_get(obj, "bounds_min_m"), &v->lo) ||
+            !vector(json_object_object_get(obj, "bounds_max_m"), &v->hi) ||
+            !(v->lo.x < v->hi.x && v->lo.y < v->hi.y && v->lo.z < v->hi.z))
+            return false;
+        v->kind = SPECTRAL_VOLUME_BOX;
+    } else {
+        const char *source;
+        if (!ONLY(obj, "kind", "source_path", "frame_index", "sigma_a_per_m", "sigma_s_per_m", "g",
+                  "cell_m") ||
+            !RayTracingJsonGetString(obj, "source_path", &source) || !*source ||
+            strlen(source) !=
+                (size_t)json_object_get_string_len(json_object_object_get(obj, "source_path")) ||
+            !RayTracingResolveExistingRequestPath(dir, source, v->path, sizeof(v->path)) ||
+            !integer(obj, "frame_index", 0, INT_MAX, &v->frame_index))
+            return false;
+        if (!strcmp(kind, "vf3d_density"))
+            v->kind = SPECTRAL_VOLUME_VF3D;
+        else if (!strcmp(kind, "water_heightfield"))
+            v->kind = SPECTRAL_VOLUME_WATER;
+        else
+            return false;
+    }
+    RuntimeSpectralCurve *curves[] = {&v->absorption, &v->scattering};
+    const char *keys[] = {"sigma_a_per_m", "sigma_s_per_m"};
+    for (int i = 0; i < 2; ++i) {
+        RuntimeSpectralCurve *c = curves[i];
+        if (!spectrum_pairs(json_object_object_get(obj, keys[i]), c->points, SPECTRAL_MAP_KNOTS,
+                            &c->count) ||
+            c->count < 2 || c->points[0][0] != 380 || c->points[c->count - 1][0] != 780)
+            return false;
+    }
+    const char *json = json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+    return number(json_object_object_get(obj, "g"), -.99, .99, &v->g) &&
+           number(json_object_object_get(obj, "cell_m"), 1e-6, 1e6, &v->cell_m) && json &&
+           ray_tracing_sha256_bytes(json, strlen(json), v->profile_hash);
+}
+bool agent_render_request_parse_spectral(json_object *root, const char *dir, RuntimeSpectralPencil *out) {
     json_object *s = json_object_object_get(root, "spectral");
     json_object *r = json_object_object_get(root, "render");
     json_object *inspection = json_object_object_get(root, "inspection");
@@ -225,11 +267,12 @@ bool agent_render_request_parse_spectral(json_object *root, RuntimeSpectralPenci
         (progress && !ONLY(progress, "summary_path", "progress_path")) ||
         (inspection && !ONLY(inspection, "camera_position", "camera_look_at", "camera_zoom")) ||
         !ONLY(r, "integrator_3d", "width", "height") ||
-        !(mapping ? ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "receiver_radius_m",
-                         "exposure", "surface_map", "exterior_ior", "glass_roughness",
-                         "receiver_reflectance", "receiver_texture", "sensors", "display_sensor")
-                  : ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "origin_m", "direction",
-                         "receiver_radius_m", "exposure", "lines")))
+        !(mapping
+              ? ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "receiver_radius_m", "exposure",
+                     "surface_map", "exterior_ior", "glass_roughness", "receiver_reflectance",
+                     "receiver_texture", "sensors", "display_sensor", "participating_volume_v1")
+              : ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "origin_m", "direction",
+                     "receiver_radius_m", "exposure", "lines")))
         return false;
 
     /* The common RGB parser accepts partial vectors and coerces dimensions.
@@ -255,9 +298,16 @@ bool agent_render_request_parse_spectral(json_object *root, RuntimeSpectralPenci
     if (inspection && json_object_object_get_ex(inspection, "camera_zoom", &zoom) &&
         !number(zoom, 0.01, 1000, &ignored))
         return false;
+    bool no_glass = mapping && json_object_object_get(s, "participating_volume_v1") &&
+                    !json_object_object_get_ex(s, "glass_id", NULL);
     const char *glass = NULL;
-    if (!object_id(s, "glass_id", out->glass_id) || !object_id(s, "receiver_id", out->receiver_id) ||
-        !strcmp(out->glass_id, out->receiver_id) || !RayTracingJsonGetString(s, "glass", &glass) ||
+    if (no_glass && (json_object_object_get_ex(s, "glass", NULL) ||
+                     json_object_object_get_ex(s, "glass_roughness", NULL) ||
+                     json_object_object_get_ex(s, "constant_ior", NULL)))
+        return false;
+    if ((!no_glass && !object_id(s, "glass_id", out->glass_id)) ||
+        !object_id(s, "receiver_id", out->receiver_id) || !strcmp(out->glass_id, out->receiver_id) ||
+        (!no_glass && !RayTracingJsonGetString(s, "glass", &glass)) ||
         (!mapping && (!vector(json_object_object_get(s, "origin_m"), &out->origin_m) ||
                       !vector(json_object_object_get(s, "direction"), &out->direction) ||
                       vec3_length(out->direction) < 1e-12)) ||
@@ -265,12 +315,19 @@ bool agent_render_request_parse_spectral(json_object *root, RuntimeSpectralPenci
         !number(json_object_object_get(s, "exposure"), 1e-20, 1e12, &out->exposure))
         return false;
     if (!mapping) out->direction = vec3_normalize(out->direction);
-    out->use_n_bk7 = strcmp(glass, "schott_n_bk7") == 0;
+    out->use_n_bk7 = glass && strcmp(glass, "schott_n_bk7") == 0;
     json_object *ior = json_object_object_get(s, "constant_ior");
-    if (out->use_n_bk7 ? ior != NULL
-                       : (strcmp(glass, "constant") || !number(ior, 1, 5, &out->constant_ior)))
+    if (no_glass)
+        out->constant_ior = 1;
+    else if (out->use_n_bk7 ? ior != NULL
+                            : (strcmp(glass, "constant") || !number(ior, 1, 5, &out->constant_ior)))
         return false;
-    if (mapping) return optics(s, out) && parse_map(map, &out->map);
+    if (mapping) {
+        json_object *volume;
+        return optics(s, out) && parse_map(map, &out->map) &&
+               (!json_object_object_get_ex(s, "participating_volume_v1", &volume) ||
+                (volume_config(volume, dir, &out->volume) && out->map.enabled));
+    }
     json_object *a = json_object_object_get(s, "lines");
     if (!json_object_is_type(a, json_type_array)) return false;
     size_t count = json_object_array_length(a);

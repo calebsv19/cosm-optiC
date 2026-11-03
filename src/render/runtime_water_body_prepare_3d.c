@@ -82,35 +82,24 @@ bool RuntimeWaterBodyPrepare3D_GetLastReport(RuntimeWaterBodyPrepare3DReport* ou
     return true;
 }
 
-bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
-                                      const RuntimeWaterSurfaceFrame* water,
-                                      int scene_object_index,
-                                      RuntimeWaterBodyPrepare3DReport* out_report,
-                                      char* out_diagnostics,
-                                      size_t out_diagnostics_size) {
-    const RuntimeWaterBodyBoundaryV1* boundary = NULL;
-    RuntimeWaterBodyMesh3DDesc desc = {0};
-    RuntimeWaterBodyPrepare3DReport report = {0};
-    RuntimeScene3D backup;
-    float* resolved_heights = NULL;
-    uint64_t sample_count = 0u;
-    bool dynamic_perimeter_policy = false;
-    bool legacy_dry_policy = false;
-    bool appended = false;
-
-    RuntimeScene3D_Init(&backup);
-    RuntimeWaterBodyPrepare3D_ResetLastReport();
-    if (out_report) memset(out_report, 0, sizeof(*out_report));
-    if (!scene || !water || !water->valid || scene_object_index < 0) {
-        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
-                                "water body prepare input invalid");
+bool RuntimeWaterBodyPrepare3D_Field(const RuntimeWaterSurfaceFrame *water, int scene_object_index,
+                                     RuntimeWaterBodyMesh3DDesc *field, float **heights,
+                                     RuntimeWaterBodyPrepare3DReport *counts, char *out_diagnostics,
+                                     size_t out_diagnostics_size) {
+    if (!water || !water->valid || !field || !heights || !counts || water->grid_w < 2 ||
+        water->grid_d < 2) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size, "invalid water field");
         return false;
     }
-    boundary = &water->water_body_boundary;
-    dynamic_perimeter_policy =
-        strcmp(boundary->dry_sample_policy, "extend_interior_to_boundary") == 0;
-    legacy_dry_policy =
-        strcmp(boundary->dry_sample_policy, "surface_min_epsilon_to_base") == 0;
+    *heights = NULL;
+    const RuntimeWaterBodyBoundaryV1 *boundary = &water->water_body_boundary;
+    RuntimeWaterBodyMesh3DDesc desc = {0};
+    RuntimeWaterBodyPrepare3DReport report = {0};
+    bool dynamic_perimeter_policy, legacy_dry_policy;
+    uint64_t sample_count;
+    float *resolved_heights;
+    dynamic_perimeter_policy = strcmp(boundary->dry_sample_policy, "extend_interior_to_boundary") == 0;
+    legacy_dry_policy = strcmp(boundary->dry_sample_policy, "surface_min_epsilon_to_base") == 0;
     if (!boundary->present) {
         water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
                                 "water body boundary contract absent");
@@ -132,28 +121,6 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
           !legacy_dry_policy))) {
         water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
                                 "water body dry sample policy unsupported");
-        return false;
-    }
-    if (!water_body_prepare_has_object(scene, boundary->container_id)) {
-        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
-                                "water body container object unresolved");
-        return false;
-    }
-    if (water_body_prepare_has_object(scene, boundary->object_id)) {
-        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
-                                "water body unified object already present");
-        return false;
-    }
-    if (boundary->legacy_shell_object_id[0] &&
-        !water_body_prepare_has_object(scene, boundary->legacy_shell_object_id)) {
-        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
-                                "water body legacy shell object unresolved");
-        return false;
-    }
-    if (!boundary->legacy_shell_object_id[0] &&
-        water_body_prepare_has_scene_object_geometry(scene, scene_object_index)) {
-        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
-                                "water body undeclared legacy geometry present");
         return false;
     }
     sample_count = (uint64_t)water->grid_w * (uint64_t)water->grid_d;
@@ -261,6 +228,57 @@ bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
                             (double)(water->grid_d - 1u);
     desc.bottom_height = boundary->bottom_height_m;
     desc.map_y_height_to_scene_z = true;
+    *field=desc;
+    *heights=resolved_heights;
+    *counts=report;
+    return true;
+}
+
+bool RuntimeWaterBodyPrepare3D_Append(RuntimeScene3D* scene,
+                                      const RuntimeWaterSurfaceFrame* water,
+                                      int scene_object_index,
+                                      RuntimeWaterBodyPrepare3DReport* out_report,
+                                      char* out_diagnostics,
+                                      size_t out_diagnostics_size) {
+    const RuntimeWaterBodyBoundaryV1* boundary = NULL;
+    RuntimeWaterBodyMesh3DDesc desc = {0};
+    RuntimeWaterBodyPrepare3DReport report = {0};
+    RuntimeScene3D backup;
+    float* resolved_heights = NULL;
+    bool appended = false;
+
+    RuntimeScene3D_Init(&backup);
+    RuntimeWaterBodyPrepare3D_ResetLastReport();
+    if (out_report) memset(out_report, 0, sizeof(*out_report));
+    if (!scene || !water || !water->valid || scene_object_index < 0) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body prepare input invalid");
+        return false;
+    }
+    boundary = &water->water_body_boundary;
+    if (!water_body_prepare_has_object(scene, boundary->container_id)) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body container object unresolved");
+        return false;
+    }
+    if (water_body_prepare_has_object(scene, boundary->object_id)) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body unified object already present");
+        return false;
+    }
+    if (boundary->legacy_shell_object_id[0] &&
+        !water_body_prepare_has_object(scene, boundary->legacy_shell_object_id)) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body legacy shell object unresolved");
+        return false;
+    }
+    if (!boundary->legacy_shell_object_id[0] &&
+        water_body_prepare_has_scene_object_geometry(scene, scene_object_index)) {
+        water_body_prepare_diag(out_diagnostics, out_diagnostics_size,
+                                "water body undeclared legacy geometry present");
+        return false;
+    }
+    if(!RuntimeWaterBodyPrepare3D_Field(water,scene_object_index,&desc,&resolved_heights,&report,out_diagnostics,out_diagnostics_size)) return false;
     int contact_container = -1;
     RuntimeWaterMaterial3DOverride contact_material;
     if (!RuntimeWaterContact3D_Prepare(scene, boundary, &desc, &contact_container,

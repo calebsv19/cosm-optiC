@@ -369,6 +369,8 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/agent_render_request_defaults.o \
 	$(BUILD_DIR)/app/agent_render_request_spectral.o \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \
+	$(BUILD_DIR)/render/runtime_spectral_volume.o \
+	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
 	$(BUILD_DIR)/render/runtime_spectral_surface_map.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_headless_spectral_map.o \
 	$(BUILD_DIR)/render/runtime_spectral_emitter.o \

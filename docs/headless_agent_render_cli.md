@@ -1,6 +1,73 @@
 # RayTracing Headless Agent Render CLI
 
 
+## Participating volumes in headless Disney V3
+
+The [slab request](../tests/fixtures/spectral_volume/request.json) illuminates
+a participating medium with two spectral lines and renders the light scattered
+toward the camera. From the checkout, build `make ray-tracing-render-headless`
+and pass `--request tests/fixtures/spectral_volume/request.json --render` to the CLI.
+Use `make test-headless-spectral-volume` for radiometry and simulation input checks.
+
+Add `participating_volume_v1` to the `spectral` block of a v2 surface-map request
+with `surface_map.enabled = true`. The medium occupies the exterior portion of
+its domain. One optional closed dielectric uses its own interior optics. Omit
+`glass_id`, `glass`, `glass_roughness` and `constant_ior` together for a scene
+with only matte planes. At least the named receiver plane is required.
+
+| Field | Meaning |
+| --- | --- |
+| `kind` | `homogeneous`, `vf3d_density` or `water_heightfield` |
+| `sigma_a_per_m`, `sigma_s_per_m` | Separate nonnegative piecewise-linear absorption and scattering coefficients in m⁻¹ at unit density. Each table has 2–32 increasing `[vacuum_nm, value]` pairs spanning exactly 380–780 nm. |
+| `g` | Henyey–Greenstein mean cosine in [−0.99, 0.99]. Zero is isotropic, positive is forward scattering. |
+| `cell_m` | Edge of the spatial cell used to reconstruct scattered radiance from photon events. Refine it together with the photon budget. |
+| `bounds_min_m`, `bounds_max_m` | World-space XYZ corners, required only for the homogeneous box. Density inside is one. |
+| `source_path`, `frame_index` | Required for simulation inputs. Paths resolve relative to the request. The decoded frame must match the requested nonnegative index. |
+
+For example, use this medium with the water fixture from a request alongside the slab request.
+
+```json
+{
+  "kind": "water_heightfield",
+  "source_path": "../water_body_boundary/manifest_valid.json",
+  "frame_index": 0,
+  "sigma_a_per_m": [[380, 0.1], [550, 0.2], [780, 1.5]],
+  "sigma_s_per_m": [[380, 0.4], [780, 0.1]],
+  "g": 0.3,
+  "cell_m": 0.05
+}
+```
+
+For VF3D, set `kind` to `vf3d_density` and point to a raw frame, pack, or
+VF3D manifest, for example `../scene_project_worker_snapshot/assets/vf3d/active/manifest.json`
+at frame 0. Density multiplies both coefficients. The native importer supplies
+the metric grid, frame time, trilinear density and masked samples. For PhysicsSim
+water, use a manifest with a validated closed `water_body_boundary_v1`. Density
+is one between the bottom and resolved triangular top surface. The native
+closure supplies the inset, dry-column policy and simulator Y to scene Z mapping.
+This input describes occupancy in the exterior optical medium. A separate
+dielectric supplies refraction. Each request selects one static simulation frame.
+
+Forward paths sample an optical depth, consume it along the ray and scatter or
+absorb at the collision. The photon retains its vacuum wavelength. Camera and
+shadow paths integrate Beer–Lambert extinction. Camera radiance includes the
+normalized phase-weighted collision flux per reconstruction-cell volume, integrated
+along the camera path. The estimator includes repeated scattering and caustic
+light entering or leaving glass. The grid averages emission within each cell,
+so a small cell and a sufficient photon count matter near sharp density boundaries.
+The reference route bounds each spatial axis at 4096 cells, the retained map at
+1,048,576 scattering events and a path at 1024 combined volume/surface steps.
+Exceeding a work bound fails the request. Existing beam and brick implementations
+apply to their separately qualified renderer routes.
+
+The JSON summary adds `spectral_volume`. It reports the field digest, observed
+source and selected-frame SHA-256 values, frame/time metadata and a per-band power
+ledger. Terminal watts are classified as absorbed in the volume, received on a
+plane, escaped, limited at a dielectric, or net optical loss at surfaces. First and
+higher scattering orders count interaction power, which can exceed launched
+power when a path scatters repeatedly. Rendering also reports center-pixel
+single- and multiple-scattering radiance before exposure and sensor response.
+
 ## Disney V3 spectral emitters, sensors and materials
 
 The [solar disk request](../tests/fixtures/spectral_optics/request.json) renders a

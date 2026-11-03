@@ -179,7 +179,7 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
     bool spectral_mode = RayTracingJsonGetString(mode_object, "integrator_3d", &mode) &&
                          strcmp(mode, "disney_v3_spectral") == 0;
     if (spectral_mode != spectral_schema ||
-        (spectral_schema && !agent_render_request_parse_spectral(root, &request.spectral)) ||
+        (spectral_schema && !agent_render_request_parse_spectral(root,request_dir, &request.spectral)) ||
         (!spectral_schema && json_object_object_get(root, "spectral"))) {
         RayTracingRequestSetDiag(out_diagnostics, out_diagnostics_size,
             "spectral request requires v2, disney_v3_spectral and supported pencil fields");
