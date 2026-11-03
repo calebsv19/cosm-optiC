@@ -73,7 +73,7 @@ bool SceneEditorSceneCommand(const char* operation,const char* path,unsigned lon
             if (!SceneEditorWriteNewRenderPreset(seed, getenv("OPTIC_NEW_SCENE_INTEGRATOR"))) {
                 if (seed) json_object_put(seed);
                 SceneEditorAgentControlReleaseReservedPath();
-                return refuse(message, size, "New scene requires direct_light or disney_v2 in OPTIC_NEW_SCENE_INTEGRATOR.");
+                return refuse(message, size, "New scene requires direct_light, disney_v2, or disney_v3_spectral in OPTIC_NEW_SCENE_INTEGRATOR.");
             }
             json_object_object_add(seed,"scene_id",json_object_new_string(id));
             bytes=json_object_to_json_string_ext(seed,JSON_C_TO_STRING_PRETTY);

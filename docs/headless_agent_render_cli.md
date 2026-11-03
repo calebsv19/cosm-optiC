@@ -21,7 +21,34 @@ back. The editor saves the selected preset in
 uses its own preset. Older documents use their historical rendering settings.
 The panel still offers an explicit per-render selection. Existing readers use
 their own historical settings when they ignore the additive editor preference.
-Explicit V3 authoring uses the versioned headless request format.
+The native editor also accepts `disney_v3_spectral` as a new-scene preset.
+
+### Render a spectral frame in the editor
+
+In the Render workspace, open **Render frame**, then cycle **Direct Light → Disney V2 → Disney V3 Spectral**.
+The main 3D integrator menu also includes V3 immediately after V2. In the frame panel select one of the following.
+
+| V3 control | What the frame uses |
+| --- | --- |
+| Direct spectral | The evaluated geometry, camera, native source visibility and matte textures. The renderer reconstructs separate approximate emission and reflectance curves from RGB and integrates their product in 20 nm steps against the CIE observer. |
+| Surface photons | Spectral emitters, the named closed glass mesh, receiver planes and a wavelength-resolved surface photon map. The renderer omits the participating volume and can run with its file offline. |
+| Surface + volume | The same surface instrument plus the selected spectral medium. A VF3D input supplies the density grid and frame identity. Its absorption and scattering spectra come from the scene profile. |
+
+For photon modes, place the v2 request’s `spectral` object at
+`extensions.ray_tracing.spectral_transport_v1` in a meter-scale scene. Use a surface map with
+`enabled: true`. Use the profile’s sources for a photon scene and leave the ordinary light list empty. Volume paths resolve relative to the scene file. The supported glass, emitters,
+sensors, receivers and volume coefficients follow the contracts below. Use this spectral volume
+attachment with V3. RGB atmosphere attachments use the legacy integrators.
+The normal 3D menu loads the saved profile when present and uses direct spectral lighting otherwise.
+The editor panel overrides the selection for an individual frame. It uses the native tiled frame job,
+one pass and the desktop tone curve. The calibrated headless instrument uses its documented sRGB display transform.
+
+The scene profile currently supplies measured optics, emitter parameters, volume asset and photon budget.
+The panel controls integrator, deposition mode, photon budget per source (scene, 16,384, 65,536 or 262,144) and exposure relative to the scene (−1 through +2 EV). Direct spectral applies a matte lighting approximation
+to ordinary RGB-authored geometry. Use an explicit optical profile for dispersive glass.
+The editor job receipt records the selected mode, surface deposits, volume scatter events, VF3D frame digest
+and verified image SHA-256. The native UI regression is `tests/integration/test_editor_spectral_render.py`;
+pass the workspace visual-test binary via `--binary` and a fresh directory via `--output-root`.
 
 Run `make test-headless-spectral-compatibility` to exercise the renderer and
 local worker contract. For the 512 × 288 default-qualification measurements,

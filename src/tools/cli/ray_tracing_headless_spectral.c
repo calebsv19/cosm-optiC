@@ -1,3 +1,4 @@
+#include "render/runtime_spectral_film.h"
 #include "tools/ray_tracing_headless_spectral.h"
 #include "tools/ray_tracing_headless_spectral_map.h"
 #include "import/runtime_mesh_asset_loader.h"
@@ -94,50 +95,8 @@ bool RayTracingHeadlessSpectral_SceneSupported(const char *path, const RuntimeSp
     return ok;
 }
 
-static bool closed_mesh(const char *id) {
-    const RayTracingRuntimeMeshAssetSet *assets = ray_tracing_runtime_mesh_assets_last();
-    for (int i = 0; assets && i < assets->instance_count; ++i) {
-        const RayTracingRuntimeMeshAssetInstance *instance = &assets->instances[i];
-        if (strcmp(instance->object_id, id) || instance->asset_index < 0 ||
-            instance->asset_index >= assets->asset_count)
-            continue;
-        return assets->assets[instance->asset_index].document.contract.topology_closed_volume;
-    }
-    return false;
-}
-
-static bool supported(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p) {
-    bool glass = p->volume.kind && !p->glass_id[0], receiver = false;
-    if ((!p->map.source_count && scene->primitiveCount != 2) || scene->volume.enabled ||
-        scene->curveInstanceCount)
-        return false;
-    for (int i = 0; i < scene->lightSet.lightCount; ++i) {
-        const RuntimeLightSource3D *l = &scene->lightSet.lights[i];
-        if (l->enabled && l->origin != RUNTIME_LIGHT_SOURCE_3D_ORIGIN_COMPAT_SCENE_LIGHT) return false;
-    }
-    for (int i = 0; i < scene->primitiveCount; ++i) {
-        const RuntimePrimitive3D *prim = &scene->primitives[i];
-        if (!strcmp(prim->source.objectId, p->glass_id))
-            glass = prim->kind == RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH && closed_mesh(p->glass_id);
-        else if (prim->kind != RUNTIME_PRIMITIVE_3D_KIND_PLANE)
-            return false;
-        if (!strcmp(prim->source.objectId, p->receiver_id))
-            receiver = prim->kind == RUNTIME_PRIMITIVE_3D_KIND_PLANE;
-    }
-    return glass && receiver;
-}
-
-static uint8_t display(double linear) {
-    double c = fmin(1, fmax(0, linear));
-    return (uint8_t)lround(255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * pow(c, 1 / 2.4) - 0.055));
-}
-
 void RayTracingHeadlessSpectral_Pixel(uint8_t *rgb, Vec3 xyz, double exposure) {
-    xyz = vec3_scale(xyz, exposure);
-    rgb[0] = display(3.2404542 * xyz.x - 1.5371385 * xyz.y - 0.4985314 * xyz.z);
-    rgb[1] = display(-0.9692660 * xyz.x + 1.8760108 * xyz.y + 0.0415560 * xyz.z);
-    rgb[2] = display(0.0556434 * xyz.x - 0.2040259 * xyz.y + 1.0572252 * xyz.z);
-    rgb[3] = 255;
+    RuntimeSpectral_DisplayPixel(rgb, RuntimeSpectral_LinearRGB(vec3_scale(xyz, exposure)));
 }
 
 bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
@@ -145,7 +104,7 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
                                     RuntimeSpectralReadout *out, char *diag, size_t size) {
     const RuntimeSpectralPencil *p = &request->spectral;
     const RuntimeScene3D *scene = &frame->scene;
-    if (!supported(scene, p)) {
+    if (!RuntimeSpectralFilm_Supported(scene, p)) {
         snprintf(
             diag, size,
             "spectral V3 requires supported dielectric geometry, a named matte receiver, compatible planes, and only the "
@@ -227,11 +186,11 @@ static void write_path(FILE *f, const RuntimeSpectralPathReadout *hit, const cha
 void RayTracingHeadlessSpectral_Write(FILE *f, const RayTracingAgentRenderRequest *request,
                                       const RuntimeSpectralReadout *out, bool rendered) {
     const RuntimeSpectralPencil *p = &request->spectral;
-    fputs("  \"spectral_execution\":{\"route\":\"local_headless\","
+    fprintf(f,"  \"spectral_execution\":{\"route\":\"local_headless\","
           "\"film_schedule\":\"serial_scanlines\",\"film_threads\":1,"
           "\"frames\":1,\"temporal_passes\":1,\"denoise\":false,"
           "\"tile_checkpoint_resume\":false,\"worker_supported\":false,"
-          "\"editor_supported\":false,\"map_cache_scope\":\"process\"},\n", f);
+          "\"editor_supported\":%s,\"map_cache_scope\":\"process\"},\n", p->map.enabled ? "true" : "false");
     if (rendered)
         fprintf(f, "  \"spectral_center_pixel_xyz\":[%.17g,%.17g,%.17g],\n", out->center_pixel_xyz.x,
                 out->center_pixel_xyz.y, out->center_pixel_xyz.z);

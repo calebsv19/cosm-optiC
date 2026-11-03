@@ -528,6 +528,7 @@ typedef struct {
     double causticCachePrepMs;
     int width;
     int height;
+    struct RuntimeSpectralFrame *spectralFrame; /* Owned by the prepared frame, borrowed by tiles. */
     bool tileOccupancyConservativeAllTiles;
     RuntimeNative3DFeatureBuffer* featureAttributionBuffer;
     int featureAttributionStartX;

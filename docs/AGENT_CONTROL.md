@@ -1,5 +1,10 @@
 # optiC Agent Control
 
+The native Render workspace can render ordinary matte scenes or a dispersive prism through Disney V3 Spectral.
+For the frame controls, optical scene profile, VF3D attachment and repeatable test, see
+[Render a spectral frame in the editor](headless_agent_render_cli.md#render-a-spectral-frame-in-the-editor).
+
+
 This is the supported public agent-control guide for local `optiC`
 (`ray_tracing`) workflows. It is intentionally smaller than the full renderer,
 release, and worker system.

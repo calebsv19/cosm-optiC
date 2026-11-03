@@ -22,6 +22,8 @@ static const char* label_2d(int value) {
 
 static const char* label_3d_button(int value) {
     switch (RayTracingIntegratorCatalog_Clamp3DToShipped(value)) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:
+            return "Integrator: 3D Disney V3 Spectral";
         case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
             return "Integrator: 3D Disney v2";
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
@@ -40,6 +42,8 @@ static const char* label_3d_button(int value) {
 
 static const char* label_3d_status(int value) {
     switch (RayTracingIntegratorCatalog_Clamp3DToShipped(value)) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:
+            return "integrator: 3D Disney V3 Spectral";
         case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
             return "integrator: 3D Disney v2";
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
@@ -63,6 +67,8 @@ int RayTracingIntegratorCatalog_Clamp2D(int value) {
 }
 
 int RayTracingIntegratorCatalog_Clamp3D(int value) {
+    /* Unknown IDs retain the previous upper-bound fallback instead of entering spectral transport. */
+    if (value == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) return value;
     return clamp_int(value,
                      RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT,
                      RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
@@ -79,6 +85,7 @@ bool RayTracingIntegratorCatalog_Is3DShipped(int value) {
         case RAY_TRACING_3D_INTEGRATOR_MATERIAL:
         case RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY:
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:
         case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
             return true;
         default:
@@ -88,6 +95,8 @@ bool RayTracingIntegratorCatalog_Is3DShipped(int value) {
 
 int RayTracingIntegratorCatalog_Clamp3DToShipped(int value) {
     switch (RayTracingIntegratorCatalog_Clamp3D(value)) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:
+            return RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL;
         case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
             return RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
         case RAY_TRACING_3D_INTEGRATOR_DISNEY:
@@ -131,7 +140,7 @@ RayTracingIntegratorMenuState RayTracingIntegratorCatalog_BuildMenuState(
     state.uses3DCatalog = (space_mode == SPACE_MODE_3D);
     if (state.uses3DCatalog) {
         state.buttonLabel = label_3d_button(state.active3D);
-        state.visibleCount = 6;
+        state.visibleCount = 7;
         state.showPathToggles = false;
     } else {
         state.buttonLabel = label_2d(state.active2D);
@@ -166,6 +175,9 @@ void RayTracingIntegratorCatalog_CycleActiveSelection(AnimationConfig* cfg) {
                 cfg->integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
                 break;
             case RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
+                cfg->integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL;
+                break;
+            case RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:
             default:
                 cfg->integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
                 break;

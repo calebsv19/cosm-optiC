@@ -258,8 +258,6 @@ bool agent_render_request_parse_spectral(json_object *root, const char *dir, Run
     json_object *r = json_object_object_get(root, "render");
     json_object *inspection = json_object_object_get(root, "inspection");
     json_object *progress = json_object_object_get(root, "progress");
-    json_object *map = NULL;
-    bool mapping = json_object_object_get_ex(s, "surface_map", &map);
     if (!ONLY(root, "schema_version", "scene", "spectral", "render", "inspection", "progress", "output",
               "run_id") ||
         !ONLY(json_object_object_get(root, "scene"), "runtime_scene_path", "camera_id") ||
@@ -267,13 +265,7 @@ bool agent_render_request_parse_spectral(json_object *root, const char *dir, Run
         (progress && !ONLY(progress, "summary_path", "progress_path")) ||
         (inspection && !ONLY(inspection, "camera_position", "camera_look_at", "camera_zoom")) ||
         !ONLY(r, "integrator_3d", "width", "height", "temporal_frames", "denoise_enabled",
-              "use_tiled_renderer", "frame_count") ||
-        !(mapping
-              ? ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "receiver_radius_m", "exposure",
-                     "surface_map", "exterior_ior", "glass_roughness", "receiver_reflectance",
-                     "receiver_texture", "sensors", "display_sensor", "participating_volume_v1")
-              : ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "origin_m", "direction",
-                     "receiver_radius_m", "exposure", "lines")))
+              "use_tiled_renderer", "frame_count"))
         return false;
 
     /* The common RGB parser accepts partial vectors and coerces dimensions.
@@ -311,6 +303,19 @@ bool agent_render_request_parse_spectral(json_object *root, const char *dir, Run
     json_object *zoom = NULL;
     if (inspection && json_object_object_get_ex(inspection, "camera_zoom", &zoom) &&
         !number(zoom, 0.01, 1000, &ignored))
+        return false;
+    return RuntimeSpectralProfile_Parse(s, dir, out);
+}
+
+bool RuntimeSpectralProfile_Parse(json_object *s, const char *dir, RuntimeSpectralPencil *out) {
+    json_object *map = NULL;
+    bool mapping = json_object_object_get_ex(s, "surface_map", &map);
+    if (!(mapping
+              ? ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "receiver_radius_m", "exposure",
+                     "surface_map", "exterior_ior", "glass_roughness", "receiver_reflectance",
+                     "receiver_texture", "sensors", "display_sensor", "participating_volume_v1")
+              : ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "origin_m", "direction",
+                     "receiver_radius_m", "exposure", "lines")))
         return false;
     bool no_glass = mapping && json_object_object_get(s, "participating_volume_v1") &&
                     !json_object_object_get_ex(s, "glass_id", NULL);
@@ -359,4 +364,33 @@ bool agent_render_request_parse_spectral(json_object *root, const char *dir, Run
     }
     out->count = (int)count;
     return true;
+}
+
+/* Both editor jobs and the ordinary renderer use the document-relative profile.
+ * Surface-only jobs must also work with the optional volume asset offline. */
+bool RuntimeSpectralProfile_FromScene(json_object *doc,const char *path,bool surface_only,
+                                      RuntimeSpectralPencil *out) {
+    json_object *ray=json_object_object_get(json_object_object_get(doc,"extensions"),"ray_tracing");
+    json_object *profile=NULL;
+    if (!json_object_object_get_ex(ray,"spectral_transport_v1",&profile)) return true;
+    json_object *lights=json_object_object_get(doc,"lights");
+    if (lights && (!json_object_is_type(lights,json_type_array) || json_object_array_length(lights))) return false;
+    json_object *units=json_object_object_get(doc,"unit_system");
+    double scale;
+    if (!json_object_is_type(units,json_type_string) || strcmp(json_object_get_string(units),"meters") ||
+        !number(json_object_object_get(doc,"world_scale"),1,1,&scale) ||
+        !json_object_is_type(profile,json_type_object)) return false;
+    char dir[4096];
+    if (!RayTracingCopyString(dir,sizeof(dir),path)) return false;
+    char *slash=strrchr(dir,'/');
+    if (slash) slash[1]=0; else strcpy(dir,".");
+    json_object *selected=json_object_new_object();
+    if (!selected) return false;
+    json_object_object_foreach(profile,key,value) {
+        if (!surface_only || strcmp(key,"participating_volume_v1"))
+            json_object_object_add(selected,key,json_object_get(value));
+    }
+    bool ok=RuntimeSpectralProfile_Parse(selected,dir,out) && out->map.enabled;
+    json_object_put(selected);
+    return ok;
 }

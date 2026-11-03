@@ -18,7 +18,7 @@ typedef enum {
     RAY_TRACING_3D_INTEGRATOR_EMISSION_TRANSPARENCY = 3,
     RAY_TRACING_3D_INTEGRATOR_DISNEY = 4,
     RAY_TRACING_3D_INTEGRATOR_DISNEY_V2 = 5,
-    /* Explicit local headless request only. */
+    /* Local native 3D and calibrated headless spectral transport. */
     RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL = 6
 } RayTracing3DIntegratorId;
 

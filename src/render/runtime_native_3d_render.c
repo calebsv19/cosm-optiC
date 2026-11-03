@@ -1,3 +1,4 @@
+#include "render/runtime_spectral_film.h"
 #include "render/runtime_native_3d_render_internal_host.h"
 
 #include "render/runtime_ray_3d.h"
@@ -116,6 +117,7 @@ static bool runtime_native_3d_render_should_use_tile_scheduler(int width, int he
 
 void RuntimeNative3DPreparedFrame_Free(RuntimeNative3DPreparedFrame* frame) {
     if (!frame) return;
+    RuntimeSpectralFrame_Free(frame->spectralFrame);
     RuntimeNative3DTileOccupancy_Free(&frame->tileOccupancy);
     RuntimeCausticVolumeCache3D_Free(&frame->causticVolumeCache);
     RuntimeCausticSurfaceCache3D_Free(&frame->causticSurfaceCache);

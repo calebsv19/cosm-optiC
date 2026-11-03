@@ -59,7 +59,7 @@ assert json.loads(created.read_text())['extensions']['ray_tracing']['editor_rend
 assert json.loads((parent/'ui-created.json').read_text())['extensions']['ray_tracing']['editor_render_integrator_v1']=='disney_v2'
 unsupported=parent/'unsupported-integrator.json'
 bad=json.loads(created.read_text())
-bad['extensions']['ray_tracing']['editor_render_integrator_v1']='disney_v3_spectral'
+bad['extensions']['ray_tracing']['editor_render_integrator_v1']='disney_v9_invalid'
 unsupported.write_text(json.dumps(bad))
 b.call('scene_open',{'scene_path':str(unsupported),'expected_revision':fresh['revision']},False)
 assert b.state()['scene_path']==str(created)

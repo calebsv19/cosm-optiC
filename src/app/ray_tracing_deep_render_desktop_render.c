@@ -37,7 +37,7 @@ static RuntimeNative3DSamplingContext deep_render_desktop_next_sampling(void) {
 static int deep_render_desktop_temporal_frames(
     RayTracing3DIntegratorId integrator_id) {
     int frames = animSettings.temporalFrames3D;
-    if (integrator_id == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT) return 1;
+    if (integrator_id == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) return 1;
     if (frames < RUNTIME_3D_TEMPORAL_FRAMES_MIN) {
         frames = RUNTIME_3D_TEMPORAL_FRAMES_MIN;
     }
@@ -389,13 +389,13 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
     }
 
     sampling = desc->fixedSampleSequence ? (RuntimeNative3DSamplingContext){.sampleSequence=desc->fixedSampleSequence} : deep_render_desktop_next_sampling();
-    if (!RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+    if (!RuntimeNative3DPrepareEvaluatedFrameWithProfile(
             &prepared,
             unit->renderWidth,
             unit->renderHeight,
             &evaluated_scene.snapshot,
-            &sampling)) {
-        deep_render_desktop_set_reason(out_reason, "native 3D frame preparation failed");
+            &sampling, NULL, NULL, desc->spectralProfile)) {
+        deep_render_desktop_set_reason(out_reason, RuntimeNative3DPrepareFrameLastDiagnostics());
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
     }
     (void)RuntimeNative3DPrepareFrameTileOccupancy(&prepared, unit->tileSize);

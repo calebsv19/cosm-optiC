@@ -17,7 +17,7 @@ static void scene_lifecycle_acceptance(SceneEditor* editor,const char* scene) {
     SceneEditorAgentControlPoll();unsigned long long original=SceneEditorDocumentRevision();
     char invalid[4096],why[256];
     snprintf(invalid,sizeof(invalid),"%s/refused-preset.json",parent);
-    setenv("OPTIC_NEW_SCENE_INTEGRATOR","disney_v3_spectral",1);
+    setenv("OPTIC_NEW_SCENE_INTEGRATOR","disney_v9_invalid",1);
     assert(!SceneEditorSceneCommand("create",invalid,original,why,sizeof(why)));
     assert(access(invalid,F_OK)!=0 && SceneEditorDocumentRevision()==original);
     setenv("OPTIC_NEW_SCENE_INTEGRATOR","disney_v2",1);

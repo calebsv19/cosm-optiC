@@ -474,6 +474,8 @@ static void verify_viewport_gestures(SceneEditor *editor) {verify_viewport_gestu
 #include "scene_editor_optical_matrices_acceptance.h"
 #include "scene_editor_lighting_mcp_acceptance.h"
 #include "scene_editor_render_mcp_acceptance.h"
+#include "render/runtime_spectral_film.h"
+#include "app/evaluated_scene_service.h"
 #include "scene_editor_scene_lifecycle_acceptance.h"
 #include "scene_editor_cross_save_as_acceptance.h"
 #include "editor/scene_editor_shared_ui.h"
@@ -541,6 +543,51 @@ int main(int argc, char** argv) {
     }
     if(argc==4 && !strcmp(argv[3],"--cross-save-as")) {cross_save_as_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--cross-save-as-reopen")) {assert(RuntimeSurfaceSamplingActive(0));assert(SceneEditorDocumentObjectCount()==4);assert(!SceneEditorDocumentIsDirty());DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
+    if(argc==4 && !strcmp(argv[3],"--spectral-ui")) {
+        SceneEditorWorkspaceProfileSelect(&editor,SCENE_WORKSPACE_RENDER);
+        SceneEditorSessionRuntimeRender(&editor);
+        render_mcp_control(&editor,"toggle");
+        render_mcp_control(&editor,"mode"); /* Direct Light -> V2 -> V3 */
+        render_mcp_control(&editor,"mode");
+        render_mcp_control(&editor,"width"); authoring_text(&editor,"320");
+        render_mcp_control(&editor,"height"); authoring_text(&editor,"128");
+        int modes=getenv("OPTIC_TEST_PRISM") ? 3 : 1;
+        if(modes==1) {
+            SceneEditorRenderOptions missing={.width=32,.height=16,.temporal_frames=1,
+                .integrator=RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL,.deposition=EDITOR_SPECTRAL_SURFACE_VOLUME};
+            char message[256];
+            assert(!SceneEditorRenderStart("missing-profile",&missing,SceneEditorDocumentRevision(),message,sizeof(message)));
+            assert(strstr(message,"spectral_transport_v1"));
+            assert(access(".optic-renders/missing-profile",F_OK)!=0);
+        }
+        for (int i=modes==1?0:1;i<modes;++i) {
+            if (i) render_mcp_control(&editor,"deposition");
+            if(i==1) {
+                render_mcp_control(&editor,"photons");
+                render_mcp_control(&editor,"photons");
+                render_mcp_control(&editor,"exposure");
+            }
+            render_mcp_control(&editor,"start"); render_mcp_wait(&editor);
+            char why[256];
+            json_object *job=SceneEditorRenderJobRead(SceneEditorRenderLatestId(),true,why,sizeof(why));
+            if (job) fprintf(stderr,"%s\n",json_object_to_json_string(job));
+            assert(job && json_object_get_boolean(json_object_object_get(job,"artifact_integrity")));
+            const char *names[]={"direct.json","surface.json","volume.json"};
+            assert(json_object_to_file(names[i],job)==0);json_object_put(job);
+        }
+        /* Normal native selection also prepares the saved scene without the
+         * Render frame panel's explicit per-job optical override. */
+        animSettings.integratorMode3D=RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL;
+        RayEvaluatedSceneServiceResult evaluated={0};
+        TimelineSample sample={.subframe_denominator=1};
+        assert(RayEvaluatedSceneCaptureSample(sample,&evaluated));
+        RuntimeNative3DPreparedFrame frame={0};
+        assert(RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(&frame,32,16,&evaluated.snapshot,NULL));
+        assert((frame.spectralFrame!=NULL)==(modes==3));
+        if(frame.spectralFrame) assert(frame.spectralFrame->stats.deposits>0 && frame.spectralFrame->stats.volume_frame_sha[0]);
+        RuntimeNative3DPreparedFrame_Free(&frame);
+        DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
+    }
     if(argc==4 && !strcmp(argv[3],"--scene-lifecycle-reopen")) {
         assert(SceneEditorDocumentObjectCount()==1);assert(!SceneEditorDocumentIsDirty());
         char message[512];assert(SceneEditorDocumentStaticCameraEditable(message,sizeof(message)));

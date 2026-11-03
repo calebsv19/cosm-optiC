@@ -25,6 +25,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/scene_atmosphere_runtime.o \
 	$(BUILD_DIR)/app/scene_atmosphere_prepare.o \
 	$(BUILD_DIR)/app/scene_atmosphere_water.o \
+	$(BUILD_DIR)/app/agent_render_request_spectral.o \
+	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/ray_tracing_sha256.o \
 	$(BUILD_DIR)/animation/evaluated_scene_snapshot.o \
 	$(BUILD_DIR)/app/evaluated_scene_service.o \
@@ -211,6 +213,15 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_render_request_snapshot.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_stats.o \
+	$(BUILD_DIR)/render/runtime_spectral_film.o \
+	$(BUILD_DIR)/render/runtime_spectral_frame.o \
+	$(BUILD_DIR)/render/runtime_spectral_profile.o \
+	$(BUILD_DIR)/render/runtime_spectral_volume.o \
+	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_map.o \
+	$(BUILD_DIR)/render/runtime_spectral_emitter.o \
+	$(BUILD_DIR)/render/runtime_spectral_pencil.o \
+	$(BUILD_DIR)/render/runtime_spectral_observer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_basic.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_background.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_disney_v2.o \
@@ -364,18 +375,9 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_durable_io.o \
 	$(BUILD_DIR)/app/ray_tracing_recovery_authority.o \
 	$(BUILD_DIR)/app/ray_tracing_temporal_checkpoint.o \
-	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/agent_render_request.o \
 	$(BUILD_DIR)/app/agent_render_request_defaults.o \
-	$(BUILD_DIR)/app/agent_render_request_spectral.o \
-	$(BUILD_DIR)/render/runtime_spectral_profile.o \
-	$(BUILD_DIR)/render/runtime_spectral_volume.o \
-	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
-	$(BUILD_DIR)/render/runtime_spectral_surface_map.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_headless_spectral_map.o \
-	$(BUILD_DIR)/render/runtime_spectral_emitter.o \
-	$(BUILD_DIR)/render/runtime_spectral_pencil.o \
-	$(BUILD_DIR)/render/runtime_spectral_observer.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_capture.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_headless_photon_termination.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_headless_spectral.o \
@@ -449,7 +451,6 @@ RAY_TRACING_WORKER_RUNTIME_DEPS = \
 	$(BUILD_DIR)/app/ray_tracing_recovery_authority.o
 
 RAY_TRACING_MATERIAL_PREVIEW_HEADLESS_DEPS = \
-	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/material_preview_request.o \
 	$(BUILD_DIR)/app/material_preview_headless.o \
 	$(BUILD_DIR)/render/adapters/timer_hud_headless_stub.o \
@@ -672,6 +673,15 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_prepared_scene_cache.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_spectral_film.o \
+	$(BUILD_DIR)/render/runtime_spectral_frame.o \
+	$(BUILD_DIR)/render/runtime_spectral_profile.o \
+	$(BUILD_DIR)/render/runtime_spectral_volume.o \
+	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_map.o \
+	$(BUILD_DIR)/render/runtime_spectral_emitter.o \
+	$(BUILD_DIR)/render/runtime_spectral_pencil.o \
+	$(BUILD_DIR)/render/runtime_spectral_observer.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_basic.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_disney_v2.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading_shared.o \

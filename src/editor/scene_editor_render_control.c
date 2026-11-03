@@ -9,6 +9,7 @@
 #include "app/ray_tracing_deep_render_desktop_host.h"
 #include "app/ray_tracing_durable_io.h"
 #include "app/ray_tracing_sha256.h"
+#include "app/agent_render_request_internal.h"
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -30,6 +31,9 @@ static struct {
     char id[64],root[4096],image[4096],receipt[4096],scene[4096],source_hash[65],image_hash[65],diagnostic[256],state[32];
     uint64_t primitive_count,triangle_count,enabled_lights;
     bool volume_enabled,volume_attached;
+    int spectralDeposits;
+    unsigned long long scatterEvents;
+    char volumeFrameSHA[65];
     int completed_subpasses,total_subpasses;
     size_t completed_tiles,total_tiles;
 } render;
@@ -51,11 +55,18 @@ static bool path_for(const char* id,char* root,size_t size) {
 }
 bool SceneEditorRenderOptionsValid(const SceneEditorRenderOptions* o) {
     return o && o->width>=16 && o->width<=2048 && o->height>=16 && o->height<=2048 && o->temporal_frames>=1 && o->temporal_frames<=32 && o->frame>=0 && o->frame<=1000000000 &&
-        (o->integrator==RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) && (o->integrator!=RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || o->temporal_frames==1);
+        (o->integrator==RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT || o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2 ||
+         o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) &&
+        (o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2 || o->temporal_frames==1) &&
+        o->deposition>=EDITOR_SPECTRAL_DIRECT && o->deposition<=EDITOR_SPECTRAL_SURFACE_VOLUME &&
+        (!o->deposition || o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) &&
+        (!o->spectral_photons || (o->deposition && o->spectral_photons>=1 && o->spectral_photons<=262144)) &&
+        (o->spectral_exposure_stops==0 || (o->deposition && o->spectral_exposure_stops>=-1 && o->spectral_exposure_stops<=2));
 }
 static int editor_integrator(const char *label) {
     if (!strcmp(label, "direct_light")) return RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT;
     if (!strcmp(label, "disney_v2")) return RAY_TRACING_3D_INTEGRATOR_DISNEY_V2;
+    if (!strcmp(label,"disney_v3_spectral")) return RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL;
     return -1;
 }
 
@@ -84,17 +95,32 @@ SceneEditorRenderOptions SceneEditorRenderOptionsGet(void) {
     if (!SceneEditorRenderLatestId()[0] &&
         SceneEditorReadRenderPreset(document_authoring_root(), &preset) && preset >= 0) {
         selected.integrator = preset;
-        if (preset == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT) selected.temporal_frames = 1;
+        selected.deposition = EDITOR_SPECTRAL_DIRECT;
+        selected.spectral_photons=selected.spectral_exposure_stops=0;
+        if (preset != RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) selected.temporal_frames = 1;
     }
     return selected;
 }
 const char* SceneEditorRenderLatestId(void) {return !strcmp(render.scene,SceneEditorDocumentPath())?render.id:"";}
 bool SceneEditorRenderActive(void) {return render.active;}
 static json_object* options_json(SceneEditorRenderOptions selected) {
-    json_object* o=json_object_new_object();json_object_object_add(o,"width",json_object_new_int(selected.width));json_object_object_add(o,"height",json_object_new_int(selected.height));json_object_object_add(o,"temporal_frames",json_object_new_int(selected.temporal_frames));json_object_object_add(o,"frame",json_object_new_int(selected.frame));json_object_object_add(o,"integrator",json_object_new_string(selected.integrator==0?"direct_light":"disney_v2"));if(selected.sample_sequence)json_object_object_add(o,"sample_sequence",json_object_new_int64(selected.sample_sequence));return o;
+    json_object* o=json_object_new_object();json_object_object_add(o,"width",json_object_new_int(selected.width));json_object_object_add(o,"height",json_object_new_int(selected.height));json_object_object_add(o,"temporal_frames",json_object_new_int(selected.temporal_frames));json_object_object_add(o,"frame",json_object_new_int(selected.frame));json_object_object_add(o,"integrator",json_object_new_string(ray_tracing_agent_render_request_integrator_label(selected.integrator)));if (selected.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)
+        json_object_object_add(o,"spectral_deposition",json_object_new_string(
+            selected.deposition==EDITOR_SPECTRAL_SURFACE_VOLUME ? "surface_volume" :
+            selected.deposition==EDITOR_SPECTRAL_SURFACE ? "surface" : "direct"));
+    if (selected.deposition) {
+        json_object_object_add(o,"photons_per_source_override",json_object_new_int(selected.spectral_photons));
+        json_object_object_add(o,"exposure_stops",json_object_new_int(selected.spectral_exposure_stops));
+    }
+    if(selected.sample_sequence)json_object_object_add(o,"sample_sequence",json_object_new_int64(selected.sample_sequence));return o;
 }
 static json_object* receipt(void) {
-    json_object* o=json_object_new_object();json_object_object_add(o,"schema_version",json_object_new_string("optic_editor_render_v1"));json_object_object_add(o,"job_id",json_object_new_string(render.id));json_object_object_add(o,"state",json_object_new_string(render.state));json_object_object_add(o,"editor_pid",json_object_new_int(getpid()));json_object_object_add(o,"scene_path",json_object_new_string(render.scene));json_object_object_add(o,"scene_revision",json_object_new_int64(render.scene_revision));json_object_object_add(o,"source_sha256",json_object_new_string(render.source_hash));json_object_object_add(o,"settings",options_json(options));json_object_object_add(o,"sample_sequence",json_object_new_int64(render.sample_sequence));json_object_object_add(o,"primitive_count",json_object_new_int64(render.primitive_count));json_object_object_add(o,"triangle_count",json_object_new_int64(render.triangle_count));json_object_object_add(o,"enabled_lights",json_object_new_int64(render.enabled_lights));json_object_object_add(o,"volume_enabled",json_object_new_boolean(render.volume_enabled));json_object_object_add(o,"volume_attached",json_object_new_boolean(render.volume_attached));json_object_object_add(o,"diagnostic",json_object_new_string(render.diagnostic));json_object_object_add(o,"cancel_requested",json_object_new_boolean(render.cancel_requested));json_object_object_add(o,"completed_subpasses",json_object_new_int(render.completed_subpasses));json_object_object_add(o,"total_subpasses",json_object_new_int(render.total_subpasses));json_object_object_add(o,"completed_tiles",json_object_new_int64(render.completed_tiles));json_object_object_add(o,"total_tiles",json_object_new_int64(render.total_tiles));json_object_object_add(o,"output_verified",json_object_new_boolean(render.verified));json_object_object_add(o,"image_path",json_object_new_string(render.image));json_object_object_add(o,"image_sha256",json_object_new_string(render.image_hash));return o;
+    json_object* o=json_object_new_object();json_object_object_add(o,"schema_version",json_object_new_string("optic_editor_render_v1"));json_object_object_add(o,"job_id",json_object_new_string(render.id));json_object_object_add(o,"state",json_object_new_string(render.state));json_object_object_add(o,"editor_pid",json_object_new_int(getpid()));json_object_object_add(o,"scene_path",json_object_new_string(render.scene));json_object_object_add(o,"scene_revision",json_object_new_int64(render.scene_revision));json_object_object_add(o,"source_sha256",json_object_new_string(render.source_hash));json_object_object_add(o,"settings",options_json(options));json_object_object_add(o,"sample_sequence",json_object_new_int64(render.sample_sequence));json_object_object_add(o,"primitive_count",json_object_new_int64(render.primitive_count));json_object_object_add(o,"triangle_count",json_object_new_int64(render.triangle_count));json_object_object_add(o,"enabled_lights",json_object_new_int64(render.enabled_lights));json_object_object_add(o,"volume_enabled",json_object_new_boolean(render.volume_enabled));json_object_object_add(o,"volume_attached",json_object_new_boolean(render.volume_attached));json_object_object_add(o,"diagnostic",json_object_new_string(render.diagnostic));json_object_object_add(o,"cancel_requested",json_object_new_boolean(render.cancel_requested));json_object_object_add(o,"completed_subpasses",json_object_new_int(render.completed_subpasses));json_object_object_add(o,"total_subpasses",json_object_new_int(render.total_subpasses));json_object_object_add(o,"completed_tiles",json_object_new_int64(render.completed_tiles));json_object_object_add(o,"total_tiles",json_object_new_int64(render.total_tiles));json_object_object_add(o,"output_verified",json_object_new_boolean(render.verified));json_object_object_add(o,"image_path",json_object_new_string(render.image));json_object_object_add(o,"image_sha256",json_object_new_string(render.image_hash));if(options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
+        json_object_object_add(o,"surface_deposits",json_object_new_int(render.spectralDeposits));
+        json_object_object_add(o,"volume_scatter_events",json_object_new_int64(render.scatterEvents));
+        json_object_object_add(o,"spectral_volume_frame_sha256",json_object_new_string(render.volumeFrameSHA));
+    }
+    return o;
 }
 static bool write_json(const char* path,json_object* o) {
     RayTracingDurableOutput out;bool ok=ray_tracing_durable_output_begin(&out,path);if(ok) {ok=fputs(json_object_to_json_string_ext(o,JSON_C_TO_STRING_PRETTY),out.stream)>=0;if(ok) ok=ray_tracing_durable_output_commit(&out);else ray_tracing_durable_output_abort(&out);}return ok;
@@ -109,8 +135,18 @@ static void release(void) {
 bool SceneEditorRenderStart(const char* id,const SceneEditorRenderOptions* o,unsigned long long revision,char* message,size_t size) {
     if(!SceneEditorDocumentIsOpen() || revision!=SceneEditorDocumentRevision() || !valid_id(id) || !SceneEditorRenderOptionsValid(o)) return refuse(message,size,"Invalid render identity/settings or stale scene revision.");
     if(render.active || RayTracingDeepRenderDesktopHost_HasActiveWork()) return refuse(message,size,"A native render already owns the exclusive render context.");
-    if(animSettings.spaceMode!=SPACE_MODE_3D || animSettings.causticMode3D!=0) return refuse(message,size,"Editor frame render requires native 3D with caustics off.");
+    if(animSettings.spaceMode!=SPACE_MODE_3D || (animSettings.causticMode3D!=0 && o->integrator!=RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)) return refuse(message,size,"Editor frame render requires native 3D with caustics off.");
     if(SceneEditorCommandInteractionActive()) return refuse(message,size,"Finish or cancel the active editor operation before rendering.");
+    RuntimeSpectralPencil profile={0};
+    if(o->deposition) {
+        if (!RuntimeSpectralProfile_FromScene(document_authoring_root(),SceneEditorDocumentPath(),
+                o->deposition==EDITOR_SPECTRAL_SURFACE,&profile) || !profile.map.enabled)
+            return refuse(message,size,"Photon deposition needs a metric scene with a valid spectral_transport_v1 surface map.");
+        if (o->spectral_photons) profile.map.samples=o->spectral_photons;
+        profile.exposure=ldexp(profile.exposure,o->spectral_exposure_stops);
+        if (o->deposition==EDITOR_SPECTRAL_SURFACE_VOLUME && !profile.volume.kind)
+            return refuse(message,size,"Surface + volume needs a participating_volume_v1 in this scene's spectral profile.");
+    }
     char root[4096],parent[4096];if(!path_for(id,root,sizeof(root))) return false;strcpy(parent,root);*strrchr(parent,'/')=0;
     if(!directory(parent,true)) return refuse(message,size,"Cannot create contained render root (symlinks are refused).");
     if(mkdir(root,0700)!=0) return refuse(message,size,"Render ID already exists or output is unavailable; inspect that ID rather than resubmitting.");
@@ -119,10 +155,11 @@ bool SceneEditorRenderStart(const char* id,const SceneEditorRenderOptions* o,uns
     char source[4096];snprintf(source,sizeof(source),"%s/source_snapshot.json",root);json_object* scene=document_authoring_root();const char* bytes=json_object_to_json_string_ext(scene,JSON_C_TO_STRING_PRETTY);
     if(!ray_tracing_sha256_bytes(bytes,strlen(bytes),render.source_hash) || !write_json(source,scene)) {strcpy(render.state,"failed");strcpy(render.diagnostic,"Source snapshot publication failed.");persist();return refuse(message,size,render.diagnostic);}
     SceneEditorTimelinePause();render.saved_config=animSettings;render.config_owned=true;
+    if(o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) animSettings.causticMode3D=0;
     animSettings.interactiveMode=false;animSettings.deepRenderMode=true;animSettings.useTiledRenderer=true;animSettings.tilePreviewEnabled=false;animSettings.renderScale3D=1;animSettings.integratorMode3D=o->integrator;animSettings.temporalFrames3D=o->temporal_frames;
     RayTracingDeepRenderSession_Init(&render.session);RayTracingDeepRenderListener_Init(&render.listener);RayTracingDeepRenderDesktopRenderUnit_Init(&render.unit);render.job=RuntimeNative3DAsyncRenderJob_Create();
     RayTracingDeepRenderSessionDesc session={.startFrameIndex=o->frame,.frameCount=1,.initialGeneration=render.generation};
-    RayTracingDeepRenderDesktopStartDesc desc={.generation=render.generation,.fixedSampleSequence=o->sample_sequence,.absoluteFrameIndex=o->frame,.frameCount=1,.outputWidth=o->width,.outputHeight=o->height,.outputRoot=root,.frameDirectory=root,.finalFramePath=render.image};
+    RayTracingDeepRenderDesktopStartDesc desc={.generation=render.generation,.fixedSampleSequence=o->sample_sequence,.absoluteFrameIndex=o->frame,.frameCount=1,.outputWidth=o->width,.outputHeight=o->height,.outputRoot=root,.frameDirectory=root,.finalFramePath=render.image,.spectralProfile=o->integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL?&profile:NULL};
     const char* reason="Native render allocation/session failed.";
     if(!render.job || !RayTracingDeepRenderSession_Begin(&render.session,&session) || RayTracingDeepRenderDesktopRenderUnit_Start(&render.unit,&render.session,render.job,&desc,&reason)!=RAY_TRACING_DEEP_RENDER_DESKTOP_START_READY) {
         snprintf(render.diagnostic,sizeof(render.diagnostic),"%s",reason);strcpy(render.state,"failed");release();persist();return refuse(message,size,render.diagnostic);
@@ -130,6 +167,14 @@ bool SceneEditorRenderStart(const char* id,const SceneEditorRenderOptions* o,uns
     const RuntimeNative3DRenderRequestSnapshot* snapshot=&render.session.frameRequest.renderSnapshot;
     render.sample_sequence=snapshot->sampling.sampleSequence;
     render.primitive_count=snapshot->preparedPrimitiveCount;render.triangle_count=snapshot->preparedTriangleCount;render.enabled_lights=snapshot->enabledLightCount;render.volume_enabled=snapshot->volumeEnabled;render.volume_attached=snapshot->volumeAttached;
+    const RuntimeSpectralFrame *spectral=render.session.frameRequest.preparedFrame.spectralFrame;
+    if (spectral) {
+        render.spectralDeposits=spectral->stats.deposits;
+        render.enabled_lights=spectral->profile.map.source_count;
+        for (int i=0;i<spectral->stats.band_count;++i) render.scatterEvents+=spectral->stats.bands[i].collisions;
+        snprintf(render.volumeFrameSHA,sizeof(render.volumeFrameSHA),"%s",spectral->stats.volume_frame_sha);
+        render.volume_enabled=render.volume_attached=spectral->profile.volume.kind!=SPECTRAL_VOLUME_NONE;
+    }
     render.active=true;render.total_subpasses=render.unit.temporalFrames;strcpy(render.state,"rendering");if(!persist()) {RuntimeNative3DAsyncRenderJob_ShutdownCancelFirst(render.job);release();strcpy(render.state,"failed");return refuse(message,size,render.diagnostic);}return true;
 }
 bool SceneEditorRenderCancel(const char* id,char* message,size_t size) {

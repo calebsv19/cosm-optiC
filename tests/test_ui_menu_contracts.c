@@ -880,7 +880,7 @@ static int test_integrator_catalog_menu_routes_by_space_mode(void) {
     assert_true("integrator_menu_3d_label",
                 strcmp(menu_state.buttonLabel, "Integrator: 3D Disney") == 0);
     assert_true("integrator_menu_3d_no_path_toggles", !menu_state.showPathToggles);
-    assert_true("integrator_menu_3d_visible_count_six", menu_state.visibleCount == 6);
+    assert_true("integrator_menu_3d_visible_count_seven", menu_state.visibleCount == 7);
 
     animSettings.integratorMode3D = RAY_TRACING_3D_INTEGRATOR_DIFFUSE_BOUNCE;
     menu_state = RayTracingIntegratorCatalog_BuildMenuState(&animSettings);
@@ -1630,7 +1630,9 @@ static int test_integrator_catalog_cycle_preserves_inactive_mode(void) {
                 animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY_V2);
 
     RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
-    assert_true("integrator_cycle_3d_wraps_disney_v2_to_direct_light",
+    assert_true("cycle_into_v3",animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL);
+    RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);
+    assert_true("integrator_cycle_3d_wraps_v3_to_direct_light",
                 animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT);
 
     RayTracingIntegratorCatalog_CycleActiveSelection(&animSettings);

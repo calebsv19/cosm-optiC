@@ -1,4 +1,5 @@
 #include "render/runtime_native_3d_render_shading_internal.h"
+#include "render/runtime_spectral_film.h"
 
 
 
@@ -30,6 +31,8 @@ bool runtime_native_3d_render_dispatch_integrator(float* radiance_buffer,
     /* Keep the native renderer dispatch explicit so later 3D tiers can add
      * focused shader paths without overloading the entrypoint itself. */
     switch (integrator_id) {
+        case RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:
+            return RuntimeSpectralFrame_Shade(frame,start_x,start_y,end_x,end_y,radiance_buffer,radiance_stride,out_stats);
         case RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT:
             ok = runtime_native_3d_render_shade_direct_light(radiance_buffer,
                                                              radiance_stride,

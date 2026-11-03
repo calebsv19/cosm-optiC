@@ -42,7 +42,7 @@ def qualify(cli, root):
     assert pre["prepared_frame"] and not pre["spectral_surface_map"]["reused"]
     assert pre["spectral_execution"] == dict(route="local_headless", film_schedule="serial_scanlines",
         film_threads=1, frames=1, temporal_passes=1, denoise=False, tile_checkpoint_resume=False,
-        worker_supported=False, editor_supported=False, map_cache_scope="process")
+        worker_supported=False, editor_supported=True, map_cache_scope="process")
     explicit = copy.deepcopy(base)
     explicit["render"].update(frame_count=1, temporal_frames=1, use_tiled_renderer=False,
                               denoise_enabled=False)

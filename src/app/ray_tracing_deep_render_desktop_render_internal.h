@@ -2,6 +2,7 @@
 #define APP_RAY_TRACING_DEEP_RENDER_DESKTOP_RENDER_INTERNAL_H
 
 #include <stdbool.h>
+#include "render/runtime_spectral_film.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -32,6 +33,7 @@ typedef struct RayTracingDeepRenderDesktopStartDesc {
     const char* outputRoot;
     const char* frameDirectory;
     const char* finalFramePath;
+    const RuntimeSpectralPencil *spectralProfile; /* Optional editor photon instrument. */
 } RayTracingDeepRenderDesktopStartDesc;
 
 typedef struct RayTracingDeepRenderDesktopRenderUnit {

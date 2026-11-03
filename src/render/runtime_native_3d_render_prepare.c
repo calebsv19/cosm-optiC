@@ -1,3 +1,5 @@
+#include "render/runtime_spectral_film.h"
+#include "app/agent_render_request_internal.h"
 #include "app/evaluated_scene_service.h"
 #include "render/runtime_volume_3d_integrate.h"
 #include "render/runtime_native_3d_render_internal.h"
@@ -1043,7 +1045,7 @@ static bool runtime_native_3d_prepare_frame_internal(
     const RuntimeNative3DSamplingContext* sampling,
     const RayEvaluatedSceneSnapshot* evaluated_scene,
     RuntimeNative3DSceneMutationFn mutation,
-    void* mutation_user_data);
+    void* mutation_user_data, const RuntimeSpectralPencil *profile);
 
 bool RuntimeNative3DPrepareFrame(RuntimeNative3DPreparedFrame* out_frame,
                                  int width,
@@ -1106,7 +1108,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingAtFrameIndex(
     const RuntimeNative3DSamplingContext* sampling) {
     return runtime_native_3d_prepare_frame_internal(
         out_frame, width, height, normalized_t, frame_index,
-        live_light_x, live_light_y, sampling, NULL, NULL, NULL);
+        live_light_x, live_light_y, sampling, NULL, NULL, NULL, NULL);
 }
 
 bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
@@ -1141,6 +1143,18 @@ bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
     const RuntimeNative3DSamplingContext* sampling,
     RuntimeNative3DSceneMutationFn mutation,
     void* mutation_user_data) {
+    return RuntimeNative3DPrepareEvaluatedFrameWithProfile(out_frame,width,height,evaluated_scene,
+        sampling,mutation,mutation_user_data,NULL);
+}
+
+bool RuntimeNative3DPrepareEvaluatedFrameWithProfile(
+    RuntimeNative3DPreparedFrame* out_frame,
+    int width,
+    int height,
+    const RayEvaluatedSceneSnapshot* evaluated_scene,
+    const RuntimeNative3DSamplingContext* sampling,
+    RuntimeNative3DSceneMutationFn mutation,
+    void* mutation_user_data, const RuntimeSpectralPencil *profile) {
     int64_t frame_index = 0;
     if (!evaluated_scene ||
         RayEvaluatedSceneSnapshotValidate(evaluated_scene) !=
@@ -1164,7 +1178,7 @@ bool RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
         out_frame, width, height, evaluated_scene->frame.normalized_t,
         (int)frame_index, evaluated_scene->light.position.x,
         evaluated_scene->light.position.y, sampling, evaluated_scene,
-        mutation, mutation_user_data);
+        mutation, mutation_user_data, profile);
 }
 
 static bool runtime_native_3d_prepare_frame_internal(
@@ -1178,7 +1192,7 @@ static bool runtime_native_3d_prepare_frame_internal(
     const RuntimeNative3DSamplingContext* sampling,
     const RayEvaluatedSceneSnapshot* evaluated_scene,
     RuntimeNative3DSceneMutationFn mutation,
-    void* mutation_user_data) {
+    void* mutation_user_data, const RuntimeSpectralPencil *profile) {
     RuntimeNative3DPreparedFrame frame = {0};
     struct timespec caustic_prep_started_at = {0};
 
@@ -1288,19 +1302,21 @@ static bool runtime_native_3d_prepare_frame_internal(
     }
     RuntimeScene3D_RefreshCapabilities(&frame.scene);
     (void)clock_gettime(CLOCK_MONOTONIC, &caustic_prep_started_at);
-    frame.causticSidecarProbeValid =
-        RuntimeDisneyV2_3D_BuildCausticSidecarProbe(&frame.scene,
-                                                    &frame.causticSidecarProbe);
-    if (!RuntimeCausticTransport3D_PopulateCaches(&frame.scene,
-                                                  &frame.causticVolumeCache,
-                                                  &frame.causticSurfaceCache,
-                                                  &frame.causticTransportDiagnostics)) {
-        (void)RuntimeCausticBootstrap3D_PopulateAnalyticVolumeCache(
-            &frame.scene,
-            &frame.causticVolumeCache,
-            &frame.causticBootstrapDiagnostics);
+    if (animSettings.integratorMode3D != RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
+        frame.causticSidecarProbeValid =
+            RuntimeDisneyV2_3D_BuildCausticSidecarProbe(&frame.scene,
+                                                        &frame.causticSidecarProbe);
+        if (!RuntimeCausticTransport3D_PopulateCaches(&frame.scene,
+                                                      &frame.causticVolumeCache,
+                                                      &frame.causticSurfaceCache,
+                                                      &frame.causticTransportDiagnostics)) {
+            (void)RuntimeCausticBootstrap3D_PopulateAnalyticVolumeCache(
+                &frame.scene,
+                &frame.causticVolumeCache,
+                &frame.causticBootstrapDiagnostics);
+        }
+        runtime_native_3d_prepare_populate_photon_render_prep(&frame);
     }
-    runtime_native_3d_prepare_populate_photon_render_prep(&frame);
     frame.causticCachePrepMs =
         runtime_native_3d_prepare_elapsed_ms_since(&caustic_prep_started_at);
 
@@ -1338,5 +1354,27 @@ static bool runtime_native_3d_prepare_frame_internal(
     *out_frame = frame;
     out_frame->traceScene = &out_frame->scene;
     runtime_native_3d_prepare_bind_scene_for_frame(&out_frame->scene, true);
+    if (animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
+        RuntimeSpectralPencil saved={0};
+        char diag[256]="Invalid spectral_transport_v1 profile in the current scene.";
+        bool ok=!out_frame->scene.volume.enabled;
+        if (!ok) snprintf(diag,sizeof(diag),"V3 volumes require a spectral participating_volume_v1 profile.");
+        if (ok && !profile && animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE && animSettings.runtimeScenePath[0]) {
+            json_object *document=json_object_from_file(animSettings.runtimeScenePath);
+            ok=document && RuntimeSpectralProfile_FromScene(document,animSettings.runtimeScenePath,false,&saved);
+            if (document) json_object_put(document);
+            profile=&saved;
+        }
+        if (ok && profile && profile->map.enabled) {
+            out_frame->spectralFrame=RuntimeSpectralFrame_Create(profile,&out_frame->scene,diag,sizeof(diag));
+            ok=out_frame->spectralFrame!=NULL;
+            out_frame->tileOccupancyConservativeAllTiles=true;
+        }
+        if (!ok) {
+            runtime_native_3d_prepare_frame_set_diag(diag);
+            RuntimeNative3DPreparedFrame_Free(out_frame);
+            return false;
+        }
+    }
     return true;
 }
