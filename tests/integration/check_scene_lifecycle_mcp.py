@@ -55,6 +55,10 @@ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as c:
 created=parent/'mcp-created.json';fresh=b.mutate('scene_create',scene_path=str(created));assert not fresh['dirty'] and not b.call('object_list')['objects']
 assert b.call('editor_catalog')['scene_path']==str(created)
 assert b.call('render_read')['render']['settings']['integrator']=='direct_light'
+missing=b.call('render_start_spectral',dict(expected_revision=fresh['revision'],request_id='no-profile',
+               width=24,height=24,frame=0,integrator='disney_v3_spectral',temporal_frames=1,
+               spectral_deposition='surface',photons_per_source_override=0,exposure_stops=0),False)
+assert 'spectral_transport_v1' in str(missing),missing
 assert json.loads(created.read_text())['extensions']['ray_tracing']['editor_render_integrator_v1']=='direct_light'
 assert json.loads((parent/'ui-created.json').read_text())['extensions']['ray_tracing']['editor_render_integrator_v1']=='disney_v2'
 unsupported=parent/'unsupported-integrator.json'
@@ -70,7 +74,7 @@ for integrator in ('direct_light','disney_v2'):
  job='lifecycle-'+integrator;b.mutate('render_start',request_id=job,width=24,height=24,temporal_frames=1,frame=0,integrator=integrator)
  for _ in range(600):
   status=b.call('render_status',{'job_id':job})['render']
-  if status['state'] not in ('running','preparing','queued'):break
+  if status['state'] not in ('rendering','running','preparing','queued'):break
   time.sleep(.05)
  assert status['state']=='completed',status
  result=b.call('render_results',{'job_id':job})['render'];assert result['artifact_integrity'] and Path(result['image_path']).is_file(),result

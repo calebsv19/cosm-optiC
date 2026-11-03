@@ -137,16 +137,21 @@ METHODS.update({
 })
 
 
+# Keep each tool's arguments fully required for the reloading bridge.
+# Existing RGB and seeded tool signatures stay valid for older clients.
+METHODS['render_start_spectral']=('render.start','Render a spectral photon scene using the native frame controls.',{
+    **METHODS['render_start'][2], 'integrator':{'enum':['disney_v3_spectral']},
+    'temporal_frames':{'const':1},
+    'spectral_deposition':{'enum':['surface','surface_volume']},
+    'photons_per_source_override':{'type':'integer','minimum':0,'maximum':262144},
+    'exposure_stops':{'type':'integer','minimum':-1,'maximum':2}})
+
+
 def tool_list():
     result=[]
     for name,(method,description,fields) in METHODS.items():
         properties=dict(fields)
         if method not in ('sequence.event_planner_read','sequence.event_pick','sequence.event_candidates','sequence.read','sequence.read_section','mesh.read','mesh.import_status','motion_plan.read','follower_orientation.read','path.list','path.read','animation.read','animation.track_read','scene.read','scene.connect','material.list','material.read','material.response_read','object.list','object.read','camera.read','lighting.read','render.read','render.status','render.results'):properties['expected_revision']={'type':'integer','minimum':0}
-        required=list(properties)
-        if method in ('render.start','render.start_seeded'):
-            properties['photons_per_source_override']={'type':'integer','minimum':0,'maximum':262144}
-            properties['exposure_stops']={'type':'integer','minimum':-1,'maximum':2}
-            properties['spectral_deposition']={'enum':['direct','surface','surface_volume']}
         result.append({'name':name,'description':description,'inputSchema':{
-            'type':'object','properties':properties,'required':required,'additionalProperties':False}})
+            'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}})
     return result
