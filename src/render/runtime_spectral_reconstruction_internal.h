@@ -3,7 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Serial render-context-owned state. Never shared by simultaneous camera workers. */
+/* Serial render-context-owned state. Never shared by simultaneous camera
+ * workers. */
 typedef struct {
     double *knot;
     unsigned char *wall;
@@ -19,11 +20,18 @@ typedef struct {
     SpectralDomainRegion *regions;
     size_t cells;
     int region_count;
+    bool rectangular_lookup;
 } SpectralDomain;
 typedef struct {
     uint64_t key;
-    double norm, cached_total, cached_first;
-    uint32_t head;
+    /* Normalization is needed only while building. Cache coordinates replace it
+     * after freeze, keeping the extra per-node storage bounded. */
+    union {
+        double norm;
+        uint64_t angular_key;
+    };
+    double cached_total, cached_first;
+    uint32_t head, angular_ready;
 } SpectralReconstructionNode;
 typedef struct {
     double flux;
@@ -34,6 +42,11 @@ typedef struct {
     uint32_t node;
     double total, first;
 } SpectralAngularCache;
+enum { SPECTRAL_SPATIAL_CACHE_SIZE = 8192 };
+typedef struct {
+    uint64_t key;
+    uint32_t nodes[8];
+} SpectralSpatialCache;
 struct SpectralReconstruction {
     RuntimeSpectralVolume *volume;
     SpectralDomain domain;
@@ -43,11 +56,14 @@ struct SpectralReconstruction {
     size_t node_count, node_capacity, link_count, link_capacity, slot_capacity;
     size_t owned_bytes, peak_bytes, budget_bytes;
     uint64_t normalization_visits, cached_queries, exact_queries, generation;
+    uint64_t spatial_hits, spatial_misses;
     bool built, view_ready, ray_ready;
-    Vec3 view_origin;
+    Vec3 phase_direction;
+    uint64_t phase_key;
     Ray3D ray;
-    double angular_cos_limit;
+    double angular_cos_limit, angular_quantum;
     SpectralAngularCache angular[2048];
+    SpectralSpatialCache spatial[SPECTRAL_SPATIAL_CACHE_SIZE];
     char error[192];
 };
 void *spectral_reconstruction_resize(SpectralReconstruction *, void *, size_t, size_t);

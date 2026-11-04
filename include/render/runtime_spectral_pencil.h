@@ -118,6 +118,7 @@ typedef struct {
     unsigned long long reconstruction_bytes, reconstruction_peak_bytes;
     unsigned long long reconstruction_nodes, reconstruction_links;
     unsigned long long reconstruction_cached_queries, reconstruction_exact_queries;
+    unsigned long long reconstruction_spatial_hits, reconstruction_spatial_misses;
     int reconstruction_regions;
     RuntimeSpectralBand bands[SPECTRAL_MAP_MAX_BANDS];
 } RuntimeSpectralMapStats;

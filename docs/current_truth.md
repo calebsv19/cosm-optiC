@@ -1,3 +1,23 @@
+## November 3 — V3 reconstruction query-cost qualification
+
+Fixed deterministic angular targets now reuse bounded phase sums across coherent
+rays. An 8192-entry spatial cache avoids repeated eight-node lookups, and small
+rectangular domains use exact bounds lookup. The phase tolerance, occupied-domain
+normalization, support sizes and unsupported-geometry refusals are unchanged.
+
+Two matched 360x258 prism seeds improve from 206.2/201.9 to 116.0/111.7 CPU-seconds.
+Under the same 450 CPU-second allowance, complete-pass budgeting fits three new
+passes (331.8 seconds) versus two previous passes (408.1 seconds). Estimated
+display noise decreases 18.4%; this is a small-sample scene-specific result, not
+a general convergence or equal-consumed-time claim. Estimator storage adds 320 KiB.
+Exact-mode signed film matches the prior implementation byte for byte.
+
+Native boundary/phase/integration checks, deterministic query-order and cache
+reuse checks, ASan/UBSan without leak detection, public spectral regressions,
+worker admission, preflight/export and actual native editor rendering pass.
+Continuous/adaptive reconstruction remains opt-in; installed/released behavior
+and default selection are unchanged. See the [reconstruction contract](spectral_volume_reconstruction.md).
+
 ## November 3 — opt-in boundary-aware V3 volume reconstruction
 
 Main Edit now implements fixed continuous and adaptive volume reconstruction in

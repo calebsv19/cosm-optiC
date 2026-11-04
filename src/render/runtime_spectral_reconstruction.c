@@ -194,28 +194,9 @@ bool spectral_reconstruction_build(RuntimeSpectralVolume *v) {
     r->built = true;
     return true;
 }
-static void decode(uint64_t key, int id[3], int *level) {
-    --key;
-    id[0] = (key >> 24) & 4095;
-    id[1] = (key >> 12) & 4095;
-    id[2] = key & 4095;
-    *level = (key >> 44) & 1;
-}
-static Vec3 node_position(const RuntimeSpectralVolume *v, const SpectralReconstructionNode *n) {
-    int id[3], level;
-    decode(n->key, id, &level);
-    double h = v->config.cell_m * (level ? 2 : 1);
-    return vec3(fmin(v->hi.x, v->lo.x + id[0] * h), fmin(v->hi.y, v->lo.y + id[1] * h),
-                fmin(v->hi.z, v->lo.z + id[2] * h));
-}
 static double phase(double mu, double g) {
     double d = 1 + g * g - 2 * g * fmax(-1, fmin(1, mu));
     return (1 - g * g) / (4 * M_PI * d * sqrt(d));
-}
-static Vec3 reference_direction(const SpectralReconstruction *r,
-                                const SpectralReconstructionNode *n) {
-    Vec3 d = vec3_sub(r->view_origin, node_position(r->volume, n));
-    return vec3_dot(d, d) > 0 ? vec3_normalize(d) : vec3(0, 0, 1);
 }
 static double exact_node(const SpectralReconstruction *r, const SpectralReconstructionNode *n,
                          Vec3 outgoing, double *first) {
@@ -235,23 +216,38 @@ bool spectral_reconstruction_begin_ray(RuntimeSpectralVolume *v, Ray3D ray) {
     if (!r || !spectral_reconstruction_build(v))
         return false;
     if (!r->view_ready) {
-        r->view_origin = ray.origin;
-        for (size_t i = 0; i < r->node_count; i++) {
-            SpectralReconstructionNode *n = &r->nodes[i];
-            n->cached_total = exact_node(r, n, reference_direction(r, n), &n->cached_first);
-        }
-        /* |d log HG / d theta| <= 3|g|/(1-g^2). Thus the positive weighted
-         * sum is within the requested relative phase tolerance whenever this
-         * angular test passes, independently of incoming directions/weights. */
-        double g = fabs(v->config.g),
-               angle = g ? log1p(v->config.phase_tolerance) * (1 - g * g) / (3 * g) : M_PI;
+        /* |d log HG / d theta| <= 3|g|/(1-g^2), for every incoming direction. */
+        double g = fabs(v->config.g);
+        double angle = g ? log1p(v->config.phase_tolerance) * (1 - g * g) / (3 * g) : M_PI;
         r->angular_cos_limit = cos(fmin(M_PI, angle));
+        r->angular_quantum = 2 * sin(fmin(M_PI, angle) * .5) / sqrt(3.0);
         r->view_ready = true;
     }
     if (!r->ray_ready || memcmp(&ray.origin, &r->ray.origin, sizeof(Vec3)) ||
         memcmp(&ray.direction, &r->ray.direction, sizeof(Vec3))) {
         r->ray = ray;
         r->ray_ready = true;
+        Vec3 outgoing = vec3_scale(ray.direction, -1);
+        r->phase_direction = outgoing;
+        r->phase_key = 0;
+        if (v->config.g == 0) {
+            r->phase_direction = vec3(0, 0, 1);
+            r->phase_key = 1;
+        } else if (v->config.phase_tolerance > 0 && r->angular_quantum > 1e-6) {
+            double h = r->angular_quantum;
+            int q[3] = {(int)floor(outgoing.x / h + .5), (int)floor(outgoing.y / h + .5),
+                        (int)floor(outgoing.z / h + .5)};
+            Vec3 target = vec3_normalize(vec3(q[0] * h, q[1] * h, q[2] * h));
+            /* A fixed direction cell makes values query-order independent.
+             * Check the same HG bound after rounding; otherwise use the actual
+             * direction. The quantum floor bounds each signed key to 21 bits. */
+            if ((q[0] || q[1] || q[2]) &&
+                vec3_dot(target, outgoing) > r->angular_cos_limit + 64 * DBL_EPSILON) {
+                r->phase_direction = target;
+                r->phase_key = 1 + ((uint64_t)(q[0] + 1048575) << 42 |
+                                    (uint64_t)(q[1] + 1048575) << 21 | (uint64_t)(q[2] + 1048575));
+            }
+        }
         if (++r->generation == 0) {
             memset(r->angular, 0, sizeof(r->angular));
             r->generation = 1;
@@ -262,23 +258,21 @@ bool spectral_reconstruction_begin_ray(RuntimeSpectralVolume *v, Ray3D ray) {
 static void angular_node(SpectralReconstruction *r, uint32_t ni, double *total, double *first) {
     SpectralAngularCache *c = &r->angular[hash(ni) & 2047];
     if (c->generation != r->generation || c->node != ni) {
-        const SpectralReconstructionNode *n = &r->nodes[ni - 1];
-        Vec3 outgoing = vec3_scale(r->ray.direction, -1);
-        bool approximate =
-            r->volume->config.g == 0 || (r->volume->config.phase_tolerance > 0 &&
-                                         vec3_dot(reference_direction(r, n), outgoing) >
-                                             r->angular_cos_limit + 64 * DBL_EPSILON);
+        SpectralReconstructionNode *n = &r->nodes[ni - 1];
+        bool reuse = r->phase_key && n->angular_ready && n->angular_key == r->phase_key;
         c->generation = r->generation;
         c->node = ni;
-        c->first = 0;
-        if (approximate) {
-            c->total = n->cached_total;
-            c->first = n->cached_first;
+        if (reuse)
             r->cached_queries++;
-        } else {
-            c->total = exact_node(r, n, outgoing, &c->first);
+        else {
+            n->cached_first = 0;
+            n->cached_total = exact_node(r, n, r->phase_direction, &n->cached_first);
+            n->angular_key = r->phase_key;
+            n->angular_ready = 1;
             r->exact_queries++;
         }
+        c->total = n->cached_total;
+        c->first = n->cached_first;
     }
     *total = c->total;
     *first = c->first;
@@ -295,11 +289,23 @@ double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band
         double w[3][2];
         for (int a = 0; a < 3; a++)
             spectral_reconstruction_basis(v, axis(p, a), a, level, id[a], w[a]);
+        uint64_t cell_key = key_make(id[0][0], id[1][0], id[2][0], band, level, region);
+        SpectralSpatialCache *cache = &r->spatial[hash(cell_key) & (SPECTRAL_SPATIAL_CACHE_SIZE - 1)];
+        if (cache->key != cell_key) {
+            r->spatial_misses++;
+            cache->key = cell_key;
+            for (int z = 0; z < 2; z++)
+                for (int y = 0; y < 2; y++)
+                    for (int x = 0; x < 2; x++) {
+                        uint64_t key = key_make(id[0][x], id[1][y], id[2][z], band, level, region);
+                        cache->nodes[x + 2 * y + 4 * z] = r->slots[slot(r, key)];
+                    }
+        } else
+            r->spatial_hits++;
         for (int z = 0; z < 2; z++)
             for (int y = 0; y < 2; y++)
                 for (int x = 0; x < 2; x++) {
-                    uint64_t key = key_make(id[0][x], id[1][y], id[2][z], band, level, region);
-                    uint32_t ni = r->slots[slot(r, key)];
+                    uint32_t ni = cache->nodes[x + 2 * y + 4 * z];
                     if (!ni)
                         continue;
                     double sum, single, weight = w[0][x] * w[1][y] * w[2][z];
@@ -327,6 +333,8 @@ void spectral_reconstruction_stats(const RuntimeSpectralVolume *v, RuntimeSpectr
     st->reconstruction_cached_queries = r->cached_queries;
     st->reconstruction_exact_queries = r->exact_queries;
     st->reconstruction_regions = r->domain.region_count;
+    st->reconstruction_spatial_hits = r->spatial_hits;
+    st->reconstruction_spatial_misses = r->spatial_misses;
 }
 
 bool spectral_reconstruction_accepting(const RuntimeSpectralVolume *v) {

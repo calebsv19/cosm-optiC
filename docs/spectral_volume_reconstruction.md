@@ -74,20 +74,31 @@ The Henyey–Greenstein phase function is
 p_g(mu) = (1-g*g) / (4*pi*(1+g*g-2*g*mu)^(3/2)).
 ```
 
-Each node initially caches its weighted source toward a reference camera
-position. For nonzero `g`, a bound valid for all incoming directions is
+Outgoing directions use fixed deterministic direction cells. For nonzero `g`,
+a bound valid for all incoming directions is
 
 ```
 abs(d log(p_g) / d theta) <= 3*abs(g)/(1-g*g)
 allowed_angle = log(1+tolerance)*(1-g*g)/(3*abs(g)).
 ```
 
-The cache is used only if the actual outgoing direction satisfies this bound,
-with a conservative floating-point margin. Otherwise the node evaluates the
-original collision directions and precomputed normalized flux weights. Positive
-weighted sums inherit the phase bound. Isotropic phase is direction independent.
-This bounds angular approximation only, not spatial smoothing, spectral binning,
-Monte Carlo noise or camera integration error.
+The Cartesian direction-cell spacing is `2*sin(min(pi,allowed_angle)/2)/sqrt(3)`.
+The rounded direction is normalized and checked against the angular bound with
+a conservative floating-point margin before use. On a cache miss, the node sums
+the original collision directions and normalized weights at that fixed target.
+A matching target key reuses the result. A failed bound check, zero rounded vector,
+or spacing at most `1e-6` uses the actual outgoing direction instead. Zero tolerance
+also uses the actual direction; isotropic phase is exactly direction independent.
+Positive weighted sums inherit the bound. Fixed targets ensure that cache history
+and query order cannot change the result. This bounds angular approximation only,
+not spatial smoothing, spectral binning, Monte Carlo noise or camera integration.
+
+The 63-bit direction key replaces build-only normalization storage after freeze;
+nodes remain 40 bytes. A separate 8192-entry (320 KiB) spatial cache stores the eight
+node indices for a cell, wavelength band, level and connected component. It does
+not approximate positions or interpolation weights. Up to four entirely rectangular
+components use exact half-open bounds tests for domain lookup; all other domains
+retain the interpolation-cell label lookup, including nonrectangular masks.
 
 A small per-ray cache reuses exact node evaluations. A changed ray origin or
 direction invalidates it. State belongs to a serial render context; simultaneous
@@ -110,8 +121,11 @@ a limit or encountering unsupported geometry fails explicitly. These are estimat
 allocations, not a whole-process RSS bound.
 
 Headless summaries expose `spectral_reconstruction`: owned/peak bytes, nodes,
-links, connected regions, cached-node queries and exact-node queries. Counts
-represent cache evaluations, not unique photons or physical scattering events.
+links, connected regions, cached-node queries, exact-node queries, and spatial
+cache hits/misses. Exact-node queries count original-direction HG sums at either
+a bounded target or the actual query direction; they are not exclusively angular
+fallbacks. Cached-node queries count reused sums. Spatial misses populate eight
+node indices. Counts are estimator work, not physical scattering events.
 
 ## Repeatable checks
 
@@ -129,7 +143,9 @@ python3 tests/integration/test_editor_spectral_render.py \
 Native checks integrate fixed/adaptive kernels over off-grid planar partitions,
 masked gaps and a nonrectangular occupied domain. Independent analytic tent/HG
 oracles test near cameras, positive/negative high anisotropy and exact mode.
-A separate camera-ray integral covers optical depths 0.01, 1 and 100. Refusal
+Coherent-ray tests require spatial/angular reuse and bit-exact forward/reverse
+query-order results, including tiny-tolerance fallback. Rectangular edge probes
+compare the shortcut with the original label lookup. A separate camera-ray integral covers optical depths 0.01, 1 and 100. Refusal
 checks include rotated finite planes whose AABBs misleadingly cover the field.
 The public request checks compare physical ledgers and approximate/exact XYZ,
 exercise validation and preserve default box behavior. The native editor test

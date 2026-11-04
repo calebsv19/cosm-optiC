@@ -31,6 +31,17 @@ static size_t index_at(const SpectralDomain *d, int x, int y, int z) {
     return x + (size_t)(d->axis[0].count - 1) * (y + (size_t)(d->axis[1].count - 1) * z);
 }
 uint16_t spectral_domain_region(const SpectralDomain *d, Vec3 p) {
+    /* A few complete rectangular components admit an exact bounds lookup.
+     * Nonrectangular occupancy retains the interpolation-cell label oracle. */
+    if (d->rectangular_lookup) {
+        for (int i = 1; i <= d->region_count; i++) {
+            const SpectralDomainRegion *c = &d->regions[i];
+            if (p.x >= c->lo.x && p.x < c->hi.x && p.y >= c->lo.y && p.y < c->hi.y &&
+                p.z >= c->lo.z && p.z < c->hi.z)
+                return (uint16_t)i;
+        }
+        return 0;
+    }
     int x = cell(&d->axis[0], p.x), y = cell(&d->axis[1], p.y), z = cell(&d->axis[2], p.z);
     return x < 0 || y < 0 || z < 0 ? 0 : d->labels[index_at(d, x, y, z)];
 }
@@ -242,6 +253,10 @@ bool spectral_domain_build(SpectralReconstruction *r, const RuntimeScene3D *s) {
             c->rectangular = tail == (size_t)(max[0] - min[0] + 1) * (max[1] - min[1] + 1) *
                                          (max[2] - min[2] + 1);
         }
+    d->rectangular_lookup = d->region_count <= 4;
+    for (int i = 1; i <= d->region_count; i++)
+        if (!d->regions[i].rectangular)
+            d->rectangular_lookup = false;
     free(queue);
     r->owned_bytes -= cells * sizeof(*queue);
     return true;

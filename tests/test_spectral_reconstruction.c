@@ -97,6 +97,21 @@ static void rectangular(void) {
     RuntimePrimitive3D p;
     RuntimeScene3D s = plane_scene(&p, .473, 2);
     bind(v, &s);
+    double edges[] = {-1e-10,
+                      0,
+                      nextafter(.473, -INFINITY),
+                      .473,
+                      nextafter(.473, INFINITY),
+                      nextafter(1, 0),
+                      1};
+    assert(v->reconstruction->domain.rectangular_lookup);
+    for (int k = 0; k < 7; k++) {
+      Vec3 point = vec3(edges[k], .5, .5);
+      uint16_t fast = spectral_domain_region(&v->reconstruction->domain, point);
+      v->reconstruction->domain.rectangular_lookup = false;
+      assert(fast == spectral_domain_region(&v->reconstruction->domain, point));
+      v->reconstruction->domain.rectangular_lookup = true;
+    }
     event(v, vec3(.49, .5, .5));
     begin(v);
     double value = integral(v, .473);
@@ -167,10 +182,10 @@ static double kernel(Vec3 source, Vec3 query) {
 }
 static void angular(void) {
   RuntimeScene3D scene = {0};
-  double gs[] = {.35, .9, -.9, .99};
+  double gs[] = {.35, .9, -.9, .99, .0001, 1e-12};
   for (int exact = 0; exact < 2; exact++)
     for (int near = 0; near < 2; near++)
-      for (int g = 0; g < 4; g++) {
+      for (int g = 0; g < 6; g++) {
         RuntimeSpectralVolume *v = volume(1);
         v->config.g = gs[g];
         v->config.phase_tolerance = exact ? 0 : .01;
@@ -284,6 +299,42 @@ static void camera_quadrature(void) {
     RuntimeSpectralVolume_Free(v);
   }
 }
+/* Coherent rays must reuse exact cache anchors without making the result
+ * depend on the order of queries. Tiny tolerances fall back safely. */
+static void cache_order(void) {
+  RuntimeScene3D scene = {0};
+  for (int mode = 1; mode <= 2; mode++)
+    for (int tiny = 0; tiny < 2; tiny++) {
+      RuntimeSpectralVolume *v = volume(mode);
+      v->config.g = .35;
+      v->config.phase_tolerance = tiny ? 1e-14 : .01;
+      bind(v, &scene);
+      event(v, vec3(.45, .45, .45));
+      double values[100];
+      for (int pass = 0; pass < 2; pass++)
+        for (int j = 0; j < 100; j++) {
+          int i = pass ? 99 - j : j;
+          Vec3 point = vec3(.44 + i * .00002, .45, .45);
+          Ray3D ray = RuntimeRay3D_Make(
+              vec3(.5, .5, 3),
+              vec3_normalize(vec3_sub(point, vec3(.5, .5, 3))));
+          assert(spectral_reconstruction_begin_ray(v, ray));
+          double value = sample(v, point);
+          if (!pass)
+            values[i] = value;
+          else
+            assert(value == values[i]);
+        }
+      assert(v->reconstruction->spatial_hits >
+             v->reconstruction->spatial_misses);
+      if (!tiny)
+        assert(v->reconstruction->cached_queries >
+               v->reconstruction->exact_queries);
+      RuntimeSpectralVolume_Free(v);
+    }
+  puts("coherent angular/spatial reuse, tiny tolerance and reverse query-order "
+       "equality pass");
+}
 static void refusals(void) {
   char diag[192];
   RuntimePrimitive3D p;
@@ -333,6 +384,7 @@ int main(void) {
   occupied();
   angular();
   camera_quadrature();
+  cache_order();
   refusals();
   puts("PASS spectral reconstruction native qualification");
   return 0;
