@@ -3577,3 +3577,16 @@ $(BUILD_DIR)/tests/scene_catalog_labels_test: $(TEST_DIR)/scene_catalog_labels_t
 .PHONY: test-scene-catalog-labels
 test-scene-catalog-labels: $(BUILD_DIR)/tests/scene_catalog_labels_test
 	@$<
+
+# Continuous spectral estimator: independent native integration/phase oracles.
+.PHONY: test-spectral-reconstruction
+test-spectral-reconstruction: $(BUILD_DIR)/tests/spectral_reconstruction_test
+	$(BUILD_DIR)/tests/spectral_reconstruction_test
+
+$(BUILD_DIR)/tests/spectral_reconstruction_test: $(BUILD_DIR)/tests/test_spectral_reconstruction.o $(RAY_TRACING_RENDER_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $^ -o $@ $(LDFLAGS)
+
+.PHONY: test-headless-spectral-reconstruction
+test-headless-spectral-reconstruction: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/test_headless_spectral_reconstruction.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)

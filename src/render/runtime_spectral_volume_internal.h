@@ -9,7 +9,10 @@ typedef struct {
     int band, next;
     bool first;
 } SpectralCollision;
+typedef struct SpectralReconstruction SpectralReconstruction;
 struct RuntimeSpectralVolume {
+    SpectralReconstruction *reconstruction;
+    Vec3 *positions; /* Only continuous modes allocate collision positions. */
     RuntimeSpectralVolumeConfig config;
     RuntimeVolumeAttachment3D vf;
     RuntimeWaterBodyMesh3DDesc water;
@@ -32,3 +35,13 @@ typedef struct {
 bool spectral_field_begin(SpectralFieldRay *, const RuntimeSpectralVolume *, Ray3D, double, bool);
 bool spectral_field_next(SpectralFieldRay *, double *, double *);
 double spectral_field_mass(const SpectralFieldRay *, double, double);
+
+unsigned spectral_volume_bucket(uint64_t, int);
+bool spectral_reconstruction_build(RuntimeSpectralVolume *);
+bool spectral_reconstruction_begin_ray(RuntimeSpectralVolume *, Ray3D);
+double spectral_reconstruction_source(RuntimeSpectralVolume *, Vec3, int, double *);
+double spectral_reconstruction_boundary(RuntimeSpectralVolume *, Ray3D, double, double);
+void spectral_reconstruction_free(SpectralReconstruction *);
+void spectral_reconstruction_stats(const RuntimeSpectralVolume *, RuntimeSpectralMapStats *);
+
+bool spectral_reconstruction_accepting(const RuntimeSpectralVolume *);

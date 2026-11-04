@@ -34,13 +34,18 @@ RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *p
             free(s);
             return NULL;
         }
+        if(!RuntimeSpectralVolume_BindScene(s->profile.active_volume,scene,diag,size)) {
+            RuntimeSpectralFrame_Free(s); return NULL;
+        }
         RuntimeSpectralVolume_Identity(s->profile.active_volume, &s->stats);
     }
     bool previous = RuntimeRay3D_SetInclusiveTriangleEdges(true);
     s->map = RuntimeSpectralSurfaceMap_Build(&s->profile, scene, &s->stats);
     RuntimeRay3D_SetInclusiveTriangleEdges(previous);
     if (!s->map) {
-        snprintf(diag, size, "V3 spectral photon map construction failed.");
+        snprintf(diag, size, "V3 spectral photon map construction failed: %s",
+                 profile->volume.reconstruction ? RuntimeSpectralVolume_Error(s->profile.active_volume)
+                                                : "invalid transport, source or allocation");
         RuntimeSpectralFrame_Free(s);
         return NULL;
     }

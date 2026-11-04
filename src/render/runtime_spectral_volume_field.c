@@ -98,8 +98,8 @@ RuntimeSpectralVolume *RuntimeSpectralVolume_Load(const RuntimeSpectralVolumeCon
     double extent[] = {v->hi.x - v->lo.x, v->hi.y - v->lo.y, v->hi.z - v->lo.z};
     for (int i = 0; i < 3; ++i) {
         double n = ceil(extent[i] / cfg->cell_m);
-        if (!(n >= 1 && n <= 4096)) {
-            snprintf(diag, size, "spectral volume requires 1 to 4096 reconstruction cells per axis");
+        if (!(n >= 1 && n <= (cfg->reconstruction ? 4095 : 4096))) {
+            snprintf(diag, size, "spectral volume reconstruction requires 1 to 4096 cells per axis (4095 for continuous nodes)");
             goto fail;
         }
         v->dims[i] = (int)n;
@@ -120,6 +120,8 @@ void RuntimeSpectralVolume_Free(RuntimeSpectralVolume *v) {
     if (!v) return;
     RuntimeVolumeAttachment3D_Free(&v->vf);
     free(v->heights);
+    spectral_reconstruction_free(v->reconstruction);
+    free(v->positions);
     free(v->points);
     free(v->heads);
     free(v);
@@ -188,6 +190,8 @@ bool spectral_field_next(SpectralFieldRay *it, double *a, double *b) {
             step = fmin(step,
                         next_plane((p.x - v->lo.x) / hx - (p.y - v->lo.y) / hy, d.x / hx - d.y / hy, 0, 1));
         }
+        if (it->cells && v->reconstruction)
+            step = fmin(step, spectral_reconstruction_boundary((RuntimeSpectralVolume *)v,it->ray,start,start+step)-start);
         *a = start;
         *b = it->t = fmin(it->end, fmax(nextafter(start, INFINITY), start + step));
         if (v->config.kind == SPECTRAL_VOLUME_WATER) {

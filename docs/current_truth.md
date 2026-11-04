@@ -1,3 +1,22 @@
+## November 3 — opt-in boundary-aware V3 volume reconstruction
+
+Main Edit now implements fixed continuous and adaptive volume reconstruction in
+the shared V3 renderer. Occupied-domain normalization conserves each admitted
+kernel; full-span axis-aligned planes partition support. A bounded HG angular
+cache falls back to original collision directions when the requested tolerance
+cannot be guaranteed. Legacy box reconstruction remains the default.
+
+Native integral, gap/mask, high-anisotropy, changed-camera, thick-ray and refusal
+checks pass, including ASan/UBSan (without leak detection). Public request tests,
+S3/S4/S5, serial/worker compatibility, headless preflight/image export and the
+native editor Direct/Surface/Surface + Volume workflow pass. The editor test also
+prepares the stored adaptive profile through ordinary scene rendering. No new
+reconstruction UI picker or installed/released package is implied.
+
+See [equations, supported boundaries, budgets and reproduction commands](spectral_volume_reconstruction.md).
+Intersecting unsupported geometry is refused; broader geometry coverage and
+performance qualification remain prerequisites for default adoption.
+
 ## October 31 — Linux camera leak checking completed
 
 The exact released source `805c1c9` (`v0.22.0`, worker `0.16.0`) now passes all

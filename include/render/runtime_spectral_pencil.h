@@ -55,8 +55,15 @@ typedef enum {
     SPECTRAL_VOLUME_VF3D,
     SPECTRAL_VOLUME_WATER
 } RuntimeSpectralVolumeKind;
+typedef enum {
+    SPECTRAL_RECONSTRUCTION_BOX,
+    SPECTRAL_RECONSTRUCTION_CONTINUOUS,
+    SPECTRAL_RECONSTRUCTION_ADAPTIVE
+} RuntimeSpectralReconstructionMode;
 typedef struct {
     RuntimeSpectralVolumeKind kind;
+    RuntimeSpectralReconstructionMode reconstruction;
+    double phase_tolerance; /* Relative HG bound; zero requests exact per-ray evaluation. */
     RuntimeSpectralCurve absorption, scattering;
     double g, cell_m;
     Vec3 lo, hi;
@@ -108,6 +115,10 @@ typedef struct {
     char volume_digest[65], volume_source_sha[65], volume_frame_sha[65];
     int volume_frame;
     double volume_time, volume_dt;
+    unsigned long long reconstruction_bytes, reconstruction_peak_bytes;
+    unsigned long long reconstruction_nodes, reconstruction_links;
+    unsigned long long reconstruction_cached_queries, reconstruction_exact_queries;
+    int reconstruction_regions;
     RuntimeSpectralBand bands[SPECTRAL_MAP_MAX_BANDS];
 } RuntimeSpectralMapStats;
 typedef struct {

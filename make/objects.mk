@@ -218,6 +218,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
+	$(BUILD_DIR)/render/runtime_spectral_reconstruction.o \
+	$(BUILD_DIR)/render/runtime_spectral_reconstruction_domain.o \
 	$(BUILD_DIR)/render/runtime_spectral_surface_map.o \
 	$(BUILD_DIR)/render/runtime_spectral_emitter.o \
 	$(BUILD_DIR)/render/runtime_spectral_pencil.o \
@@ -678,6 +680,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
+	$(BUILD_DIR)/render/runtime_spectral_reconstruction.o \
+	$(BUILD_DIR)/render/runtime_spectral_reconstruction_domain.o \
 	$(BUILD_DIR)/render/runtime_spectral_surface_map.o \
 	$(BUILD_DIR)/render/runtime_spectral_emitter.o \
 	$(BUILD_DIR)/render/runtime_spectral_pencil.o \

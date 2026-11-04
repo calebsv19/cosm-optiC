@@ -259,6 +259,7 @@ RuntimeSpectralSurfaceMap *RuntimeSpectralSurfaceMap_Build(const RuntimeSpectral
         RuntimeSpectral_Free(profile);
         if (!ok) goto fail;
     }
+    if (!RuntimeSpectralVolume_PrepareReconstruction(p->active_volume)) goto fail;
     if (p->active_volume) RuntimeSpectralVolume_ScatterStats(p->active_volume, st);
     st->deposits = m->count;
     return m;

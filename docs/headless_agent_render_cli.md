@@ -1722,3 +1722,10 @@ root to `<RELEASE_ROOT>.work/build`; the archive remains at the declared release
 root. Worker staging refuses occupied package/sidecar paths. Retained release
 preparation must bind the selected roots through its owner before resuming;
 changing an approved candidate requires supported source reconciliation.
+
+### Continuous V3 volume reconstruction
+
+The optional `participating_volume_v1.reconstruction` selector admits `box`
+(default), `continuous`, or `adaptive`. `phase_tolerance` controls bounded angular
+caching in continuous modes. See [normalization, admission limits, storage and
+verification](spectral_volume_reconstruction.md) before selecting these modes.

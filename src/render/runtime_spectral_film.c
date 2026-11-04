@@ -1,6 +1,7 @@
 #include "render/runtime_spectral_film.h"
 #include "import/runtime_mesh_asset_loader.h"
 #include "render/runtime_spectral_observer.h"
+#include "render/runtime_spectral_volume.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -147,5 +148,6 @@ bool RuntimeSpectralFilm_Region(const RuntimeSpectralPencil *p, const RuntimeSpe
                 radiance[i + 3] = 0;
             }
         }
+    if(p->active_volume)RuntimeSpectralVolume_ScatterStats(p->active_volume,st);
     return true;
 }

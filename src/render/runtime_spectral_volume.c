@@ -19,12 +19,13 @@ static uint64_t cell_at(const RuntimeSpectralVolume *v, Vec3 p, double *volume) 
     }
     return key;
 }
-static unsigned bucket(uint64_t cell, int band) {
+unsigned spectral_volume_bucket(uint64_t cell, int band) {
     uint64_t k = cell ^ ((uint64_t)band << 40);
     k = (k ^ (k >> 30)) * UINT64_C(0xbf58476d1ce4e5b9);
     return (unsigned)((k ^ (k >> 29)) & (BUCKETS - 1));
 }
 static bool store_point(RuntimeSpectralVolume *v, Vec3 p, Vec3 dir, int band, double watts, bool first) {
+    if(!spectral_reconstruction_accepting(v))return false;
     if (!v->heads) {
         v->heads = calloc(BUCKETS, sizeof(int));
         if (!v->heads) return false;
@@ -35,17 +36,23 @@ static bool store_point(RuntimeSpectralVolume *v, Vec3 p, Vec3 dir, int band, do
         SpectralCollision *points = realloc(v->points, (size_t)n * sizeof(*points));
         if (!points) return false;
         v->points = points;
+        if(v->config.reconstruction) {
+            Vec3 *positions=realloc(v->positions,(size_t)n*sizeof(*positions));
+            if(!positions)return false;
+            v->positions=positions;
+        }
         v->capacity = n;
     }
     double vol;
     uint64_t cell = cell_at(v, p, &vol);
-    unsigned index = bucket(cell, band);
+    unsigned index = spectral_volume_bucket(cell, band);
     v->points[v->count] = (SpectralCollision){.incoming = dir,
                                               .watts = watts,
                                               .first = first,
                                               .cell = cell,
                                               .band = band,
                                               .next = v->heads[index]};
+    if(v->positions)v->positions[v->count]=p;
     v->heads[index] = ++v->count;
     return true;
 }
@@ -78,7 +85,7 @@ static double source_term(const RuntimeSpectralVolume *v, Ray3D ray, double midp
                           double *first) {
     double vol, sum = 0;
     uint64_t cell = cell_at(v, vec3_add(ray.origin, vec3_scale(ray.direction, midpoint)), &vol);
-    for (int k = v->heads[bucket(cell, band)]; k; k = v->points[k - 1].next) {
+    for (int k = v->heads[spectral_volume_bucket(cell, band)]; k; k = v->points[k - 1].next) {
         const SpectralCollision *p = &v->points[k - 1];
         if (p->cell == cell && p->band == band) {
             double x = p->watts * phase(-vec3_dot(p->incoming, ray.direction), v->config.g);
@@ -112,10 +119,41 @@ static double camera_length(const SpectralFieldRay *it, double a, double b, doub
         sum += w[i] * exp(-st * spectral_field_mass(it, a, a + (b - a) * x[i]));
     return (b - a) * sum;
 }
+/* Integrate within both field knots and geometry partitions. Resolve thick
+ * intervals before quadrature rather than allowing attenuation to alias. */
+static double continuous_camera(RuntimeSpectralVolume *v,Ray3D ray,int band,const SpectralFieldRay *it,
+                                double a,double b,double st,double tau,double *first) {
+    if(tau>.25) {
+        double mid=a+(b-a)*.5;
+        if(mid>a && mid<b) {
+            double left_tau=st*spectral_field_mass(it,a,mid),left_first=0,right_first=0;
+            double left=continuous_camera(v,ray,band,it,a,mid,st,left_tau,&left_first),right=0;
+            if(left_tau<40)right=continuous_camera(v,ray,band,it,mid,b,st,st*spectral_field_mass(it,mid,b),&right_first);
+            *first+=left_first+exp(-left_tau)*right_first;
+            return left+exp(-left_tau)*right;
+        }
+    }
+    static const double q2[]={.21132486540518713,.7886751345948129},w2[]={.5,.5};
+    static const double q4[]={.06943184420297371,.33000947820757187,.6699905217924281,.9305681557970262};
+    static const double w4[]={.17392742256872693,.32607257743127307,.32607257743127307,.17392742256872693};
+    int n=tau<.025?2:4;const double *q=n==2?q2:q4,*weights=n==2?w2:w4;double sum=0;
+    for(int i=0;i<n;i++) {
+        double t=a+(b-a)*q[i],single=0;
+        double value=spectral_reconstruction_source(v,vec3_add(ray.origin,vec3_scale(ray.direction,t)),band,&single);
+        if(value==0 && single==0)continue;
+        double weight=(b-a)*weights[i]*exp(-st*spectral_field_mass(it,a,t));
+        sum+=weight*value;*first+=weight*single;
+    }
+    return sum;
+}
+bool RuntimeSpectralVolume_PrepareReconstruction(RuntimeSpectralVolume *v) {
+    return !v || !v->config.reconstruction || spectral_reconstruction_build(v);
+}
 bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectralPencilLine *line,
                                    Ray3D *ray, double limit, bool camera, int step,
                                    RuntimeSpectralPathReadout *out, bool *restart) {
     *restart = false;
+    if(camera && v->config.reconstruction && !spectral_reconstruction_begin_ray(v,*ray))return false;
     double sa = RuntimeSpectralCurve_Value(&v->config.absorption, line->vacuum_nm);
     double ss = RuntimeSpectralCurve_Value(&v->config.scattering, line->vacuum_nm), st = sa + ss;
     SpectralFieldRay it;
@@ -128,11 +166,18 @@ bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectr
         if (!(tau > 0)) continue;
         if (camera) {
             if (v->heads && ss > 0) {
+                if(v->config.reconstruction) {
+                    double first=0;
+                    double value=continuous_camera(v,*ray,line->band,&it,a,b,st,tau,&first);
+                    out->inscattered+=out->weight*value;
+                    out->single_scatter+=out->weight*first;
+                } else {
                 double first = 0, j = source_term(v, *ray, (a + b) * .5, line->band, &first);
                 if (j) {
                     double weight = out->weight * camera_length(&it, a, b, st, tau);
                     out->inscattered += weight * j;
                     out->single_scatter += weight * first;
+                }
                 }
             }
             out->weight *= exp(-tau);
@@ -175,6 +220,7 @@ bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectr
     return true;
 }
 void RuntimeSpectralVolume_ScatterStats(const RuntimeSpectralVolume *v, RuntimeSpectralMapStats *st) {
+    spectral_reconstruction_stats(v,st);
     for (int b = 0; b < st->band_count; ++b) {
         RuntimeSpectralBand *r = &st->bands[b];
         const RuntimeSpectralBand *s = &v->ledger[b];

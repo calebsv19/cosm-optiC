@@ -35,6 +35,9 @@ bool RayTracingHeadlessSpectralMap_Run(const RuntimeSpectralPencil *request,
     if (p->volume.kind) {
         p->active_volume = RuntimeSpectralVolume_Load(&p->volume, diag, size);
         if (!p->active_volume) return false;
+        if(!RuntimeSpectralVolume_BindScene(p->active_volume,scene,diag,size)) {
+            RuntimeSpectralVolume_Free(p->active_volume); return false;
+        }
     }
     char key[65];
     RuntimeSpectralSurfaceMap_Key(p, scene, key);
@@ -55,7 +58,9 @@ bool RayTracingHeadlessSpectralMap_Run(const RuntimeSpectralPencil *request,
         cached = RuntimeSpectralSurfaceMap_Build(p, scene, &built);
         if (!cached) {
             snprintf(diag, size,
-                     "spectral map preparation failed: invalid transport, source or allocation");
+                     "spectral map preparation failed: %s", p->volume.reconstruction
+                         ? RuntimeSpectralVolume_Error(p->active_volume)
+                         : "invalid transport, source or allocation");
             release_map();
             return false;
         }
@@ -76,6 +81,12 @@ bool RayTracingHeadlessSpectralMap_Run(const RuntimeSpectralPencil *request,
     return true;
 }
 void RayTracingHeadlessSpectralMap_Write(FILE *f, const RuntimeSpectralMapStats *st, bool rendered) {
+    if (st->reconstruction_bytes) {
+        fprintf(f,"  \"spectral_reconstruction\":{\"owned_bytes\":%llu,\"peak_bytes\":%llu,"
+                  "\"nodes\":%llu,\"links\":%llu,\"regions\":%d,\"cached_node_queries\":%llu,\"exact_node_queries\":%llu},\n",
+                st->reconstruction_bytes,st->reconstruction_peak_bytes,st->reconstruction_nodes,
+                st->reconstruction_links,st->reconstruction_regions,st->reconstruction_cached_queries,st->reconstruction_exact_queries);
+    }
     if (st->volume_digest[0]) {
         fprintf(
             f,

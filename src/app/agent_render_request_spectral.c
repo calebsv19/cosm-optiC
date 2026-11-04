@@ -216,7 +216,7 @@ static bool volume_config(json_object *obj, const char *dir, RuntimeSpectralVolu
     if (!RayTracingJsonGetString(obj, "kind", &kind)) return false;
     if (!strcmp(kind, "homogeneous")) {
         if (!ONLY(obj, "kind", "bounds_min_m", "bounds_max_m", "sigma_a_per_m", "sigma_s_per_m", "g",
-                  "cell_m") ||
+                  "cell_m", "reconstruction", "phase_tolerance") ||
             !vector(json_object_object_get(obj, "bounds_min_m"), &v->lo) ||
             !vector(json_object_object_get(obj, "bounds_max_m"), &v->hi) ||
             !(v->lo.x < v->hi.x && v->lo.y < v->hi.y && v->lo.z < v->hi.z))
@@ -225,7 +225,7 @@ static bool volume_config(json_object *obj, const char *dir, RuntimeSpectralVolu
     } else {
         const char *source;
         if (!ONLY(obj, "kind", "source_path", "frame_index", "sigma_a_per_m", "sigma_s_per_m", "g",
-                  "cell_m") ||
+                  "cell_m", "reconstruction", "phase_tolerance") ||
             !RayTracingJsonGetString(obj, "source_path", &source) || !*source ||
             strlen(source) !=
                 (size_t)json_object_get_string_len(json_object_object_get(obj, "source_path")) ||
@@ -239,6 +239,19 @@ static bool volume_config(json_object *obj, const char *dir, RuntimeSpectralVolu
         else
             return false;
     }
+    v->reconstruction = SPECTRAL_RECONSTRUCTION_BOX;
+    json_object *mode = json_object_object_get(obj, "reconstruction");
+    if (mode) {
+        if (json_object_get_type(mode) != json_type_string) return false;
+        const char *name = json_object_get_string(mode);
+        if (strlen(name) != (size_t)json_object_get_string_len(mode)) return false;
+        if (!strcmp(name, "continuous")) v->reconstruction = SPECTRAL_RECONSTRUCTION_CONTINUOUS;
+        else if (!strcmp(name, "adaptive")) v->reconstruction = SPECTRAL_RECONSTRUCTION_ADAPTIVE;
+        else if (strcmp(name, "box")) return false;
+    }
+    v->phase_tolerance = .01;
+    json_object *tolerance = json_object_object_get(obj, "phase_tolerance");
+    if (tolerance && (!v->reconstruction || !number(tolerance, 0, .05, &v->phase_tolerance))) return false;
     RuntimeSpectralCurve *curves[] = {&v->absorption, &v->scattering};
     const char *keys[] = {"sigma_a_per_m", "sigma_s_per_m"};
     for (int i = 0; i < 2; ++i) {

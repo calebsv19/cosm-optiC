@@ -16,7 +16,7 @@ def write(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
-def prepare(root, prism):
+def prepare(root, prism, reconstruction=None):
     runtime = root / 'data/runtime'
     runtime.mkdir(parents=True)
     write(runtime / 'animation_config.json', dict(editorMode=1, spaceMode=1, windowWidth=1280,
@@ -60,17 +60,19 @@ def prepare(root, prism):
             for obj,color in zip(scene['objects'],(0x999999,0xd63324,0x2467c4))]
         scene['lights']=[dict(light_id='key',kind='point',position=dict(x=-1,y=-1.8,z=2.4),
                               intensity=7.5,radius=0)]
+    if prism and reconstruction:
+        profile['participating_volume_v1'].update(reconstruction=reconstruction,cell_m=.0005,phase_tolerance=.01)
     write(root/'scene.json',scene)
 
 
-def run(binary,out,prism):
-    prepare(out,prism)
+def run(binary,out,prism,reconstruction=None):
+    prepare(out,prism,reconstruction)
     env=dict(os.environ,RAY_TRACING_PROGRAM_ROOT=str(REPO),
              RAY_TRACING_RUNTIME_MESH_ASSET_CACHE_ROOT=str(out/'cache'))
     if prism: env['OPTIC_TEST_PRISM']='1'
     with (out/'native.log').open('w') as log:
         subprocess.run([binary,out,out/'scene.json','--spectral-ui'],env=env,
-                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=180)
+                       stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1800 if reconstruction else 180)
     for tag in (['surface','volume'] if prism else ['direct']):
         receipt=json.loads((out/(tag+'.json')).read_text())
         assert receipt['settings']['integrator']=='disney_v3_spectral'
@@ -95,6 +97,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--binary',type=Path,required=True)
     parser.add_argument('--output-root',type=Path,required=True)
+    parser.add_argument('--reconstruction',choices=['continuous','adaptive'])
     args=parser.parse_args()
     for tag in ('ordinary','prism'):
-        run(args.binary.resolve(),args.output_root.resolve()/tag,tag=='prism')
+        run(args.binary.resolve(),args.output_root.resolve()/tag,tag=='prism',args.reconstruction)
