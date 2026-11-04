@@ -39,7 +39,9 @@ json_object* SceneEditorAgentControlDispatch(json_object* request) {
     json_object* response=json_object_new_object();char message[512]="";
     json_object* method=get(request,"method"),*params=get(request,"params");
     bool ok=false;
-    if(!method || !json_object_is_type(method,json_type_string) || !SceneEditorDocumentIsOpen()) {
+    if(!method || !json_object_is_type(method,json_type_string) ||
+       strlen(json_object_get_string(method)) != (size_t)json_object_get_string_len(method) ||
+       !SceneEditorDocumentIsOpen()) {
         snprintf(message,sizeof(message),"No open scene or invalid command.");goto done;
     }
     const char* name=json_object_get_string(method);
@@ -80,7 +82,9 @@ json_object* SceneEditorAgentControlDispatch(json_object* request) {
         else snprintf(message,sizeof(message),"Scene changed; supply the current expected_revision.");goto done;
     }
     json_object* owner=get(request,"scene_path");
-    if(owner && (!json_object_is_type(owner,json_type_string) || strcmp(json_object_get_string(owner),SceneEditorDocumentPath()))) {snprintf(message,sizeof(message),"Editor changed scenes; read current state before editing.");goto done;}
+    if(owner && (!json_object_is_type(owner,json_type_string) ||
+                 strlen(json_object_get_string(owner)) != (size_t)json_object_get_string_len(owner) ||
+                 strcmp(json_object_get_string(owner),SceneEditorDocumentPath()))) {snprintf(message,sizeof(message),"Editor changed scenes; read current state before editing.");goto done;}
     if(SceneEditorCommandInteractionActive()) {
         snprintf(message,sizeof(message),"Finish or cancel the active editor operation before agent edits.");goto done;
     }

@@ -52,6 +52,7 @@
 #include "test_support.h"
 #include "scene_editor_timeline_selection_tests.h"
 #include "scene_editor_object_timeline_tests.h"
+#include "scene_editor_command_ownership_tests.h"
 
 #include <json-c/json.h>
 
@@ -731,6 +732,7 @@ static int test_scene_editor_document_transform_history_and_atomic_conflict(void
     SceneEditorDocumentClose();
     assert_true("foundation_a_document_reopen",
                 SceneEditorDocumentOpen(runtime_path, diagnostics, sizeof(diagnostics)));
+    test_l2_command_ownership();
     {
         int created=-1;
         unsigned long long before_revision=SceneEditorDocumentRevision();
