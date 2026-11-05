@@ -9,6 +9,7 @@
 void RuntimeSpectralFrame_Free(RuntimeSpectralFrame *s) {
     if (!s)
         return;
+    if (s->query_lock) SDL_DestroyMutex(s->query_lock);
     RuntimeSpectralSurfaceMap_Free(s->map);
     RuntimeSpectralVolume_Free(s->profile.active_volume);
     free(s);
@@ -27,11 +28,19 @@ RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *p
         snprintf(diag, size, "Cannot allocate spectral frame.");
         return NULL;
     }
+    if (profile->volume.kind && profile->volume.reconstruction) {
+        s->query_lock = SDL_CreateMutex();
+        if (!s->query_lock) {
+            snprintf(diag, size, "Cannot allocate the V3 volume query lock.");
+            free(s);
+            return NULL;
+        }
+    }
     s->profile = *profile;
     if (profile->volume.kind) {
         s->profile.active_volume = RuntimeSpectralVolume_Load(&profile->volume, diag, size);
         if (!s->profile.active_volume) {
-            free(s);
+            RuntimeSpectralFrame_Free(s);
             return NULL;
         }
         if(!RuntimeSpectralVolume_BindScene(s->profile.active_volume,scene,diag,size)) {
@@ -79,11 +88,13 @@ bool RuntimeSpectralFrame_Shade(const RuntimeNative3DPreparedFrame *frame, int x
     if (frame->spectralFrame) {
         const RuntimeSpectralFrame *s = frame->spectralFrame;
         RuntimeSpectralReadout out = {.map = s->stats};
+        if (s->query_lock && SDL_LockMutex(s->query_lock) != 0) return false;
         char diag[160];
         bool previous = RuntimeRay3D_SetInclusiveTriangleEdges(true);
         bool ok = RuntimeSpectralFilm_Region(&s->profile, s->map, frame, x0, y0, x1, y1, NULL, radiance,
                                              stride, &out, diag, sizeof(diag));
         RuntimeRay3D_SetInclusiveTriangleEdges(previous);
+        if (s->query_lock) SDL_UnlockMutex(s->query_lock);
         return ok;
     }
     for (int y = y0; y < y1; ++y)

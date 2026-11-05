@@ -62,6 +62,7 @@ def prepare(root, prism, reconstruction=None):
                               intensity=7.5,radius=0)]
     if prism and reconstruction:
         profile['participating_volume_v1'].update(reconstruction=reconstruction,cell_m=.0005,phase_tolerance=.01)
+        profile['surface_map']['gather']='adaptive_scattered'
     write(root/'scene.json',scene)
 
 
@@ -77,6 +78,9 @@ def run(binary,out,prism,reconstruction=None):
         receipt=json.loads((out/(tag+'.json')).read_text())
         assert receipt['settings']['integrator']=='disney_v3_spectral'
         assert receipt['settings']['spectral_deposition']==dict(surface='surface',volume='surface_volume',direct='direct')[tag]
+        if tag=='volume':
+            assert receipt['settings']['gather_override']=='adaptive_scattered'
+            assert receipt['surface_gather']=='adaptive_scattered' and receipt['expanded_surface_deposits']>0
         image=Path(receipt['image_path']).read_bytes()
         assert receipt['output_verified'] and receipt['image_sha256']==hashlib.sha256(image).hexdigest()
         offset=struct.unpack_from('<I',image,10)[0]
@@ -101,3 +105,11 @@ if __name__=='__main__':
     args=parser.parse_args()
     for tag in ('ordinary','prism'):
         run(args.binary.resolve(),args.output_root.resolve()/tag,tag=='prism',args.reconstruction)
+
+    if args.reconstruction:
+        repeat=args.output_root.resolve()/'prism-repeat'
+        run(args.binary.resolve(),repeat,True,args.reconstruction)
+        def image_hash(folder):
+            return json.loads((folder/'volume.json').read_text())['image_sha256']
+        assert image_hash(repeat)==image_hash(args.output_root.resolve()/'prism')
+        print('PASS deterministic editor volume replay')

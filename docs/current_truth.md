@@ -1,3 +1,18 @@
+## November 4 — V3 density-dependent surface gather
+
+V3 supports `surface_map.gather = "adaptive_scattered"` in headless requests and
+saved scene profiles. In the editor, select Disney V3 Spectral, enable surface
+photon deposition, and cycle Gather between Scene, Adaptive and Fixed. Receipts
+record the effective mode and count of widened deposits. Sparse scattered
+deposits can use up to twice the base radius; dense regions, unscattered caustics
+and uncertain boundaries keep the base radius.
+
+The native editor serializes access to each frame’s mutable continuous-volume
+query cache. Repeated adaptive editor renders now return identical image hashes.
+The public request checks cover fixed-gather parity, unchanged transport
+ledgers, deterministic replay, invalid settings and a coincident-plane guard.
+See the [surface and volume reconstruction contract](spectral_volume_reconstruction.md).
+
 ## November 3 — V3 reconstruction query-cost qualification
 
 Fixed deterministic angular targets now reuse bounded phase sums across coherent

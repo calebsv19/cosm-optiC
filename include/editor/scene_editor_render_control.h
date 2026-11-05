@@ -5,7 +5,8 @@
 #include <json-c/json.h>
 #include "editor/scene_editor_pane_host.h"
 typedef enum { EDITOR_SPECTRAL_DIRECT, EDITOR_SPECTRAL_SURFACE, EDITOR_SPECTRAL_SURFACE_VOLUME } SceneEditorDeposition;
-typedef struct SceneEditorRenderOptions {int width,height,temporal_frames,frame,integrator;uint32_t sample_sequence;SceneEditorDeposition deposition;int spectral_photons;int spectral_exposure_stops;} SceneEditorRenderOptions;
+typedef enum { EDITOR_GATHER_SCENE, EDITOR_GATHER_ADAPTIVE, EDITOR_GATHER_FIXED } SceneEditorGather;
+typedef struct SceneEditorRenderOptions {int width,height,temporal_frames,frame,integrator;uint32_t sample_sequence;SceneEditorDeposition deposition;int spectral_photons;int spectral_exposure_stops;SceneEditorGather gather;} SceneEditorRenderOptions;
 /* The seed is written only at create. Older documents carry no preference. */
 bool SceneEditorWriteNewRenderPreset(json_object *root, const char *label);
 bool SceneEditorReadRenderPreset(json_object *root, int *integrator);

@@ -1,5 +1,6 @@
 #include "render/runtime_spectral_surface_map.h"
 #include "app/ray_tracing_sha256.h"
+#include "render/runtime_scene_accel_3d_internal.h"
 #include "render/runtime_caustic_photon_surface_kernel_3d.h"
 #include "render/runtime_spectral_volume.h"
 #include <math.h>
@@ -13,7 +14,8 @@ typedef struct {
     double vacuum_nm, watts;
     int64_t u, v;
     int primitive, band, source, next;
-    bool front;
+    bool front, scattered;
+    float scale;
 } Deposit;
 
 struct RuntimeSpectralSurfaceMap {
@@ -21,6 +23,7 @@ struct RuntimeSpectralSurfaceMap {
     int *heads;
     size_t mask;
     int count, continuum_bins;
+    bool has_expanded;
     double band_nm[SPECTRAL_MAP_MAX_BANDS];
     double direct_watts[SPECTRAL_MAP_LIGHTS][SPECTRAL_MAP_MAX_BANDS];
 };
@@ -35,6 +38,7 @@ void RuntimeSpectralSurfaceMap_Key(const RuntimeSpectralPencil *p, const Runtime
     const char version[] = "optic-spectral-surface-v1";
     ray_tracing_sha256_update(&h, version, sizeof(version));
     ray_tracing_sha256_update(&h, p->map.config_hash, 64);
+    if (p->map.adaptive_scattered) ray_tracing_sha256_update(&h, "adaptive_scattered", sizeof("adaptive_scattered"));
     if (p->active_volume) ray_tracing_sha256_update(&h, RuntimeSpectralVolume_Digest(p->active_volume), 64);
     ray_tracing_sha256_update(&h, p->glass_id, strlen(p->glass_id) + 1);
     ray_tracing_sha256_update(&h, p->receiver_id, strlen(p->receiver_id) + 1);
@@ -211,7 +215,7 @@ static bool populate(RuntimeSpectralSurfaceMap *m, const RuntimeSpectralPencil *
                        .primitive = hit.primitive,
                        .band = b,
                        .source = source,
-                       .front = hit.receiver_front};
+                       .front = hit.receiver_front, .scattered = hit.scatters > 0, .scale = 1};
         if (!cell(&scene->primitives[hit.primitive].shape.plane, hit.position, p->receiver_radius_m, &d->u,
                   &d->v))
             return false;
@@ -232,12 +236,79 @@ void RuntimeSpectralSurfaceMap_Free(RuntimeSpectralSurfaceMap *m) {
         free(m);
     }
 }
+
+/* Sample-point bandwidth: each scattered record owns one normalized kernel. */
+static bool clear_of_other_surfaces(const Deposit *deposit, const RuntimeScene3D *scene,
+                                    const RuntimeSceneAcceleration3DInstanceBounds *bounds,
+                                    int count, double reach) {
+    Vec3 x = deposit->position;
+    for (int i = 0; i < scene->primitiveCount; ++i) {
+        if (i == deposit->primitive || scene->primitives[i].kind != RUNTIME_PRIMITIVE_3D_KIND_PLANE)
+            continue;
+        const RuntimePlane3D *plane = &scene->primitives[i].shape.plane;
+        if (fabs(vec3_dot(vec3_sub(x, plane->origin), plane->normal)) <= reach)
+            return false;
+    }
+    for (int i = 0; i < count; ++i) {
+        if (bounds[i].primitiveIndex == deposit->primitive) continue;
+        Vec3 lo = bounds[i].min, hi = bounds[i].max;
+        if (x.x >= lo.x - reach && x.x <= hi.x + reach &&
+            x.y >= lo.y - reach && x.y <= hi.y + reach &&
+            x.z >= lo.z - reach && x.z <= hi.z + reach) return false;
+    }
+    return true;
+}
+
+static int assign_support(RuntimeSpectralSurfaceMap *m, const RuntimeScene3D *scene, double radius) {
+    RuntimeSceneAcceleration3DInstanceBounds *bounds = NULL;
+    int count = 0, expanded = 0;
+    if (!RuntimeSceneAcceleration3D_CaptureInstanceBounds(scene, &bounds, &count, NULL)) return 0;
+    for (int i = 0; i < scene->primitiveCount; ++i) {
+        if (scene->primitives[i].kind == RUNTIME_PRIMITIVE_3D_KIND_PLANE) continue;
+        int j = 0;
+        while (j < count && bounds[j].primitiveIndex != i) ++j;
+        if (j == count) goto done; /* Missing bounds retain the fixed kernel for this map. */
+    }
+    for (int i = 0; i < m->count; i++) {
+        Deposit *d = &m->records[i];
+        d->scale = 1;
+        if (!d->scattered || !clear_of_other_surfaces(d, scene, bounds, count, 2 * radius))
+            continue;
+        const RuntimePlane3D *plane = &scene->primitives[d->primitive].shape.plane;
+        Vec3 loc = vec3_sub(d->position, plane->origin);
+        if (plane->width / 2 - fabs(vec3_dot(loc, plane->axisU)) < 2 * radius ||
+            plane->height / 2 - fabs(vec3_dot(loc, plane->axisV)) < 2 * radius)
+            continue;
+        int n = 0;
+        for (int v = -1; v <= 1 && n < 16; v++)
+            for (int u = -1; u <= 1 && n < 16; u++) {
+                size_t k = bucket(m, d->primitive, d->band, d->u + u, d->v + v);
+                for (int j = m->heads[k]; j >= 0 && n < 16; j = m->records[j].next) {
+                    const Deposit *q = &m->records[j];
+                    if (q->u != d->u + u || q->v != d->v + v || q->primitive != d->primitive ||
+                        q->band != d->band || q->front != d->front)
+                        continue;
+                    Vec3 delta = vec3_sub(d->position, q->position);
+                    if (vec3_dot(delta, delta) < radius * radius)
+                        n++;
+                }
+            }
+        d->scale = (float)fmin(2, sqrt(16.0 / fmax(1, n)));
+        expanded += d->scale > 1;
+    }
+done:
+    RuntimeSceneAcceleration3D_FreeInstanceIdentityMaps(bounds, count);
+    free(bounds);
+    return expanded;
+}
 RuntimeSpectralSurfaceMap *RuntimeSpectralSurfaceMap_Build(const RuntimeSpectralPencil *p,
                                                            const RuntimeScene3D *scene,
                                                            RuntimeSpectralMapStats *st) {
     const RuntimeSpectralMapConfig *cfg = &p->map;
     RuntimeSpectralSurfaceMap *m = calloc(1, sizeof(*m));
-    if (!m) return NULL;
+    if (!m)
+        return NULL;
+    st->adaptive_scattered = cfg->adaptive_scattered;
     bands(m, cfg, st);
     for (int b = 0; b < st->band_count; ++b)
         m->band_nm[b] = st->bands[b].nm;
@@ -261,6 +332,10 @@ RuntimeSpectralSurfaceMap *RuntimeSpectralSurfaceMap_Build(const RuntimeSpectral
     }
     if (!RuntimeSpectralVolume_PrepareReconstruction(p->active_volume)) goto fail;
     if (p->active_volume) RuntimeSpectralVolume_ScatterStats(p->active_volume, st);
+    if (p->map.adaptive_scattered) {
+        st->expanded_deposits = assign_support(m, scene, p->receiver_radius_m);
+        m->has_expanded = st->expanded_deposits > 0;
+    }
     st->deposits = m->count;
     return m;
 fail:
@@ -312,8 +387,9 @@ double RuntimeSpectralSurfaceMap_Radiance(const RuntimeSpectralSurfaceMap *m,
     }
     int64_t u, v;
     if (!m->count || !cell(plane, hit->position, r, &u, &v)) return L;
-    for (int dv = -1; dv <= 1; ++dv)
-        for (int du = -1; du <= 1; ++du) {
+    int reach = m->has_expanded ? 2 : 1;
+    for (int dv = -reach; dv <= reach; ++dv)
+        for (int du = -reach; du <= reach; ++du) {
             size_t key = bucket(m, hit->primitive, band, u + du, v + dv);
             for (int i = m->heads[key]; i >= 0; i = m->records[i].next) {
                 const Deposit *d = &m->records[i];
@@ -322,7 +398,7 @@ double RuntimeSpectralSurfaceMap_Radiance(const RuntimeSpectralSurfaceMap *m,
                     continue;
                 ++*candidates;
                 double distance = vec3_length(vec3_sub(d->position, hit->position));
-                L += d->watts * RuntimeCausticPhotonSurfaceKernel3D_Weight(distance, r) / M_PI;
+                L += d->watts * RuntimeCausticPhotonSurfaceKernel3D_Weight(distance, d->scale * r) / M_PI;
             }
         }
     return L;

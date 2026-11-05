@@ -30,6 +30,7 @@ typedef struct {
 } RuntimeSpectralLamp;
 typedef struct {
     bool enabled;
+    bool adaptive_scattered;
     int samples, bins, source_count;
     unsigned seed;
     double absorption_per_m;
@@ -109,6 +110,8 @@ typedef struct {
 typedef struct {
     char key[65];
     int band_count, launched, deposits, direct_arrivals, missed, depth_limited;
+    int expanded_deposits;
+    bool adaptive_scattered;
     unsigned long long candidates;
     double build_ms, film_ms;
     bool reused;

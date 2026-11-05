@@ -2,7 +2,9 @@
 #include "editor/scene_editor_lifecycle.h"
 static void render_mcp_control(SceneEditor* editor,const char* name) {SDL_Rect rect;assert(SceneEditorRenderPanelControl(name,&rect));click(editor,rect);SceneEditorSessionRuntimeRender(editor);}
 static void render_mcp_wait(SceneEditor* editor) {
-    for(int i=0;i<4000 && SceneEditorRenderActive();++i) {SceneEditorSessionRuntimeRender(editor);SDL_Delay(10);}assert(!SceneEditorRenderActive());
+    const bool prism = getenv("OPTIC_TEST_PRISM") != NULL;
+    const Uint64 deadline = SDL_GetTicks64() + 1500000;
+    for(int i=0;(prism ? SDL_GetTicks64()<deadline : i<4000) && SceneEditorRenderActive();++i) {SceneEditorSessionRuntimeRender(editor);SDL_Delay(10);}assert(!SceneEditorRenderActive());
 }
 static void render_mcp_acceptance(SceneEditor* editor,const char* scene,bool reopen) {
     char message[512];

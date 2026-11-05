@@ -146,6 +146,10 @@ METHODS['render_start_spectral']=('render.start','Render a spectral photon scene
     'photons_per_source_override':{'type':'integer','minimum':0,'maximum':262144},
     'exposure_stops':{'type':'integer','minimum':-1,'maximum':2}})
 
+METHODS['render_start_spectral_gather']=('render.start','Render V3 surface photons with a selectable gather.',{
+    **METHODS['render_start_spectral'][2],
+    'gather_override':{'enum':['scene','fixed','adaptive_scattered']}})
+
 
 def tool_list():
     result=[]

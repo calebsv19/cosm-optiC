@@ -562,6 +562,7 @@ int main(int argc, char** argv) {
         }
         for (int i=modes==1?0:1;i<modes;++i) {
             if (i) render_mcp_control(&editor,"deposition");
+            if (i==2) render_mcp_control(&editor,"gather");
             if(i==1) {
                 render_mcp_control(&editor,"photons");
                 render_mcp_control(&editor,"photons");

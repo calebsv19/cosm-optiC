@@ -111,9 +111,11 @@ void RayTracingHeadlessSpectralMap_Write(FILE *f, const RuntimeSpectralMapStats 
     }
     fprintf(f,
             "  \"spectral_surface_map\":{\"key\":\"%s\",\"reused\":%s,\"launched\":%d,"
-            "\"deposits\":%d,\"direct_arrivals\":%d,\"missed\":%d,\"depth_limited\":%d,"
+            "\"gather\":\"%s\",\"expanded_deposits\":%d,\"deposits\":%d,\"direct_arrivals\":%d,\"missed\":%d,\"depth_limited\":%d,"
             "\"record_bytes\":%zu,\"gather_candidates\":%llu,\"bands\":[",
-            st->key, st->reused ? "true" : "false", st->launched, st->deposits, st->direct_arrivals,
+            st->key, st->reused ? "true" : "false", st->launched,
+            st->adaptive_scattered ? "adaptive_scattered" : "fixed", st->expanded_deposits,
+            st->deposits, st->direct_arrivals,
             st->missed, st->depth_limited, RuntimeSpectralSurfaceMap_RecordBytes(), st->candidates);
     for (int b = 0; b < st->band_count; ++b) {
         const RuntimeSpectralBand *row = &st->bands[b];

@@ -27,6 +27,34 @@ def qualify(cli, root):
     legacy=run();v['reconstruction']='box';box=run()
     assert physical(box)==physical(legacy)
     assert box['spectral_center_pixel_xyz']==legacy['spectral_center_pixel_xyz']
+    settings=q['spectral']['surface_map']
+    settings['gather']='fixed'
+    fixed=run()
+    assert fixed['spectral_center_pixel_xyz']==box['spectral_center_pixel_xyz']
+    assert fixed['spectral_surface_map']['expanded_deposits']==0
+    settings['gather']='adaptive_scattered'
+    adaptive=run()
+    assert adaptive['spectral_surface_map']['gather']=='adaptive_scattered'
+    assert adaptive['spectral_surface_map']['expanded_deposits']>0
+    assert adaptive['spectral_surface_map']['key']!=fixed['spectral_surface_map']['key']
+    assert physical(adaptive)==physical(fixed)
+    assert run()['spectral_center_pixel_xyz']==adaptive['spectral_center_pixel_xyz']
+    # A coincident second plane must keep the footprint at the base radius.
+    scene_path=Path(q['scene']['runtime_scene_path'])
+    scene=json.loads(scene_path.read_text())
+    plane=dict(next(o for o in scene['objects'] if o['object_id']=='screen'),object_id='nearby_screen')
+    scene['objects'].append(plane)
+    (root/'assets').symlink_to(scene_path.parent/'assets')
+    (root/'overlap.json').write_text(json.dumps(scene))
+    q['scene']['runtime_scene_path']=str(root/'overlap.json')
+    overlap=run()
+    assert overlap['spectral_surface_map']['deposits']>0
+    assert overlap['spectral_surface_map']['expanded_deposits']==0
+    q['scene']['runtime_scene_path']=str(scene_path)
+    for bad in ('adaptive', 'adaptive_scattered\0ignored', None, 1):
+        settings['gather']=bad
+        run(False)
+    del settings['gather']
     for mode in ('continuous','adaptive'):
         v.update(reconstruction=mode,phase_tolerance=.01)
         approx=run();v['phase_tolerance']=0;exact=run()

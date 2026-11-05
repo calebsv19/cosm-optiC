@@ -149,8 +149,16 @@ static bool optics(json_object *s, RuntimeSpectralPencil *out) {
            integer(s, "display_sensor", 0, out->sensor_count - 1, &out->display_sensor);
 }
 static bool parse_map(json_object *obj, RuntimeSpectralMapConfig *m) {
-    if (!ONLY(obj, "enabled", "photons_per_source", "bins", "seed", "absorption_per_m", "sources"))
+    if (!ONLY(obj, "enabled", "photons_per_source", "bins", "seed", "absorption_per_m", "sources", "gather"))
         return false;
+    json_object *gather;
+    if (json_object_object_get_ex(obj, "gather", &gather)) {
+        if (!json_object_is_type(gather, json_type_string)) return false;
+        const char *name = json_object_get_string(gather);
+        if (strlen(name) != (size_t)json_object_get_string_len(gather)) return false;
+        m->adaptive_scattered = !strcmp(name, "adaptive_scattered");
+        if (!m->adaptive_scattered && strcmp(name, "fixed")) return false;
+    }
     json_object *on = json_object_object_get(obj, "enabled"),
                 *lamps = json_object_object_get(obj, "sources");
     int seed;

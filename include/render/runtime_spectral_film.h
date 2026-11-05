@@ -2,6 +2,7 @@
 #define RENDER_RUNTIME_SPECTRAL_FILM_H
 #include "render/runtime_native_3d_render.h"
 #include "render/runtime_spectral_surface_map.h"
+#include <SDL2/SDL_mutex.h>
 
 bool RuntimeNative3DPrepareEvaluatedFrameWithProfile(RuntimeNative3DPreparedFrame *out_frame, int width,
                                                      int height,
@@ -20,6 +21,7 @@ bool RuntimeSpectralFilm_Region(const RuntimeSpectralPencil *p, const RuntimeSpe
                                 uint8_t *pixels, float *radiance, int stride, RuntimeSpectralReadout *out,
                                 char *diag, size_t size);
 typedef struct RuntimeSpectralFrame {
+    SDL_mutex *query_lock; /* Continuous volume caches are owned by one shading tile at a time. */
     RuntimeSpectralPencil profile;
     RuntimeSpectralSurfaceMap *map;
     RuntimeSpectralMapStats stats;

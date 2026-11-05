@@ -29,6 +29,15 @@ bool SceneEditorAgentRenderDispatch(const char* name,json_object* p,json_object*
             else if(!strcmp(value,"surface_volume")) o.deposition=EDITOR_SPECTRAL_SURFACE_VOLUME;
             else if(strcmp(value,"direct")) goto invalid;
         }
+        json_object *gather=get(p,"gather_override");
+        if(gather) {
+            if(!o.deposition || !json_object_is_type(gather,json_type_string)) goto invalid;
+            const char *value=json_object_get_string(gather);
+            if(strlen(value)!=(size_t)json_object_get_string_len(gather)) goto invalid;
+            if(!strcmp(value,"adaptive_scattered")) o.gather=EDITOR_GATHER_ADAPTIVE;
+            else if(!strcmp(value,"fixed")) o.gather=EDITOR_GATHER_FIXED;
+            else if(strcmp(value,"scene")) goto invalid;
+        }
         json_object *photons=get(p,"photons_per_source_override"),*exposure=get(p,"exposure_stops");
         if(photons && (!o.deposition || !integer(p,"photons_per_source_override",&o.spectral_photons))) goto invalid;
         if(exposure) {
@@ -36,7 +45,7 @@ bool SceneEditorAgentRenderDispatch(const char* name,json_object* p,json_object*
                json_object_get_int64(exposure)<-1 || json_object_get_int64(exposure)>2) goto invalid;
             o.spectral_exposure_stops=json_object_get_int(exposure);
         }
-        if(json_object_object_length(p)!=(seeded?8:7)+(deposition!=NULL)+(exposure!=NULL)+(photons!=NULL) || !json_object_is_type(mode,json_type_string) || !json_object_is_type(id,json_type_string) || !integer(p,"width",&o.width) || !integer(p,"height",&o.height) || !integer(p,"temporal_frames",&o.temporal_frames) || !integer(p,"frame",&o.frame)) goto invalid;
+        if(json_object_object_length(p)!=(seeded?8:7)+(deposition!=NULL)+(exposure!=NULL)+(photons!=NULL)+(gather!=NULL) || !json_object_is_type(mode,json_type_string) || !json_object_is_type(id,json_type_string) || !integer(p,"width",&o.width) || !integer(p,"height",&o.height) || !integer(p,"temporal_frames",&o.temporal_frames) || !integer(p,"frame",&o.frame)) goto invalid;
         if(seeded) {
             json_object *sequence=get(p,"sample_sequence");
             if(!json_object_is_type(sequence,json_type_int)||json_object_get_int64(sequence)<1||json_object_get_int64(sequence)>UINT32_MAX)goto invalid;

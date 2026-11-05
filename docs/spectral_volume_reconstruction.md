@@ -31,6 +31,26 @@ The same scene geometry, wavelength samples, random stream and physical forward
 transport are reused. Reconstruction changes the camera estimator, not the
 surface photon map, collision count, absorption ledger or emission power.
 
+## Scattered deposits on surfaces
+
+In V3, headless requests and saved editor spectral profiles accept
+`surface_map.gather` as `fixed` (default) or `adaptive_scattered`. Both use the
+same forward photon paths. The adaptive mode assigns a radius to each deposit
+that reached a receiver after scattering in the medium. It counts deposits on
+the same primitive, side and wavelength band within the base radius, including
+the deposit itself. With count n, its normalized planar kernel uses
+`receiver_radius_m × clamp(sqrt(16/n), 1, 2)`. Direct light and unscattered
+caustic deposits use the base radius.
+
+The renderer keeps the base radius near a finite receiver edge, another plane
+or another primitive's bounds. Missing object bounds also select the base
+radius. These conservative tests restrict enlargement in ambiguous geometry.
+The headless summary reports the selected gather and the number of expanded
+deposits. In the editor’s Render frame panel, enable surface deposition and cycle
+Gather between Scene, Adaptive and Fixed. Scene uses the saved profile. The job
+receipt records the override. Map identity includes the mode. The same gather works with the box
+and continuous volume estimators.
+
 ## Boundary normalization
 
 For collision `i` in occupied connected component `C`, let `w_ij` be its
@@ -101,8 +121,9 @@ components use exact half-open bounds tests for domain lookup; all other domains
 retain the interpolation-cell label lookup, including nonrectangular masks.
 
 A small per-ray cache reuses exact node evaluations. A changed ray origin or
-direction invalidates it. State belongs to a serial render context; simultaneous
-workers must not share it. Camera segments split at reconstruction, density and
+direction invalidates it. The editor serializes continuous-volume queries within each prepared frame so
+concurrent tiles cannot overwrite its per-ray cache. Independent frames can render
+in parallel. Camera segments split at reconstruction, density and
 admitted geometry knots. Two-point Gauss integration is used below segment
 optical depth 0.025, four-point otherwise, with subdivision above 0.25.
 
