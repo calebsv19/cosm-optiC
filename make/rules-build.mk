@@ -255,6 +255,11 @@ $(BUILD_DIR)/kit_render/%.o: $(KIT_RENDER_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@
 
+# Window metrics uses a real SDL_Renderer for non-Vulkan SDL windows.
+$(BUILD_DIR)/kit_ui/kit_ui_window_sdl.o: CFLAGS := $(subst -include $(VK_RENDERER_DIR)/include/vk_renderer_sdl.h,,$(CFLAGS))
+# SDL-style drawing in this unit targets the already alpha-blended Vulkan pipeline.
+$(BUILD_DIR)/kit_ui/kit_ui_sdl.o $(BUILD_DIR)/kit_ui/kit_ui_interaction_sdl.o: CFLAGS += -include include/render/kit_ui_vk_sdl.h
+
 $(BUILD_DIR)/kit_ui/%.o: $(KIT_UI_DIR)/src/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(DEPFLAGS) -c $< -o $@

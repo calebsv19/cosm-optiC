@@ -104,7 +104,15 @@ int scene_editor_shared_label(SDL_Renderer *renderer,SDL_Rect area,const char *l
 void scene_editor_shared_label_at(SDL_Renderer *r,const char *label,int x,int y,SDL_Color ink,int point) {
     SDL_Rect clip;int w=0,h=0;
     if(SDL_RenderIsClipEnabled(r))SDL_RenderGetClipRect(r,&clip);
-    else {SDL_GetRendererOutputSize(r,&w,&h);clip=(SDL_Rect){0,0,w,h};}
+    else {
+#if USE_VULKAN
+        w=(int)r->draw_state.logical_size[0];
+        h=(int)r->draw_state.logical_size[1];
+#else
+        SDL_GetRendererOutputSize(r,&w,&h);
+#endif
+        clip=(SDL_Rect){0,0,w,h};
+    }
     SDL_Rect bounds={x,y,clip.x+clip.w-x,clip.y+clip.h-y};
     int height=point+6;if(bounds.h>height)bounds.h=height;
     scene_editor_shared_label(r,bounds,label,ink,point,0,0);
