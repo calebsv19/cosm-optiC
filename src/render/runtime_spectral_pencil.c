@@ -108,6 +108,11 @@ static bool trace_closed_dielectric(const RuntimeScene3D *scene, const RuntimeSp
             if (camera) out->weight *= (from / to) * (from / to);
             ray = RuntimeRay3D_Make(hit.position, event.refractionDir);
         }
+        /* At grazing angles a rounded hit point can meet its own face again
+         * beyond min_distance. Move across the boundary in the outgoing
+         * normal direction using the same coordinate-precision bound. */
+        double side = vec3_dot(ray.direction, normal) < 0 ? -1 : 1;
+        ray.origin = vec3_add(ray.origin, vec3_scale(normal, side * min_distance));
     }
     /* A depth-limited path contributes no flux to the receiver. */
     out->direction = ray.direction;

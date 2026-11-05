@@ -68,6 +68,16 @@ def qualify(cli, root):
     assert abs(short['vacuum_nm']-633.79683135445021)<1e-12
     assert sum(a*b for a,b in zip(short['direction'],direction)) < -1+1e-12
 
+    # A grazing exit can round onto the interior side of its own face.
+    grazing = copy.deepcopy(base)
+    grazing['spectral']['origin_m'] = [.98290406070138692, .26954375265983405, 1.8975516637533482e-05]
+    grazing['spectral']['direction'] = [-.85590469658399404, -.51563208547701544, .039378963826960517]
+    grazing['spectral']['lines'] = [dict(vacuum_nm=711.53669201683272, watts=1, absorption_per_m=0)]
+    exit_path = run(grazing)['spectral_pencil'][0]['forward']
+    assert exit_path['interfaces'] == 3 and not exit_path['depth_limited']
+    assert not exit_path['receiver_hit'] and 0 < exit_path['path_watts'] < 1
+    assert exit_path['direction'][0] < 0 and exit_path['direction'][1] > .99
+
     report = run(base, render=True)
     first = frame()
     assert report["integrator_3d"] == "disney_v3_spectral" and report["frames_rendered"] == 1
