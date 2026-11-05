@@ -55,6 +55,19 @@ def qualify(cli, root):
     def frame():
         return (output / "frames/frame_0000.bmp").read_bytes()
 
+    # A TIR path near the prism bottom has a valid 9.24 nm segment. A fixed
+    # 10 nm t_min skips that interface and wrongly reports an open glass boundary.
+    corner = copy.deepcopy(base)
+    corner['spectral']['origin_m'] = [0.18785651118585348, 0.10316827954779073, 0.00011160109322828476]
+    direction = [-0.61899752376092587, 0.13989201325371348, 0.77283393442942494]
+    corner['spectral']['direction'] = direction
+    corner['spectral']['lines'] = [dict(vacuum_nm=633.79683135445021, watts=1, absorption_per_m=0)]
+    short = run(corner)['spectral_pencil'][0]['forward']
+    assert short['receiver_hit'] and not short['depth_limited'] and short['interfaces']==9
+    assert 0 < short['path_watts'] < 1
+    assert abs(short['vacuum_nm']-633.79683135445021)<1e-12
+    assert sum(a*b for a,b in zip(short['direction'],direction)) < -1+1e-12
+
     report = run(base, render=True)
     first = frame()
     assert report["integrator_3d"] == "disney_v3_spectral" and report["frames_rendered"] == 1

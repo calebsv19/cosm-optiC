@@ -4,6 +4,7 @@
 #include "render/runtime_physical_glass_3d.h"
 #include "render/runtime_spectral_volume.h"
 #include <math.h>
+#include <float.h>
 #include <string.h>
 
 double RuntimeSpectralCurve_Value(const RuntimeSpectralCurve *curve, double nm) {
@@ -27,7 +28,7 @@ double RuntimeSpectralPencil_Index(const RuntimeSpectralPencil *p, double vacuum
 
 /* Both paths start in the exterior medium. Smooth paths track ballistic
  * transmission and TIR. Rough interfaces sample the native GGX random walk. */
-bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p,
+static bool trace_closed_dielectric(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p,
                                  const RuntimeSpectralPencilLine *line, double index, Ray3D ray,
                                  bool camera, RuntimeSpectralPathReadout *out) {
     const RuntimeMaterialPayload3D material = {.hasGlassTransportOverride = true,
@@ -39,7 +40,12 @@ bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpect
     for (int step = 0; out->interfaces < 32; ++step) {
         HitInfo3D hit;
         out->direction = ray.direction;
-        bool surface = RuntimeRay3D_TraceSceneFirstHit(scene, &ray, 1e-8,
+        /* Secondary interfaces can be nanometers apart near a prism corner.
+         * Bound self-intersection error by coordinate precision instead of
+         * discarding every segment shorter than a fixed geometric distance. */
+        double scale = fmax(1, fmax(fabs(ray.origin.x), fmax(fabs(ray.origin.y), fabs(ray.origin.z))));
+        double min_distance = 64 * DBL_EPSILON * scale;
+        bool surface = RuntimeRay3D_TraceSceneFirstHit(scene, &ray, min_distance,
                                                        RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE, &hit);
         if (p->active_volume && !inside) {
             bool restart;
@@ -107,4 +113,15 @@ bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpect
     out->direction = ray.direction;
     out->depth_limited = true;
     return true;
+}
+
+bool RuntimeSpectralPencil_Trace(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p,
+                                 const RuntimeSpectralPencilLine *line, double index, Ray3D ray,
+                                 bool camera, RuntimeSpectralPathReadout *out) {
+    /* Closed surfaces include their shared edges in every caller, including
+     * the standalone monochromatic path oracle. The policy is thread-local. */
+    bool previous = RuntimeRay3D_SetInclusiveTriangleEdges(true);
+    bool ok = trace_closed_dielectric(scene, p, line, index, ray, camera, out);
+    RuntimeRay3D_SetInclusiveTriangleEdges(previous);
+    return ok;
 }
