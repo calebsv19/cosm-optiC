@@ -154,8 +154,7 @@ bool RuntimeCausticPhotonScenePopulation3D_PopulateMaps(
     RuntimeRay3DTraceContext_SetTraceRoute(&ray_context, active->traceRoute);
     RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
         &ray_context,
-        (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
-            RuntimeSceneAcceleration3D_TraceFirstHit);
+        RuntimeSceneAcceleration3D_FirstHitCallback);
     HitInfo3D_Reset(&receiver_hit);
     found = RuntimeRay3D_TraceSceneFirstHitWithContext(&ray_context,
                                                        scene,

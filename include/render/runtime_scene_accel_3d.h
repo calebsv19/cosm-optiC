@@ -108,6 +108,14 @@ RuntimeSceneAcceleration3DTraceStatus RuntimeSceneAcceleration3D_TraceFirstHit(
     FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
     FISICS_DIM(length) FISICS_UNIT(meter) double t_max,
     HitInfo3D* out_hit);
+/* The generic ray-route callback returns int; the acceleration API returns
+ * an enum. Convert the value through a correctly typed function call. */
+static inline int RuntimeSceneAcceleration3D_FirstHitCallback(
+    const RuntimeScene3D* scene, const Ray3D* ray,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_min,
+    FISICS_DIM(length) FISICS_UNIT(meter) double t_max, HitInfo3D* out_hit) {
+    return (int)RuntimeSceneAcceleration3D_TraceFirstHit(scene, ray, t_min, t_max, out_hit);
+}
 void RuntimeSceneAcceleration3D_ResetTraceStats(void);
 void RuntimeSceneAcceleration3D_SnapshotTraceStats(
     RuntimeSceneAcceleration3DTraceStats* out_stats);

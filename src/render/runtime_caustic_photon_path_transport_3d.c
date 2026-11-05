@@ -354,8 +354,7 @@ bool RuntimeCausticPhotonPathTransport3D_Trace(
                                            active->sceneTrace.traceRoute);
     RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
         &ray_context,
-        (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
-            RuntimeSceneAcceleration3D_TraceFirstHit);
+        RuntimeSceneAcceleration3D_FirstHitCallback);
 
     for (uint32_t depth = 1u; depth <= effective_max_depth; ++depth) {
         RuntimeCausticPhotonSceneHitEvent3D* hit_event;

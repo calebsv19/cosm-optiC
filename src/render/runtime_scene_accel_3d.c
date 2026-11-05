@@ -510,8 +510,7 @@ bool RuntimeSceneAcceleration3D_RebuildTLASFromScene(const RuntimeScene3D* scene
     gRuntimeSceneAcceleration3DPreparedGeometrySignature =
         runtime_scene_accel_3d_geometry_signature(scene);
     RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
-        (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
-            RuntimeSceneAcceleration3D_TraceFirstHit);
+        RuntimeSceneAcceleration3D_FirstHitCallback);
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBuildMs +=
         runtime_scene_accel_3d_elapsed_ms_since(&build_start);
     return true;
@@ -589,8 +588,7 @@ bool RuntimeSceneAcceleration3D_BindPreparedSceneForTracing(const RuntimeScene3D
     }
     runtime_scene_accel_3d_register_compatible_scene(scene);
     RuntimeRay3D_SetSceneAccelerationTraceFirstHit(
-        (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
-            RuntimeSceneAcceleration3D_TraceFirstHit);
+        RuntimeSceneAcceleration3D_FirstHitCallback);
     runtime_scene_accel_3d_set_diag("ok");
     gRuntimeSceneAcceleration3DTLASDiagnostics.tlasBindMs +=
         runtime_scene_accel_3d_elapsed_ms_since(&bind_start);

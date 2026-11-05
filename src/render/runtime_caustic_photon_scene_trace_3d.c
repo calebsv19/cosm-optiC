@@ -189,8 +189,7 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicDielectric(
     RuntimeRay3DTraceContext_SetTraceRoute(&ray_context, active->traceRoute);
     RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
         &ray_context,
-        (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
-            RuntimeSceneAcceleration3D_TraceFirstHit);
+        RuntimeSceneAcceleration3D_FirstHitCallback);
     ray = RuntimeRay3D_Make(state.position, state.direction);
     RuntimeCausticLensTransport3D_DefaultTraversalProfile(&profile);
 
@@ -535,8 +534,7 @@ bool RuntimeCausticPhotonSceneTrace3D_TraceDeterministicBsdfHit(
     RuntimeRay3DTraceContext_SetTraceRoute(&ray_context, active->traceRoute);
     RuntimeRay3DTraceContext_SetSceneAccelerationTraceFirstHit(
         &ray_context,
-        (RuntimeRay3DSceneAccelerationTraceFirstHitFn)
-            RuntimeSceneAcceleration3D_TraceFirstHit);
+        RuntimeSceneAcceleration3D_FirstHitCallback);
     ray = RuntimeRay3D_Make(state.position, state.direction);
     HitInfo3D_Reset(&hit);
     result.readback.intersectionCount = 1u;
