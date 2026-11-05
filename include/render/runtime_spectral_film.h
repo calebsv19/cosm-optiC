@@ -20,11 +20,16 @@ bool RuntimeSpectralFilm_Region(const RuntimeSpectralPencil *p, const RuntimeSpe
                                 const RuntimeNative3DPreparedFrame *frame, int x0, int y0, int x1, int y1,
                                 uint8_t *pixels, float *radiance, int stride, RuntimeSpectralReadout *out,
                                 char *diag, size_t size);
+/* Sparse camera masks are native samples; linear values retain signed RGB. */
+bool RuntimeSpectralFilm_Sample(const RuntimeSpectralPencil *p, const RuntimeSpectralSurfaceMap *map,
+    const RuntimeNative3DPreparedFrame *frame, int y0, int y1, double dx, double dy,
+    const uint8_t *mask, float *radiance, RuntimeSpectralReadout *out, char *diag, size_t size);
 typedef struct RuntimeSpectralFrame {
     SDL_mutex *query_lock; /* Continuous volume caches are owned by one shading tile at a time. */
     RuntimeSpectralPencil profile;
     RuntimeSpectralSurfaceMap *map;
     RuntimeSpectralMapStats stats;
+    RuntimeSpectralSamplingStats sampling;
 } RuntimeSpectralFrame;
 RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *profile,
                                                   const RuntimeScene3D *scene, char *diag, size_t size);

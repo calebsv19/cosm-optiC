@@ -1729,3 +1729,5 @@ The optional `participating_volume_v1.reconstruction` selector admits `box`
 (default), `continuous`, or `adaptive`. `phase_tolerance` controls bounded angular
 caching in continuous modes. See [normalization, admission limits, storage and
 verification](spectral_volume_reconstruction.md) before selecting these modes.
+
+See [V3 balanced edge-aware convergence](spectral_sampling.md) for ordinary render, saved-scene and headless sampling controls.

@@ -331,10 +331,12 @@ bool agent_render_request_parse_spectral(json_object *root, const char *dir, Run
 bool RuntimeSpectralProfile_Parse(json_object *s, const char *dir, RuntimeSpectralPencil *out) {
     json_object *map = NULL;
     bool mapping = json_object_object_get_ex(s, "surface_map", &map);
+    json_object *sampling_value;
+    if(json_object_object_get_ex(s,"sampling",&sampling_value) && !sampling_value) return false;
     if (!(mapping
               ? ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "receiver_radius_m", "exposure",
                      "surface_map", "exterior_ior", "glass_roughness", "receiver_reflectance",
-                     "receiver_texture", "sensors", "display_sensor", "participating_volume_v1")
+                     "receiver_texture", "sensors", "display_sensor", "participating_volume_v1", "sampling")
               : ONLY(s, "glass_id", "receiver_id", "glass", "constant_ior", "origin_m", "direction",
                      "receiver_radius_m", "exposure", "lines")))
         return false;
@@ -364,7 +366,8 @@ bool RuntimeSpectralProfile_Parse(json_object *s, const char *dir, RuntimeSpectr
         return false;
     if (mapping) {
         json_object *volume;
-        return optics(s, out) && parse_map(map, &out->map) &&
+        return RuntimeSpectralSampling_Parse(json_object_object_get(s, "sampling"), &out->sampling) &&
+               optics(s, out) && parse_map(map, &out->map) &&
                (!json_object_object_get_ex(s, "participating_volume_v1", &volume) ||
                 (volume_config(volume, dir, &out->volume) && out->map.enabled));
     }

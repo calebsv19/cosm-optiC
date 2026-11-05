@@ -186,11 +186,14 @@ static void write_path(FILE *f, const RuntimeSpectralPathReadout *hit, const cha
 void RayTracingHeadlessSpectral_Write(FILE *f, const RayTracingAgentRenderRequest *request,
                                       const RuntimeSpectralReadout *out, bool rendered) {
     const RuntimeSpectralPencil *p = &request->spectral;
+    json_object *sampling=RuntimeSpectralSampling_JSON(&out->sampling);
+    fprintf(f,"  \"spectral_sampling\":%s,\n",json_object_to_json_string_ext(sampling,JSON_C_TO_STRING_PLAIN));
+    json_object_put(sampling);
     fprintf(f,"  \"spectral_execution\":{\"route\":\"local_headless\","
           "\"film_schedule\":\"serial_scanlines\",\"film_threads\":1,"
-          "\"frames\":1,\"temporal_passes\":1,\"denoise\":false,"
+          "\"frames\":1,\"temporal_passes\":%d,\"denoise\":false,"
           "\"tile_checkpoint_resume\":false,\"worker_supported\":false,"
-          "\"editor_supported\":%s,\"map_cache_scope\":\"process\"},\n", p->map.enabled ? "true" : "false");
+          "\"editor_supported\":%s,\"map_cache_scope\":\"process\"},\n", p->sampling.enabled?out->sampling.passes:1, p->map.enabled ? "true" : "false");
     if (rendered)
         fprintf(f, "  \"spectral_center_pixel_xyz\":[%.17g,%.17g,%.17g],\n", out->center_pixel_xyz.x,
                 out->center_pixel_xyz.y, out->center_pixel_xyz.z);

@@ -151,6 +151,12 @@ METHODS['render_start_spectral_gather']=('render.start','Render V3 surface photo
     'gather_override':{'enum':['scene','fixed','adaptive_scattered']}})
 
 
+METHODS['render_start_spectral_convergence']=('render.start','Render V3 with balanced edge sampling and measured convergence.',{
+    **METHODS['render_start_spectral_gather'][2],
+    'sampling_override':{'type':'integer','minimum':0,'maximum':2},
+    'max_passes_override':{'type':'integer','minimum':0,'maximum':1048576}})
+
+
 def tool_list():
     result=[]
     for name,(method,description,fields) in METHODS.items():

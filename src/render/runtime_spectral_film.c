@@ -64,10 +64,10 @@ void RuntimeSpectral_DisplayPixel(uint8_t *pixel, Vec3 rgb) {
     pixel[2] = display(rgb.z);
     pixel[3] = 255;
 }
-bool RuntimeSpectralFilm_Region(const RuntimeSpectralPencil *p, const RuntimeSpectralSurfaceMap *cached,
+static bool spectral_film_region(const RuntimeSpectralPencil *p, const RuntimeSpectralSurfaceMap *cached,
                                 const RuntimeNative3DPreparedFrame *frame, int x0, int y0, int x1, int y1,
                                 uint8_t *pixels, float *radiance, int stride, RuntimeSpectralReadout *out,
-                                char *diag, size_t size) {
+                                char *diag, size_t size, double dx, double dy, const uint8_t *mask, bool signed_rgb) {
     const RuntimeScene3D *scene = frame->traceScene ? frame->traceScene : &frame->scene;
     RuntimeSpectralMapStats *st = &out->map;
     double sigma[SPECTRAL_MAP_MAX_BANDS];
@@ -88,8 +88,9 @@ bool RuntimeSpectralFilm_Region(const RuntimeSpectralPencil *p, const RuntimeSpe
         }
     for (int y = y0; y < y1; ++y)
         for (int x = x0; x < x1; ++x) {
+            if (mask && !mask[(size_t)y * frame->width + x]) continue;
             Vec3 xyz = vec3(0, 0, 0);
-            Ray3D ray = RuntimeCameraProjector3D_MakePrimaryRay(&frame->projector, x, y);
+            Ray3D ray = RuntimeCameraProjector3D_MakePrimaryRay(&frame->projector, x + dx, y + dy);
             double signals[4] = {0};
             int samples = p->glass_roughness > 0 ? 16 : 1;
             for (int j = 0; j < samples; ++j) {
@@ -142,12 +143,26 @@ bool RuntimeSpectralFilm_Region(const RuntimeSpectralPencil *p, const RuntimeSpe
                 RuntimeSpectral_DisplayPixel(pixels + ((size_t)y * frame->width + x) * 4, rgb);
             else {
                 size_t i = ((size_t)(y - y0) * stride + x - x0) * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS;
-                radiance[i] = fmax(0, rgb.x);
-                radiance[i + 1] = fmax(0, rgb.y);
-                radiance[i + 2] = fmax(0, rgb.z);
+                radiance[i] = signed_rgb ? rgb.x : fmax(0, rgb.x);
+                radiance[i + 1] = signed_rgb ? rgb.y : fmax(0, rgb.y);
+                radiance[i + 2] = signed_rgb ? rgb.z : fmax(0, rgb.z);
                 radiance[i + 3] = 0;
             }
         }
     if(p->active_volume)RuntimeSpectralVolume_ScatterStats(p->active_volume,st);
     return true;
+}
+
+bool RuntimeSpectralFilm_Region(const RuntimeSpectralPencil *p, const RuntimeSpectralSurfaceMap *map,
+    const RuntimeNative3DPreparedFrame *frame, int x0, int y0, int x1, int y1,
+    uint8_t *pixels, float *radiance, int stride, RuntimeSpectralReadout *out, char *diag, size_t size) {
+    return spectral_film_region(p, map, frame, x0, y0, x1, y1, pixels, radiance, stride,
+                                out, diag, size, 0, 0, NULL, false);
+}
+bool RuntimeSpectralFilm_Sample(const RuntimeSpectralPencil *p, const RuntimeSpectralSurfaceMap *map,
+    const RuntimeNative3DPreparedFrame *frame, int y0, int y1, double dx, double dy,
+    const uint8_t *mask, float *radiance, RuntimeSpectralReadout *out, char *diag, size_t size) {
+    return spectral_film_region(p, map, frame, 0, y0, frame->width, y1, NULL,
+        radiance + (size_t)y0 * frame->width * RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
+        frame->width, out, diag, size, dx, dy, mask, true);
 }

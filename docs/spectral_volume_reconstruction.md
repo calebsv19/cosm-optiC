@@ -175,3 +175,5 @@ uses actual Render frame controls and the ordinary saved-scene preparation path.
 Continuous/adaptive reconstruction remains opt-in pending broader performance
 and geometry qualification. Release, installed desktop and default adoption are
 separate from this source implementation.
+
+See [V3 balanced edge-aware convergence](spectral_sampling.md) for ordinary render, saved-scene and headless sampling controls.

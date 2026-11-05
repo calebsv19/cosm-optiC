@@ -487,6 +487,8 @@ static void verify_viewport_gestures(SceneEditor *editor) {verify_viewport_gestu
 #include "scene_editor_event_camera_acceptance.h"
 #include "scene_editor_event_planner_acceptance.h"
 #include "preview_shared_ui_native_test.h"
+#include "scene_editor_spectral_sampling_case.h"
+
 int main(int argc, char** argv) {
     SceneEditor editor;
     SceneEditorPaneLayout before, after;
@@ -543,14 +545,15 @@ int main(int argc, char** argv) {
     }
     if(argc==4 && !strcmp(argv[3],"--cross-save-as")) {cross_save_as_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--cross-save-as-reopen")) {assert(RuntimeSurfaceSamplingActive(0));assert(SceneEditorDocumentObjectCount()==4);assert(!SceneEditorDocumentIsDirty());DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;}
-    if(argc==4 && !strcmp(argv[3],"--spectral-ui")) {
+    if(argc==4 && (!strcmp(argv[3],"--spectral-ui") || !strcmp(argv[3],"--spectral-sampling-ui"))) {
+        bool sampling_test=!strcmp(argv[3],"--spectral-sampling-ui");
         SceneEditorWorkspaceProfileSelect(&editor,SCENE_WORKSPACE_RENDER);
         SceneEditorSessionRuntimeRender(&editor);
         render_mcp_control(&editor,"toggle");
         render_mcp_control(&editor,"mode"); /* Direct Light -> V2 -> V3 */
         render_mcp_control(&editor,"mode");
-        render_mcp_control(&editor,"width"); authoring_text(&editor,"320");
-        render_mcp_control(&editor,"height"); authoring_text(&editor,"128");
+        render_mcp_control(&editor,"width"); authoring_text(&editor,sampling_test?"64":"320");
+        render_mcp_control(&editor,"height"); authoring_text(&editor,sampling_test?"48":"128");
         int modes=getenv("OPTIC_TEST_PRISM") ? 3 : 1;
         if(modes==1) {
             SceneEditorRenderOptions missing={.width=32,.height=16,.temporal_frames=1,
@@ -568,11 +571,20 @@ int main(int argc, char** argv) {
                 render_mcp_control(&editor,"photons");
                 render_mcp_control(&editor,"exposure");
             }
+            if(sampling_test && i==1) {
+                render_mcp_control(&editor,"sampling");
+                render_mcp_control(&editor,"temporal_frames");authoring_text(&editor,"16");
+            }
             render_mcp_control(&editor,"start"); render_mcp_wait(&editor);
             char why[256];
             json_object *job=SceneEditorRenderJobRead(SceneEditorRenderLatestId(),true,why,sizeof(why));
             if (job) fprintf(stderr,"%s\n",json_object_to_json_string(job));
             assert(job && json_object_get_boolean(json_object_object_get(job,"artifact_integrity")));
+            if(sampling_test) {
+                json_object *stats=json_object_object_get(job,"spectral_sampling");
+                assert(json_object_get_int(json_object_object_get(stats,"passes"))==16);
+                assert(json_object_get_int(json_object_object_get(job,"completed_subpasses"))==16);
+            }
             const char *names[]={"direct.json","surface.json","volume.json"};
             assert(json_object_to_file(names[i],job)==0);json_object_put(job);
         }
@@ -586,6 +598,7 @@ int main(int argc, char** argv) {
         assert(RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(&frame,32,16,&evaluated.snapshot,NULL));
         assert((frame.spectralFrame!=NULL)==(modes==3));
         if(frame.spectralFrame) assert(frame.spectralFrame->stats.deposits>0 && frame.spectralFrame->stats.volume_frame_sha[0]);
+        if(sampling_test) spectral_sampling_frame_checks(&frame);
         RuntimeNative3DPreparedFrame_Free(&frame);
         DestroySceneEditor(&editor);TTF_Quit();SDL_Quit();return 0;
     }

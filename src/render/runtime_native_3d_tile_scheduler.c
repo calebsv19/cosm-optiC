@@ -1,4 +1,5 @@
 #include "render/runtime_native_3d_tile_scheduler_internal.h"
+#include "render/runtime_spectral_convergence.h"
 
 #include <SDL2/SDL.h>
 
@@ -748,6 +749,21 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
         return false;
     }
 
+    if (integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL && frame->spectralFrame &&
+        frame->spectralFrame->profile.sampling.enabled) {
+        /* Whole-frame convergence owns its independent map and camera samples.
+         * The ordinary scheduler still owns cancellation and preview delivery. */
+        if (scheduler_control && scheduler_control->checkpoint) return false;
+        RuntimeSpectralReadout result={0};char diagnostic[256];
+        bool converged_render=RuntimeSpectralConvergence_Render(&frame->spectralFrame->profile,
+            frame,pixel_buffer,scheduler_control?scheduler_control->cancelToken:NULL,
+            tile_progress_callback,tile_progress_user_data,&result,diagnostic,sizeof(diagnostic));
+        frame->spectralFrame->sampling=result.sampling;
+        if(out_stats) out_stats->temporalCommittedSubpasses=result.sampling.passes;
+        if (progress_callback) progress_callback(result.sampling.passes,result.sampling.passes,
+            result.sampling.passes,progress_user_data);
+        return converged_render;
+    }
     occupancy_ok = RuntimeNative3DPrepareFrameTileOccupancy(
         frame, effective_tile_size);
     (void)occupancy_ok;

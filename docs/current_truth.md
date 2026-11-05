@@ -3835,3 +3835,5 @@ logical and raster sizes across DPI/zoom combinations. Existing fonts, hinting,
 layout policy, palette and image sampling remain. Shared CPU/GPU glyph oracles,
 actual 1x/2x editor/field/HUD checks, affected editor regressions and headless smoke
 qualify this source slice. [Details and proof scope](text_fidelity.md).
+
+See [V3 balanced edge-aware convergence](spectral_sampling.md) for ordinary render, saved-scene and headless sampling controls.

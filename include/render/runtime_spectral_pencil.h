@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "render/runtime_spectral_sampling.h"
 #include "render/runtime_spectral_profile.h"
 #include "render/runtime_ray_3d.h"
 
@@ -73,6 +74,7 @@ typedef struct {
 } RuntimeSpectralVolumeConfig;
 typedef struct RuntimeSpectralVolume RuntimeSpectralVolume;
 typedef struct {
+    RuntimeSpectralSamplingConfig sampling;
     RuntimeSpectralVolumeConfig volume;
     RuntimeSpectralVolume *active_volume; /* borrowed during headless preparation/render */
     RuntimeSpectralMapConfig map;
@@ -126,6 +128,7 @@ typedef struct {
     RuntimeSpectralBand bands[SPECTRAL_MAP_MAX_BANDS];
 } RuntimeSpectralMapStats;
 typedef struct {
+    RuntimeSpectralSamplingStats sampling;
     RuntimeSpectralMapStats map;
     Vec3 center_pixel_xyz;
     double sensor_signal[4];

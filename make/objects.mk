@@ -213,6 +213,8 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_render_request_snapshot.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_stats.o \
+	$(BUILD_DIR)/render/runtime_spectral_sampling.o \
+	$(BUILD_DIR)/render/runtime_spectral_convergence.o \
 	$(BUILD_DIR)/render/runtime_spectral_film.o \
 	$(BUILD_DIR)/render/runtime_spectral_frame.o \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \
@@ -675,6 +677,8 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_native_3d_render.o \
 	$(BUILD_DIR)/render/runtime_native_3d_prepared_scene_cache.o \
 	$(BUILD_DIR)/render/runtime_native_3d_render_shading.o \
+	$(BUILD_DIR)/render/runtime_spectral_sampling.o \
+	$(BUILD_DIR)/render/runtime_spectral_convergence.o \
 	$(BUILD_DIR)/render/runtime_spectral_film.o \
 	$(BUILD_DIR)/render/runtime_spectral_frame.o \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \

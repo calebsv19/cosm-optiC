@@ -531,7 +531,7 @@ static bool runtime_native_3d_render_to_pixel_buffer_internal(
                                              height,
                                              &frame.scene,
                                              &frame.projector);
-    if (scheduler_control || runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
+    if ((frame.spectralFrame && frame.spectralFrame->profile.sampling.enabled) || scheduler_control || runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
         if (tile_progress_callback) {
             tile_progress_adapter.callback = tile_progress_callback;
             tile_progress_adapter.user_data = tile_progress_user_data;

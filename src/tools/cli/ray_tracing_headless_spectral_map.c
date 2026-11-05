@@ -1,4 +1,5 @@
 #include "render/runtime_spectral_film.h"
+#include "render/runtime_spectral_convergence.h"
 #include "tools/ray_tracing_headless_spectral_map.h"
 #include "render/runtime_spectral_surface_map.h"
 #include "render/runtime_spectral_observer.h"
@@ -28,6 +29,8 @@ static double now_ms(void) {
 bool RayTracingHeadlessSpectralMap_Run(const RuntimeSpectralPencil *request,
                                        const RuntimeNative3DPreparedFrame *frame, uint8_t *pixels,
                                        RuntimeSpectralReadout *out, char *diag, size_t size) {
+    if (pixels && request->sampling.enabled)
+        return RuntimeSpectralConvergence_Render(request,frame,pixels,NULL,NULL,NULL,out,diag,size);
     const RuntimeScene3D *scene = &frame->scene;
     RuntimeSpectralMapStats *st = &out->map;
     RuntimeSpectralPencil config = *request;
@@ -73,6 +76,7 @@ bool RayTracingHeadlessSpectralMap_Run(const RuntimeSpectralPencil *request,
     }
     *st = built;
     st->reused = reuse;
+    out->sampling.enabled=request->sampling.enabled;
     if (!pixels) return true;
     double film_start = now_ms();
     if (!RuntimeSpectralFilm_Region(p, cached, frame, 0, 0, frame->width, frame->height,

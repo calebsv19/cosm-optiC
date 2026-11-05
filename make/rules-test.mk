@@ -3590,3 +3590,12 @@ $(BUILD_DIR)/tests/spectral_reconstruction_test: $(BUILD_DIR)/tests/test_spectra
 .PHONY: test-headless-spectral-reconstruction
 test-headless-spectral-reconstruction: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/test_headless_spectral_reconstruction.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+.PHONY: test-spectral-sampling test-headless-spectral-sampling
+test-spectral-sampling: $(BUILD_DIR)/tests/spectral_sampling_test
+	$(BUILD_DIR)/tests/spectral_sampling_test
+$(BUILD_DIR)/tests/spectral_sampling_test: tests/spectral_sampling_test.c $(BUILD_DIR)/render/runtime_spectral_sampling.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LIBS)
+test-headless-spectral-sampling: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/test_headless_spectral_sampling.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN) --output-root $(BUILD_DIR)/spectral-sampling-proof-$$(date +%s)-$$$$
