@@ -13,6 +13,11 @@ The public request checks cover fixed-gather parity, unchanged transport
 ledgers, deterministic replay, invalid settings and a coincident-plane guard.
 See the [surface and volume reconstruction contract](spectral_volume_reconstruction.md).
 
+Spectral dielectric paths also use coordinate-precision boundary distances,
+outgoing-side normal offsets and inclusive shared triangle edges. The prism
+regression covers a nine-interface short-corner path and a three-interface
+grazing exit. Native optimized and ASan/UBSan builds pass these cases.
+
 ## November 3 — V3 reconstruction query-cost qualification
 
 Fixed deterministic angular targets now reuse bounded phase sums across coherent
