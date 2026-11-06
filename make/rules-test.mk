@@ -3583,6 +3583,8 @@ test-scene-catalog-labels: $(BUILD_DIR)/tests/scene_catalog_labels_test
 test-spectral-reconstruction: $(BUILD_DIR)/tests/spectral_reconstruction_test
 	$(BUILD_DIR)/tests/spectral_reconstruction_test
 
+$(BUILD_DIR)/tests/test_spectral_reconstruction.o: $(TEST_DIR)/spectral_mesh_reconstruction_case.h
+
 $(BUILD_DIR)/tests/spectral_reconstruction_test: $(BUILD_DIR)/tests/test_spectral_reconstruction.o $(RAY_TRACING_RENDER_HEADLESS_DEPS)
 	@mkdir -p $(dir $@)
 	$(CC) $^ -o $@ $(LDFLAGS)

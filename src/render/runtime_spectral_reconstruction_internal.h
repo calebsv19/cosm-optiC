@@ -3,6 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct SpectralReconstruction SpectralReconstruction;
+#include "runtime_spectral_reconstruction_mesh.h"
+
 /* Serial render-context-owned state. Never shared by simultaneous camera
  * workers. */
 typedef struct {
@@ -16,6 +19,7 @@ typedef struct {
 } SpectralDomainRegion;
 typedef struct {
     SpectralDomainAxis axis[3];
+    SpectralMeshBoundary mesh;
     uint16_t *labels;
     SpectralDomainRegion *regions;
     size_t cells;
@@ -57,6 +61,12 @@ struct SpectralReconstruction {
     size_t owned_bytes, peak_bytes, budget_bytes;
     uint64_t normalization_visits, cached_queries, exact_queries, generation;
     uint64_t spatial_hits, spatial_misses;
+    void *mesh_quadrature;
+    size_t mesh_quadrature_bytes;
+    struct {
+        uint64_t key;
+        double value;
+    } mesh_norm_cache[2048];
     bool built, view_ready, ray_ready;
     Vec3 phase_direction;
     uint64_t phase_key;
@@ -73,6 +83,8 @@ void spectral_domain_free(SpectralDomain *);
 uint16_t spectral_domain_region(const SpectralDomain *, Vec3);
 double spectral_domain_next(const SpectralDomain *, Ray3D, double, double);
 double spectral_domain_norm(SpectralReconstruction *, const int[3], int, uint16_t);
+double spectral_domain_part_norm(SpectralReconstruction *, const int[3], int,
+                                 uint16_t, int);
 void spectral_reconstruction_basis(const RuntimeSpectralVolume *, double, int, int, int[2],
                                    double[2]);
 double spectral_reconstruction_hat_integral(double, double, double, double, double);

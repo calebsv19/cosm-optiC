@@ -121,14 +121,21 @@ static double camera_length(const SpectralFieldRay *it, double a, double b, doub
 }
 /* Integrate within both field knots and geometry partitions. Resolve thick
  * intervals before quadrature rather than allowing attenuation to alias. */
-static double continuous_camera(RuntimeSpectralVolume *v,Ray3D ray,int band,const SpectralFieldRay *it,
-                                double a,double b,double st,double tau,double *first) {
+static double continuous_camera(RuntimeSpectralVolume *v, Ray3D ray, int band,
+                                const SpectralFieldRay *it, double a, double b,
+                                double st, double tau, double *first,
+                                int depth) {
     if(tau>.25) {
         double mid=a+(b-a)*.5;
         if(mid>a && mid<b) {
             double left_tau=st*spectral_field_mass(it,a,mid),left_first=0,right_first=0;
-            double left=continuous_camera(v,ray,band,it,a,mid,st,left_tau,&left_first),right=0;
-            if(left_tau<40)right=continuous_camera(v,ray,band,it,mid,b,st,st*spectral_field_mass(it,mid,b),&right_first);
+            double left = continuous_camera(v, ray, band, it, a, mid, st,
+                                            left_tau, &left_first, depth + 1),
+                   right = 0;
+            if (left_tau < 40)
+                right = continuous_camera(v, ray, band, it, mid, b, st,
+                                          st * spectral_field_mass(it, mid, b),
+                                          &right_first, depth + 1);
             *first+=left_first+exp(-left_tau)*right_first;
             return left+exp(-left_tau)*right;
         }
@@ -136,14 +143,52 @@ static double continuous_camera(RuntimeSpectralVolume *v,Ray3D ray,int band,cons
     static const double q2[]={.21132486540518713,.7886751345948129},w2[]={.5,.5};
     static const double q4[]={.06943184420297371,.33000947820757187,.6699905217924281,.9305681557970262};
     static const double w4[]={.17392742256872693,.32607257743127307,.32607257743127307,.17392742256872693};
-    int n=tau<.025?2:4;const double *q=n==2?q2:q4,*weights=n==2?w2:w4;double sum=0;
+    bool mesh = spectral_mesh_camera_interval(v, ray, a, b);
+    int n = tau < .025 && !mesh ? 2 : 4;
+    const double *q = n == 2 ? q2 : q4, *weights = n == 2 ? w2 : w4;
+    double sum = 0, first_sum = 0;
     for(int i=0;i<n;i++) {
         double t=a+(b-a)*q[i],single=0;
         double value=spectral_reconstruction_source(v,vec3_add(ray.origin,vec3_scale(ray.direction,t)),band,&single);
         if(value==0 && single==0)continue;
         double weight=(b-a)*weights[i]*exp(-st*spectral_field_mass(it,a,t));
-        sum+=weight*value;*first+=weight*single;
+        sum += weight * value;
+        first_sum += weight * single;
     }
+    if (mesh) {
+        double coarse = 0, coarse_first = 0;
+        for (int i = 0; i < 2; i++) {
+            double t = a + (b - a) * q2[i], single = 0;
+            double value = spectral_reconstruction_source(
+                v, vec3_add(ray.origin, vec3_scale(ray.direction, t)), band,
+                &single);
+            double weight =
+                (b - a) * w2[i] * exp(-st * spectral_field_mass(it, a, t));
+            coarse += weight * value;
+            coarse_first += weight * single;
+        }
+        if (fabs(sum - coarse) > 1e-5 * fmax(fabs(sum), 1e-300) ||
+            fabs(first_sum - coarse_first) >
+                1e-5 * fmax(fabs(first_sum), 1e-300)) {
+            double mid = a + (b - a) * .5;
+            if (depth >= 24 || !(mid > a && mid < b)) {
+                spectral_reconstruction_fail(
+                    v->reconstruction,
+                    "continuous mesh camera quadrature did not converge");
+                return NAN;
+            }
+            double left_tau = st * spectral_field_mass(it, a, mid),
+                   left_first = 0, right_first = 0;
+            double left = continuous_camera(v, ray, band, it, a, mid, st,
+                                            left_tau, &left_first, depth + 1);
+            double right = continuous_camera(
+                v, ray, band, it, mid, b, st,
+                st * spectral_field_mass(it, mid, b), &right_first, depth + 1);
+            *first += left_first + exp(-left_tau) * right_first;
+            return left + exp(-left_tau) * right;
+        }
+    }
+    *first += first_sum;
     return sum;
 }
 bool RuntimeSpectralVolume_PrepareReconstruction(RuntimeSpectralVolume *v) {
@@ -170,7 +215,10 @@ bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectr
             if (v->heads && ss > 0) {
                 if(v->config.reconstruction) {
                     double first=0;
-                    double value=continuous_camera(v,*ray,line->band,&it,a,b,st,tau,&first);
+                    double value = continuous_camera(v, *ray, line->band, &it,
+                                                     a, b, st, tau, &first, 0);
+                    if (!isfinite(value))
+                        return false;
                     out->inscattered+=out->weight*value;
                     out->single_scatter+=out->weight*first;
                 } else {

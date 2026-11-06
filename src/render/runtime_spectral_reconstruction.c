@@ -36,6 +36,7 @@ void spectral_reconstruction_free(SpectralReconstruction *r) {
     if (!r)
         return;
     spectral_domain_free(&r->domain);
+    free(r->mesh_quadrature);
     free(r->nodes);
     free(r->links);
     free(r->slots);
@@ -134,6 +135,11 @@ bool spectral_reconstruction_build(RuntimeSpectralVolume *v) {
         if (!region)
             return spectral_reconstruction_fail(
                 r, "scattering event outside admitted occupied component");
+        double face_weights[SPECTRAL_MESH_PARTS];
+        if (!spectral_mesh_weights(&r->domain.mesh, v->positions[i],
+                                   face_weights))
+            return spectral_reconstruction_fail(
+                r, "scattering event inside convex mesh obstacle");
         int level = level_for(v, p), ids[3][2];
         double w[3][2];
         for (int a = 0; a < 3; a++)
@@ -143,54 +149,90 @@ bool spectral_reconstruction_build(RuntimeSpectralVolume *v) {
                 for (int x = 0; x < 2; x++) {
                     if (!(w[0][x] * w[1][y] * w[2][z] > 0))
                         continue;
-                    if ((r->node_count + 1) * 2 > r->slot_capacity && !grow_slots(r))
-                        return false;
-                    uint64_t key =
-                        key_make(ids[0][x], ids[1][y], ids[2][z], p->band, level, region);
-                    size_t s = slot(r, key);
-                    uint32_t ni = r->slots[s];
-                    if (!ni) {
-                        if (r->node_count == r->node_capacity) {
-                            size_t next = r->node_capacity ? r->node_capacity * 2 : 4096;
+                    int at[] = {ids[0][x], ids[1][y], ids[2][z]};
+                    unsigned parts = spectral_mesh_node_parts(v, at, level);
+                    for (int part = 0; part <= r->domain.mesh.count; part++) {
+                        if (!(parts & (1u << part)) ||
+                            !(face_weights[part] > 0))
+                            continue;
+                        if ((r->node_count + 1) * 2 > r->slot_capacity &&
+                            !grow_slots(r))
+                            return false;
+                        uint64_t key =
+                            key_make(ids[0][x], ids[1][y], ids[2][z], p->band,
+                                     level, region + part * 6553);
+                        size_t s = slot(r, key);
+                        uint32_t ni = r->slots[s];
+                        if (!ni) {
+                            if (r->node_count == r->node_capacity) {
+                                size_t next = r->node_capacity
+                                                  ? r->node_capacity * 2
+                                                  : 4096;
+                                void *q = spectral_reconstruction_resize(
+                                    r, r->nodes,
+                                    r->node_capacity * sizeof(*r->nodes),
+                                    next * sizeof(*r->nodes));
+                                if (!q)
+                                    return false;
+                                r->nodes = q;
+                                r->node_capacity = next;
+                            }
+                            uint64_t norm_key =
+                                key_make(at[0], at[1], at[2], 0, level,
+                                         region + part * 6553);
+                            size_t norm_slot = hash(norm_key) & 2047;
+                            double norm;
+                            if (part &&
+                                r->mesh_norm_cache[norm_slot].key == norm_key)
+                                norm = r->mesh_norm_cache[norm_slot].value;
+                            else {
+                                norm = spectral_domain_part_norm(r, at, level,
+                                                                 region, part);
+                                if (part) {
+                                    r->mesh_norm_cache[norm_slot].key =
+                                        norm_key;
+                                    r->mesh_norm_cache[norm_slot].value = norm;
+                                }
+                            }
+                            if (r->error[0])
+                                return false;
+                            if (!(norm > 0) || !isfinite(norm))
+                                return spectral_reconstruction_fail(
+                                    r, "continuous node has invalid "
+                                       "occupied-domain normalization");
+                            ni = (uint32_t)++r->node_count;
+                            r->slots[s] = ni;
+                            r->nodes[ni - 1] = (SpectralReconstructionNode){
+                                .key = key, .norm = norm};
+                        }
+                        if (r->link_count == r->link_capacity) {
+                            size_t next =
+                                r->link_capacity ? r->link_capacity * 2 : 4096;
                             void *q = spectral_reconstruction_resize(
-                                r, r->nodes, r->node_capacity * sizeof(*r->nodes),
-                                next * sizeof(*r->nodes));
+                                r, r->links,
+                                r->link_capacity * sizeof(*r->links),
+                                next * sizeof(*r->links));
                             if (!q)
                                 return false;
-                            r->nodes = q;
-                            r->node_capacity = next;
+                            r->links = q;
+                            r->link_capacity = next;
                         }
-                        int at[] = {ids[0][x], ids[1][y], ids[2][z]};
-                        double norm = spectral_domain_norm(r, at, level, region);
-                        if (r->error[0])
-                            return false;
-                        if (!(norm > 0) || !isfinite(norm))
-                            return spectral_reconstruction_fail(
-                                r, "continuous node has invalid occupied-domain normalization");
-                        ni = (uint32_t)++r->node_count;
-                        r->slots[s] = ni;
-                        r->nodes[ni - 1] = (SpectralReconstructionNode){.key = key, .norm = norm};
+                        SpectralReconstructionNode *node = &r->nodes[ni - 1];
+                        r->links[r->link_count] = (SpectralReconstructionLink){
+                            .flux = p->watts * w[0][x] * w[1][y] * w[2][z] *
+                                    face_weights[part] / node->norm,
+                            .photon = (uint32_t)i,
+                            .next = node->head};
+                        node->head = (uint32_t)++r->link_count;
                     }
-                    if (r->link_count == r->link_capacity) {
-                        size_t next = r->link_capacity ? r->link_capacity * 2 : 4096;
-                        void *q = spectral_reconstruction_resize(
-                            r, r->links, r->link_capacity * sizeof(*r->links),
-                            next * sizeof(*r->links));
-                        if (!q)
-                            return false;
-                        r->links = q;
-                        r->link_capacity = next;
-                    }
-                    SpectralReconstructionNode *node = &r->nodes[ni - 1];
-                    r->links[r->link_count] = (SpectralReconstructionLink){
-                        .flux = p->watts * w[0][x] * w[1][y] * w[2][z] / node->norm,
-                        .photon = (uint32_t)i,
-                        .next = node->head};
-                    node->head = (uint32_t)++r->link_count;
                 }
     }
     free(v->positions);
     v->positions = NULL;
+    free(r->mesh_quadrature);
+    r->mesh_quadrature = NULL;
+    r->owned_bytes -= r->mesh_quadrature_bytes;
+    r->mesh_quadrature_bytes = 0;
     r->built = true;
     return true;
 }
@@ -282,6 +324,9 @@ double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band
     uint16_t region = spectral_domain_region(&r->domain, p);
     if (!region)
         return 0;
+    double face_weights[SPECTRAL_MESH_PARTS];
+    if (!spectral_mesh_weights(&r->domain.mesh, p, face_weights))
+        return 0;
     double total = 0;
     for (int level = 0; level <= (v->config.reconstruction == SPECTRAL_RECONSTRUCTION_ADAPTIVE);
          level++) {
@@ -289,30 +334,58 @@ double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band
         double w[3][2];
         for (int a = 0; a < 3; a++)
             spectral_reconstruction_basis(v, axis(p, a), a, level, id[a], w[a]);
-        uint64_t cell_key = key_make(id[0][0], id[1][0], id[2][0], band, level, region);
-        SpectralSpatialCache *cache = &r->spatial[hash(cell_key) & (SPECTRAL_SPATIAL_CACHE_SIZE - 1)];
-        if (cache->key != cell_key) {
-            r->spatial_misses++;
-            cache->key = cell_key;
+        double h = v->config.cell_m * (level ? 2 : 1);
+        const SpectralMeshBoundary *mesh = &r->domain.mesh;
+        int last = mesh->count;
+        if (p.x < mesh->lo.x - 2 * h || p.x > mesh->hi.x + 2 * h ||
+            p.y < mesh->lo.y - 2 * h || p.y > mesh->hi.y + 2 * h ||
+            p.z < mesh->lo.z - 2 * h || p.z > mesh->hi.z + 2 * h)
+            last = 0;
+        for (int face = 0; face < last; face++) {
+            SpectralMeshPlane plane = mesh->plane[face];
+            double margin =
+                2 * h * (fabs(plane.n.x) + fabs(plane.n.y) + fabs(plane.n.z));
+            if (vec3_dot(plane.n, p) - plane.d > margin) {
+                last = 0;
+                break;
+            }
+        }
+        for (int part = 0; part <= last; part++) {
+            if (!(face_weights[part] > 0))
+                continue;
+            uint16_t key_region = region + part * 6553;
+            uint64_t cell_key =
+                key_make(id[0][0], id[1][0], id[2][0], band, level, key_region);
+            SpectralSpatialCache *cache =
+                &r->spatial[hash(cell_key) & (SPECTRAL_SPATIAL_CACHE_SIZE - 1)];
+            if (cache->key != cell_key) {
+                r->spatial_misses++;
+                cache->key = cell_key;
+                for (int z = 0; z < 2; z++)
+                    for (int y = 0; y < 2; y++)
+                        for (int x = 0; x < 2; x++) {
+                            uint64_t key =
+                                key_make(id[0][x], id[1][y], id[2][z], band,
+                                         level, key_region);
+                            cache->nodes[x + 2 * y + 4 * z] =
+                                r->slots[slot(r, key)];
+                        }
+            } else
+                r->spatial_hits++;
             for (int z = 0; z < 2; z++)
                 for (int y = 0; y < 2; y++)
                     for (int x = 0; x < 2; x++) {
-                        uint64_t key = key_make(id[0][x], id[1][y], id[2][z], band, level, region);
-                        cache->nodes[x + 2 * y + 4 * z] = r->slots[slot(r, key)];
+                        uint32_t ni = cache->nodes[x + 2 * y + 4 * z];
+                        if (!ni)
+                            continue;
+                        double sum, single,
+                            weight = w[0][x] * w[1][y] * w[2][z] *
+                                     face_weights[part];
+                        angular_node(r, ni, &sum, &single);
+                        total += weight * sum;
+                        *first += weight * single;
                     }
-        } else
-            r->spatial_hits++;
-        for (int z = 0; z < 2; z++)
-            for (int y = 0; y < 2; y++)
-                for (int x = 0; x < 2; x++) {
-                    uint32_t ni = cache->nodes[x + 2 * y + 4 * z];
-                    if (!ni)
-                        continue;
-                    double sum, single, weight = w[0][x] * w[1][y] * w[2][z];
-                    angular_node(r, ni, &sum, &single);
-                    total += weight * sum;
-                    *first += weight * single;
-                }
+        }
     }
     return total;
 }

@@ -80,11 +80,67 @@ Admission is intentionally bounded:
 - Untransformed homogeneous boxes and VF3D density fields are supported.
 - Axis-aligned interior planes must span the entire field. Their exact coordinates
   split both component labeling and camera quadrature, including off-grid planes.
-- Intersecting finite or oblique planes, curved/mesh boundaries, water volumes and
-  transformed fields are refused explicitly. Geometry outside the field is reused.
+- One intersecting closed convex triangle mesh is supported, with at most 128
+  triangles and eight distinct supporting faces. Admission checks finite vertices,
+  nondegenerate faces, paired edges, a strict interior point and convexity.
+- Intersecting finite or oblique standalone planes, nonconvex/open meshes,
+  additional mesh obstacles, other curved boundaries, water volumes and transformed
+  fields are refused explicitly. Geometry outside the field is reused.
 - Masks follow VF3D's interpolated density semantics. They are not an independent
   opaque surface model. Within a single connected component, support can still
   smooth around a narrow cavity; this is not general visibility-aware gathering.
+
+## Convex mesh support
+
+For a convex obstacle with outward unit face normals, define signed face distance
+`d_f(x) = dot(n_f, x) - b_f`. Outside the solid, the nonnegative weights
+
+```
+a_f(x) = max(d_f(x), 0) / sum_g max(d_g(x), 0)
+```
+
+sum to one. Inside/on the solid all weights are zero. A nodal tent whose entire
+support lies outside any supporting plane uses the original fast estimator.
+Otherwise it is separated into overlapping face-visible portions:
+
+```
+Z_j,C,f = integral over C of phi_j(x) a_f(x) dV
+J_b(x,omega) = sum_i,j,f W_i w_ij a_f(x_i) phi_j(x) a_f(x)
+                         p_g(omega_i dot omega) / Z_j,C,f
+```
+
+Each nonzero term joins a deposit and query on the exterior side of the same
+supporting plane. Their segment therefore cannot cross the convex solid.
+The overlapping weights approach zero continuously at extended face planes;
+there is no hard exterior partition along those planes. Summing deposit weights
+and integrating the normalized portions preserves each stored contribution.
+This is a conservative density estimator: it can suppress some geometrically
+visible pairs that do not share an exterior face. It is not an unbiased transport
+estimator or a general nonconvex visibility solution.
+
+Normalization splits the tent at its knots and at face-sign planes, clips convex
+polyhedra, and integrates their tetrahedra with positive 3/5-point Duffy/Gauss
+rules and a bounded total estimated-error budget. The nominal absolute budget is
+`1e-6` times the enclosing support-box volume, distributed over occupied cells,
+clipped pieces and tetrahedra. Rule agreement is an error estimate, not a formal
+interval bound. Independent composite integration tests check actual energy.
+More than 8192 live quadrature cells or the existing work/storage budget refuses
+explicitly. Quadrature scratch is charged to the reconstruction budget and freed
+after building. A 2048-entry cache reuses normalizations across wavelength bands.
+Mesh scenes admit at most 6553 occupied components so face identifiers fit the
+existing node keys. Camera intervals also split at mesh face planes. Near mesh
+kernels, camera integration compares two- and four-point rules and subdivides
+until their total and first-scatter estimates agree within `1e-5` relative error.
+It refuses unmet accuracy at its refinement-depth limit rather than silently
+accepting the result. Exact supporting-plane separation keeps this extra work
+out of intervals that cannot reach mesh-boundary support.
+
+Native qualification includes cube and oblique triangular-prism face, edge and
+corner deposits in both fixed and adaptive modes; independent integration;
+interior/opposite-face leakage; exterior continuity; and open/nonconvex refusal.
+The former headless overlapping-prism refusal fixture now requires successful
+admission. Ordinary editor surface/volume switching and deterministic replay
+are checked separately. These bounded fixtures do not qualify arbitrary meshes.
 
 ## Angular cache and exact fallback
 
@@ -203,6 +259,6 @@ separate caches; existing continuous-query synchronization remains in place.
 Native checks require exact radiometric equality for forward, reverse, diagonal,
 grazing and missing rays, changed limits, spectral extinction and capacity
 fallback. The CLI regression compares native image bytes and per-band ledgers
-with reuse disabled/enabled. It also preserves rejection of an actual prism
+with reuse disabled/enabled. It also checks admission of the validated convex prism
 mesh intersecting a continuous volume. This optimization does not admit new
 boundary geometry or change kernel normalization.

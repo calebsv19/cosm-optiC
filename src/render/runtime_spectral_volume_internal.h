@@ -47,3 +47,7 @@ void spectral_reconstruction_free(SpectralReconstruction *);
 void spectral_reconstruction_stats(const RuntimeSpectralVolume *, RuntimeSpectralMapStats *);
 
 bool spectral_reconstruction_accepting(const RuntimeSpectralVolume *);
+
+bool spectral_mesh_camera_interval(const RuntimeSpectralVolume *, Ray3D, double,
+                                   double);
+bool spectral_reconstruction_fail(SpectralReconstruction *, const char *);

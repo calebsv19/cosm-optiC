@@ -77,6 +77,14 @@ static bool barriers(SpectralReconstruction *r, const RuntimeScene3D *s, double 
         if (!overlap(bounds[i].min, bounds[i].max, v->lo, v->hi))
             continue;
         int k = bounds[i].primitiveIndex;
+        if (k >= 0 && k < s->primitiveCount &&
+            s->primitives[k].kind == RUNTIME_PRIMITIVE_3D_KIND_TRIANGLE_MESH) {
+            if (!spectral_mesh_admit(r, s, k)) {
+                ok = false;
+                break;
+            }
+            continue;
+        }
         if (k < 0 || k >= s->primitiveCount ||
             s->primitives[k].kind != RUNTIME_PRIMITIVE_3D_KIND_PLANE) {
             ok = false;
@@ -85,6 +93,8 @@ static bool barriers(SpectralReconstruction *r, const RuntimeScene3D *s, double 
     }
     RuntimeSceneAcceleration3D_FreeInstanceIdentityMaps(bounds, n);
     free(bounds);
+    if (!ok && r->error[0])
+        return false;
     if (!ok)
         return spectral_reconstruction_fail(
             r, "continuous volume does not admit intersecting curved or mesh boundaries");
@@ -204,7 +214,7 @@ bool spectral_domain_build(SpectralReconstruction *r, const RuntimeScene3D *s) {
     size_t capacity = 0;
     for (size_t start = 0; start < cells; start++)
         if (d->labels[start] == UINT16_MAX) {
-            if (d->region_count == UINT16_MAX - 1) {
+            if (d->region_count == (d->mesh.count ? 6553 : UINT16_MAX - 1)) {
                 free(queue);
                 return spectral_reconstruction_fail(r, "continuous component capacity exceeded");
             }
@@ -273,8 +283,12 @@ double spectral_reconstruction_hat_integral(double left, double peak, double rig
         sum += (hi - lo) * ((right - lo) + (right - hi)) / (2 * (right - peak));
     return sum;
 }
-double spectral_domain_norm(SpectralReconstruction *r, const int id[3], int level,
-                            uint16_t region) {
+double spectral_domain_norm(SpectralReconstruction *r, const int id[3],
+                            int level, uint16_t region) {
+    return spectral_domain_part_norm(r, id, level, region, 0);
+}
+double spectral_domain_part_norm(SpectralReconstruction *r, const int id[3],
+                                 int level, uint16_t region, int part) {
     RuntimeSpectralVolume *v = r->volume;
     SpectralDomain *d = &r->domain;
     double h = v->config.cell_m * (level ? 2 : 1), left[3], peak[3], right[3];
@@ -286,6 +300,9 @@ double spectral_domain_norm(SpectralReconstruction *r, const int id[3], int leve
     }
     const SpectralDomainRegion *c = &d->regions[region];
     if (c->rectangular) {
+        if (part)
+            return spectral_mesh_integral(r, left, peak, right, c->lo, c->hi,
+                                          part);
         double norm = 1;
         for (int a = 0; a < 3; a++)
             norm *= spectral_reconstruction_hat_integral(left[a], peak[a], right[a],
@@ -312,6 +329,16 @@ double spectral_domain_norm(SpectralReconstruction *r, const int id[3], int leve
                 if (d->labels[index_at(d, x, y, z)] != region)
                     continue;
                 int xyz[] = {x, y, z};
+                if (part) {
+                    Vec3 lo = vec3(d->axis[0].knot[x], d->axis[1].knot[y],
+                                   d->axis[2].knot[z]);
+                    Vec3 hi =
+                        vec3(d->axis[0].knot[x + 1], d->axis[1].knot[y + 1],
+                             d->axis[2].knot[z + 1]);
+                    sum += spectral_mesh_integral(r, left, peak, right, lo, hi,
+                                                  part);
+                    continue;
+                }
                 double vol = 1;
                 for (int a = 0; a < 3; a++)
                     vol *= spectral_reconstruction_hat_integral(left[a], peak[a], right[a],
@@ -323,6 +350,15 @@ double spectral_domain_norm(SpectralReconstruction *r, const int id[3], int leve
 }
 double spectral_domain_next(const SpectralDomain *d, Ray3D ray, double a, double b) {
     Vec3 p = vec3_add(ray.origin, vec3_scale(ray.direction, a));
+    for (int i = 0; i < d->mesh.count; i++) {
+        SpectralMeshPlane plane = d->mesh.plane[i];
+        double denominator = vec3_dot(plane.n, ray.direction);
+        if (denominator) {
+            double t = (plane.d - vec3_dot(plane.n, ray.origin)) / denominator;
+            if (t > a + 64 * DBL_EPSILON * fmax(1, fabs(a)))
+                b = fmin(b, t);
+        }
+    }
     for (int axis = 0; axis < 3; axis++) {
         double x = component(p, axis), dir = component(ray.direction, axis);
         if (!dir)

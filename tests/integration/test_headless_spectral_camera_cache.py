@@ -38,11 +38,10 @@ def qualify(cli,root,repo=REPO):
   assert h==c and candidate['spectral_volume']['bands']==ref['spectral_volume']['bands']
   assert candidate['spectral_center_pixel_xyz']==ref['spectral_center_pixel_xyz']
   assert candidate['spectral_camera_cache']['hits']>0 and ref['spectral_camera_cache']['bytes']==0
- # Continuous reconstruction still refuses actual intersecting prism geometry.
+ # Closed convex prism geometry is now admitted by continuous reconstruction.
  bounds=q['spectral']['participating_volume_v1']['bounds_min_m'][:]
  q['spectral']['participating_volume_v1']['bounds_min_m'][0]=.1
- run('intersecting-prism-refusal',q,valid=False)
- assert 'continuous volume does not admit intersecting curved or mesh boundaries' in (root/'intersecting-prism-refusal/summary.json').read_text()
+ run('intersecting-prism-admitted',q)
  q['spectral']['participating_volume_v1']['bounds_min_m']=bounds
  q['spectral']['sampling']=dict(mode='converge',max_passes=16,visible_error=255,edge_error=255,energy_error=1)
  q['render'].update(width=24,height=16);q['spectral']['surface_map']['photons_per_source']=1024

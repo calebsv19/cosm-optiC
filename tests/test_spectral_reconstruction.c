@@ -455,7 +455,12 @@ static void camera_segment_cache(void) {
        "ray/limit invalidation and bounded overflow");
 }
 
+#include "spectral_mesh_reconstruction_case.h"
+
 int main(void) {
+  mesh_boundaries();
+  prism_boundaries();
+  mesh_camera_quadrature();
   camera_segment_cache();
   rectangular();
   occupied();

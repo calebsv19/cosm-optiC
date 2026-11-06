@@ -6,8 +6,10 @@ Headless convergence now publishes live stage/pass/checkpoint snapshots through
 the ordinary progress owner and an atomic spectral companion. See
 [sampling progress](spectral_sampling.md#live-headless-convergence-progress) and
 [camera reuse](spectral_volume_reconstruction.md#exact-camera-segment-reuse).
-Mesh-intersecting continuous volumes remain unsupported; existing guards and
-normalization checks are preserved. No default transport-mode change is made.
+Continuous reconstruction now admits one validated closed convex mesh using
+normalized face-visible kernels; see [convex mesh support](spectral_volume_reconstruction.md#convex-mesh-support).
+Open/nonconvex or multiple intersecting meshes remain unsupported. No default
+transport-mode change is made.
 
 ## November 4 — V3 density-dependent surface gather
 
