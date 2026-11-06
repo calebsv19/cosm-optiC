@@ -1,3 +1,20 @@
+## 1.12.0 — explicit rigid integration identity and complex result envelope
+
+The optional rigid scene/result adapters recognize `integration_policy` only as
+`bounded_subsegments_v1`; absence retains the legacy integration policy and its
+exact physical projection serialization. `CoreSceneRigidContract` and
+`CoreSceneRigidResult` expose `CoreSceneRigidIntegrationPolicy`. Unknown strings,
+JSON types and enum values refuse; scene/result policy mismatches refuse. This
+is contract identity, not a solver implementation or numerical qualification.
+Consumers rebuilding these structs must use matching headers and sources.
+
+The shared result matcher supports up to 64 convex children per body. Applications
+retain explicit format-specific limits: legacy optiC bundle v1 remains 12 children,
+while its proposed complex bundle v2 may admit 64 after authenticated metadata.
+Body32, contact496, tick14400, JSON64MiB and node4M bounds are unchanged. Geometry
+and producer attestation remain caller responsibilities. This source checkpoint
+is not installed, released, or adopted by other consumers merely by version label.
+
 ## 1.9.0 — bounded compound immutable-result matching
 
 The optional rigid-result matcher now revalidates up to three collision children

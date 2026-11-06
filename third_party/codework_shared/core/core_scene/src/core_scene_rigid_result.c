@@ -246,13 +246,15 @@ CoreResult core_scene_rigid_result_read(const char *s, size_t n,
   if (!keys(p,
             "|schema||scene_id||coordinate_system||quaternion_order||rate_"
             "numerator||rate_denominator||origin_tick||end_tick||gravity_mps2||"
-            "contact_policy||bindings|",
-            11) ||
+            "contact_policy||integration_policy||bindings|",
+            11 + (get(p, "integration_policy") != NULL)) ||
       !text(p, "schema", "core_rigid_physical_input_v1") ||
       !text(p, "coordinate_system", "right_handed_z_up_meters") ||
       !text(p, "quaternion_order", "wxyz") ||
       (!text(p, "contact_policy", "min_restitution_geometric_friction_v1") &&
        !text(p,"contact_policy","min_restitution_geometric_friction_zero_cutoff_v1")) ||
+      (get(p, "integration_policy") &&
+       !text(p, "integration_policy", "bounded_subsegments_v1")) ||
       !copy(p, "scene_id", r.scene_id, 64) ||
       !integer(get(p, "rate_numerator"), 240, 240) ||
       !integer(get(p, "rate_denominator"), 1, 1) ||
@@ -262,6 +264,9 @@ CoreResult core_scene_rigid_result_read(const char *s, size_t n,
     goto done;
   r.contact_policy = text(p,"contact_policy","min_restitution_geometric_friction_zero_cutoff_v1")
       ? CORE_SCENE_RIGID_CONTACT_ZERO_CUTOFF : CORE_SCENE_RIGID_CONTACT_DEFAULT;
+  r.integration_policy = get(p, "integration_policy")
+      ? CORE_SCENE_RIGID_INTEGRATION_BOUNDED_SUBSEGMENTS
+      : CORE_SCENE_RIGID_INTEGRATION_DEFAULT;
   r.end_tick = (uint32_t)get(p, "end_tick")->valuedouble;
   double g = 0;
   for (int i = 0; i < 3; i++)
@@ -347,7 +352,7 @@ CoreResult core_scene_rigid_result_match(const CoreSceneRigidResult *r,
       core_scene_rigid_validate(c, (CoreSceneRigidLimits){CORE_SCENE_RIGID_RESULT_BODIES, CORE_SCENE_RIGID_RESULT_PAIRS, CORE_SCENE_RIGID_RESULT_CHILDREN}, NULL)
               .code != CORE_OK ||
       c->rate_numerator != 240 || c->rate_denominator != 1 ||
-      c->origin_tick != 0)
+      c->origin_tick != 0 || r->integration_policy != c->integration_policy)
     return BAD;
   /* Reproduce this profile's native producer projection, including its chosen
      round-trip serialization. Comparing parsed doubles with a tolerance would
@@ -375,6 +380,8 @@ CoreResult core_scene_rigid_result_match(const CoreSceneRigidResult *r,
                           c->contact_policy == CORE_SCENE_RIGID_CONTACT_ZERO_CUTOFF
                             ? "min_restitution_geometric_friction_zero_cutoff_v1"
                             : "min_restitution_geometric_friction_v1");
+  if (c->integration_policy == CORE_SCENE_RIGID_INTEGRATION_BOUNDED_SUBSEGMENTS)
+    cJSON_AddStringToObject(p, "integration_policy", "bounded_subsegments_v1");
   cJSON_AddItemToObject(p, "bindings", rows);
   size_t count = 0;
   for (size_t rank = 0; rank < r->body_count; rank++) {

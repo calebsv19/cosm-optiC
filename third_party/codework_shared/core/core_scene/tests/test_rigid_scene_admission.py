@@ -47,6 +47,9 @@ def main():
         return lambda s, a: body(s).__setitem__(key, value)
 
     run('floor two pillars asymmetric body', ok=True)
+    run('declared bounded subsegments', lambda s,a:s['extensions']['rigid_scene'].update(integration_policy='bounded_subsegments_v1'), ok=True)
+    for value in ['unknown', '', None, False, 1, {}, []]:
+        run('unsupported integration policy ' + repr(value), lambda s,a,v=value:s['extensions']['rigid_scene'].update(integration_policy=v))
     run('negative explicit gravity is valid', lambda s,a:s['extensions']['rigid_scene'].update(gravity_mps2=[0,0,0]), ok=True)
     run('static triangle collider metadata', lambda s,a:a['assets'][0].update(shape='static_triangles'), ok=True)
     run('object order independent', lambda s,a:s['objects'].reverse(), ok=True)

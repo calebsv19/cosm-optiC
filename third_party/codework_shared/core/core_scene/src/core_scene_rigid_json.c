@@ -297,11 +297,13 @@ CoreResult core_scene_rigid_json_read(const char *scene, size_t n,
     goto done;
   if (!keys(root,
             "|schema||coordinate_system||rate_numerator||rate_denominator||"
-            "origin_tick||end_tick||gravity_mps2||contact_policy||bindings|") ||
+            "origin_tick||end_tick||gravity_mps2||contact_policy||integration_policy||bindings|") ||
       !text(root, "schema", CORE_SCENE_RIGID_SCHEMA) ||
       !text(root, "coordinate_system", "right_handed_z_up_meters") ||
       (!text(root, "contact_policy", "min_restitution_geometric_friction_v1") &&
        !text(root, "contact_policy", "min_restitution_geometric_friction_zero_cutoff_v1")) ||
+      (get(root, "integration_policy") &&
+       !text(root, "integration_policy", "bounded_subsegments_v1")) ||
       !uint32(root, "rate_numerator", &c->rate_numerator) ||
       !uint32(root, "rate_denominator", &c->rate_denominator) ||
       !uint32(root, "origin_tick", &c->origin_tick) ||
@@ -315,6 +317,9 @@ CoreResult core_scene_rigid_json_read(const char *scene, size_t n,
     goto done;
   c->contact_policy = text(root,"contact_policy","min_restitution_geometric_friction_zero_cutoff_v1")
       ? CORE_SCENE_RIGID_CONTACT_ZERO_CUTOFF : CORE_SCENE_RIGID_CONTACT_DEFAULT;
+  c->integration_policy = get(root, "integration_policy")
+      ? CORE_SCENE_RIGID_INTEGRATION_BOUNDED_SUBSEGMENTS
+      : CORE_SCENE_RIGID_INTEGRATION_DEFAULT;
   c->schema_version = 1;
   c->object_count = (size_t)cJSON_GetArraySize(objects);
   c->asset_count = (size_t)cJSON_GetArraySize(assets);
