@@ -3850,3 +3850,13 @@ actual 1x/2x editor/field/HUD checks, affected editor regressions and headless s
 qualify this source slice. [Details and proof scope](text_fidelity.md).
 
 See [V3 balanced edge-aware convergence](spectral_sampling.md) for ordinary render, saved-scene and headless sampling controls.
+
+### Exact spectral source-geometry reuse
+
+V3 continuous/adaptive volume queries now optionally reuse bounded exact-position
+geometry within each frozen photon map. Wavelength-dependent lookup, attenuation
+and angular evaluation remain separate. The existing disabled-camera-cache
+reference setting preserves scalar evaluation; budget/allocation failure also
+falls back without rejecting the scene. See
+[spectral volume reconstruction](spectral_volume_reconstruction.md#exact-source-geometry-reuse)
+for cache identity, memory and qualification boundaries.

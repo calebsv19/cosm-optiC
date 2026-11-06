@@ -36,6 +36,7 @@ void spectral_reconstruction_free(SpectralReconstruction *r) {
     if (!r)
         return;
     spectral_domain_free(&r->domain);
+    free(r->source_cache);
     free(r->mesh_quadrature);
     free(r->nodes);
     free(r->links);
@@ -319,7 +320,7 @@ static void angular_node(SpectralReconstruction *r, uint32_t ni, double *total, 
     *total = c->total;
     *first = c->first;
 }
-double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band, double *first) {
+static double source_reference(RuntimeSpectralVolume *v, Vec3 p, int band, double *first) {
     SpectralReconstruction *r = v->reconstruction;
     uint16_t region = spectral_domain_region(&r->domain, p);
     if (!region)
@@ -389,6 +390,116 @@ double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band
     }
     return total;
 }
+static void source_prepare(RuntimeSpectralVolume *v, Vec3 p, SpectralSourceStencil *c) {
+    c->position = p;
+    c->valid = true;
+    c->count = 0;
+    SpectralReconstruction *r = v->reconstruction;
+    uint16_t region = spectral_domain_region(&r->domain, p);
+    if (!region)
+        return;
+    double face_weights[SPECTRAL_MESH_PARTS];
+    if (!spectral_mesh_weights(&r->domain.mesh, p, face_weights))
+        return;
+    for (int level = 0; level <= (v->config.reconstruction == SPECTRAL_RECONSTRUCTION_ADAPTIVE);
+         level++) {
+        int id[3][2];
+        double w[3][2];
+        for (int a = 0; a < 3; a++)
+            spectral_reconstruction_basis(v, axis(p, a), a, level, id[a], w[a]);
+        double h = v->config.cell_m * (level ? 2 : 1);
+        const SpectralMeshBoundary *mesh = &r->domain.mesh;
+        int last = mesh->count;
+        if (p.x < mesh->lo.x - 2 * h || p.x > mesh->hi.x + 2 * h ||
+            p.y < mesh->lo.y - 2 * h || p.y > mesh->hi.y + 2 * h ||
+            p.z < mesh->lo.z - 2 * h || p.z > mesh->hi.z + 2 * h)
+            last = 0;
+        for (int face = 0; face < last; face++) {
+            SpectralMeshPlane plane = mesh->plane[face];
+            double margin =
+                2 * h * (fabs(plane.n.x) + fabs(plane.n.y) + fabs(plane.n.z));
+            if (vec3_dot(plane.n, p) - plane.d > margin) {
+                last = 0;
+                break;
+            }
+        }
+        for (int part = 0; part <= last; part++) {
+            if (!(face_weights[part] > 0))
+                continue;
+            uint16_t key_region = region + part * 6553;
+            SpectralSourceGroup *g = &c->groups[c->count++];
+            for (int z = 0; z < 2; z++)
+                for (int y = 0; y < 2; y++)
+                    for (int x = 0; x < 2; x++) {
+                        int i = x + 2 * y + 4 * z;
+                        g->keys[i] = key_make(id[0][x], id[1][y], id[2][z], 0,
+                                              level, key_region);
+                        g->weights[i] = w[0][x] * w[1][y] * w[2][z] * face_weights[part];
+                    }
+        }
+    }
+}
+/* Optional bounded storage must not turn a formerly admissible map into an
+ * allocation failure. A missing cache uses the unchanged scalar reference. */
+static bool source_cache_ready(SpectralReconstruction *r) {
+    if (!r->source_cache_attempted) {
+        r->source_cache_attempted = true;
+        size_t bytes = SPECTRAL_SOURCE_CACHE_SIZE * sizeof(*r->source_cache);
+        size_t transport = (size_t)r->volume->capacity * sizeof(SpectralCollision) +
+                           (r->volume->heads ? 65536 * sizeof(int) : 0);
+        if (r->built && bytes <= r->budget_bytes &&
+            r->owned_bytes + transport <= r->budget_bytes - bytes) {
+            r->source_cache = calloc(SPECTRAL_SOURCE_CACHE_SIZE, sizeof(*r->source_cache));
+            if (r->source_cache) {
+                r->owned_bytes += bytes;
+                r->peak_bytes = fmax(r->peak_bytes, r->owned_bytes + transport);
+            }
+        }
+    }
+    return r->source_cache != NULL;
+}
+double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band, double *first) {
+    SpectralReconstruction *r = v->reconstruction;
+    if (v->config.disable_camera_cache || !source_cache_ready(r))
+        return source_reference(v, p, band, first);
+    uint64_t bits[3];
+    memcpy(&bits[0], &p.x, sizeof(double));
+    memcpy(&bits[1], &p.y, sizeof(double));
+    memcpy(&bits[2], &p.z, sizeof(double));
+    size_t index = hash(hash(bits[0]) ^ (hash(bits[1]) << 1) ^ (hash(bits[2]) << 2)) &
+                   (SPECTRAL_SOURCE_CACHE_SIZE - 1);
+    SpectralSourceStencil *c = &r->source_cache[index];
+    if (!c->valid || memcmp(&c->position, &p, sizeof(p))) {
+        r->source_misses++;
+        source_prepare(v, p, c);
+    } else
+        r->source_hits++;
+    double total = 0;
+    uint64_t band_key = (uint64_t)band << 36;
+    for (int j = 0; j < c->count; j++) {
+        const SpectralSourceGroup *g = &c->groups[j];
+        uint64_t cell_key = g->keys[0] + band_key;
+        SpectralSpatialCache *cache = &r->spatial[hash(cell_key) & (SPECTRAL_SPATIAL_CACHE_SIZE - 1)];
+        if (cache->key != cell_key) {
+            r->spatial_misses++;
+            cache->key = cell_key;
+            for (int i = 0; i < 8; i++)
+                cache->nodes[i] = r->slots[slot(r, g->keys[i] + band_key)];
+        } else
+            r->spatial_hits++;
+        for (int i = 0; i < 8; i++) {
+            uint32_t ni = cache->nodes[i];
+            if (!ni)
+                continue;
+            double sum, single;
+            angular_node(r, ni, &sum, &single);
+            total += g->weights[i] * sum;
+            *first += g->weights[i] * single;
+        }
+    }
+    return total;
+}
+
 double spectral_reconstruction_boundary(RuntimeSpectralVolume *v, Ray3D ray, double a, double b) {
     return v->reconstruction ? spectral_domain_next(&v->reconstruction->domain, ray, a, b) : b;
 }

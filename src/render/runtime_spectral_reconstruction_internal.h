@@ -51,6 +51,19 @@ typedef struct {
     uint64_t key;
     uint32_t nodes[8];
 } SpectralSpatialCache;
+/* Exact-position geometry only; band and angular values never enter this cache.
+ * The owning reconstruction is immutable after build and owns its lifetime. */
+enum { SPECTRAL_SOURCE_CACHE_SIZE = 1024 };
+typedef struct {
+    uint64_t keys[8];
+    double weights[8];
+} SpectralSourceGroup;
+typedef struct {
+    Vec3 position;
+    bool valid;
+    int count;
+    SpectralSourceGroup groups[2 * SPECTRAL_MESH_PARTS];
+} SpectralSourceStencil;
 struct SpectralReconstruction {
     RuntimeSpectralVolume *volume;
     SpectralDomain domain;
@@ -67,6 +80,9 @@ struct SpectralReconstruction {
         uint64_t key;
         double value;
     } mesh_norm_cache[2048];
+    SpectralSourceStencil *source_cache;
+    bool source_cache_attempted;
+    uint64_t source_hits, source_misses;
     bool built, view_ready, ray_ready;
     Vec3 phase_direction;
     uint64_t phase_key;

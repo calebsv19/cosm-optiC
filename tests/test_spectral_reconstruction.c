@@ -457,7 +457,74 @@ static void camera_segment_cache(void) {
 
 #include "spectral_mesh_reconstruction_case.h"
 
+
+static void source_stencil_cache(void) {
+  for (int mode = 1; mode <= 2; mode++) {
+    RuntimeSpectralVolume *v = volume(mode);
+    RuntimePrimitive3D primitive;
+    RuntimeTriangle3D triangles[12];
+    RuntimeScene3D scene = mesh_cube(&primitive, triangles);
+    bind(v, &scene);
+    event(v, vec3(.449, .449, .449));
+    v->points = realloc(v->points, 2 * sizeof(*v->points));
+    v->positions = realloc(v->positions, 2 * sizeof(*v->positions));
+    assert(v->points && v->positions);
+    v->points[1] = v->points[0];
+    v->positions[1] = v->positions[0];
+    v->points[1].band = 1;
+    v->points[1].watts = 2;
+    v->points[1].first = false;
+    v->points[1].incoming = vec3(1, 0, 0);
+    v->count = v->capacity = 2;
+    v->heads[spectral_volume_bucket(v->points[1].cell, 1)] = 2;
+    v->config.g = .7;
+    v->config.phase_tolerance = 0; /* Exercise exact angular fallback. */
+    begin(v);
+    double totals[2] = {0};
+    for (int pass = 0; pass < 3; pass++) {
+      Ray3D ray = RuntimeRay3D_Make(vec3(.5, .5, 3),
+                                   pass == 1 ? vec3(1, 0, 0) : vec3(0, 0, -1));
+      assert(spectral_reconstruction_begin_ray(v, ray));
+      for (int i = 0; i < 4096; i++) {
+        /* More positions than cache slots, plus inside/occluded/edge cases. */
+        Vec3 p = vec3(.3 + (i % 32) * .012, .3 + ((i / 32) % 16) * .025,
+                      .3 + (i / 512) * .04);
+        for (int band = 0; band < 2; band++) {
+          double a = .125, b = .125, c = .125;
+          v->config.disable_camera_cache = true;
+          double ref = spectral_reconstruction_source(v, p, band, &a);
+          v->config.disable_camera_cache = false;
+          double value = spectral_reconstruction_source(v, p, band, &b);
+          double again = spectral_reconstruction_source(v, p, band, &c);
+          assert(ref == value && value == again && a == b && b == c);
+          totals[band] += value;
+        }
+      }
+    }
+    assert(totals[0] > 0 && totals[1] > 0 && totals[0] != totals[1]);
+    assert(v->reconstruction->source_hits > 0 && v->reconstruction->source_misses > 1024);
+    assert(v->reconstruction->source_cache);
+    printf("source cache mode=%d hits=%llu misses=%llu bytes=%zu\n", mode,
+           (unsigned long long)v->reconstruction->source_hits,
+           (unsigned long long)v->reconstruction->source_misses,
+           SPECTRAL_SOURCE_CACHE_SIZE * sizeof(SpectralSourceStencil));
+    RuntimeSpectralVolume_Free(v);
+    /* A new map cannot inherit stencils; insufficient optional cache budget
+     * retains exact scalar evaluation without setting a fatal error. */
+    v = volume(mode); bind(v, &scene); event(v, vec3(.449, .449, .449)); begin(v);
+    v->config.disable_camera_cache = true;
+    double ref = sample(v, vec3(.44, .44, .44));
+    v->reconstruction->budget_bytes = v->reconstruction->owned_bytes;
+    v->config.disable_camera_cache = false;
+    assert(sample(v, vec3(.44, .44, .44)) == ref && ref > 0);
+    assert(!v->reconstruction->source_cache && !v->reconstruction->error[0]);
+    RuntimeSpectralVolume_Free(v);
+  }
+  puts("PASS source stencil: exact band/direction parity, collisions, map lifetime and budget fallback");
+}
+
 int main(void) {
+  source_stencil_cache();
   mesh_boundaries();
   prism_boundaries();
   mesh_camera_quadrature();

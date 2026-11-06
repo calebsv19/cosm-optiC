@@ -67,7 +67,7 @@ typedef enum {
 typedef struct {
     RuntimeSpectralVolumeKind kind;
     RuntimeSpectralReconstructionMode reconstruction;
-    bool disable_camera_cache; /* Reference traversal switch; false preserves the optimized default. */
+    bool disable_camera_cache; /* Reference camera traversal/source switch; false preserves exact reuse. */
     double phase_tolerance; /* Relative HG bound; zero requests exact per-ray evaluation. */
     RuntimeSpectralCurve absorption, scattering;
     double g, cell_m;

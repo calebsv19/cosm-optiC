@@ -41,7 +41,12 @@ def qualify(cli,root,repo=REPO):
  # Closed convex prism geometry is now admitted by continuous reconstruction.
  bounds=q['spectral']['participating_volume_v1']['bounds_min_m'][:]
  q['spectral']['participating_volume_v1']['bounds_min_m'][0]=.1
- run('intersecting-prism-admitted',q)
+ q['spectral']['participating_volume_v1']['camera_spatial_cache']=False
+ ref,h=run('intersecting-prism-reference',q)
+ q['spectral']['participating_volume_v1']['camera_spatial_cache']=True
+ candidate,c=run('intersecting-prism-admitted',q)
+ assert h==c and candidate['spectral_center_pixel_xyz']==ref['spectral_center_pixel_xyz']
+ assert candidate['spectral_volume']['bands']==ref['spectral_volume']['bands']
  q['spectral']['participating_volume_v1']['bounds_min_m']=bounds
  q['spectral']['sampling']=dict(mode='converge',max_passes=16,visible_error=255,edge_error=255,energy_error=1)
  q['render'].update(width=24,height=16);q['spectral']['surface_map']['photons_per_source']=1024
