@@ -170,7 +170,7 @@ static bool populate(RuntimeSpectralSurfaceMap *m, const RuntimeSpectralPencil *
         int b = band_for(m, st, draw.nm, draw.measure);
         if (b < 0) return false;
         RuntimeSpectralPencilLine line = {draw.nm, watts,
-                                          RuntimeSpectralSurfaceMap_Absorption(cfg, draw.nm), id, b};
+                                          RuntimeSpectralSurfaceMap_Absorption(cfg, draw.nm), id, b, NULL};
         Vec3 direction = s->direction;
         if (s->angular_radius_rad > 0)
             direction =

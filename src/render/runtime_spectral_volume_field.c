@@ -217,3 +217,95 @@ double spectral_field_mass(const SpectralFieldRay *it, double a, double b) {
            (RuntimeVolume3D_SampleDensityAtPosition(&it->v->vf, at(it->ray, mid - offset)) +
             RuntimeVolume3D_SampleDensityAtPosition(&it->v->vf, at(it->ray, mid + offset)));
 }
+
+/* Exact ordered segment reuse, privately owned by a camera region. No quantized
+ * keys, wavelength-dependent values, global cache, or cross-frame lifetime. */
+enum { CAMERA_SEGMENTS = 4096 };
+struct RuntimeSpectralCameraCache {
+  const RuntimeSpectralVolume *volume;
+  Ray3D ray;
+  double limit;
+  bool cells, valid, replay, overflow;
+  size_t count, cursor;
+  unsigned long long hits, misses, reused, overflows;
+  struct {
+    double a, b, mass;
+  } segments[CAMERA_SEGMENTS];
+};
+RuntimeSpectralCameraCache *RuntimeSpectralCameraCache_Create(void) {
+  return calloc(1, sizeof(RuntimeSpectralCameraCache));
+}
+void RuntimeSpectralCameraCache_Free(RuntimeSpectralCameraCache *c,
+                                     RuntimeSpectralMapStats *st) {
+  if (!c)
+    return;
+  if (st) {
+    st->camera_cache_hits += c->hits;
+    st->camera_cache_misses += c->misses;
+    st->camera_cache_segments += c->reused;
+    st->camera_cache_overflows += c->overflows;
+    st->camera_cache_bytes = sizeof(*c);
+  }
+  free(c);
+}
+static bool same_vec(Vec3 a, Vec3 b) {
+  return a.x == b.x && a.y == b.y && a.z == b.z;
+}
+bool spectral_camera_begin(RuntimeSpectralCameraCache *c, SpectralFieldRay *it,
+                           const RuntimeSpectralVolume *v, Ray3D ray,
+                           double limit, bool cells) {
+  if (!c)
+    return spectral_field_begin(it, v, ray, limit, cells);
+  c->cursor = 0;
+  c->replay = c->valid && c->volume == v && c->limit == limit &&
+              c->cells == cells && same_vec(c->ray.origin, ray.origin) &&
+              same_vec(c->ray.direction, ray.direction);
+  if (c->replay) {
+    ++c->hits;
+    *it = (SpectralFieldRay){.v = v, .ray = ray, .cells = cells};
+    return c->count != 0;
+  }
+  ++c->misses;
+  c->volume = v;
+  c->ray = ray;
+  c->limit = limit;
+  c->cells = cells;
+  c->valid = false;
+  c->overflow = false;
+  c->count = 0;
+  if (spectral_field_begin(it, v, ray, limit, cells))
+    return true;
+  c->valid = true;
+  return false;
+}
+bool spectral_camera_next(RuntimeSpectralCameraCache *c, SpectralFieldRay *it,
+                          double *a, double *b, double *mass) {
+  if (c && c->replay) {
+    if (c->cursor == c->count)
+      return false;
+    size_t i = c->cursor++;
+    *a = c->segments[i].a;
+    *b = c->segments[i].b;
+    *mass = c->segments[i].mass;
+    ++c->reused;
+    return true;
+  }
+  if (!spectral_field_next(it, a, b)) {
+    if (c)
+      c->valid = !c->overflow;
+    return false;
+  }
+  *mass = spectral_field_mass(it, *a, *b);
+  if (c && !c->overflow) {
+    if (c->count == CAMERA_SEGMENTS) {
+      c->overflow = true;
+      ++c->overflows;
+    } else {
+      size_t i = c->count++;
+      c->segments[i].a = *a;
+      c->segments[i].b = *b;
+      c->segments[i].mass = *mass;
+    }
+  }
+  return true;
+}

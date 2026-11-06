@@ -1,3 +1,14 @@
+## November 5 — V3 camera cost and live convergence
+
+V3 reuses exact camera-ray spatial partitions and density integrals across
+wavelengths, with bounded per-region storage and an explicit reference toggle.
+Headless convergence now publishes live stage/pass/checkpoint snapshots through
+the ordinary progress owner and an atomic spectral companion. See
+[sampling progress](spectral_sampling.md#live-headless-convergence-progress) and
+[camera reuse](spectral_volume_reconstruction.md#exact-camera-segment-reuse).
+Mesh-intersecting continuous volumes remain unsupported; existing guards and
+normalization checks are preserved. No default transport-mode change is made.
+
 ## November 4 — V3 density-dependent surface gather
 
 V3 supports `surface_map.gather = "adaptive_scattered"` in headless requests and

@@ -177,3 +177,32 @@ and geometry qualification. Release, installed desktop and default adoption are
 separate from this source implementation.
 
 See [V3 balanced edge-aware convergence](spectral_sampling.md) for ordinary render, saved-scene and headless sampling controls.
+
+
+## Exact camera segment reuse
+
+`participating_volume_v1.camera_spatial_cache` is an optional Boolean, default
+`true`, in headless and saved-scene spectral profiles. Set it to `false` for the
+reference traversal. The optimization applies to box, continuous and adaptive
+reconstruction, including homogeneous and VF3D volumes.
+
+Each camera region owns a bounded cache of the last ray's exact segment endpoints
+and integrated density. Reuse requires identical volume identity, origin,
+direction, segment limit and partition mode. Refracted rays are never merged by
+approximate direction. Spectral attenuation, source evaluation, quadrature and
+angular fallback remain wavelength-specific. The volume is immutable during the
+region; the cache is released afterward and cannot carry state between frames.
+
+The cache holds 4096 segments (98,536 bytes on the qualified arm64 build) per
+active camera region. Allocation failure or a longer ray retains the original
+traversal. Headless `spectral_camera_cache` reports bytes per region, hits, misses,
+reused segments and overflow count for the last map. This is not whole-process
+memory or an aggregate over all convergence passes. Concurrent regions own
+separate caches; existing continuous-query synchronization remains in place.
+
+Native checks require exact radiometric equality for forward, reverse, diagonal,
+grazing and missing rays, changed limits, spectral extinction and capacity
+fallback. The CLI regression compares native image bytes and per-band ledgers
+with reuse disabled/enabled. It also preserves rejection of an actual prism
+mesh intersecting a continuous volume. This optimization does not admit new
+boundary geometry or change kernel normalization.

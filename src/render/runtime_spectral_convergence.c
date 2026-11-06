@@ -130,7 +130,8 @@ static bool sample_map(const RuntimeSpectralFrame *source,
                        RuntimeNative3DTileSchedulerProgressCallback progress,
                        void *user, int completed, int started, char *diag,
                        size_t size) {
-  *readout = (RuntimeSpectralReadout){.map = source->stats};
+  RuntimeSpectralSamplingStats previous = readout->sampling;
+  *readout = (RuntimeSpectralReadout){.map = source->stats, .sampling = previous};
   for (int y = 0; y < frame->height; y += 8) {
     if (canceled(cancel))
       return false;
@@ -179,11 +180,22 @@ bool RuntimeSpectralConvergence_Render(
              "storage.");
     goto done;
   }
+  out->sampling = st;
   /* Reserve a distinct seed for the pilot. Each following map uses a bijective
    * unsigned sequence, preserving identical camera-frame replay. */
   current.map.seed = profile->map.seed ^ UINT32_C(0xb5297a4d);
   if (canceled(cancel))
     goto done;
+  if (progress) {
+    RuntimeNative3DTileSchedulerProgress preparing = {
+        .startedSubpasses = st.passes ? st.passes + 1 : 0,
+        .completedSubpasses = st.passes,
+        .totalSubpasses = profile->sampling.max_passes};
+    out->sampling = st;
+    if (!progress(&preparing, user)) {
+      snprintf(diag,size,"Spectral progress publication failed."); goto done;
+    }
+  }
   map = RuntimeSpectralFrame_Create(&current, scene, diag, size);
   if (!map || !sample_map(map, frame, &film, 0, 0, NULL, cancel, out, progress,
                           user, 0, 0, diag, size))
@@ -206,6 +218,17 @@ bool RuntimeSpectralConvergence_Render(
       }
     current.map.seed =
         profile->map.seed + UINT32_C(0x9e3779b9) * (unsigned)(pass + 1);
+    if (progress) {
+      RuntimeNative3DTileSchedulerProgress preparing = {
+          .startedSubpasses = pass + 1,
+          .completedSubpasses = st.passes,
+          .totalSubpasses = profile->sampling.max_passes};
+      out->sampling = st;
+      if (!progress(&preparing, user)) {
+        snprintf(diag, size, "Spectral progress publication failed.");
+        goto done;
+      }
+    }
     map = RuntimeSpectralFrame_Create(&current, scene, diag, size);
     if (!map)
       goto done;
@@ -245,6 +268,7 @@ bool RuntimeSpectralConvergence_Render(
       measure(&film, &profile->sampling, &st);
       st.pass_limit = !st.converged && profile->sampling.max_passes &&
                       st.passes >= profile->sampling.max_passes;
+      out->sampling = st;
       if (progress) {
         IntegratorTile tile = {.originX = 0,
                                .originY = 0,

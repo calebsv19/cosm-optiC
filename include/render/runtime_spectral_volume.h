@@ -3,6 +3,8 @@
 
 RuntimeSpectralVolume *RuntimeSpectralVolume_Load(const RuntimeSpectralVolumeConfig *, char *, size_t);
 void RuntimeSpectralVolume_Free(RuntimeSpectralVolume *);
+RuntimeSpectralCameraCache *RuntimeSpectralCameraCache_Create(void);
+void RuntimeSpectralCameraCache_Free(RuntimeSpectralCameraCache *, RuntimeSpectralMapStats *);
 void RuntimeSpectralVolume_Identity(const RuntimeSpectralVolume *, RuntimeSpectralMapStats *);
 const char *RuntimeSpectralVolume_Digest(const RuntimeSpectralVolume *);
 double RuntimeSpectralVolume_Transmission(const RuntimeSpectralVolume *, Ray3D, double, double);

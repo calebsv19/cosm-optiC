@@ -157,12 +157,14 @@ bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectr
     double sa = RuntimeSpectralCurve_Value(&v->config.absorption, line->vacuum_nm);
     double ss = RuntimeSpectralCurve_Value(&v->config.scattering, line->vacuum_nm), st = sa + ss;
     SpectralFieldRay it;
-    if (!st || !spectral_field_begin(&it, v, *ray, limit, camera && v->heads)) return true;
+    RuntimeSpectralCameraCache *cache = camera ? line->camera_cache : NULL;
+    if (!st || !spectral_camera_begin(cache, &it, v, *ray, limit, camera && v->heads)) return true;
     uint64_t id = (line->sample_id * UINT64_C(0x9e3779b97f4a7c15)) ^ UINT64_C(0xc2b2ae3d27d4eb4f) ^
                   ((uint64_t)step << 4);
     double remaining = -log1p(-RuntimeSpectral_Uniform64(id)), a, b;
-    while (spectral_field_next(&it, &a, &b)) {
-        double mass = spectral_field_mass(&it, a, b), tau = st * mass;
+    double mass;
+    while (spectral_camera_next(cache, &it, &a, &b, &mass)) {
+        double tau = st * mass;
         if (!(tau > 0)) continue;
         if (camera) {
             if (v->heads && ss > 0) {

@@ -137,3 +137,109 @@ void ray_tracing_tile_progress_callback(int started_subpasses,
         context->request_path,
         -1);
 }
+
+/* V3 convergence publishes through the existing durable CLI progress owner.
+ * The companion snapshot is overwritten atomically; stderr keeps checkpoint
+ * history. */
+#include "app/ray_tracing_durable_io.h"
+#include "render/runtime_spectral_convergence.h"
+#include "tools/ray_tracing_headless_spectral_map.h"
+#include <string.h>
+
+typedef struct {
+  const RayTracingAgentRenderRequest *request;
+  const RuntimeNative3DPreparedFrame *frame;
+  RuntimeSpectralReadout *readout;
+  struct timespec start;
+  double last;
+  int started;
+  bool published;
+} SpectralProgress;
+static bool spectral_progress(const RuntimeNative3DTileSchedulerProgress *p,
+                              void *user) {
+  SpectralProgress *c = user;
+  double elapsed = ray_tracing_elapsed_seconds_since(&c->start);
+  bool checkpoint = p->dirtyTileCount != 0;
+  bool preparing = p->totalTilesInSubpass == 0;
+  if (c->published && !checkpoint && !preparing &&
+      c->started == p->startedSubpasses && elapsed - c->last < 1)
+    return true;
+  c->last = elapsed;
+  c->started = p->startedSubpasses;
+  c->published = true;
+  const RuntimeSpectralSamplingStats *s = &c->readout->sampling;
+  const char *stage = checkpoint  ? "checkpoint"
+                      : preparing ? "preparing_map"
+                                  : "sampling";
+  int frame_index =
+      c->frame->evaluatedSceneBound
+          ? (int)c->frame->evaluatedScene.frame.sample.absolute_frame
+          : c->request->start_frame;
+  json_object *obj = json_object_new_object();
+  if (!obj)
+    return false;
+  json_object_object_add(obj, "schema_version",
+                         json_object_new_string("optic_spectral_progress_v1"));
+  json_object_object_add(obj, "run_id",
+                         json_object_new_string(c->request->run_id));
+  json_object_object_add(obj, "frame_index", json_object_new_int(frame_index));
+  json_object_object_add(obj, "stage", json_object_new_string(stage));
+  json_object_object_add(obj, "elapsed_seconds",
+                         json_object_new_double(elapsed));
+  json_object_object_add(obj, "started_passes",
+                         json_object_new_int(p->startedSubpasses));
+  json_object_object_add(obj, "completed_tiles",
+                         json_object_new_int64(p->completedTilesInSubpass));
+  json_object_object_add(obj, "total_tiles",
+                         json_object_new_int64(p->totalTilesInSubpass));
+  json_object_object_add(
+      obj, "max_passes",
+      json_object_new_int(c->request->spectral.sampling.max_passes));
+  json_object_object_add(obj, "sampling", RuntimeSpectralSampling_JSON(s));
+  const char *text =
+      json_object_to_json_string_ext(obj, JSON_C_TO_STRING_PLAIN);
+  bool ok = text != NULL;
+  if (ok && c->request->progress_path[0]) {
+    char path[PATH_MAX];
+    int n = snprintf(path, sizeof(path), "%s.spectral.json",
+                     c->request->progress_path);
+    ok = n > 0 && (size_t)n < sizeof(path);
+    if (ok)
+      ok = ray_tracing_render_headless_write_progress_and_job_status(
+          c->request->progress_path, c->request, "spectral_convergence",
+          frame_index, frame_index - c->request->start_frame,
+          p->startedSubpasses, s->passes,
+          c->request->spectral.sampling.max_passes, p->completedTilesInSubpass,
+          p->totalTilesInSubpass, elapsed, -1, "running", text, NULL, NULL,
+          NULL, 0);
+    if (ok) {
+      RayTracingDurableOutput output;
+      ok = ray_tracing_durable_output_begin(&output, path);
+      if (ok) {
+        bool written = fprintf(output.stream, "%s\n", text) >= 0;
+        if (written)
+          ok = ray_tracing_durable_output_commit(&output);
+        else {
+          ray_tracing_durable_output_abort(&output);
+          ok = false;
+        }
+      }
+    }
+  }
+  if (ok)
+    ok = fprintf(stderr, "SPECTRAL_PROGRESS %s\n", text) >= 0 &&
+         fflush(stderr) == 0;
+  json_object_put(obj);
+  return ok;
+}
+bool RayTracingHeadlessSpectralMap_Converge(
+    const RayTracingAgentRenderRequest *request,
+    const RuntimeNative3DPreparedFrame *frame, uint8_t *pixels,
+    RuntimeSpectralReadout *out, char *diag, size_t size) {
+  SpectralProgress context = {
+      .request = request, .frame = frame, .readout = out};
+  clock_gettime(CLOCK_MONOTONIC, &context.start);
+  return RuntimeSpectralConvergence_Render(&request->spectral, frame, pixels,
+                                           NULL, spectral_progress, &context,
+                                           out, diag, size);
+}

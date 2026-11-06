@@ -379,7 +379,84 @@ static void refusals(void) {
   puts(
       "unsupported boundaries, allocation budget and node-index bounds refuse");
 }
+static void camera_segment_cache(void) {
+  RuntimeScene3D scene = {0};
+  for (int mode = 0; mode <= 2; mode++)
+    for (int vf = 0; vf <= 1; vf++) {
+      RuntimeSpectralVolume *v = volume(mode);
+      if (vf)
+        field(v, 0, 0);
+      bind(v, &scene);
+      event(v, vec3(.49, .49, .49));
+      v->config.absorption =
+          (RuntimeSpectralCurve){.count = 2, .points = {{380, .01}, {780, 2}}};
+      v->config.scattering =
+          (RuntimeSpectralCurve){.count = 2, .points = {{380, .4}, {780, 5}}};
+      assert(RuntimeSpectralVolume_PrepareReconstruction(v));
+      RuntimeSpectralCameraCache *cache = RuntimeSpectralCameraCache_Create();
+      assert(cache);
+      Vec3 origins[] = {{-.1, .49, .49},
+                        {1.1, .49, .49},
+                        {-.1, -.1, .49},
+                        {-.1, .999999, .49},
+                        {2, 2, 2}};
+      Vec3 dirs[] = {
+          {1, 0, 0}, {-1, 0, 0}, {1, 1, 0}, {1, 1e-12, 0}, {1, 0, 0}};
+      for (int r = 0; r < 5; r++)
+        for (int limit = 0; limit < 2; limit++)
+          for (int band = 0; band < 3; band++) {
+            Ray3D ray = RuntimeRay3D_Make(origins[r], dirs[r]);
+            RuntimeSpectralPencilLine line = {.vacuum_nm = 380 + 200 * band,
+                                              .band = 0};
+            RuntimeSpectralPathReadout reference = {.weight = 1},
+                                       candidate = {.weight = 1};
+            bool restart;
+            double distance = limit ? .55 : 3;
+            assert(RuntimeSpectralVolume_Segment(v, &line, &ray, distance, true,
+                                                 0, &reference, &restart));
+            line.camera_cache = cache;
+            assert(RuntimeSpectralVolume_Segment(v, &line, &ray, distance, true,
+                                                 0, &candidate, &restart));
+            assert(reference.weight == candidate.weight &&
+                   reference.inscattered == candidate.inscattered &&
+                   reference.single_scatter == candidate.single_scatter);
+          }
+      RuntimeSpectralMapStats stats = {0};
+      RuntimeSpectralCameraCache_Free(cache, &stats);
+      assert(stats.camera_cache_hits > 0 && stats.camera_cache_misses > 0 &&
+             stats.camera_cache_segments > 0);
+      assert(stats.camera_cache_bytes < 128 * 1024);
+      RuntimeSpectralVolume_Free(v);
+    }
+  /* More than 4096 ray partitions: retain exact traversal and refuse reuse. */
+  RuntimeSpectralVolume *v = volume(0);
+  v->config.cell_m = 1. / 4096;
+  RuntimeSpectralCameraCache *cache = RuntimeSpectralCameraCache_Create();
+  assert(cache);
+  Ray3D ray = RuntimeRay3D_Make(vec3(-.1, -.09, -.08), vec3(1, .999, .997));
+  for (int run = 0; run < 2; run++) {
+    SpectralFieldRay a, b;
+    assert(spectral_field_begin(&a, v, ray, 3, true));
+    assert(spectral_camera_begin(cache, &b, v, ray, 3, true));
+    double x, y, z, w, m;
+    int count = 0;
+    while (spectral_field_next(&a, &x, &y)) {
+      assert(spectral_camera_next(cache, &b, &z, &w, &m));
+      assert(x == z && y == w && m == spectral_field_mass(&a, x, y));
+      ++count;
+    }
+    assert(count > 4096 && !spectral_camera_next(cache, &b, &z, &w, &m));
+  }
+  RuntimeSpectralMapStats stats = {0};
+  RuntimeSpectralCameraCache_Free(cache, &stats);
+  assert(stats.camera_cache_overflows == 2 && stats.camera_cache_hits == 0);
+  RuntimeSpectralVolume_Free(v);
+  puts("PASS exact camera cache: box/VF3D, continuous/adaptive, wavelength, "
+       "ray/limit invalidation and bounded overflow");
+}
+
 int main(void) {
+  camera_segment_cache();
   rectangular();
   occupied();
   angular();

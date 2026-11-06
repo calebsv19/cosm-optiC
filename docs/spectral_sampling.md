@@ -119,3 +119,27 @@ python3 tests/integration/test_editor_spectral_sampling.py \
 It exercises the actual controls, saved-profile preparation, ordinary scheduler,
 same-process camera movement/replay and cancellation. The small fixtures qualify
 integration and lifecycle; they are not high-resolution quality benchmarks.
+
+
+## Live headless convergence progress
+
+For `sampling.mode = "converge"`, the ordinary request
+`progress.progress_path` receives updates during rendering. An atomic companion
+`<progress_path>.spectral.json` uses schema `optic_spectral_progress_v1` and
+contains run/frame identity, frame-local elapsed seconds, stage, started passes,
+completed/total camera tiles, maximum passes, and the latest sampling statistics.
+Stages are `preparing_map`, `sampling`, and `checkpoint`. Map preparation and
+checkpoints publish immediately; camera updates are throttled to about once per
+second. Flushed `SPECTRAL_PROGRESS <JSON>` lines on stderr retain update history.
+
+Sampling statistics describe committed passes and the most recent convergence
+check, not a prediction of remaining work. Zero maximum passes still means
+unlimited convergence; no completion percentage or ETA is inferred from it.
+The final render summary is authoritative. Checkpoints are observable progress,
+not resumable renderer state. A configured progress publication failure fails
+the render instead of silently losing observability. Existing editor progress,
+preview and cancellation continue through the same convergence callbacks.
+
+Run `tests/integration/test_headless_spectral_camera_cache.py --cli <cli>
+--output-root <fresh-output>` to check live readback before completion, exact
+checkpoint/final-summary agreement, deterministic replay and publication failure.

@@ -35,6 +35,8 @@ typedef struct {
 bool spectral_field_begin(SpectralFieldRay *, const RuntimeSpectralVolume *, Ray3D, double, bool);
 bool spectral_field_next(SpectralFieldRay *, double *, double *);
 double spectral_field_mass(const SpectralFieldRay *, double, double);
+bool spectral_camera_begin(RuntimeSpectralCameraCache *, SpectralFieldRay *, const RuntimeSpectralVolume *, Ray3D, double, bool);
+bool spectral_camera_next(RuntimeSpectralCameraCache *, SpectralFieldRay *, double *, double *, double *);
 
 unsigned spectral_volume_bucket(uint64_t, int);
 bool spectral_reconstruction_build(RuntimeSpectralVolume *);

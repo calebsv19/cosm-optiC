@@ -26,11 +26,12 @@ static double now_ms(void) {
     clock_gettime(CLOCK_MONOTONIC, &now);
     return now.tv_sec * 1e3 + now.tv_nsec * 1e-6;
 }
-bool RayTracingHeadlessSpectralMap_Run(const RuntimeSpectralPencil *request,
+bool RayTracingHeadlessSpectralMap_Run(const RayTracingAgentRenderRequest *agent,
                                        const RuntimeNative3DPreparedFrame *frame, uint8_t *pixels,
                                        RuntimeSpectralReadout *out, char *diag, size_t size) {
+    const RuntimeSpectralPencil *request = &agent->spectral;
     if (pixels && request->sampling.enabled)
-        return RuntimeSpectralConvergence_Render(request,frame,pixels,NULL,NULL,NULL,out,diag,size);
+        return RayTracingHeadlessSpectralMap_Converge(agent,frame,pixels,out,diag,size);
     const RuntimeScene3D *scene = &frame->scene;
     RuntimeSpectralMapStats *st = &out->map;
     RuntimeSpectralPencil config = *request;
@@ -85,6 +86,8 @@ bool RayTracingHeadlessSpectralMap_Run(const RuntimeSpectralPencil *request,
     return true;
 }
 void RayTracingHeadlessSpectralMap_Write(FILE *f, const RuntimeSpectralMapStats *st, bool rendered) {
+    fprintf(f, "  \"spectral_camera_cache\":{\"bytes\":%zu,\"hits\":%llu,\"misses\":%llu,\"reused_segments\":%llu,\"overflows\":%llu},\n",
+            st->camera_cache_bytes,st->camera_cache_hits,st->camera_cache_misses,st->camera_cache_segments,st->camera_cache_overflows);
     if (st->reconstruction_bytes) {
         fprintf(f,"  \"spectral_reconstruction\":{\"owned_bytes\":%llu,\"peak_bytes\":%llu,"
                   "\"nodes\":%llu,\"links\":%llu,\"regions\":%d,\"cached_node_queries\":%llu,\"exact_node_queries\":%llu,\"spatial_hits\":%llu,\"spatial_misses\":%llu},\n",

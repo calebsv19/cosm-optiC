@@ -9,10 +9,12 @@
 
 /* Local headless calibration instrument. Exact quadrature over discrete atoms. */
 #define RUNTIME_SPECTRAL_PENCIL_MAX_LINES 16
+typedef struct RuntimeSpectralCameraCache RuntimeSpectralCameraCache;
 typedef struct {
     double vacuum_nm, watts, absorption_per_m;
     uint64_t sample_id;
     int band;
+    RuntimeSpectralCameraCache *camera_cache; /* Borrowed, private to this camera region. */
 } RuntimeSpectralPencilLine;
 
 enum {
@@ -65,6 +67,7 @@ typedef enum {
 typedef struct {
     RuntimeSpectralVolumeKind kind;
     RuntimeSpectralReconstructionMode reconstruction;
+    bool disable_camera_cache; /* Reference traversal switch; false preserves the optimized default. */
     double phase_tolerance; /* Relative HG bound; zero requests exact per-ray evaluation. */
     RuntimeSpectralCurve absorption, scattering;
     double g, cell_m;
@@ -125,6 +128,8 @@ typedef struct {
     unsigned long long reconstruction_cached_queries, reconstruction_exact_queries;
     unsigned long long reconstruction_spatial_hits, reconstruction_spatial_misses;
     int reconstruction_regions;
+    unsigned long long camera_cache_hits, camera_cache_misses, camera_cache_segments, camera_cache_overflows;
+    size_t camera_cache_bytes;
     RuntimeSpectralBand bands[SPECTRAL_MAP_MAX_BANDS];
 } RuntimeSpectralMapStats;
 typedef struct {

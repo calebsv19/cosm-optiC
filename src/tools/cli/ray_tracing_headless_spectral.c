@@ -113,7 +113,7 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
     }
     if (p->map.source_count) {
         bool previous = RuntimeRay3D_SetInclusiveTriangleEdges(true);
-        bool ok = RayTracingHeadlessSpectralMap_Run(p, frame, pixels, out, diag, size);
+        bool ok = RayTracingHeadlessSpectralMap_Run(request, frame, pixels, out, diag, size);
         RuntimeRay3D_SetInclusiveTriangleEdges(previous);
         return ok;
     }

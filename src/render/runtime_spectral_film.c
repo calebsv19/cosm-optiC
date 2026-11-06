@@ -70,6 +70,8 @@ static bool spectral_film_region(const RuntimeSpectralPencil *p, const RuntimeSp
                                 char *diag, size_t size, double dx, double dy, const uint8_t *mask, bool signed_rgb) {
     const RuntimeScene3D *scene = frame->traceScene ? frame->traceScene : &frame->scene;
     RuntimeSpectralMapStats *st = &out->map;
+    RuntimeSpectralCameraCache *camera_cache = p->active_volume && !p->volume.disable_camera_cache
+        ? RuntimeSpectralCameraCache_Create() : NULL; /* Allocation failure retains scalar traversal. */
     double sigma[SPECTRAL_MAP_MAX_BANDS];
     double indices[SPECTRAL_MAP_MAX_BANDS];
     Vec3 observer[SPECTRAL_MAP_MAX_BANDS];
@@ -100,7 +102,7 @@ static bool spectral_film_region(const RuntimeSpectralPencil *p, const RuntimeSp
                                                       UINT64_C(0x8fea67c3b21d0000) ^
                                                           ((uint64_t)p->map.seed << 32) ^
                                                           (((uint64_t)y * frame->width + x) * 16 + j),
-                                                      b};
+                                                      b, camera_cache};
                     /* An air-only camera segment is achromatic. A dielectric path is retraced for each
                      * band.
                      */
@@ -108,6 +110,7 @@ static bool spectral_film_region(const RuntimeSpectralPencil *p, const RuntimeSp
                         !RuntimeSpectralPencil_Trace(scene, p, &line, indices[b], ray, true, &hit)) {
                         snprintf(diag, size,
                                  "spectral camera path encountered an inconsistent glass boundary");
+                        RuntimeSpectralCameraCache_Free(camera_cache, NULL);
                         return false;
                     }
                     /* A direct camera path never samples a rough interface. */
@@ -149,6 +152,7 @@ static bool spectral_film_region(const RuntimeSpectralPencil *p, const RuntimeSp
                 radiance[i + 3] = 0;
             }
         }
+    RuntimeSpectralCameraCache_Free(camera_cache, st);
     if(p->active_volume)RuntimeSpectralVolume_ScatterStats(p->active_volume,st);
     return true;
 }
