@@ -20,7 +20,13 @@ bool SceneAtmosphereRuntimeContext(int frame_index,TimelineEvaluationContext* co
     return true;
 }
 bool SceneAtmosphereRuntimeSnapshotMatches(const char* scene,const RayEvaluatedSceneSnapshot* snapshot,char* d,size_t n) {
-    if(!snapshot || !SceneAtmosphereRuntimeRead()->present) return true;
+    if(!snapshot) return true;
+    if(!SceneAtmosphereRuntimeRead()->present) {
+        if(snapshot->simulation.source==RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE) {
+            if(d&&n)snprintf(d,n,"sequence water cache is no longer attached");return false;
+        }
+        return true;
+    }
     RayEvaluatedSimulationIdentity identity;
     if(!SceneAtmosphereRuntimeSimulation(scene,&snapshot->frame,&identity,d,n)) return false;
     const RayEvaluatedSimulationIdentity* recorded=&snapshot->simulation;

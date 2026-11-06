@@ -1,14 +1,14 @@
 {
   "schema": "optic_rigid_result_shared_inputs_v1",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "files": {
-    "VERSION": "74ee4d121463989183f9a9b848577eb2434f3f5d095de2a4b197bf29ffa2399b",
-    "include/core_scene_rigid.h": "f66e357bc15357bc3f311f7d896d18424fc59cf5d637765a03cedf2bff074018",
+    "VERSION": "c92df6bdde330be219d62f48ec6490b01889436f2f59027aab200e74de619168",
+    "include/core_scene_rigid.h": "f623b348daafed66f3f5008caeba6e0ba976ea8ef81af60109a3e7be859d2356",
     "include/core_scene_rigid_json.h": "4793d864084ede4308bfc4d234a28750ca989abf6cf5c2b82f333a8425eb2d7f",
-    "include/core_scene_rigid_result.h": "084c9397d72ac9d2423507d17be7807ec6743b9b48ab83aec5d8120d7354cd3e",
-    "src/core_scene_rigid.c": "3cb53b3d4fa7a692a38e2fe5de403f4a2416eeddd342acbe14d87dd048790545",
-    "src/core_scene_rigid_json.c": "bbf70f5b875c4ce31bcc79d2944d0e3618464e892f5311c82fd807a7da542aee",
-    "src/core_scene_rigid_result.c": "3ab48a40e6f90b943898297a0185180b45dc5b241f9d64dc0c7ec44fef20b86d"
+    "include/core_scene_rigid_result.h": "541edcacd9117b4ce234dfd26b96219729b780edc0dc6e816574a522dbb984bb",
+    "src/core_scene_rigid.c": "9c9d3bd58b4ea03115d5c1e95e9f6a83647818cd48511d39f7c31518b47ca06f",
+    "src/core_scene_rigid_json.c": "d8c8b7896b6e971bae4372d18b9d0cd6b0c6b9b3280694a348c449a829203213",
+    "src/core_scene_rigid_result.c": "f5bc2bff9ad8680905a7f4b70460666eaf837ad778bd600f7eb0e2fd4f0ce3d0"
   },
   "cjson_sha256": "f892717f26cf3d21b7108de50cea95b6e48092950427615fe1d8d9c46ea09cca"
 }

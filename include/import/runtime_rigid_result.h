@@ -8,8 +8,8 @@ enum {
   RAY_RIGID_RESULT_MAX_BODIES = 32,
   RAY_RIGID_RESULT_MAX_PAIRS =
       RAY_RIGID_RESULT_MAX_BODIES * (RAY_RIGID_RESULT_MAX_BODIES - 1) / 2,
-  RAY_RIGID_RESULT_MAX_CHILDREN = 12,
-  RAY_RIGID_RESULT_MAX_ASSETS = 8
+  RAY_RIGID_RESULT_MAX_CHILDREN = 64,
+  RAY_RIGID_RESULT_MAX_ASSETS = 32
 };
 typedef struct RuntimeRigidResult RuntimeRigidResult;
 /* Pure preparation: no current scene/cache mutation. NULL candidate means

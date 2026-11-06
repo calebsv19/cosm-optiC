@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <json-c/json.h>
 #include "animation/timeline_clock.h"
+#include "animation/sequence_clock.h"
 #include "app/scene_atmosphere_optics.h"
 
 /* Project-relative, solver-free cache attachment. One attachment in v1. */
@@ -12,6 +13,8 @@ typedef struct SceneAtmosphereAttachment {
     bool present, enabled, visible, affects_lighting, animated, missing_is_error;
     char id[96], source_path[1024], source_kind[24];
     TimelineRate source_rate;
+    bool sequence_source_clock;
+    SequenceClock sequence_clock; /* Retained value, no borrowed JSON/storage. */
     int64_t timeline_start, source_start;
     double density_scale, density_gamma, absorption_gain, scatter_gain, step_scale;
     double opacity; /* [0,1] density multiplier after remapping; legacy default 1. */

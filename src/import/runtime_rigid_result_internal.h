@@ -5,6 +5,7 @@
 struct RuntimeRigidResult {
   CoreSceneRigidResult result;
   bool has_sequence;
+  bool complex_bundle;
   SequenceClock sequence;
   uint64_t sequence_revision;
   char revision[65];
@@ -13,6 +14,7 @@ struct RuntimeRigidResult {
   struct {
     char id[64], sha256[65];
     uint32_t child_count;
+    bool approximate;
     cJSON *visible;
   } assets[RAY_RIGID_RESULT_MAX_ASSETS];
 };

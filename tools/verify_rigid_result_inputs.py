@@ -8,8 +8,9 @@ from pathlib import Path
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--core-scene', type=Path, required=True)
 p.add_argument('--cjson', type=Path, required=True)
+p.add_argument('--manifest', type=Path, default=Path(__file__).with_name('rigid_result_shared_inputs.json'))
 a = p.parse_args()
-manifest = json.loads((Path(__file__).with_name('rigid_result_shared_inputs.json')).read_text())
+manifest = json.loads(a.manifest.read_text())
 for name, wanted in manifest['files'].items():
     if hashlib.sha256((a.core_scene / name).read_bytes()).hexdigest() != wanted:
         raise SystemExit('Rigid result shared source drift requires review: ' + name)

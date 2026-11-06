@@ -6,7 +6,8 @@
 #include "core_scene_rigid_json.h"
 #include "runtime_rigid_result_internal.h"
 #include "runtime_rigid_asset_metadata.h"
-_Static_assert(RAY_RIGID_RESULT_MAX_CHILDREN == CORE_SCENE_RIGID_RESULT_CHILDREN, "Rigid child profiles must agree");
+#include "runtime_rigid_bundle_v2.h"
+_Static_assert(RAY_RIGID_RESULT_MAX_CHILDREN >= CORE_SCENE_RIGID_RESULT_CHILDREN, "App storage must cover the shared result profile");
 _Static_assert(RAY_RIGID_RESULT_MAX_BODIES == CORE_SCENE_RIGID_RESULT_BODIES,
                "Rigid producer/consumer body envelopes must agree");
 
@@ -21,13 +22,9 @@ _Static_assert(RAY_RIGID_RESULT_MAX_BODIES == CORE_SCENE_RIGID_RESULT_BODIES,
 static bool digest_bytes(const void *p, size_t n, char hex[65]) {
   return core_scene_compile_sha256(p, n, hex).code == CORE_OK;
 }
-typedef struct File {
-  char path[128], hash[65];
-  char *bytes;
-  size_t size;
-} File;
+typedef RuntimeRigidBundleFile File;
 typedef struct Bundle {
-  File files[32];
+  File files[256];
   size_t count, total;
 } Bundle;
 static const cJSON *get(const cJSON *j, const char *k) {
@@ -319,7 +316,7 @@ static cJSON *catalog(Bundle *files, RuntimeRigidResult *r, cJSON *original) {
   const cJSON *defs = get(setj, "assets");
   bool ok = schema(setj, "ball_rigid_asset_set_v1") &&
             fields(setj, "|schema||assets|", 2) && cJSON_IsArray(defs) &&
-            cJSON_GetArraySize(defs) > 0 && cJSON_GetArraySize(defs) <= RAY_RIGID_RESULT_MAX_ASSETS;
+            cJSON_GetArraySize(defs) > 0 && cJSON_GetArraySize(defs) <= 8;
   for (const cJSON *a = ok ? defs->child : NULL; a && ok; a = a->next) {
     const char *id = str(a, "asset_id"), *root = str(a, "root");
     if (!fields(a, "|asset_id||root|", 2) || strlen(id) > 48 || !id[0] ||
@@ -414,7 +411,7 @@ bool RuntimeRigidBundleRead(const char *path, const char *revision,
                             const char *current, RuntimeRigidResult **out,
                             char *diagnostic, size_t capacity) {
   CoreSceneRigidDiagnostic diag = {0};
-  bool ok = false;
+  bool ok = false, v2 = false;
   const char *stage = "root";
   int fd = -1;
   Bundle b = {0};
@@ -427,9 +424,10 @@ bool RuntimeRigidBundleRead(const char *path, const char *revision,
       (fd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW)) < 0)
     goto done;
   stage = "manifest revision";
-  raw = read_at(fd, "manifest.json", 65536, &n);
+  raw = read_at(fd, "manifest.json", 256u * 1024u, &n);
   if (!raw || !(m = parse(raw, n)) ||
-      !schema(m, "ball_rigid_result_bundle_v1") ||
+      (!schema(m, "ball_rigid_result_bundle_v1") &&
+       !schema(m, "ball_rigid_result_bundle_v2")) ||
       !fields(m,
               "|schema||physical_input_sha256||engine_sha256||endpoint_tick||"
               "artifacts||result_revision|",
@@ -437,16 +435,19 @@ bool RuntimeRigidBundleRead(const char *path, const char *revision,
       strcmp(str(m, "result_revision"), revision) ||
       !digest_manifest(m, revision))
     goto done;
+  v2 = schema(m, "ball_rigid_result_bundle_v2");
+  r->complex_bundle = v2;
+  if (!v2 && n > 65536) goto done;
   stage = "artifact inventory";
   const cJSON *artifacts = get(m, "artifacts");
   if (!cJSON_IsArray(artifacts) || cJSON_GetArraySize(artifacts) < 1 ||
-      cJSON_GetArraySize(artifacts) > 31)
+      cJSON_GetArraySize(artifacts) > (v2 ? 256 : 31))
     goto done;
   for (const cJSON *a = artifacts->child; a; a = a->next) {
     File *f = &b.files[b.count++];
     const char *p = str(a, "path");
     const cJSON *size = get(a, "size_bytes");
-    if (!fields(a, "|path||size_bytes||sha256|", 3) || !allowed(p) ||
+    if (!fields(a, "|path||size_bytes||sha256|", 3) || !(v2 ? RuntimeRigidBundleV2Path(p) : allowed(p)) ||
         strlen(p) >= sizeof(f->path) || !cJSON_IsNumber(size) ||
         size->valuedouble < 1 || size->valuedouble > CORE_SCENE_RIGID_RESULT_JSON_BYTES ||
         size->valuedouble != (double)(size_t)size->valuedouble ||
@@ -455,12 +456,12 @@ bool RuntimeRigidBundleRead(const char *path, const char *revision,
       goto done;
     strcpy(f->path, p);
     f->bytes = read_at(
-        fd, p, !strcmp(p, "poses.pack") ? CORE_SCENE_RIGID_RESULT_JSON_BYTES : 1024u * 1024u,
+        fd, p, v2 || !strcmp(p, "poses.pack") ? CORE_SCENE_RIGID_RESULT_JSON_BYTES : 1024u * 1024u,
         &f->size);
     if (!f->bytes || f->size != size->valuedouble ||
         core_scene_compile_sha256(f->bytes, f->size, f->hash).code != CORE_OK ||
         strcmp(f->hash, str(a, "sha256")) ||
-        (b.total += f->size) > 64u * 1024u * 1024u)
+        (b.total += f->size) > (v2 ? 256u : 64u) * 1024u * 1024u)
       goto done;
   }
   stage = "directory inventory";
@@ -480,14 +481,14 @@ bool RuntimeRigidBundleRead(const char *path, const char *revision,
     goto done;
   stage = "physical compatibility";
   original = parse(scene->bytes, scene->size);
-  cat = original ? catalog(&b, r, original) : NULL;
+  cat = original ? (v2 ? RuntimeRigidBundleV2Catalog(b.files, b.count, str(m, "engine_sha256"), r) : catalog(&b, r, original)) : NULL;
   cat_text = cat ? cJSON_PrintUnformatted(cat) : NULL;
   if (!cat_text)
     goto done;
   stage = "original physical contract";
   if (core_scene_rigid_json_read(
           scene->bytes, scene->size, cat_text, strlen(cat_text),
-          (CoreSceneRigidLimits){RAY_RIGID_RESULT_MAX_BODIES, RAY_RIGID_RESULT_MAX_PAIRS, RAY_RIGID_RESULT_MAX_CHILDREN}, contract, &diag)
+          (CoreSceneRigidLimits){RAY_RIGID_RESULT_MAX_BODIES, RAY_RIGID_RESULT_MAX_PAIRS, v2 ? 64 : 12}, contract, &diag)
           .code != CORE_OK) {
     stage = diag.message;
     goto done;
@@ -522,7 +523,7 @@ bool RuntimeRigidBundleRead(const char *path, const char *revision,
   stage = "current physical contract";
   if (core_scene_rigid_json_read(
           current, strlen(current), cat_text, strlen(cat_text),
-          (CoreSceneRigidLimits){RAY_RIGID_RESULT_MAX_BODIES, RAY_RIGID_RESULT_MAX_PAIRS, RAY_RIGID_RESULT_MAX_CHILDREN}, contract, &diag)
+          (CoreSceneRigidLimits){RAY_RIGID_RESULT_MAX_BODIES, RAY_RIGID_RESULT_MAX_PAIRS, v2 ? 64 : 12}, contract, &diag)
           .code != CORE_OK) {
     stage = diag.message;
     goto done;

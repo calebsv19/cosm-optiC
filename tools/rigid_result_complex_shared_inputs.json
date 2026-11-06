@@ -1,0 +1,14 @@
+{
+  "schema": "optic_rigid_result_shared_inputs_v1",
+  "version": "1.12.0",
+  "files": {
+    "VERSION": "c92df6bdde330be219d62f48ec6490b01889436f2f59027aab200e74de619168",
+    "include/core_scene_rigid.h": "f623b348daafed66f3f5008caeba6e0ba976ea8ef81af60109a3e7be859d2356",
+    "include/core_scene_rigid_json.h": "4793d864084ede4308bfc4d234a28750ca989abf6cf5c2b82f333a8425eb2d7f",
+    "include/core_scene_rigid_result.h": "541edcacd9117b4ce234dfd26b96219729b780edc0dc6e816574a522dbb984bb",
+    "src/core_scene_rigid.c": "9c9d3bd58b4ea03115d5c1e95e9f6a83647818cd48511d39f7c31518b47ca06f",
+    "src/core_scene_rigid_json.c": "d8c8b7896b6e971bae4372d18b9d0cd6b0c6b9b3280694a348c449a829203213",
+    "src/core_scene_rigid_result.c": "f5bc2bff9ad8680905a7f4b70460666eaf837ad778bd600f7eb0e2fd4f0ce3d0"
+  },
+  "cjson_sha256": "f892717f26cf3d21b7108de50cea95b6e48092950427615fe1d8d9c46ea09cca"
+}

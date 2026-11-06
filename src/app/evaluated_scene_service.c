@@ -1,4 +1,5 @@
 #include "import/runtime_sequence_source.h"
+#include "app/scene_atmosphere_sequence.h"
 #include "motion/scene_motion_plans.h"
 #include "app/evaluated_scene_service.h"
 #include "import/runtime_rigid_result.h"
@@ -499,7 +500,8 @@ static bool ray_evaluated_build_authored(
         &inputs.simulation,out_result->status_line,sizeof(out_result->status_line))) {
         out_result->status=TIMELINE_STATUS_INVALID_SNAPSHOT;out_result->valid=false;return false;
     }
-    if(inputs.has_sequence && inputs.simulation.valid && !RuntimeSequenceVolumeActive()) {
+    if(inputs.has_sequence && inputs.simulation.valid && !RuntimeSequenceVolumeActive() &&
+       !SceneAtmosphereSequenceMatches(SceneAtmosphereRuntimeRead(),&inputs.sequence)) {
         ray_evaluated_fail(out_result,TIMELINE_STATUS_INVALID_SNAPSHOT,"sequence mode does not admit animated simulation caches");return false;
     }
     if(inputs.simulation.valid) inputs.invalidation_domains |= TIMELINE_INVALIDATION_VOLUME;
@@ -612,7 +614,8 @@ static bool ray_evaluated_build_legacy(
         &inputs.simulation,out_result->status_line,sizeof(out_result->status_line))) {
         out_result->status=TIMELINE_STATUS_INVALID_SNAPSHOT;out_result->valid=false;return false;
     }
-    if(inputs.has_sequence && inputs.simulation.valid && !RuntimeSequenceVolumeActive()) {
+    if(inputs.has_sequence && inputs.simulation.valid && !RuntimeSequenceVolumeActive() &&
+       !SceneAtmosphereSequenceMatches(SceneAtmosphereRuntimeRead(),&inputs.sequence)) {
         ray_evaluated_fail(out_result,TIMELINE_STATUS_INVALID_SNAPSHOT,"sequence mode does not admit animated simulation caches");return false;
     }
     if(inputs.simulation.valid) inputs.invalidation_domains |= TIMELINE_INVALIDATION_VOLUME;
