@@ -258,6 +258,9 @@ bool spectral_reconstruction_begin_ray(RuntimeSpectralVolume *v, Ray3D ray) {
     SpectralReconstruction *r = v->reconstruction;
     if (!r || !spectral_reconstruction_build(v))
         return false;
+    /* Camera bands begin the same sample sequence. Exact-position checks also
+     * handle different optical-depth subdivision and truncated segments. */
+    r->source_cursor = 0;
     if (!r->view_ready) {
         /* |d log HG / d theta| <= 3|g|/(1-g^2), for every incoming direction. */
         double g = fabs(v->config.g);
@@ -270,6 +273,7 @@ bool spectral_reconstruction_begin_ray(RuntimeSpectralVolume *v, Ray3D ray) {
         memcmp(&ray.direction, &r->ray.direction, sizeof(Vec3))) {
         r->ray = ray;
         r->ray_ready = true;
+        r->source_cached_count = 0;
         Vec3 outgoing = vec3_scale(ray.direction, -1);
         r->phase_direction = outgoing;
         r->phase_key = 0;
@@ -423,17 +427,22 @@ static void source_prepare(RuntimeSpectralVolume *v, Vec3 p, SpectralSourceStenc
                 break;
             }
         }
+        /* Keep the common achromatic stencil compact. Mesh-boundary parts use
+         * the retained scalar path rather than inflating every cache entry. */
+        if (last) {
+            c->count = -1;
+            return;
+        }
         for (int part = 0; part <= last; part++) {
             if (!(face_weights[part] > 0))
                 continue;
             uint16_t key_region = region + part * 6553;
             SpectralSourceGroup *g = &c->groups[c->count++];
+            g->cell_key = key_make(id[0][0], id[1][0], id[2][0], 0, level, key_region);
             for (int z = 0; z < 2; z++)
                 for (int y = 0; y < 2; y++)
                     for (int x = 0; x < 2; x++) {
                         int i = x + 2 * y + 4 * z;
-                        g->keys[i] = key_make(id[0][x], id[1][y], id[2][z], 0,
-                                              level, key_region);
                         g->weights[i] = w[0][x] * w[1][y] * w[2][z] * face_weights[part];
                     }
         }
@@ -462,29 +471,35 @@ double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band
     SpectralReconstruction *r = v->reconstruction;
     if (v->config.disable_camera_cache || !source_cache_ready(r))
         return source_reference(v, p, band, first);
-    uint64_t bits[3];
-    memcpy(&bits[0], &p.x, sizeof(double));
-    memcpy(&bits[1], &p.y, sizeof(double));
-    memcpy(&bits[2], &p.z, sizeof(double));
-    size_t index = hash(hash(bits[0]) ^ (hash(bits[1]) << 1) ^ (hash(bits[2]) << 2)) &
-                   (SPECTRAL_SOURCE_CACHE_SIZE - 1);
+    if (r->source_cursor == SPECTRAL_SOURCE_CACHE_SIZE) {
+        r->source_overflows++;
+        return source_reference(v, p, band, first);
+    }
+    size_t index = r->source_cursor++;
     SpectralSourceStencil *c = &r->source_cache[index];
-    if (!c->valid || memcmp(&c->position, &p, sizeof(p))) {
+    if (index >= r->source_cached_count || memcmp(&c->position, &p, sizeof(p))) {
         r->source_misses++;
         source_prepare(v, p, c);
+        if (index >= r->source_cached_count)
+            r->source_cached_count = index + 1;
     } else
         r->source_hits++;
+    if (c->count < 0)
+        return source_reference(v, p, band, first);
     double total = 0;
     uint64_t band_key = (uint64_t)band << 36;
     for (int j = 0; j < c->count; j++) {
         const SpectralSourceGroup *g = &c->groups[j];
-        uint64_t cell_key = g->keys[0] + band_key;
+        uint64_t cell_key = g->cell_key + band_key;
         SpectralSpatialCache *cache = &r->spatial[hash(cell_key) & (SPECTRAL_SPATIAL_CACHE_SIZE - 1)];
         if (cache->key != cell_key) {
             r->spatial_misses++;
             cache->key = cell_key;
-            for (int i = 0; i < 8; i++)
-                cache->nodes[i] = r->slots[slot(r, g->keys[i] + band_key)];
+            for (int i = 0; i < 8; i++) {
+                uint64_t offset = ((uint64_t)(i & 1) << 24) |
+                                  ((uint64_t)((i >> 1) & 1) << 12) | (uint64_t)(i >> 2);
+                cache->nodes[i] = r->slots[slot(r, cell_key + offset)];
+            }
         } else
             r->spatial_hits++;
         for (int i = 0; i < 8; i++) {

@@ -267,23 +267,29 @@ boundary geometry or change kernel normalization.
 
 Continuous and adaptive camera queries reuse wavelength-independent geometry at
 exactly matching sample positions within one frozen reconstruction map. A bounded
-1024-entry direct-mapped cache stores occupied-region results, mesh-face weights,
-interpolation node keys and interpolation weights. Wavelength is applied to the
-node lookup afterward; angular values still use the existing phase-bound cache
-and exact fallback. Summation order is unchanged. No color, radiance, wavelength,
-optical depth or phase result is interpolated by this cache.
+1024-entry ordered cache stores occupied-region results, base node keys and
+interpolation weights for supports separated from the mesh. Mesh-boundary samples
+retain the scalar reference rather than inflating every entry with face groups.
+Wavelength is applied during node lookup; angular values still use the existing
+phase-bound cache and exact fallback. Summation order is unchanged. No color,
+radiance, optical depth or phase result is interpolated by this cache.
 
-Each entry compares the full position after hashing. Collisions replace entries
-and recompute the same geometry. The map owns the storage and frees it with its
-reconstruction; a new scene/map cannot inherit entries. Camera direction changes
-do not invalidate geometry, but retain the existing angular invalidation.
-At the current layout the optional storage is2392064 bytes (about2.28MiB), charged
+Each camera segment starts its query cursor at zero. An unchanged ray can reuse
+its previous wavelength's query sequence, but each entry must also match the
+full position exactly. Different subdivision or truncated sequences therefore
+recompute mismatching positions. A changed ray clears the valid prefix; a new
+scene/map owns fresh state. Queries beyond1024 entries use scalar evaluation.
+The map frees cache storage with its reconstruction. Existing angular
+invalidation remains in force independently.
+
+The current64-bit layout uses180224 bytes (176KiB) of optional storage, charged
 to the reconstruction allocation budget. Allocation or budget failure retains
-scalar evaluation without making an otherwise supported scene fail.
+scalar evaluation without making an otherwise supported scene fail. The existing
+`camera_spatial_cache: false` reference setting disables both camera-segment
+and source-geometry reuse.
 
-The existing `camera_spatial_cache: false` reference setting disables both camera
-segment reuse and source-geometry reuse. Native tests cover exact agreement
-across bands and changed ray directions, cache collisions, map lifetimes and
+Native tests cover exact nonzero agreement across bands and changed directions,
+changed and shortened query sequences, bounded overflow, map lifetimes and
 optional-budget fallback. Headless parity also covers a volume overlapping the
 convex prism. This optimization does not alter support size, normalization,
 visibility, sampling thresholds or convergence decisions.

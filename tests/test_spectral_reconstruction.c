@@ -466,8 +466,8 @@ static void source_stencil_cache(void) {
     RuntimeScene3D scene = mesh_cube(&primitive, triangles);
     bind(v, &scene);
     event(v, vec3(.449, .449, .449));
-    v->points = realloc(v->points, 2 * sizeof(*v->points));
-    v->positions = realloc(v->positions, 2 * sizeof(*v->positions));
+    v->points = realloc(v->points, 4 * sizeof(*v->points));
+    v->positions = realloc(v->positions, 4 * sizeof(*v->positions));
     assert(v->points && v->positions);
     v->points[1] = v->points[0];
     v->positions[1] = v->positions[0];
@@ -475,7 +475,14 @@ static void source_stencil_cache(void) {
     v->points[1].watts = 2;
     v->points[1].first = false;
     v->points[1].incoming = vec3(1, 0, 0);
-    v->count = v->capacity = 2;
+    for (int band = 0; band < 2; band++) {
+      v->points[2 + band] = v->points[band];
+      v->positions[2 + band] = vec3(.12, .12, .12);
+      v->points[2 + band].cell = ((uint64_t)1 << 24) | ((uint64_t)1 << 12) | 1;
+      v->points[2 + band].watts = 3 + band;
+      v->heads[spectral_volume_bucket(v->points[2 + band].cell, band)] = 3 + band;
+    }
+    v->count = v->capacity = 4;
     v->heads[spectral_volume_bucket(v->points[1].cell, 1)] = 2;
     v->config.g = .7;
     v->config.phase_tolerance = 0; /* Exercise exact angular fallback. */
@@ -487,14 +494,16 @@ static void source_stencil_cache(void) {
       assert(spectral_reconstruction_begin_ray(v, ray));
       for (int i = 0; i < 4096; i++) {
         /* More positions than cache slots, plus inside/occluded/edge cases. */
-        Vec3 p = vec3(.3 + (i % 32) * .012, .3 + ((i / 32) % 16) * .025,
-                      .3 + (i / 512) * .04);
+        Vec3 p = vec3(.1 + (i % 32) * .025, .1 + ((i / 32) % 16) * .05,
+                      .1 + (i / 512) * .1);
         for (int band = 0; band < 2; band++) {
           double a = .125, b = .125, c = .125;
           v->config.disable_camera_cache = true;
           double ref = spectral_reconstruction_source(v, p, band, &a);
           v->config.disable_camera_cache = false;
+          assert(spectral_reconstruction_begin_ray(v, ray));
           double value = spectral_reconstruction_source(v, p, band, &b);
+          assert(spectral_reconstruction_begin_ray(v, ray));
           double again = spectral_reconstruction_source(v, p, band, &c);
           assert(ref == value && value == again && a == b && b == c);
           totals[band] += value;
@@ -503,7 +512,39 @@ static void source_stencil_cache(void) {
     }
     assert(totals[0] > 0 && totals[1] > 0 && totals[0] != totals[1]);
     assert(v->reconstruction->source_hits > 0 && v->reconstruction->source_misses > 1024);
+    /* Sequential overflow, a changed sample sequence and a shorter replay
+     * cannot return a stencil for a different position. */
+    for (int pass = 0; pass < 3; pass++) {
+      begin(v);
+      for (int i = 0; i < 1200 - pass * 50; i++) {
+        Vec3 p = vec3(.01 + ((i + pass) % 31) * .03, .025, .025);
+        double a = 0, b = 0;
+        v->config.disable_camera_cache = true;
+        double ref = spectral_reconstruction_source(v, p, 0, &a);
+        v->config.disable_camera_cache = false;
+        double value = spectral_reconstruction_source(v, p, 0, &b);
+        assert(value == ref && a == b);
+      }
+    }
+    assert(v->reconstruction->source_overflows > 0);
+    begin(v);
     assert(v->reconstruction->source_cache);
+    for (int band = 0; band < 2; band++) {
+      double a = .125, b = .125;
+      v->config.disable_camera_cache = true;
+      double ref = spectral_reconstruction_source(v, vec3(.025, .025, .025), band, &a);
+      v->config.disable_camera_cache = false;
+      begin(v);
+      double value = spectral_reconstruction_source(v, vec3(.025, .025, .025), band, &b);
+      assert(value > 0 && value == ref && a == b);
+    }
+    bool prepared_nonzero = false;
+    for (int i = 0; i < SPECTRAL_SOURCE_CACHE_SIZE; i++) {
+      SpectralSourceStencil *c = &v->reconstruction->source_cache[i];
+      if (c->valid && c->position.x == .025 && c->position.y == .025 && c->position.z == .025)
+        prepared_nonzero = c->count > 0;
+    }
+    assert(prepared_nonzero);
     printf("source cache mode=%d hits=%llu misses=%llu bytes=%zu\n", mode,
            (unsigned long long)v->reconstruction->source_hits,
            (unsigned long long)v->reconstruction->source_misses,
@@ -520,7 +561,7 @@ static void source_stencil_cache(void) {
     assert(!v->reconstruction->source_cache && !v->reconstruction->error[0]);
     RuntimeSpectralVolume_Free(v);
   }
-  puts("PASS source stencil: exact band/direction parity, collisions, map lifetime and budget fallback");
+  puts("PASS source stencil: exact band/direction parity, sequence mismatch/overflow, map lifetime and budget fallback");
 }
 
 int main(void) {
