@@ -378,6 +378,8 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
         if (!job || !job->ok) {
             return false;
         }
+        /* A later cancel or progress failure must retain this completed prefix. */
+        scheduler->completedTileJobCount += 1;
         RuntimeNative3DRenderUnit_GetActivityCounts(&job->renderUnit,
                                                     &job->activePixelCount,
                                                     &job->activeTileCount,
@@ -454,7 +456,6 @@ static bool runtime_native_3d_tile_scheduler_wait_for_subpass(
         }
     }
     scheduler->completionCount += completions;
-    scheduler->completedTileJobCount += (int)completions;
     return true;
 }
 
@@ -997,7 +998,7 @@ finalize:
         out_stats->temporalProgressDirtyTileCount = scheduler.progressDirtyTileCount;
         out_stats->temporalConservativeFirstFrameTileRender =
             scheduler.firstFrameConservativeTileRender ? 1 : 0;
-    } else if (!ok && out_stats && scheduler.cancelRequested) {
+    } else if (!ok && out_stats) {
         *out_stats = scheduler.stats;
         runtime_native_3d_tile_scheduler_record_lifetime_stats(&scheduler, out_stats);
         out_stats->temporalCommittedSubpasses = scheduler.committedSubpasses;

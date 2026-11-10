@@ -1,5 +1,7 @@
+#define _DARWIN_C_SOURCE
 #define _XOPEN_SOURCE 700
 #include "scene_editor_rigid_job.h"
+#include "platform/ray_tracing_owned_child.h"
 #include "editor/scene_editor_document.h"
 #include "editor/scene_editor_timeline.h"
 #include <json-c/json.h>
@@ -12,6 +14,8 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <spawn.h>
+#include <signal.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +25,11 @@ extern char **environ;
 static pid_t child;
 static char source[4096],destination[4096],log_path[4096];
 static unsigned long long revision;
+void SceneEditorRigidJobShutdown(void) {
+    if(!child) return;
+    int status=0;(void)RayTracingOwnedChild_Stop(child,&status);child=0;
+    /* Keep the preparation log and candidate for explicit outcome inspection. */
+}
 static const char *str(json_object *o,const char *key) {
     json_object *v=NULL;json_object_object_get_ex(o,key,&v);
     return json_object_is_type(v,json_type_string)?json_object_get_string(v):"";
@@ -62,20 +71,31 @@ bool SceneEditorRigidJobBegin(const char *profile,char *message,size_t size) {
       "--pack-io",(char*)str(o,"pack_io"),"--assets",(char*)str(o,"assets"),
       "--store",(char*)str(o,"store"),"--renderer",(char*)str(o,"renderer"),
       "--output",(char*)str(o,"output"),"--expected-head",(char*)head,"--ticks",(char*)ticks,"--wall-seconds",(char*)wall,NULL};
-    posix_spawn_file_actions_t actions;posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_adddup2(&actions,fd,STDOUT_FILENO);
-    posix_spawn_file_actions_adddup2(&actions,fd,STDERR_FILENO);
-    posix_spawn_file_actions_addclose(&actions,fd);
-    pid_t pid=0;int error=posix_spawnp(&pid,"python3",&actions,NULL,args,environ);
-    posix_spawn_file_actions_destroy(&actions);close(fd);json_object_put(o);
+    posix_spawn_file_actions_t actions;
+    posix_spawnattr_t attr;
+    int error=posix_spawn_file_actions_init(&actions);
+    bool actions_ready=error==0,attr_ready=false;
+    if(!error) error=posix_spawnattr_init(&attr);
+    if(!error) attr_ready=true;
+    if(!error) error=posix_spawnattr_setflags(&attr,POSIX_SPAWN_SETPGROUP);
+    if(!error) error=posix_spawnattr_setpgroup(&attr,0);
+    if(!error) error=posix_spawn_file_actions_adddup2(&actions,fd,STDOUT_FILENO);
+    if(!error) error=posix_spawn_file_actions_adddup2(&actions,fd,STDERR_FILENO);
+    if(!error) error=posix_spawn_file_actions_addclose(&actions,fd);
+    pid_t pid=0;
+    if(!error) error=posix_spawnp(&pid,"python3",&actions,&attr,args,environ);
+    if(attr_ready) posix_spawnattr_destroy(&attr);
+    if(actions_ready) posix_spawn_file_actions_destroy(&actions);
+    close(fd);json_object_put(o);
     if(error) {unlink(log_path);snprintf(message,size,"Cannot start local preparation: %s",strerror(error));return false;}
     child=pid;revision=SceneEditorDocumentRevision();SceneEditorTimelinePause();
     snprintf(message,size,"Preparing locally. The current result remains active until completion.");return true;
 }
 void SceneEditorRigidJobPoll(char *message,size_t size) {
     if(!child) return;
-    int status=0;pid_t result=waitpid(child,&status,WNOHANG);
-    if(result==0 || (result<0 && errno==EINTR)) return;
+    int status=0;
+    int result=RayTracingOwnedChild_Poll(child,&status);
+    if(result==0) return;
     child=0;
     if(result<0 || !WIFEXITED(status) || WEXITSTATUS(status)!=0) {
         FILE *f=fopen(log_path,"rb");char detail[512]={0};

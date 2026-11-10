@@ -34,6 +34,7 @@ typedef struct RuntimeNative3DAsyncRenderJobResult {
     bool published;
     uint64_t generation;
     uint64_t completionValue;
+    /* Terminal snapshots retain generation metadata but no live cancel token. */
     RuntimeNative3DRenderRequestSnapshot snapshot;
 } RuntimeNative3DAsyncRenderJobResult;
 

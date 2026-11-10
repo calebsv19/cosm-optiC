@@ -107,6 +107,13 @@ bool RuntimeNative3DAsyncRenderJob_Start(
         return false;
     }
 
+    /* Refused admission must not replace an earlier accepted completion. */
+    const RuntimeNative3DRenderRequestSnapshot previous_snapshot = job->snapshot;
+    const RuntimeNative3DAsyncRenderJobResult previous_result = job->result;
+    const RuntimeNative3DAsyncRenderJobStatus previous_status = job->status;
+    const bool previous_published = job->published;
+    const bool previous_cancel = atomic_load_explicit(&job->cancelRequested,
+                                                     memory_order_acquire);
     snapshot = desc->snapshot;
     snapshot.generationBound = true;
     snapshot.generation = desc->generation;
@@ -128,7 +135,12 @@ bool RuntimeNative3DAsyncRenderJob_Start(
                        NULL,
                        runtime_native_3d_async_render_job_worker,
                        job) != 0) {
-        job->status = RUNTIME_NATIVE_3D_ASYNC_RENDER_JOB_FAILED;
+        job->snapshot = previous_snapshot;
+        job->result = previous_result;
+        job->status = previous_status;
+        job->published = previous_published;
+        atomic_store_explicit(&job->cancelRequested, previous_cancel,
+                              memory_order_release);
         job->runFn = NULL;
         job->userData = NULL;
         pthread_mutex_unlock(&job->mutex);
@@ -217,6 +229,10 @@ RuntimeNative3DAsyncRenderPublishStatus RuntimeNative3DAsyncRenderJob_TryPublish
             publish_status = RUNTIME_NATIVE_3D_ASYNC_RENDER_PUBLISH_PUBLISHED;
         }
         if (out_result) {
+            /* Terminal copies may outlive this job or a subsequent Start.
+             * Keep the observed cancellation outcome, not its live pointer. */
+            result.snapshot.cancelTokenBound = false;
+            result.snapshot.cancelToken.cancelRequested = NULL;
             *out_result = result;
         }
     }

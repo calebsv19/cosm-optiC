@@ -7,3 +7,5 @@
 bool SceneEditorRigidJobBegin(const char *profile,char *message,size_t size);
 bool SceneEditorRigidJobBusy(void);
 void SceneEditorRigidJobPoll(char *message,size_t size);
+/* Stops the owned local preparation group and reaps its direct child. */
+void SceneEditorRigidJobShutdown(void);

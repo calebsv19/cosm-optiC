@@ -81,13 +81,15 @@ static void request_scan(const char *root, const char *manifest,
     scans[slot] = scan;
     pthread_t thread;
     pthread_attr_t attr;
-    pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-    if (pthread_create(&thread, &attr, scan_catalog, scan) != 0) {
+    int error = pthread_attr_init(&attr);
+    bool attr_ready = error == 0;
+    if (!error) error = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (!error) error = pthread_create(&thread, &attr, scan_catalog, scan);
+    if (error) {
         scans[slot] = NULL;
         free(scan);
     }
-    pthread_attr_destroy(&attr);
+    if (attr_ready) pthread_attr_destroy(&attr);
 }
 
 void menu_catalog_discovery_request(const char *const *roots, size_t root_count,

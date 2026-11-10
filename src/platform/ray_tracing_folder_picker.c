@@ -1,4 +1,7 @@
+#define _DARWIN_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
 #include "platform/ray_tracing_folder_picker.h"
+#include "platform/ray_tracing_owned_child.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -23,6 +26,12 @@
 #ifndef PATH_MAX
 #define PATH_MAX 4096
 #endif
+
+static ssize_t picker_read(int fd, void *buffer, size_t size) {
+    ssize_t result;
+    do { result = read(fd, buffer, size); } while (result < 0 && errno == EINTR);
+    return result;
+}
 
 static void trim_dialog_newline(char *text) {
     size_t length = 0u;
@@ -113,6 +122,20 @@ static bool start_picker_process(RayTracingFolderPickerRequest *request,
     int flags = 0;
 
     if (!request || request->active || pipe(pipe_fds) != 0) return false;
+    /* Do fallible descriptor setup before admitting a child. */
+    int read_fd = fcntl(pipe_fds[0], F_DUPFD_CLOEXEC, 3);
+    int write_fd = fcntl(pipe_fds[1], F_DUPFD_CLOEXEC, 3);
+    close(pipe_fds[0]); close(pipe_fds[1]);
+    if (read_fd < 0 || write_fd < 0) {
+        if (read_fd >= 0) close(read_fd);
+        if (write_fd >= 0) close(write_fd);
+        return false;
+    }
+    pipe_fds[0] = read_fd; pipe_fds[1] = write_fd;
+    flags = fcntl(read_fd, F_GETFL, 0);
+    if (flags < 0 || fcntl(read_fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+        close(read_fd); close(write_fd); return false;
+    }
     child = fork();
     if (child < 0) {
         (void)close(pipe_fds[0]);
@@ -120,6 +143,7 @@ static bool start_picker_process(RayTracingFolderPickerRequest *request,
         return false;
     }
     if (child == 0) {
+        if (setpgid(0, 0) != 0) _exit(126);
         (void)close(pipe_fds[0]);
         if (dup2(pipe_fds[1], STDOUT_FILENO) < 0) _exit(126);
         (void)close(pipe_fds[1]);
@@ -128,13 +152,7 @@ static bool start_picker_process(RayTracingFolderPickerRequest *request,
     }
 
     (void)close(pipe_fds[1]);
-    flags = fcntl(pipe_fds[0], F_GETFL, 0);
-    if (flags < 0 || fcntl(pipe_fds[0], F_SETFL, flags | O_NONBLOCK) != 0) {
-        (void)close(pipe_fds[0]);
-        (void)kill(child, SIGTERM);
-        (void)waitpid(child, NULL, 0);
-        return false;
-    }
+    (void)setpgid(child, child); /* Child also establishes the group before exec. */
     request->child_pid = child;
     request->output_fd = pipe_fds[0];
     request->output_used = 0u;
@@ -294,7 +312,7 @@ RayTracingFolderPickerResult RayTracing_FolderPicker_Poll(
     pid_t waited = 0;
     if (!request || !request->active) return RAY_TRACING_FOLDER_PICKER_FAILED;
     while (request->output_used + 1u < sizeof(request->output)) {
-        bytes_read = read(request->output_fd,
+        bytes_read = picker_read(request->output_fd,
                           request->output + request->output_used,
                           sizeof(request->output) - request->output_used - 1u);
         if (bytes_read > 0) {
@@ -309,7 +327,7 @@ RayTracingFolderPickerResult RayTracing_FolderPicker_Poll(
         break;
     }
     if (request->output_used + 1u >= sizeof(request->output)) {
-        while ((bytes_read = read(request->output_fd, discard, sizeof(discard))) > 0) {
+        while ((bytes_read = picker_read(request->output_fd, discard, sizeof(discard))) > 0) {
             request->output_overflow = true;
         }
         if (bytes_read < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -317,19 +335,19 @@ RayTracingFolderPickerResult RayTracing_FolderPicker_Poll(
             return RAY_TRACING_FOLDER_PICKER_FAILED;
         }
     }
-    waited = waitpid(request->child_pid, &wait_status, WNOHANG);
+    waited = RayTracingOwnedChild_Poll(request->child_pid, &wait_status);
     if (waited == 0) return RAY_TRACING_FOLDER_PICKER_PENDING;
     if (waited < 0) {
         RayTracing_FolderPicker_Cancel(request);
         return RAY_TRACING_FOLDER_PICKER_FAILED;
     }
     while (request->output_used + 1u < sizeof(request->output) &&
-           (bytes_read = read(request->output_fd,
+           (bytes_read = picker_read(request->output_fd,
                               request->output + request->output_used,
                               sizeof(request->output) - request->output_used - 1u)) > 0) {
         request->output_used += (size_t)bytes_read;
     }
-    while ((bytes_read = read(request->output_fd, discard, sizeof(discard))) > 0) {
+    while ((bytes_read = picker_read(request->output_fd, discard, sizeof(discard))) > 0) {
         request->output_overflow = true;
     }
     request->output[request->output_used] = '\0';
@@ -347,21 +365,10 @@ RayTracingFolderPickerResult RayTracing_FolderPicker_Poll(
 }
 
 void RayTracing_FolderPicker_Cancel(RayTracingFolderPickerRequest *request) {
-    int attempts = 0;
-    pid_t waited = 0;
     if (!request) return;
     if (request->output_fd >= 0) (void)close(request->output_fd);
     if (request->active && request->child_pid > 0) {
-        (void)kill(request->child_pid, SIGTERM);
-        do {
-            waited = waitpid(request->child_pid, NULL, WNOHANG);
-            if (waited != 0) break;
-            (void)usleep(1000u);
-        } while (++attempts < 100);
-        if (waited == 0) {
-            (void)kill(request->child_pid, SIGKILL);
-            (void)waitpid(request->child_pid, NULL, 0);
-        }
+        (void)RayTracingOwnedChild_Stop(request->child_pid, NULL);
     }
     reset_request(request);
 }

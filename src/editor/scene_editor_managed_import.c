@@ -1,4 +1,5 @@
 #include "editor/scene_editor_managed_import.h"
+#include "scene_editor_receipt_json.h"
 #include "editor/scene_editor_document.h"
 #include <limits.h>
 #include <stdio.h>
@@ -25,10 +26,16 @@ bool SceneEditorManagedImportRead(const char *id,json_object *response,char *mes
         snprintf(message,size,"Import receipt unavailable for this scene; only the latest import is retained.");return false;
     }
     json_object *o=json_object_new_object();
-    json_object_object_add(o,"import_id",json_object_new_string(receipt.id));
-    json_object_object_add(o,"scene_path",json_object_new_string(receipt.scene));
-    json_object_object_add(o,"state",json_object_new_string(receipt.state));
-    json_object_object_add(o,"message",json_object_new_string(receipt.message));
-    if(!strcmp(receipt.state,"completed")) json_object_object_add(o,"object_id",json_object_new_string(receipt.id));
-    json_object_object_add(response,"import",o);return true;
+    if(!o)goto failure;
+    if(!SceneEditorReceiptJsonAdd(o,"import_id",json_object_new_string(receipt.id)) ||
+       !SceneEditorReceiptJsonAdd(o,"scene_path",json_object_new_string(receipt.scene)) ||
+       !SceneEditorReceiptJsonAdd(o,"state",json_object_new_string(receipt.state)) ||
+       !SceneEditorReceiptJsonAdd(o,"message",json_object_new_string(receipt.message)) ||
+       (!strcmp(receipt.state,"completed") && !SceneEditorReceiptJsonAdd(o,"object_id",json_object_new_string(receipt.id)))) {
+        json_object_put(o);goto failure;
+    }
+    if(!SceneEditorReceiptJsonAdd(response,"import",o))goto failure;
+    return true;
+failure:
+    snprintf(message,size,"Import receipt allocation/publication failed; retry the same import ID.");return false;
 }

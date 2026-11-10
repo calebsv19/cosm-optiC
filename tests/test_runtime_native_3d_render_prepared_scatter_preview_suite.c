@@ -2423,6 +2423,8 @@ static int test_runtime_native_3d_tiled_cancel_before_dispatch_blocks_publish(vo
     return 0;
 }
 
+#include "l3_tile_cancel_progress.h"
+
 int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     int before = test_support_failures();
 
@@ -2449,6 +2451,7 @@ int run_test_runtime_native_3d_render_prepared_scatter_preview_suite(void) {
     test_runtime_native_3d_render_unit_raw_progress_resolve_bypasses_denoise();
     test_runtime_native_3d_tiled_first_frame_occupancy_culls_empty_tiles();
     test_runtime_native_3d_tiled_cancel_before_dispatch_blocks_publish();
+    test_l3_tile_cancel_after_progress();
     return test_support_failures() - before;
 }
 

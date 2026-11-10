@@ -1,4 +1,5 @@
 #include "editor/scene_editor_command_guard.h"
+#include "scene_editor_receipt_json.h"
 /* Editor/UI command owner, using the existing native desktop render lifecycle. */
 #include "editor/scene_editor_render_control.h"
 #include "editor/scene_editor_document.h"
@@ -24,7 +25,7 @@ static struct {
     RayTracingDeepRenderDesktopRenderUnit unit;
     RayTracingDeepRenderListener listener;
     AnimationConfig saved_config;
-    bool config_owned,active,cancel_requested,verified;
+    bool config_owned,active,cancel_requested,verified,receipt_pending;
     unsigned long long scene_revision;
     uint64_t generation;
     uint32_t sample_sequence;
@@ -111,35 +112,38 @@ SceneEditorRenderOptions SceneEditorRenderOptionsGet(void) {
 const char* SceneEditorRenderLatestId(void) {return !strcmp(render.scene,SceneEditorDocumentPath())?render.id:"";}
 bool SceneEditorRenderActive(void) {return render.active;}
 static json_object* options_json(SceneEditorRenderOptions selected) {
-    json_object* o=json_object_new_object();json_object_object_add(o,"width",json_object_new_int(selected.width));json_object_object_add(o,"height",json_object_new_int(selected.height));json_object_object_add(o,"temporal_frames",json_object_new_int(selected.temporal_frames));json_object_object_add(o,"frame",json_object_new_int(selected.frame));json_object_object_add(o,"integrator",json_object_new_string(ray_tracing_agent_render_request_integrator_label(selected.integrator)));if (selected.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)
-        json_object_object_add(o,"spectral_deposition",json_object_new_string(
+    json_object* o=json_object_new_object();if(!o)return NULL;if(!SceneEditorReceiptJsonAdd(o,"width",json_object_new_int(selected.width)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"height",json_object_new_int(selected.height)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"temporal_frames",json_object_new_int(selected.temporal_frames)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"frame",json_object_new_int(selected.frame)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"integrator",json_object_new_string(ray_tracing_agent_render_request_integrator_label(selected.integrator))))goto failure;if (selected.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)
+        if(!SceneEditorReceiptJsonAdd(o,"spectral_deposition",json_object_new_string(
             selected.deposition==EDITOR_SPECTRAL_SURFACE_VOLUME ? "surface_volume" :
-            selected.deposition==EDITOR_SPECTRAL_SURFACE ? "surface" : "direct"));
+            selected.deposition==EDITOR_SPECTRAL_SURFACE ? "surface" : "direct")))goto failure;
     if (selected.deposition) {
-        json_object_object_add(o,"sampling_override",json_object_new_int(selected.spectral_sampling));
-        json_object_object_add(o,"max_passes_override",json_object_new_int(selected.spectral_max_passes));
-        json_object_object_add(o,"gather_override",json_object_new_string(selected.gather==EDITOR_GATHER_SCENE ? "scene" :
-            selected.gather==EDITOR_GATHER_ADAPTIVE ? "adaptive_scattered" : "fixed"));
-        json_object_object_add(o,"photons_per_source_override",json_object_new_int(selected.spectral_photons));
-        json_object_object_add(o,"exposure_stops",json_object_new_int(selected.spectral_exposure_stops));
+        if(!SceneEditorReceiptJsonAdd(o,"sampling_override",json_object_new_int(selected.spectral_sampling)))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"max_passes_override",json_object_new_int(selected.spectral_max_passes)))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"gather_override",json_object_new_string(selected.gather==EDITOR_GATHER_SCENE ? "scene" :
+            selected.gather==EDITOR_GATHER_ADAPTIVE ? "adaptive_scattered" : "fixed")))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"photons_per_source_override",json_object_new_int(selected.spectral_photons)))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"exposure_stops",json_object_new_int(selected.spectral_exposure_stops)))goto failure;
     }
-    if(selected.sample_sequence)json_object_object_add(o,"sample_sequence",json_object_new_int64(selected.sample_sequence));return o;
+    if(selected.sample_sequence)if(!SceneEditorReceiptJsonAdd(o,"sample_sequence",json_object_new_int64(selected.sample_sequence)))goto failure;return o;
+failure: json_object_put(o);return NULL;
 }
 static json_object* receipt(void) {
-    json_object* o=json_object_new_object();json_object_object_add(o,"schema_version",json_object_new_string("optic_editor_render_v1"));json_object_object_add(o,"job_id",json_object_new_string(render.id));json_object_object_add(o,"state",json_object_new_string(render.state));json_object_object_add(o,"editor_pid",json_object_new_int(getpid()));json_object_object_add(o,"scene_path",json_object_new_string(render.scene));json_object_object_add(o,"scene_revision",json_object_new_int64(render.scene_revision));json_object_object_add(o,"source_sha256",json_object_new_string(render.source_hash));json_object_object_add(o,"settings",options_json(options));json_object_object_add(o,"sample_sequence",json_object_new_int64(render.sample_sequence));json_object_object_add(o,"primitive_count",json_object_new_int64(render.primitive_count));json_object_object_add(o,"triangle_count",json_object_new_int64(render.triangle_count));json_object_object_add(o,"enabled_lights",json_object_new_int64(render.enabled_lights));json_object_object_add(o,"volume_enabled",json_object_new_boolean(render.volume_enabled));json_object_object_add(o,"volume_attached",json_object_new_boolean(render.volume_attached));json_object_object_add(o,"diagnostic",json_object_new_string(render.diagnostic));json_object_object_add(o,"cancel_requested",json_object_new_boolean(render.cancel_requested));json_object_object_add(o,"completed_subpasses",json_object_new_int(render.completed_subpasses));json_object_object_add(o,"total_subpasses",json_object_new_int(render.total_subpasses));json_object_object_add(o,"completed_tiles",json_object_new_int64(render.completed_tiles));json_object_object_add(o,"total_tiles",json_object_new_int64(render.total_tiles));json_object_object_add(o,"output_verified",json_object_new_boolean(render.verified));json_object_object_add(o,"image_path",json_object_new_string(render.image));json_object_object_add(o,"image_sha256",json_object_new_string(render.image_hash));if(options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
-        json_object_object_add(o,"spectral_sampling",RuntimeSpectralSampling_JSON(&render.sampling));
-        json_object_object_add(o,"surface_gather",json_object_new_string(render.adaptiveGather?"adaptive_scattered":"fixed"));
-        json_object_object_add(o,"expanded_surface_deposits",json_object_new_int(render.expandedDeposits));
-        json_object_object_add(o,"surface_deposits",json_object_new_int(render.spectralDeposits));
-        json_object_object_add(o,"volume_scatter_events",json_object_new_int64(render.scatterEvents));
-        json_object_object_add(o,"spectral_volume_frame_sha256",json_object_new_string(render.volumeFrameSHA));
+    json_object* o=json_object_new_object();if(!o)return NULL;if(!SceneEditorReceiptJsonAdd(o,"schema_version",json_object_new_string("optic_editor_render_v1")))goto failure;if(!SceneEditorReceiptJsonAdd(o,"job_id",json_object_new_string(render.id)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"state",json_object_new_string(render.state)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"editor_pid",json_object_new_int(getpid())))goto failure;if(!SceneEditorReceiptJsonAdd(o,"scene_path",json_object_new_string(render.scene)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"scene_revision",json_object_new_int64(render.scene_revision)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"source_sha256",json_object_new_string(render.source_hash)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"settings",options_json(options)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"sample_sequence",json_object_new_int64(render.sample_sequence)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"primitive_count",json_object_new_int64(render.primitive_count)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"triangle_count",json_object_new_int64(render.triangle_count)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"enabled_lights",json_object_new_int64(render.enabled_lights)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"volume_enabled",json_object_new_boolean(render.volume_enabled)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"volume_attached",json_object_new_boolean(render.volume_attached)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"diagnostic",json_object_new_string(render.diagnostic)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"cancel_requested",json_object_new_boolean(render.cancel_requested)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"completed_subpasses",json_object_new_int(render.completed_subpasses)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"total_subpasses",json_object_new_int(render.total_subpasses)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"completed_tiles",json_object_new_int64(render.completed_tiles)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"total_tiles",json_object_new_int64(render.total_tiles)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"output_verified",json_object_new_boolean(render.verified)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"image_path",json_object_new_string(render.image)))goto failure;if(!SceneEditorReceiptJsonAdd(o,"image_sha256",json_object_new_string(render.image_hash)))goto failure;if(options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
+        if(!SceneEditorReceiptJsonAdd(o,"spectral_sampling",RuntimeSpectralSampling_JSON(&render.sampling)))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"surface_gather",json_object_new_string(render.adaptiveGather?"adaptive_scattered":"fixed")))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"expanded_surface_deposits",json_object_new_int(render.expandedDeposits)))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"surface_deposits",json_object_new_int(render.spectralDeposits)))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"volume_scatter_events",json_object_new_int64(render.scatterEvents)))goto failure;
+        if(!SceneEditorReceiptJsonAdd(o,"spectral_volume_frame_sha256",json_object_new_string(render.volumeFrameSHA)))goto failure;
     }
     return o;
+failure: json_object_put(o);return NULL;
 }
 static bool write_json(const char* path,json_object* o) {
-    RayTracingDurableOutput out;bool ok=ray_tracing_durable_output_begin(&out,path);if(ok) {ok=fputs(json_object_to_json_string_ext(o,JSON_C_TO_STRING_PRETTY),out.stream)>=0;if(ok) ok=ray_tracing_durable_output_commit(&out);else ray_tracing_durable_output_abort(&out);}return ok;
+    if(!o)return false;const char *bytes=json_object_to_json_string_ext(o,JSON_C_TO_STRING_PRETTY);if(!bytes)return false;
+    RayTracingDurableOutput out;bool ok=ray_tracing_durable_output_begin(&out,path);if(ok) {ok=fputs(bytes,out.stream)>=0;if(ok) ok=ray_tracing_durable_output_commit(&out);else ray_tracing_durable_output_abort(&out);}return ok;
 }
-static bool persist(void) {json_object* o=receipt();bool ok=write_json(render.receipt,o);if(!ok) snprintf(render.diagnostic,sizeof(render.diagnostic),"Render receipt publication failed.");json_object_put(o);return ok;}
+static bool persist(void) {json_object* o=receipt();bool ok=write_json(render.receipt,o);render.receipt_pending=!ok;if(!ok) snprintf(render.diagnostic,sizeof(render.diagnostic),"Render receipt publication failed.");json_object_put(o);return ok;}
 static void release(void) {
     RuntimeNative3DAsyncRenderJob_Destroy(render.job);render.job=NULL;
     RayTracingDeepRenderSession_Reset(&render.session);RayTracingDeepRenderDesktopRenderUnit_Destroy(&render.unit);RayTracingDeepRenderListener_Destroy(&render.listener);
@@ -147,6 +151,7 @@ static void release(void) {
     render.active=false;
 }
 bool SceneEditorRenderStart(const char* id,const SceneEditorRenderOptions* o,unsigned long long revision,char* message,size_t size) {
+    if(render.receipt_pending && !persist()) return refuse(message,size,"Prior render receipt publication is pending; repair its destination before another render.");
     if(!SceneEditorDocumentIsOpen() || revision!=SceneEditorDocumentRevision() || !valid_id(id) || !SceneEditorRenderOptionsValid(o)) return refuse(message,size,"Invalid render identity/settings or stale scene revision.");
     if(render.active || RayTracingDeepRenderDesktopHost_HasActiveWork()) return refuse(message,size,"A native render already owns the exclusive render context.");
     if(animSettings.spaceMode!=SPACE_MODE_3D || (animSettings.causticMode3D!=0 && o->integrator!=RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)) return refuse(message,size,"Editor frame render requires native 3D with caustics off.");
@@ -205,7 +210,7 @@ bool SceneEditorRenderCancel(const char* id,char* message,size_t size) {
     render.cancel_requested=true;strcpy(render.state,"canceling");RuntimeNative3DAsyncRenderJob_RequestCancel(render.job);persist();return true;
 }
 void SceneEditorRenderPoll(void) {
-    if(!render.active) return;
+    if(!render.active){if(render.receipt_pending)(void)persist();return;}
     RuntimeNative3DAsyncRenderTileProgressSnapshot progress;
     if(RuntimeNative3DAsyncRenderProgressBuffer_CopyLatestTileProgress(render.unit.progress,render.generation,&progress) && progress.valid) {
         render.completed_subpasses=progress.completedSubpasses;render.total_subpasses=progress.totalSubpasses;render.completed_tiles=progress.completedTilesInSubpass;render.total_tiles=progress.totalTilesInSubpass;
@@ -227,15 +232,23 @@ void SceneEditorRenderPoll(void) {
         strcpy(render.state,render.verified?"completed":"failed");snprintf(render.diagnostic,sizeof(render.diagnostic),"%s",RayTracingDeepRenderCompletionStatus_Name(result.status));
     }
     if(render.sampling.enabled) render.total_subpasses=render.completed_subpasses=render.sampling.passes;
-    release();if(!persist()) {strcpy(render.state,"failed");render.verified=false;}
+    release();(void)persist(); /* A receipt failure does not roll back committed image bytes. */
 }
 void SceneEditorRenderShutdown(void) {
     SceneEditorRenderPanelReset();
     if(render.active) {RuntimeNative3DAsyncRenderJob_ShutdownCancelFirst(render.job);render.cancel_requested=true;strcpy(render.state,"canceled");strcpy(render.diagnostic,"Editor session closed; render canceled.");release();persist();}
     else release();
 }
+static json_object* render_read_json(SceneEditorRenderOptions selected,const char *id,bool active) {
+    json_object *o=json_object_new_object();if(!o)return NULL;
+    if(!SceneEditorReceiptJsonAdd(o,"fixed_sampling_supported",json_object_new_boolean(true)) ||
+       !SceneEditorReceiptJsonAdd(o,"settings",options_json(selected)) ||
+       !SceneEditorReceiptJsonAdd(o,"active",json_object_new_boolean(active)) ||
+       !SceneEditorReceiptJsonAdd(o,"latest_job_id",json_object_new_string(id))){json_object_put(o);return NULL;}
+    return o;
+}
 json_object* SceneEditorRenderRead(void) {
-    SceneEditorRenderPoll();json_object* o=json_object_new_object();json_object_object_add(o,"fixed_sampling_supported",json_object_new_boolean(true));json_object_object_add(o,"settings",options_json(SceneEditorRenderOptionsGet()));json_object_object_add(o,"active",json_object_new_boolean(render.active));json_object_object_add(o,"latest_job_id",json_object_new_string(SceneEditorRenderLatestId()));return o;
+    SceneEditorRenderPoll();return render_read_json(SceneEditorRenderOptionsGet(),SceneEditorRenderLatestId(),render.active);
 }
 json_object* SceneEditorRenderJobRead(const char* id,bool results,char* message,size_t size) {
     SceneEditorRenderPoll();char root[4096],path[4096];struct stat st;
@@ -248,11 +261,13 @@ json_object* SceneEditorRenderJobRead(const char* id,bool results,char* message,
     if(!json_object_is_type(get(o,"state"),json_type_string) || !json_object_is_type(get(o,"image_sha256"),json_type_string) || !json_object_is_type(get(o,"settings"),json_type_object)) {json_object_put(o);refuse(message,size,"Render receipt fields are invalid.");return NULL;}
     const char* state=json_object_get_string(get(o,"state"));
     if((!strcmp(state,"rendering") || !strcmp(state,"preparing") || !strcmp(state,"canceling")) && (!render.active || strcmp(render.id,id))) {
-        json_object_object_add(o,"state",json_object_new_string("interrupted"));json_object_object_add(o,"diagnostic",json_object_new_string("No render in this editor session owns this receipt; inspect before a new request."));
+        if(!SceneEditorReceiptJsonAdd(o,"state",json_object_new_string("interrupted")) || !SceneEditorReceiptJsonAdd(o,"diagnostic",json_object_new_string("No render in this editor session owns this receipt; inspect before a new request.")))goto allocation_failure;
     }
     if(results) {
         snprintf(path,sizeof(path),"%s/frame.bmp",root);json_object* settings=get(o,"settings");char sha[65];bool verified=!strcmp(json_object_get_string(get(o,"state")),"completed") && json_object_get_boolean(get(o,"output_verified")) && RayTracingDeepRenderCompletion_VerifyFrameBMP(path,json_object_get_int(get(settings,"width")),json_object_get_int(get(settings,"height")),NULL) && ray_tracing_sha256_file(path,sha) && !strcmp(sha,json_object_get_string(get(o,"image_sha256")));
-        json_object_object_add(o,"artifact_integrity",json_object_new_boolean(verified));json_object_object_add(o,"image_path",json_object_new_string(path));
+        if(!SceneEditorReceiptJsonAdd(o,"artifact_integrity",json_object_new_boolean(verified)) || !SceneEditorReceiptJsonAdd(o,"image_path",json_object_new_string(path)))goto allocation_failure;
     }
     return o;
+allocation_failure:
+    json_object_put(o);refuse(message,size,"Render result allocation failed; retry the same ID.");return NULL;
 }

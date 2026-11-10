@@ -1,4 +1,5 @@
 #include "editor/scene_editor_shared_ui.h"
+#include "scene_editor_rigid_job.h"
 #include "editor/scene_editor_runtime_scene_persistence.h"
 #include "editor/scene_editor_scene_commands.h"
 #include "editor/scene_editor_render_control.h"
@@ -1077,6 +1078,7 @@ void ResetSceneEditor(SceneEditor* editor) {
 
 
 void DestroySceneEditor(SceneEditor* editor) {
+    SceneEditorRigidJobShutdown();
     SceneEditorSharedUiReset();
     SceneEditorRenderShutdown();
     SceneEditorAtmosphereViewportReset();

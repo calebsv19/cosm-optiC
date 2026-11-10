@@ -120,7 +120,8 @@ static int test_async_render_job_publishes_matching_generation_once(void) {
     assert_true("runtime_native_3d_async_job_snapshot_cancel_bound",
                 probe.entered && probe.saw_generation_bound && probe.saw_cancel_bound &&
                     probe.saw_generation == 42u &&
-                    result.snapshot.cancelTokenBound &&
+                    !result.snapshot.cancelTokenBound &&
+                    result.snapshot.cancelToken.cancelRequested == NULL &&
                     result.snapshot.cancelGeneration == 42u);
     assert_true("runtime_native_3d_async_job_completion_value",
                 result.completionValue == 99u);
@@ -195,7 +196,9 @@ static int test_async_render_job_shutdown_requests_cancel_before_join(void) {
     publish_status = RuntimeNative3DAsyncRenderJob_TryPublish(job, 77u, &result);
     assert_true("runtime_native_3d_async_job_cancel_not_published",
                 publish_status == RUNTIME_NATIVE_3D_ASYNC_RENDER_PUBLISH_CANCELED &&
-                    result.canceled && result.cancelRequested && !result.published);
+                    result.canceled && result.cancelRequested && !result.published &&
+                    !result.snapshot.cancelTokenBound &&
+                    result.snapshot.cancelToken.cancelRequested == NULL);
     RuntimeNative3DAsyncRenderJob_Destroy(job);
     return 0;
 }

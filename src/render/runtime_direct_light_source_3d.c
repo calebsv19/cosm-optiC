@@ -149,25 +149,34 @@ static uint32_t runtime_direct_light_3d_hash_u32(uint32_t x) {
     return x;
 }
 
+/* Explicit saturating conversion preserves the ordinary unsigned seed range
+ * without undefined float-to-integer conversion for negative world positions. */
+static uint32_t runtime_direct_light_3d_seed_coordinate(double coordinate) {
+    const double scaled = coordinate * 4096.0;
+    if (!(scaled > 0.0)) return 0u;
+    if (scaled >= (double)UINT32_MAX) return UINT32_MAX;
+    return (uint32_t)scaled;
+}
+
 static uint32_t runtime_direct_light_3d_seed_from_light_hit(
     const RuntimeLight3D* light,
     const HitInfo3D* hit) {
     uint32_t seed = 0x6d2b79f5U;
     if (light) {
-        seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(light->position.x * 4096.0));
-        seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(light->position.y * 4096.0) ^
+        seed ^= runtime_direct_light_3d_hash_u32(runtime_direct_light_3d_seed_coordinate(light->position.x));
+        seed ^= runtime_direct_light_3d_hash_u32(runtime_direct_light_3d_seed_coordinate(light->position.y) ^
                                                  0x9e3779b9U);
-        seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(light->position.z * 4096.0) ^
+        seed ^= runtime_direct_light_3d_hash_u32(runtime_direct_light_3d_seed_coordinate(light->position.z) ^
                                                  0x85ebca6bU);
-        seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(light->radius * 4096.0) ^
+        seed ^= runtime_direct_light_3d_hash_u32(runtime_direct_light_3d_seed_coordinate(light->radius) ^
                                                  0xc2b2ae35U);
     }
     if (hit) {
-        seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(hit->position.x * 4096.0) ^
+        seed ^= runtime_direct_light_3d_hash_u32(runtime_direct_light_3d_seed_coordinate(hit->position.x) ^
                                                  0x27d4eb2fU);
-        seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(hit->position.y * 4096.0) ^
+        seed ^= runtime_direct_light_3d_hash_u32(runtime_direct_light_3d_seed_coordinate(hit->position.y) ^
                                                  0x165667b1U);
-        seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(hit->position.z * 4096.0) ^
+        seed ^= runtime_direct_light_3d_hash_u32(runtime_direct_light_3d_seed_coordinate(hit->position.z) ^
                                                  0xd3a2646cU);
         seed ^= runtime_direct_light_3d_hash_u32((uint32_t)(hit->triangleIndex + 1) *
                                                  83492791U);

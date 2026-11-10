@@ -1,4 +1,6 @@
+#define _DARWIN_C_SOURCE
 #include "editor/scene_editor_shared_ui.h"
+#include "platform/ray_tracing_owned_child.h"
 #include "editor/scene_editor_shared_fields.h"
 #include "editor/scene_editor_managed_import.h"
 #include "editor/scene_editor_rename.h"
@@ -307,6 +309,7 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
         return false;
     }
     if (child == 0) {
+        if (setpgid(0,0) != 0) _exit(126);
         if (kind == TRANSFORM_PANEL_JOB_IMPORT) {
             execlp("python3",
                    "python3",
@@ -352,6 +355,7 @@ static bool panel_spawn_managed_job(TransformPanelJobKind kind,
         }
         _exit(127);
     }
+    (void)setpgid(child,child);
     snprintf(s_job_scene_path,sizeof(s_job_scene_path),"%s",scene);
     s_job_pid = child;
     s_job_started_ticks = SDL_GetTicks();
@@ -786,10 +790,7 @@ bool SceneEditorTransformPanelStageImportSTL(const char* path) {
 static void panel_cancel_import(void) {
     if (s_picker_initialized && s_picker.active) RayTracing_FolderPicker_Cancel(&s_picker);
     if (s_job_pid > 0 && s_job_kind == TRANSFORM_PANEL_JOB_IMPORT) {
-        (void)kill(s_job_pid,SIGTERM);
-        int attempts=0;
-        while(waitpid(s_job_pid,NULL,WNOHANG)==0 && attempts++<100) (void)usleep(1000u);
-        if(attempts>=100) { (void)kill(s_job_pid,SIGKILL); (void)waitpid(s_job_pid,NULL,0); }
+        (void)RayTracingOwnedChild_Stop(s_job_pid,NULL);
         if(s_candidate_path[0]) (void)unlink(s_candidate_path);
         s_candidate_path[0]='\0';
         s_job_pid=-1;
@@ -945,10 +946,10 @@ bool SceneEditorTransformPanelPoll(void) {
     }
     if (s_job_pid > 0) {
         int status = 0;
-        pid_t result = waitpid(s_job_pid, &status, WNOHANG);
-        if (result == s_job_pid) {
+        int result = RayTracingOwnedChild_Poll(s_job_pid, &status);
+        if (result != 0) {
             char diagnostics[256] = {0};
-            bool success = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+            bool success = result > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
             if (success && (SceneEditorDocumentRevision() != s_job_document_revision || strcmp(s_job_scene_path,SceneEditorDocumentPath()))) {
                 snprintf(diagnostics,
                          sizeof(diagnostics),
@@ -1025,8 +1026,7 @@ void SceneEditorTransformPanelReset(void) {
     }
     if (s_job_pid > 0) {
         SceneEditorManagedImportCanceled();
-        (void)kill(s_job_pid, SIGTERM);
-        (void)waitpid(s_job_pid, NULL, 0);
+        (void)RayTracingOwnedChild_Stop(s_job_pid,NULL);
     }
     if (s_candidate_path[0]) {
         (void)unlink(s_candidate_path);
