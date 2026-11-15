@@ -150,4 +150,5 @@ package-linux-worker-self-test: package-linux-worker
 	@python3 tests/integration/run_ray_tracing_job_runner_status_snapshot.py --runner "$(LINUX_WORKER_BIN_DIR)/ray_tracing_job_runner"
 	@python3 tests/integration/run_checkpoint_retention_stack.py
 	@python3 tests/integration/run_cancelled_progress_retention.py
+	@PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/test_headless_spectral_ordinary_glass.py --cli "$(LINUX_WORKER_BIN_DIR)/run_worker.sh" --package-config "$(LINUX_WORKER_CONFIG_DIR)"
 	@echo "package-linux-worker-self-test passed."

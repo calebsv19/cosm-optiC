@@ -16,12 +16,15 @@ from spectral_response_fixture import cie
 from spectral_components import verify, read as read_components
 
 
-def qualify(root, cli):
+def qualify(root, cli, *, package_config=None):
     asset = 'asset_sphere_64x32'
     path = Path(f'assets/mesh_assets/{asset}.runtime.json')
     (root / path.parent).mkdir(parents=True)
     shutil.copy2(REPO / 'tests/fixtures/mesh_asset_runtime_spheres' / path, root / path)
-    (root / 'config').symlink_to(REPO / 'config', target_is_directory=True)
+    if package_config is None:
+        (root / 'config').symlink_to(REPO / 'config', target_is_directory=True)
+    else:
+        shutil.copytree(package_config, root / 'config')
     sphere = {
         'object_id': 'lens', 'object_type': 'mesh_asset_instance', 'dimensional_mode': 'full_3d',
         'space_mode_intent': '3d',
@@ -75,11 +78,6 @@ def qualify(root, cli):
         return report
 
     full = run('default')
-    disabled = run('export_disabled', lambda _,p:p.update(linear_components=False))
-    assert (root/'default/frames/frame_0000.bmp').read_bytes() == (root/'export_disabled/frames/frame_0000.bmp').read_bytes()
-    assert full['film_components_xyz'] == disabled['film_components_xyz']
-    assert all(group['xyz']==[0,0,0] for group in full['scattering_orders']['groups'])
-    run('invalid_export',lambda _,p:p.update(linear_components='false'),valid=False)
     g = full['smooth_glass']
     f = full['film_components_xyz']
     assert full['route'] == 'surface_path_v1' and full['photon_maps_used']
@@ -90,6 +88,14 @@ def qualify(root, cli):
         assert math.isclose(b['launched_w'], sum(b[k] for k in (
             'all_receiver_w','escaped_w','glass_absorbed_w','depth_limited_w','optical_loss_w')),
             rel_tol=1e-9, abs_tol=1e-11)
+    if package_config is not None:
+        print('PASS staged worker launcher ordinary V3 glass, photon map and verified raw XYZ film')
+        return
+    disabled = run('export_disabled', lambda _,p:p.update(linear_components=False))
+    assert (root/'default/frames/frame_0000.bmp').read_bytes() == (root/'export_disabled/frames/frame_0000.bmp').read_bytes()
+    assert full['film_components_xyz'] == disabled['film_components_xyz']
+    assert all(group['xyz']==[0,0,0] for group in full['scattering_orders']['groups'])
+    run('invalid_export',lambda _,p:p.update(linear_components='false'),valid=False)
     pure = run('camera_only', lambda _,p: p.update(caustics={'passes':0}))
     assert not pure['photon_maps_used'] and pure['smooth_glass']['launched'] == 0
     for i,x in enumerate(pure['film_components_xyz']['total']):
@@ -290,6 +296,9 @@ def qualify(root, cli):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--cli', required=True, type=Path)
+    parser.add_argument('--package-config', type=Path,
+                        help='Run the packaged foreground V3 smoke with this config directory')
     args = parser.parse_args()
     with tempfile.TemporaryDirectory(prefix='optic-ordinary-glass-') as directory:
-        qualify(Path(directory), args.cli.resolve())
+        qualify(Path(directory), args.cli.resolve(),
+                package_config=args.package_config.resolve() if args.package_config else None)
