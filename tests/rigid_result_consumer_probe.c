@@ -1,6 +1,7 @@
 /* BR4 uses the same evaluated service and prepared-frame function as Preview
  * and the ordinary headless CLI. No Ball code or numerical solver is linked. */
 #include "app/evaluated_scene_service.h"
+#include "app/scene_atmosphere_runtime.h"
 #include "config/config_manager.h"
 #include "import/runtime_rigid_result.h"
 #include "import/runtime_scene_bridge.h"
@@ -16,6 +17,31 @@ static json_object *vector(double x, double y, double z) {
   json_object_array_add(a, json_object_new_double(y));
   json_object_array_add(a, json_object_new_double(z));
   return a;
+}
+/* Compare the contract, not unspecified C padding between bool and double. */
+static bool object_equal(const RayEvaluatedObjectTransform *a,
+                         const RayEvaluatedObjectTransform *b) {
+#define SAME(f) (a->f == b->f)
+  return SAME(valid) && !strcmp(a->target_id,b->target_id) && SAME(source) &&
+      SAME(has_position) && SAME(has_rotation) && SAME(position.x) &&
+      SAME(position.y) && SAME(position.z) && SAME(rotation_radians.x) &&
+      SAME(rotation_radians.y) && SAME(rotation_radians.z) &&
+      SAME(has_orientation_quaternion) && SAME(orientation_quaternion.w) &&
+      SAME(orientation_quaternion.x) && SAME(orientation_quaternion.y) &&
+      SAME(orientation_quaternion.z) && SAME(source_handoff_digest) &&
+      SAME(source_binding_digest) && SAME(source_tick) &&
+      !strcmp(a->rigid_result_revision,b->rigid_result_revision) &&
+      !strcmp(a->rigid_physical_input_sha256,b->rigid_physical_input_sha256) &&
+      SAME(rigid_body_id) && SAME(frame.rate.frames_per_second_numerator) &&
+      SAME(frame.rate.frames_per_second_denominator) &&
+      SAME(frame.range.start_frame) && SAME(frame.range.frame_count) &&
+      SAME(frame.sample.absolute_frame) && SAME(frame.sample.subframe_numerator) &&
+      SAME(frame.sample.subframe_denominator) && SAME(frame.local_frame) &&
+      SAME(frame.subframe) && SAME(frame.absolute_frame_position) &&
+      SAME(frame.local_frame_position) && SAME(frame.absolute_time_seconds) &&
+      SAME(frame.local_time_seconds) && SAME(frame.duration_seconds) &&
+      SAME(frame.normalized_t);
+#undef SAME
 }
 int main(int argc, char **argv) {
   if (argc < 2)
@@ -67,20 +93,30 @@ int main(int argc, char **argv) {
             (TimelineSample){range.start_frame + 1, 0, 1}, &before))
       return 6;
     bool ok = runtime_scene_bridge_apply_file(argv[3], &summary);
-    if (ok || !RuntimeRigidResultActive() ||
-        !RayEvaluatedSceneCaptureSample(
-            (TimelineSample){range.start_frame + 1, 0, 1}, &after) ||
-        memcmp(&before.snapshot.camera,&after.snapshot.camera,sizeof(RayEvaluatedCamera)) ||
-        memcmp(before.snapshot.object_transforms,
-               after.snapshot.object_transforms,
-               before.snapshot.object_transform_count *
-                   sizeof(RayEvaluatedObjectTransform)))
+    bool active = RuntimeRigidResultActive();
+    bool captured = active && RayEvaluatedSceneCaptureSample(
+        (TimelineSample){range.start_frame + 1, 0, 1}, &after);
+    bool camera_equal = captured && !memcmp(&before.snapshot.camera,
+        &after.snapshot.camera, sizeof(RayEvaluatedCamera));
+    bool objects_equal = captured && before.snapshot.object_transform_count ==
+        after.snapshot.object_transform_count;
+    for(size_t k=0;objects_equal && k<before.snapshot.object_transform_count;k++)
+      objects_equal = object_equal(&before.snapshot.object_transforms[k],
+                                    &after.snapshot.object_transforms[k]);
+    if (ok || !active || !captured || !camera_equal || !objects_equal) {
+      fprintf(stderr, "rollback accepted=%d active=%d captured=%d camera_equal=%d objects_equal=%d\n",
+          ok, active, captured, camera_equal, objects_equal);
       return 7;
+    }
     puts("BR4 {\"rollback\":true}");
     RuntimeRigidResultCommit(NULL);
     return 0;
   }
-  for (int arg = 2; arg < argc; arg++) {
+  bool clock_only = argc > 2 && !strcmp(argv[2], "--clock-only");
+  bool affine_only = argc > 2 && !strcmp(argv[2], "--affine-geometry");
+  bool sampled_geometry = affine_only || clock_only || (argc > 2 && !strcmp(argv[2], "--sample-geometry"));
+  int first_sample = sampled_geometry ? 3 : 2;
+  for (int arg = first_sample; arg < argc; arg++) {
     int frame = atoi(argv[arg]);
     RayEvaluatedSceneServiceResult sample = {0}, preview = {0};
     if (!RayEvaluatedSceneCaptureSample(
@@ -106,13 +142,14 @@ int main(int argc, char **argv) {
         return 10;
     }
     RuntimeNative3DPreparedFrame prepared = {0};
-    if (!RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
+    bool prepare_geometry = !clock_only || arg == first_sample || arg == argc - 1;
+    if (prepare_geometry && !RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(
             &prepared, 16, 16, &sample.snapshot, NULL)) {
       fprintf(stderr, "prepare: %s\n",
               RuntimeNative3DPrepareFrameLastDiagnostics());
       return 11;
     }
-    if (arg == 2) {
+    if (arg == first_sample) {
       RayEvaluatedSceneSnapshot forged = sample.snapshot;
       forged.object_transforms[0].position.x += 0.01;
       RuntimeNative3DPreparedFrame refused = {0};
@@ -123,6 +160,11 @@ int main(int argc, char **argv) {
       if(sample.snapshot.camera.inspection_id[0]){
         forged=sample.snapshot;forged.camera.inspection_time.numerator++;
         if(RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(&refused,16,16,&forged,NULL))return 35;
+        RuntimeNative3DPreparedFrame_Free(&refused);
+      }
+      if(sample.snapshot.simulation.source==RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE) {
+        forged=sample.snapshot;forged.simulation.source_frame_index++;
+        if(RuntimeNative3DPrepareFrameWithSamplingForEvaluatedScene(&refused,16,16,&forged,NULL))return 36;
         RuntimeNative3DPreparedFrame_Free(&refused);
       }
       if(sample.snapshot.has_sequence) {
@@ -136,6 +178,7 @@ int main(int argc, char **argv) {
                 *poses = json_object_new_array(),
                 *triangles = json_object_new_array();
     json_object_object_add(out, "frame", json_object_new_int(frame));
+    if(clock_only)json_object_object_add(out,"prepared_geometry",json_object_new_boolean(prepare_geometry));
     json_object_object_add(out, "poses", poses);
     json_object_object_add(out,"camera",vector(sample.snapshot.camera.position.x,sample.snapshot.camera.position.y,sample.snapshot.camera.position.z));
     json_object_object_add(out,"camera_id",json_object_new_string(sample.snapshot.camera.target_id));
@@ -148,6 +191,13 @@ int main(int argc, char **argv) {
       if(!preview.snapshot.has_sequence || !SequenceClockEvaluationsEqual(&sample.snapshot.sequence,&preview.snapshot.sequence))return 33;
     }
 
+    if(sample.snapshot.simulation.valid) {
+      json_object *cache=json_object_new_object();
+      json_object_object_add(cache,"kind",json_object_new_int(sample.snapshot.simulation.source));
+      json_object_object_add(cache,"source_frame",json_object_new_int64(sample.snapshot.simulation.source_frame_index));
+      json_object_object_add(cache,"content_sha256",json_object_new_string(sample.snapshot.simulation.content_digest));
+      json_object_object_add(out,"cache",cache);
+    }
     json_object_object_add(out, "triangles", triangles);
     for (size_t i = 0; i < sample.snapshot.object_transform_count; i++) {
       const RayEvaluatedObjectTransform *t =
@@ -179,6 +229,7 @@ int main(int argc, char **argv) {
       const RuntimeTriangle3D *t = &scene->triangleMesh.triangles[i];
       if (t->primitiveIndex < 0 || t->primitiveIndex >= scene->primitiveCount)
         return 12;
+      if (sampled_geometry && t->localTriangleIndex >= 2 && t->localTriangleIndex % 997) continue;
       json_object *o = json_object_new_object(),
                   *vertices = json_object_new_array();
       json_object_object_add(
@@ -195,7 +246,7 @@ int main(int argc, char **argv) {
     }
     /* Concave bodies can have COM in empty space. Probe every visible physical
      * body from just inside one of its actual prepared triangle faces. */
-    for(size_t body=0;body<sample.snapshot.object_transform_count;++body) {
+    for(size_t body=0;!affine_only && !clock_only && body<sample.snapshot.object_transform_count;++body) {
       const RayEvaluatedObjectTransform *target=&sample.snapshot.object_transforms[body];
       bool visible=false,verified=false;
       for(int k=0;k<scene->primitiveCount;++k)
@@ -217,7 +268,7 @@ int main(int argc, char **argv) {
           if(!RuntimeRay3D_TraceSceneFirstHit(scene,&ray,1e-7,100,&hits[route])||strcmp(hits[route].source.objectId,target->target_id))found_both=false;
         }
         if(found_both) {
-          if(fabs(hits[0].t-hits[1].t)>2e-10)return 15;
+          if(fabs(hits[0].t-hits[1].t)>2e-10){fprintf(stderr,"surface parity frame=%d target=%s local=%d flat_t=%.17g tlas_t=%.17g\n",frame,target->target_id,t->localTriangleIndex,hits[0].t,hits[1].t);return 15;}
           verified=true;
         }
       }

@@ -52,7 +52,13 @@ bool SequenceFrameReceiptWrite(const char *path,const RayEvaluatedSceneSnapshot 
           t->orientation_quaternion.w,t->orientation_quaternion.x,t->orientation_quaternion.y,t->orientation_quaternion.z);
     }
     fputs("]",f);
-    if(s->simulation.valid){fputs(",\"cache\":{\"id\":",f);quoted(f,s->simulation.cache_id);fprintf(f,",\"tick\":%" PRId64 ",\"content_digest\":\"%s\"}",s->simulation.source_frame_index,s->simulation.content_digest);}
+    if(s->simulation.valid){
+      fputs(",\"cache\":{\"id\":",f);quoted(f,s->simulation.cache_id);
+      fprintf(f,",\"tick\":%" PRId64 ",\"content_digest\":\"%s\"",s->simulation.source_frame_index,s->simulation.content_digest);
+      if(s->simulation.source==RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE)
+        fprintf(f,",\"clock\":\"sequence_source\",\"rate\":[%u,%u]",s->simulation.source_rate.frames_per_second_numerator,s->simulation.source_rate.frames_per_second_denominator);
+      fputc('}',f);
+    }
     fputs("}\n",f);bool ok=!ferror(f);if(fclose(f))ok=false;
     if(!ok)remove(sidecar);return ok;
 }

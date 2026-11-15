@@ -1,4 +1,5 @@
 #include "app/scene_atmosphere_attachment.h"
+#include "app/scene_atmosphere_sequence.h"
 #include "animation/timeline_track.h"
 #include <math.h>
 #include <stdio.h>
@@ -65,7 +66,7 @@ bool SceneAtmosphereAttachmentValidate(const SceneAtmosphereAttachment* v,char* 
         !isfinite(v->rotation_degrees[i]) || fabs(v->rotation_degrees[i])>36000 ||
         !isfinite(v->scale[i]) || v->scale[i]<1e-6 || v->scale[i]>1e6)
         return fail(d,n,"invalid atmosphere tint or placement");
-    return true;
+    return SceneAtmosphereSequenceValidate(v,d,n);
 }
 static bool boolean(json_object* o,const char* key,bool* out) {
     json_object* v=get(o,key); if(!v) return true;
@@ -131,7 +132,8 @@ bool SceneAtmosphereAttachmentParse(json_object* author,SceneAtmosphereAttachmen
     if(json_object_object_get_ex(o,"optics",&optics) && !optics) return fail(d,n,"Atmosphere optics cannot be null.");
     if(!SceneAtmosphereOpticsParse(optics,&v.optics,d,n)) return false;
     v.source_rate=(TimelineRate){(uint32_t)rn,(uint32_t)rd};v.missing_is_error=!strcmp(missing,"error");
-    if(!SceneAtmosphereAttachmentValidate(&v,d,n)) return false;
+    if(!SceneAtmosphereSequenceRead(author,playback,&v,d,n) ||
+       !SceneAtmosphereAttachmentValidate(&v,d,n)) return false;
     *out=v;return true;
 }
 static json_object* array(const double values[3]) {
@@ -149,6 +151,7 @@ json_object* SceneAtmosphereAttachmentToJson(const SceneAtmosphereAttachment* v)
     json_object_object_add(o,"enabled",json_object_new_boolean(v->enabled));
     json_object_object_add(o,"visible",json_object_new_boolean(v->visible));
     json_object_object_add(o,"affects_lighting",json_object_new_boolean(v->affects_lighting));
+    if(v->sequence_source_clock) json_object_object_add(p,"clock",json_object_new_string("sequence_source"));
     json_object_object_add(p,"animated",json_object_new_boolean(v->animated));
     json_object_object_add(p,"timeline_start",json_object_new_int64(v->timeline_start));
     json_object_object_add(p,"source_start",json_object_new_int64(v->source_start));
@@ -174,6 +177,9 @@ bool SceneAtmosphereAttachmentRequestedFrame(const SceneAtmosphereAttachment* v,
         !isfinite(f->absolute_frame_position) || !f->sample.subframe_denominator ||
         f->sample.subframe_numerator>=f->sample.subframe_denominator)
         return fail(d,n,"invalid atmosphere frame context");
+    TimelineEvaluationContext source;
+    if(!SceneAtmosphereSequenceContext(v,f,&source,d,n)) return false;
+    f=&source;
     long double mapped=(long double)v->source_start;
     if(v->animated) mapped+=((long double)f->sample.absolute_frame-v->timeline_start+
         (long double)f->sample.subframe_numerator/f->sample.subframe_denominator)*

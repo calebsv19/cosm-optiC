@@ -79,6 +79,11 @@ def assemble(scene_path, frames, output, ffmpeg='ffmpeg', ffprobe='ffprobe', cam
             _require(not row['bodies'] and len(pin) == 1 and cache.get('id') == scene['extensions']['ray_tracing']['authoring']['atmosphere_attachment']['id'] and cache.get('tick') == tick and cache.get('content_digest') == pin[0]['sha256'], 'volume receipt is not the pinned complete source state')
         else:
             _require(row['bodies'] and all((b['tick'] == tick for b in row['bodies'])))
+            attachment = scene['extensions']['ray_tracing']['authoring'].get('atmosphere_attachment', {})
+            if attachment.get('playback', {}).get('clock') == 'sequence_source':
+                from sequence_water_schedule import expected_cache
+                _require(row.get('cache') == expected_cache(scene, scene_path, int(tick)),
+                         'water receipt does not match the simulation-clock source bytes')
         receipts.append(row)
         pins[str(image)] = sha(image)
         pins[str(receipt_path)] = sha(receipt_path)

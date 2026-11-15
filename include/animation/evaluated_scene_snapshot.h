@@ -28,7 +28,8 @@ typedef enum RayEvaluatedPlaybackMode {
 
 typedef enum RayEvaluatedSimulationSource {
     RAY_EVALUATED_SIMULATION_NONE = 0,
-    RAY_EVALUATED_SIMULATION_CACHE
+    RAY_EVALUATED_SIMULATION_CACHE,
+    RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE
 } RayEvaluatedSimulationSource;
 
 typedef enum RayEvaluatedObjectTransformSource {

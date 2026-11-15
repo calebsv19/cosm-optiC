@@ -31,9 +31,10 @@ static bool bounds(const RuntimeRigidResult *r, size_t b, uint64_t tick,
     low[k] = DBL_MAX;
     high[k] = -DBL_MAX;
   }
-  for (int i = 0; i < n; i++) {
+  const cJSON *vertex = vertices->child;
+  for (int i = 0; i < n; i++, vertex = vertex->next) {
     double p[3], v[3];
-    if (!source_vertex(cJSON_GetArrayItem(vertices, i), p))
+    if (!source_vertex(vertex, p))
       return false;
     if (world) {
       if (core_scene_rigid_result_vertex(&r->result, (uint32_t)tick, b, p, v)
@@ -208,28 +209,37 @@ bool EventFocusOccluded(const RuntimeRigidResult *r, uint64_t tick,
                    .direction =
                        vec3(target[0] - origin[0], target[1] - origin[1],
                             target[2] - origin[2])};
-      for (int i = 0; i < cJSON_GetArraySize(triangles); i++) {
-        const cJSON *t = cJSON_GetArrayItem(triangles, i);
+      int vertex_count=cJSON_GetArraySize(vertices);
+      if(vertex_count<1)return true;
+      const cJSON **vertex_table=malloc((size_t)vertex_count*sizeof(*vertex_table));
+      if(!vertex_table)return true;
+      const cJSON *vertex=vertices->child;
+      for(int i=0;i<vertex_count;i++,vertex=vertex->next)vertex_table[i]=vertex;
+      const cJSON *t=triangles->child;
+      for (int i = 0; t; i++,t=t->next) {
         const char *keys[] = {"a", "b", "c"};
         RuntimeTriangle3D triangle = {0};
         Vec3 *points[] = {&triangle.p0, &triangle.p1, &triangle.p2};
         for (int k = 0; k < 3; k++) {
           const cJSON *index = cJSON_GetObjectItemCaseSensitive(t, keys[k]);
           double source[3], world[3];
-          if (!cJSON_IsNumber(index) ||
-              !source_vertex(cJSON_GetArrayItem(vertices, index->valueint),
-                             source) ||
+          if (!cJSON_IsNumber(index) || index->valuedouble<0 ||
+              index->valuedouble>=vertex_count || index->valuedouble!=index->valueint ||
+              !source_vertex(vertex_table[index->valueint], source) ||
               core_scene_rigid_result_vertex(&r->result, (uint32_t)tick, b,
                                              source, world)
-                      .code != CORE_OK)
-            return true;
+                      .code != CORE_OK) {
+            free(vertex_table);return true;
+          }
           *points[k] = vec3(world[0], world[1], world[2]);
         }
         HitInfo3D hit;
         if (RuntimeRay3D_IntersectTriangle(&ray, &triangle, i, 1e-6, 1 - 1e-6,
-                                           &hit))
-          return true;
+                                           &hit)) {
+          free(vertex_table);return true;
+        }
       }
+      free(vertex_table);
     }
   }
   return false;

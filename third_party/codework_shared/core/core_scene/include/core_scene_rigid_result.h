@@ -3,7 +3,7 @@
 #include "core_scene_rigid.h"
 /* Optional cJSON adapter. No solver, renderer, file I/O or UI dependency.
  * Callers authenticate/snapshot container bytes before admission. */
-#define CORE_SCENE_RIGID_RESULT_CHILDREN 12u
+#define CORE_SCENE_RIGID_RESULT_CHILDREN 64u
 #define CORE_SCENE_RIGID_RESULT_BODIES 32u
 #define CORE_SCENE_RIGID_RESULT_PAIRS (CORE_SCENE_RIGID_RESULT_BODIES * (CORE_SCENE_RIGID_RESULT_BODIES - 1u) / 2u)
 #define CORE_SCENE_RIGID_RESULT_CONSTRAINTS CORE_SCENE_RIGID_RESULT_PAIRS
@@ -20,6 +20,7 @@ typedef struct CoreSceneRigidResultBinding {
 } CoreSceneRigidResultBinding;
 typedef struct CoreSceneRigidResult {
   CoreSceneRigidContactPolicy contact_policy;
+  CoreSceneRigidIntegrationPolicy integration_policy;
   char scene_id[64], engine_sha256[65], physical_input_sha256[65];
   uint32_t endpoint_tick, end_tick;
   double gravity_mps2[3];

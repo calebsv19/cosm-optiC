@@ -67,8 +67,13 @@ typedef enum CoreSceneRigidContactPolicy {
   CORE_SCENE_RIGID_CONTACT_DEFAULT = 0,
   CORE_SCENE_RIGID_CONTACT_ZERO_CUTOFF = 1
 } CoreSceneRigidContactPolicy;
+typedef enum CoreSceneRigidIntegrationPolicy {
+  CORE_SCENE_RIGID_INTEGRATION_DEFAULT = 0,
+  CORE_SCENE_RIGID_INTEGRATION_BOUNDED_SUBSEGMENTS = 1
+} CoreSceneRigidIntegrationPolicy;
 typedef struct CoreSceneRigidContract {
   CoreSceneRigidContactPolicy contact_policy;
+  CoreSceneRigidIntegrationPolicy integration_policy;
   char scene_id[64];
   uint32_t schema_version, rate_numerator, rate_denominator, origin_tick,
       end_tick;

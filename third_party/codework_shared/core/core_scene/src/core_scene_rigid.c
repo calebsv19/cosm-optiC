@@ -69,6 +69,9 @@ CoreResult core_scene_rigid_validate(const CoreSceneRigidContract *c,
   if (c && c->contact_policy != CORE_SCENE_RIGID_CONTACT_DEFAULT &&
       c->contact_policy != CORE_SCENE_RIGID_CONTACT_ZERO_CUTOFF)
     return fail(d,"contact_policy","","unsupported contact policy");
+  if (c && c->integration_policy != CORE_SCENE_RIGID_INTEGRATION_DEFAULT &&
+      c->integration_policy != CORE_SCENE_RIGID_INTEGRATION_BOUNDED_SUBSEGMENTS)
+    return fail(d, "integration_policy", "", "unsupported integration policy");
   if (d)
     memset(d, 0, sizeof(*d));
   if (!c)

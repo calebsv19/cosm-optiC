@@ -6,9 +6,11 @@
 #include <string.h>
 
 #include "scene_atmosphere_optics_codec_test.h"
+#include "scene_atmosphere_sequence_test.h"
 
 int main(int argc,char** argv) {
     atmosphere_optics_codec();
+    atmosphere_sequence_clock();
     char d[256];
     SceneAtmosphereAttachment v, decoded;
     SceneAtmosphereAttachmentDefaults(&v); v.present=true;

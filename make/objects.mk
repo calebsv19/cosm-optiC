@@ -21,6 +21,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_native_3d_pixel_probe.o \
 	$(BUILD_DIR)/app/scene_atmosphere_assets.o \
 	$(BUILD_DIR)/app/scene_atmosphere_attachment.o \
+	$(BUILD_DIR)/app/scene_atmosphere_sequence.o \
 	$(BUILD_DIR)/app/scene_atmosphere_optics.o \
 	$(BUILD_DIR)/app/scene_atmosphere_runtime.o \
 	$(BUILD_DIR)/app/scene_atmosphere_prepare.o \

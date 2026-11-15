@@ -175,7 +175,12 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
            !ray_evaluated_digest_valid(q->source.revision))
             return TIMELINE_STATUS_INVALID_SNAPSHOT;
     }
+    if(snapshot->simulation.source < RAY_EVALUATED_SIMULATION_NONE ||
+       snapshot->simulation.source > RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE ||
+       (snapshot->simulation.source == RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE && !snapshot->has_sequence))
+        return TIMELINE_STATUS_INVALID_SNAPSHOT;
     if(snapshot->has_sequence && snapshot->simulation.valid &&
+       snapshot->simulation.source != RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE &&
        (snapshot->simulation.source_frame_index!=(int64_t)snapshot->sequence.source_tick ||
         snapshot->simulation.source_rate.frames_per_second_numerator!=snapshot->sequence.source.rate.frames_per_second_numerator ||
         snapshot->simulation.source_rate.frames_per_second_denominator!=snapshot->sequence.source.rate.frames_per_second_denominator)) return TIMELINE_STATUS_INVALID_SNAPSHOT;
@@ -239,7 +244,8 @@ TimelineStatus RayEvaluatedSceneSnapshotValidate(
             }
         }
     }
-    if (snapshot->simulation.source == RAY_EVALUATED_SIMULATION_CACHE &&
+    if ((snapshot->simulation.source == RAY_EVALUATED_SIMULATION_CACHE ||
+         snapshot->simulation.source == RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE) &&
         (!snapshot->simulation.valid ||
          !ray_evaluated_id_valid(snapshot->simulation.cache_id,
                                  sizeof(snapshot->simulation.cache_id)) ||

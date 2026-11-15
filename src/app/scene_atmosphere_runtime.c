@@ -27,7 +27,18 @@ json_object* SceneAtmosphereAuthoring(json_object* scene) {
 }
 bool SceneAtmosphereValidateScene(json_object* scene,char* d,size_t n) {
     SceneAtmosphereAttachment v;
-    return SceneAtmosphereAttachmentParse(SceneAtmosphereAuthoring(scene),&v,d,n);
+    if(!SceneAtmosphereAttachmentParse(SceneAtmosphereAuthoring(scene),&v,d,n)) return false;
+    if(v.sequence_source_clock) {
+        json_object *ray=get(get(scene,"extensions"),"ray_tracing"),*binding=get(ray,"rigid_result");
+        json_object *id=get(scene,"scene_id"),*revision=get(binding,"result_revision");
+        if(!get(get(scene,"extensions"),"rigid_scene") || !binding ||
+           get(SceneAtmosphereAuthoring(scene),"sequence_volume") ||
+           !json_object_is_type(id,json_type_string) || !json_object_is_type(revision,json_type_string) ||
+           strcmp(json_object_get_string(id),v.sequence_clock.source.id) ||
+           strcmp(json_object_get_string(revision),v.sequence_clock.source.revision))
+            return fail(d,n,"sequence_source water requires the same authenticated rigid source");
+    }
+    return true;
 }
 void SceneAtmosphereRuntimeReset(void) {
     if(owns_tuning) {
@@ -181,6 +192,13 @@ bool SceneAtmosphereRuntimeSimulation(const char* scene_path,const TimelineEvalu
         if(!ray_tracing_sha256_bytes(combined,128,manifest_digest)) return false;
     }
     identity.source=RAY_EVALUATED_SIMULATION_CACHE;identity.valid=true;
+    if(active.sequence_source_clock) {
+        char water_path[4096];int water_frame=0;
+        if(!water_digest[0] || SceneAtmosphereRuntimeWater(scene_path,frame,water_path,sizeof(water_path),&water_frame,d,n)<0 || !water_path[0])
+            return fail(d,n,"sequence_source requires an actual water cache");
+        identity.source=RAY_EVALUATED_SIMULATION_SEQUENCE_WATER_CACHE;
+        selected=water_frame;
+    }
     snprintf(identity.cache_id,sizeof(identity.cache_id),"%s",active.id);
     char prefix[17];memcpy(prefix,manifest_digest,16);prefix[16]=0;
     identity.cache_revision=strtoull(prefix,NULL,16);

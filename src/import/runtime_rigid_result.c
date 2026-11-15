@@ -292,8 +292,12 @@ bool RuntimeRigidResultInstanceAtT(RayTracingRuntimeMeshAssetInstance *instance,
   double pitch = atan2(-basis[2][0], horizontal);
   instance->rotation_y = pitch;
   if (horizontal > 1e-14) {
-    instance->rotation_x = atan2(basis[2][1], basis[2][2]);
     instance->rotation_z = atan2(basis[1][0], basis[0][0]);
+    /* Keep roll coupled to yaw near a vertical pitch. Independently dividing
+       two nearly-zero matrix rows magnifies their rounding disagreement. */
+    double sz = sin(instance->rotation_z), cz = cos(instance->rotation_z);
+    instance->rotation_x = atan2(sz * basis[0][2] - cz * basis[1][2],
+                                 cz * basis[1][1] - sz * basis[0][1]);
   } else {
     instance->rotation_x = atan2(-basis[1][2], basis[1][1]);
     instance->rotation_z = 0;
@@ -303,13 +307,13 @@ bool RuntimeRigidResultInstanceAtT(RayTracingRuntimeMeshAssetInstance *instance,
   instance->scale_x = instance->scale_y = instance->scale_z = 1;
   return true;
 }
-static bool current_mesh_digest(const char *path, const char *expected) {
+static bool current_mesh_digest(const char *path, const char *expected, size_t limit) {
   int fd = open(path, O_RDONLY | O_NOFOLLOW);
   if (fd < 0)
     return false;
   struct stat st;
   bool ok = !fstat(fd, &st) && S_ISREG(st.st_mode) && st.st_size > 0 &&
-            st.st_size <= 1024 * 1024;
+            (uint64_t)st.st_size <= limit;
   size_t n = ok ? (size_t)st.st_size : 0;
   char *bytes = ok ? malloc(n) : NULL;
   ok = ok && bytes;
@@ -352,31 +356,43 @@ bool RuntimeRigidResultMeshesMatch(const RuntimeRigidResult *r,
       }
     const cJSON *visible = NULL;
     const char *mesh_sha = NULL;
+    bool approximate = false;
     for (size_t i = 0; i < r->asset_count; i++)
       if (!strcmp(r->assets[i].id, binding->mesh_id)) {
         visible = r->assets[i].visible;
         mesh_sha = r->assets[i].sha256;
+        approximate = r->assets[i].approximate;
       }
     if (instances == 0 && r->hidden[b])
       continue;
     if (instances != 1 || !asset || !visible ||
         asset->procedural_surface_valid ||
         asset->procedural_solid_material_valid || !mesh_sha ||
-        !current_mesh_digest(asset->path, mesh_sha))
-      return fail(d, n,
-                  "rigid result requires its accepted visible source mesh");
+        !current_mesh_digest(asset->path, mesh_sha, r->complex_bundle ? 64u * 1024u * 1024u : 1024u * 1024u))
+      { if (d && n) snprintf(d, n,
+          "rigid visible mesh mismatch: %s (instances=%zu surface=%d material=%d)",
+          binding->object_id, instances, asset ? asset->procedural_surface_valid : 0,
+          asset ? asset->procedural_solid_material_valid : 0);
+        return false; }
     const cJSON *mesh = cJSON_GetObjectItemCaseSensitive(visible, "mesh"),
                 *vertices = cJSON_GetObjectItemCaseSensitive(mesh, "vertices"),
                 *triangles =
                     cJSON_GetObjectItemCaseSensitive(mesh, "triangles");
     const CoreMeshAssetRuntimeDocument *doc = &asset->document;
+    /* An explicitly attested approximate collider has a distinct derived
+       physical source. Its unchanged display mesh retains the original source
+       identity, authenticated by the accepted visible bytes. Strict assets
+       preserve the original shared-source requirement. */
+    const cJSON *display_source = cJSON_GetObjectItemCaseSensitive(visible, "source_asset_id");
+    const char *expected_source = approximate && cJSON_IsString(display_source)
+        ? display_source->valuestring : binding->source_id;
     if ((size_t)cJSON_GetArraySize(vertices) != doc->vertex_count ||
         (size_t)cJSON_GetArraySize(triangles) != doc->triangle_count ||
         strcmp(doc->contract.asset_id, binding->mesh_id) ||
-        strcmp(doc->contract.source_asset_id, binding->source_id))
-      return fail(d, n, "rigid mesh identity/topology mismatch");
-    for (size_t i = 0; i < doc->vertex_count; i++) {
-      const cJSON *v = cJSON_GetArrayItem(vertices, (int)i);
+        strcmp(doc->contract.source_asset_id, expected_source))
+      { if(d && n) snprintf(d,n,"rigid mesh identity/topology mismatch: %s",binding->object_id); return false; }
+    const cJSON *v = vertices->child;
+    for (size_t i = 0; i < doc->vertex_count; i++, v = v->next) {
       const double xyz[3] = {doc->vertices[i].position.x,
                              doc->vertices[i].position.y,
                              doc->vertices[i].position.z};
@@ -387,8 +403,8 @@ bool RuntimeRigidResultMeshesMatch(const RuntimeRigidResult *r,
           return fail(d, n, "rigid mesh source coordinate mismatch");
       }
     }
-    for (size_t i = 0; i < doc->triangle_count; i++) {
-      const cJSON *v = cJSON_GetArrayItem(triangles, (int)i);
+    v = triangles->child;
+    for (size_t i = 0; i < doc->triangle_count; i++, v = v->next) {
       const size_t indices[3] = {doc->triangles[i].a, doc->triangles[i].b,
                                  doc->triangles[i].c};
       const char *keys[] = {"a", "b", "c"};
