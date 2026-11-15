@@ -16,6 +16,7 @@
 #include "render/runtime_native_3d_resolution.h"
 #include "render/runtime_native_3d_tile_scheduler.h"
 #include "render/runtime_ray_3d.h"
+#include "render/runtime_spectral_transport.h"
 #include "render/runtime_scene_accel_3d.h"
 
 static uint32_t s_deep_render_desktop_sample_sequence = 1u;
@@ -396,6 +397,11 @@ RayTracingDeepRenderDesktopRenderUnit_Start(
             &evaluated_scene.snapshot,
             &sampling, NULL, NULL, desc->spectralProfile)) {
         deep_render_desktop_set_reason(out_reason, RuntimeNative3DPrepareFrameLastDiagnostics());
+        return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
+    }
+    if(!RuntimeSpectralTransport_ConfigureOutput(&prepared,desc->finalFramePath,false)) {
+        RuntimeNative3DPreparedFrame_Free(&prepared);
+        deep_render_desktop_set_reason(out_reason,"V3 linear component output already exists or has an invalid path");
         return RAY_TRACING_DEEP_RENDER_DESKTOP_START_FAILED;
     }
     (void)RuntimeNative3DPrepareFrameTileOccupancy(&prepared, unit->tileSize);

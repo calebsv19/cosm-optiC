@@ -116,8 +116,9 @@ def preview(root, revision, run_id, renderer, mode, samples, width, height):
         shutil.copytree(source, dest / 'inputs')
         verify(dest / 'inputs')
         intent = read(source / 'render_request.json')
+        spectral = intent.get('schema_version') == 'ray_tracing_agent_render_request_v2'
         start = intent['render'].get('start_frame', 0)
-        count = intent['render']['frame_count']
+        count = 1 if spectral else intent['render']['frame_count']
         if mode == 'sampled':
             sample_count = min(samples, count)
             indices = sorted({start + round(i * (count - 1) / max(1, sample_count - 1)) for i in range(sample_count)})
@@ -136,12 +137,15 @@ def preview(root, revision, run_id, renderer, mode, samples, width, height):
         for index in indices:
             request = json.loads(json.dumps(intent))
             request['run_id'] = f'{run_id}-{index}'
-            request['render'].update(start_frame=index, frame_count=1, width=width,
-                height=height, temporal_frames=1, denoise_enabled=False)
-            request['sampling'] = {'frame_offset': index - start, 'frame_count': count}
-            request['resources'] = {'cpu_percent': 25, 'max_workers': 1, 'reserve_cpu_count': 2}
+            request['render'].update(frame_count=1, width=width, height=height,
+                                     temporal_frames=1, denoise_enabled=False)
             out = f'../frames_run_{index:04d}'
-            request['output'] = {'root': out, 'overwrite': False, 'video': {'enabled': False}}
+            request['output'] = {'root': out, 'overwrite': False}
+            if not spectral:
+                request['render']['start_frame'] = index
+                request['sampling'] = {'frame_offset': index - start, 'frame_count': count}
+                request['resources'] = {'cpu_percent': 25, 'max_workers': 1, 'reserve_cpu_count': 2}
+                request['output']['video'] = {'enabled': False}
             request['progress'] = {'summary_path': out + '/render_summary.json',
                                    'progress_path': out + '/render_progress.json'}
             req = dest / 'inputs' / f'preview_{index:04d}.json'

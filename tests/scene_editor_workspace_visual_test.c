@@ -490,6 +490,7 @@ static void verify_viewport_gestures(SceneEditor *editor) {verify_viewport_gestu
 #include "scene_editor_spectral_sampling_case.h"
 #include "scene_editor_l3_process_acceptance.h"
 #include "scene_editor_l3_render_acceptance.h"
+#include "scene_editor_v3_transport_case.h"
 
 int main(int argc, char** argv) {
     SceneEditor editor;
@@ -519,6 +520,7 @@ int main(int argc, char** argv) {
      * only after the actual native window has settled and painted. */
     for(int i=0;i<3;i++) {SDL_Delay(40);SDL_PumpEvents();SceneEditorSessionRuntimeRender(&editor);}
     assert(SceneEditorDocumentIsOpen());
+    if(argc==4 && (!strcmp(argv[3],"--v3-integrated") || !strcmp(argv[3],"--v3-integrated-reopen"))) {v3_transport_acceptance(&editor,!strcmp(argv[3],"--v3-integrated-reopen"));DestroySceneEditor(&editor);active_editor=NULL;vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--l3-render")){l3_render_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);active_editor=NULL;vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && !strcmp(argv[3],"--l3-process")){l3_process_acceptance(&editor,argv[2]);DestroySceneEditor(&editor);active_editor=NULL;vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}
     if(argc==4 && (!strcmp(argv[3],"--event-planner")||!strcmp(argv[3],"--event-planner-reopen"))){event_planner_acceptance(&editor,argv[2],!strcmp(argv[3],"--event-planner-reopen"));DestroySceneEditor(&editor);vk_shared_device_shutdown();TTF_Quit();SDL_Quit();return 0;}

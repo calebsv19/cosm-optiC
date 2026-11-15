@@ -15,6 +15,8 @@ typedef struct {
 RuntimeSpecularBSDF3DSample RuntimeSpecularBSDF3D_Sample(
     const RuntimePrincipledBSDF3D *bsdf, const HitInfo3D *hit, Vec3 view,
     double lobe_probability, double u, double v);
+Vec3 RuntimeSpecularBSDF3D_EvaluateCos(const RuntimePrincipledBSDF3D *,
+    const HitInfo3D *, Vec3 view, Vec3 direction);
 double RuntimeSpecularBSDF3D_Pdf(const RuntimePrincipledBSDF3D *bsdf,
     const HitInfo3D *hit, Vec3 view, Vec3 direction);
 /* Fixed-NDF-sample differentials for smooth constant-normal opaque reflectors.

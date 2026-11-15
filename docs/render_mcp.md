@@ -5,6 +5,15 @@ using the existing native async desktop renderer, progress listener, cancellatio
 and durable BMP completion path. A render captures the current working scene,
 including unsaved edits, without invoking File Save or adding an Undo entry.
 
+Ordinary Disney V3 uses the shared [spectral transport backend](spectral_transport_backend.md).
+`render_profile_read` reads the retained/default policy; revision-guarded
+`render_profile_set` edits it through Undo/Redo. `render_start_v3` uses the same
+native job with `camera_samples_override` (0 preserves the scene). Shared
+`spectral_transport` metadata and a hashed full `transport.json` sidecar expose
+the selected estimator, approximation, components, termination and optional
+bounded path trace. Profile editing refuses an active render. Older render tool
+signatures remain valid.
+
 | Tool | Behavior |
 | --- | --- |
 | `render_read` | Read the panel's render settings, active state and latest job ID. |

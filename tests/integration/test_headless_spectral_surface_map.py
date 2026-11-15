@@ -67,6 +67,20 @@ def qualify(cli, root):
         near(row["centroid_m"][1],y,.00005)
         near(row["watts"],power,.001)
     assert max(normal)>0
+    frame = root/"out/frames/frame_0000.bmp"
+    without_probe = frame.read_bytes()
+    q["spectral"]["selected_pixel"] = {"x": 0, "y": 0}
+    probed, probed_xyz = run(q)
+    assert frame.read_bytes() == without_probe and probed_xyz == normal
+    assert probed["key"] == st["key"]
+    probe = json.loads(summary.read_text())["spectral_selected_pixel"]
+    assert probe["xyz"] == normal
+    assert any(row.get("largest_surface_deposit") for row in probe["bands"])
+    for row, reference_band in zip(probe["bands"], probed["bands"], strict=True):
+        assert math.isclose(sum(row[k] for k in ("direct_radiance", "photon_surface_radiance",
+            "single_scatter_radiance", "multiple_scatter_radiance")), reference_band["center_band_radiance"],
+            rel_tol=1e-12, abs_tol=1e-12)
+    del q["spectral"]["selected_pixel"]
     direct_key=st["key"]
     point(q,lamp(q)["origin_m"],[0,0,0])
     _,through = run(q)

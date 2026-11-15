@@ -980,8 +980,8 @@ bool runtime_scene_bridge_writeback_ray_overlay_json(const char *runtime_scene_j
     {
         json_object *extensions=NULL,*ray=NULL,*oe=NULL,*overlay_ray=NULL;
         if(json_object_object_get_ex(runtime_root,"extensions",&extensions)&&json_object_object_get_ex(extensions,"ray_tracing",&ray)&&json_object_object_get_ex(overlay_root,"extensions",&oe)&&json_object_object_get_ex(oe,"ray_tracing",&overlay_ray)&&json_object_is_type(overlay_ray,json_type_object)){
-            const char *keys[]={"managed_mesh_assets","rigid_result"};
-            for(size_t i=0;i<2;i++){json_object *value=NULL;json_object_object_del(overlay_ray,keys[i]);if(json_object_object_get_ex(ray,keys[i],&value))json_object_object_add(overlay_ray,keys[i],json_object_get(value));}
+            const char *keys[]={"managed_mesh_assets","rigid_result","spectral_transport_v1","editor_render_integrator_v1"};
+            for(size_t i=0;i<sizeof(keys)/sizeof(keys[0]);i++){json_object *value=NULL;json_object_object_del(overlay_ray,keys[i]);if(json_object_object_get_ex(ray,keys[i],&value))json_object_object_add(overlay_ray,keys[i],json_object_get(value));}
         }
     }
     /* Retained authoring is authoritative. Legacy overlays cannot reconstruct

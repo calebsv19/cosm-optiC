@@ -1,4 +1,6 @@
-# V3 balanced edge-aware convergence
+# V3 sampling and convergence
+
+The [ordinary surface path workflow](spectral_surface_path.md) has its own pinned quality defaults and fixed sample/depth budget, shared by native/editor and local headless rendering. The panel's ordinary **Samples (0=scene)** override controls camera paths; photon **Max passes** still counts independent maps. The [backend contract](spectral_transport_backend.md) separates these owners. The photon-map convergence controller described here does not certify fixed-budget room renders.
 
 V3 photon deposition can render each camera frame until measured convergence.
 The ordinary native render scheduler, editor Render frame panel and local
@@ -36,15 +38,19 @@ saved scene, or inside `spectral` in a headless photon-map request:
   "mode": "converge",
   "min_passes": 16,
   "max_passes": 0,
+  "camera_coverage": "adaptive",
+  "camera_sequence": "balanced",
   "visible_error": 2.5,
   "edge_error": 3.5,
+  "local_error": 2.5,
   "energy_error": 0.01
 }
 ```
 
 Only `mode` is required; the other values shown are defaults. Minimum and
 nonzero maximum counts are multiples of eight, at most 1048576. Minimum is at
-least 16; zero maximum means unlimited. Visible and edge thresholds are RMS
+least 16; zero maximum means unlimited. `camera_coverage` accepts `adaptive`
+(the default) or `full` (every pixel, every pass). Visible, edge and local thresholds are RMS
 errors in 8-bit display code values, in `(0,255]`. Energy error is a relative
 integrated linear-luminance difference in `(0,1]`. Explicit `null`, unknown
 fields and malformed values are rejected. `{"mode":"single"}` admits no
@@ -58,19 +64,66 @@ bright pixels. Its edge mask is dilated by three pixels and its contributions
 are excluded from the final image. Each subsequent pass traces a fresh photon
 map with a deterministic seed and a subpixel camera offset.
 
+`camera_sequence` selects `balanced` (the compatible default, one shared
+four-quadrant offset per pass) or `progressive` (the existing native per-pixel
+Owen-scrambled Sobol sequence). Progressive sampling gives each pixel and each
+of the two comparison groups a distinct scramble. Each group advances its own
+sequence; full coverage at 8, 32 and 128 total passes gives each group a complete
+2×2, 4×4 and 8×8 subdivision respectively. Sparse masks can skip sequence points,
+so this coverage property is for full-camera sampling. The native 16-bit sample
+index starts a newly scrambled epoch after 65536 samples per group, avoiding
+repeated camera rays in unlimited runs.
+
+Optional `camera_seed` is an unsigned integer from 0 through 4294967295. Omission
+uses the original photon-map seed, preserving legacy replay. An explicit seed
+controls camera quadrature independently of photon transport. Receipts record
+the effective camera seed and sequence. For a noise audit, hold camera seed
+fixed while changing photon seeds, then hold photon seed fixed while changing
+camera seeds; finally compare runs with both seeds changed. These conditional
+comparisons expose different noise sources, not separate physical light terms.
+
+Optional `camera_samples_per_map` accepts 1 (default), 2, 4 or 8. Values above
+one require `camera_sequence: "progressive"`. Each pass builds one photon map,
+evaluates the requested camera rays against that same map, and contributes their
+arithmetic mean with the same weight as every other map. Each comparison group
+advances its own native camera sequence by the bundle size. Changing bundle size
+changes the camera-to-map pairing; it does not change photon seeds or transport.
+The camera subdivision counts above apply to one ray per map; with bundles,
+each group advances by `maps_in_group * camera_samples_per_map` samples.
+
+Pass limits, minimum passes, eight-map checkpoints and consecutive acceptance
+still count independent photon maps. Repeated rays on a map do not create extra
+independent maps. Receipts expose `camera_samples_per_map`, `min_pixel_maps` and
+`max_pixel_maps`; `min_pixel_samples`, `max_pixel_samples` and `camera_samples`
+count actual included camera rays. The pilot is excluded from both counts.
+An interrupted or failed bundle is not committed as a completed map or published
+as a final image. The default one-ray path preserves existing output.
+
+Bundles are opt-in sampling controls, not a convergence guarantee or recommended
+production default. Compare measured cost and error on complete regions with
+multiple photon seeds. Display clipping can hide local linear disagreement.
+
 Eight passes form a checkpoint. They are split into two disjoint groups of four;
 each group samples every pixel quadrant once. Both groups use exactly the same
 pixel mask. Edge pixels are sampled every pass. Elsewhere a six-pixel sparse
 lattice changes phase between checkpoints. The first checkpoint and every
-fourth checkpoint after it are full-frame refreshes. All included samples are
+fourth checkpoint after it are full-frame refreshes. A passing check requests
+full-frame validation immediately; a passing full-frame check keeps the next
+checkpoint full as well. All included samples are
 actual native camera rays; there is no interpolation of sparse corrections.
 
 Signed linear RGB is accumulated separately for the two groups. At each
 checkpoint, the controller averages their means for output, then compares
 half their difference after fixed exposure/display conversion. It measures
-visible-pixel RMS, pilot-edge RMS and integrated linear luminance difference.
-Newly illuminated pixels join the visible metric. Two consecutive passing
-checkpoints, with the minimum pass count satisfied, produce `converged`.
+visible-pixel RMS, pilot-edge RMS, worst visible-pixel RMS within a 16×16 block,
+and integrated linear luminance difference. The local check prevents a noisy
+patch from being diluted by quieter regions; it does not blur or reconstruct
+pixels. Newly illuminated pixels join the visible metric. Two consecutive
+passing **full-camera** checkpoints, with the minimum pass count satisfied,
+produce `converged`. A sparse checkpoint may request validation but cannot count
+as fresh full-camera acceptance. This corrects the earlier stop rule that could
+count reused interior evidence twice. Existing converge requests may therefore
+take more work or reach their cap where the old controller reported convergence.
 
 These are empirical agreement checks, not confidence intervals or a proof of
 physical accuracy. Display clipping can conceal errors; the linear energy check
@@ -98,14 +151,22 @@ at eight-pass checkpoints. Unlimited convergence can run indefinitely when a
 scene fails the thresholds; use Cancel or an explicit maximum when appropriate.
 
 Receipts include status, committed passes, full passes, checkpoints, consecutive
-passing checkpoints, camera samples, pilot edge pixels and measured errors.
+passing full-camera checkpoints, full-checkpoint count, camera samples, minimum
+and maximum accumulated samples per pixel, pilot edge pixels and measured errors.
+`validation_pending` identifies a passing sparse check awaiting full-camera
+validation. `local_error` is the worst-block display error. `camera_coverage`
+records the requested schedule. The pilot is excluded from pixel counts.
 Headless center-pixel XYZ/sensor values average samples of that pixel; physical
 map ledgers describe the last map, not the sum of all maps. No tile checkpoint
 resume or remote-worker support is added by this controller.
 
 ## Qualification
 
-`make test-spectral-sampling` checks quadrant balance and deterministic jitter.
+`make test-spectral-sampling` checks legacy quadrant balance, deterministic
+per-pixel replay, independent groups, progressive subdivision and epoch renewal.
+`make test-spectral-convergence` links the actual controller to a deterministic
+film producer and checks late interior changes, fresh full-camera acceptance,
+localized-noise refusal and full reference coverage.
 `test-headless-spectral-sampling` checks single-mode byte parity, deterministic
 convergence, a capped nonconverged result, camera reset and invalid settings.
 The native editor fixture can be run with:
@@ -119,6 +180,12 @@ python3 tests/integration/test_editor_spectral_sampling.py \
 It exercises the actual controls, saved-profile preparation, ordinary scheduler,
 same-process camera movement/replay and cancellation. The small fixtures qualify
 integration and lifecycle; they are not high-resolution quality benchmarks.
+
+For bounded source comparisons with fixed camera/medium/reconstruction, use the
+[spectral source testbench](spectral_source_testbench.md). Its default full-camera
+schedule is a reference for the adaptive path; neither schedule changes photon
+support, wavelength bins or exposure. A small image with `converged` status is
+not proof of high-resolution or moving-camera quality.
 
 
 ## Live headless convergence progress
@@ -143,3 +210,11 @@ preview and cancellation continue through the same convergence callbacks.
 Run `tests/integration/test_headless_spectral_camera_cache.py --cli <cli>
 --output-root <fresh-output>` to check live readback before completion, exact
 checkpoint/final-summary agreement, deterministic replay and publication failure.
+
+
+### Ordinary V3 linear films and scattering diagnostics
+
+Ordinary V3 final jobs export unexposed float64 XYZ component films by default,
+with saved `surface_path_v1.linear_components: false` opt-out. The native editor
+and headless path share the export and scattering-order report. See
+[the format, exact recombination rule, storage cost, and qualification](spectral_linear_components.md).

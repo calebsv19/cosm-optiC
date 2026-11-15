@@ -1,3 +1,265 @@
+## November 14 — current HDR retained; lower-budget workflow qualified
+
+The user selected current signed HDR OIDN over guided restoration. A retrospective
+budget comparison keeps that filter unchanged and identifies two independent
+64-sample renders (128 total, two maps) as a balanced candidate on the two known
+scenes: full XYZ error rises only 1.23–1.58% versus the accepted 256-sample HDR,
+and all four pair/scene replicates pass the fixed budget screens. Single
+64-sample renders fail the local 10% error cap in four of eight cases.
+Beauty-only OIDN accumulation modes now accept two verified equal-budget batches;
+component/variance-guided filters retain four. All 103 tests and actual CLI/raw/
+overwrite/parity checks pass. No default or release change. Absolute glass-edge
+preservation and unseen-scene generalization remain unqualified.
+See [recipe, comparison and limits](spectral_denoise.md#november-14--accepted-hdr-choice-and-two-batch-budget).
+
+## November 14 — fresh-reference guided HDR comparison
+
+A separate experimental variance-guided detail-restoration tool now composes
+with signed HDR OIDN using four equal independent raw batches. It uses image
+statistics, not native albedo/normal guides. Eight new reference renders compare
+the frozen candidate against the exact previous HDR baseline on two known scenes.
+Guided XYZ RMSE reductions are 36.48% / 36.97%, versus HDR 39.30% / 39.90%.
+All numeric gates pass. Glass-edge feature errors improve 18–21% but still fail
+the preservation screen; the tungsten mixed-width screen improves to pass.
+The guided image restores grain, and glint recovery is small. Keep current HDR
+as the smoother option; neither automatic default promotion nor native guidance
+is claimed. Ninety-nine tests, exact native replay and all fresh references pass.
+See [usage, comparison and limits](spectral_denoise.md#november-14--variance-guided-hdr-detail-comparison).
+
+## November 14 — recovered HDR qualification and opt-in job workflow
+
+All 16 planned input/reference jobs now complete with unchanged samples and
+quality criteria. Reproducing the reference slowdown identified launcher-inherited
+low scheduling priority; the exact failed request completed in 505 s at normal
+priority, with compared native output bytes unchanged. Subsequent references
+completed in 609–706 s under the same 1,800 s limit.
+
+Signed HDR OIDN reduces full-image XYZ RMSE by 39.42% (tungsten) and 39.67%
+(changed-geometry/saturated LED). All frozen aggregate, grid, mean and color
+gates pass. Feature screens remain failed for glints/edges and the tungsten
+mixed glass/fog width. This supports an explicit experimental visual option,
+not a feature-preserving or automatic native default.
+
+The new `tools/spectral_render_denoise.py` offers one local command for native
+preflight, raw rendering, verified HDR postprocess and completion recording.
+It retains raw files, preserves caller configuration resolution, refuses existing
+destinations and input drift, and terminates only its owned subprocess on timeout.
+All 90 focused/inherited tests and an actual native workflow smoke pass. Native C,
+installed apps, versions, packages and release/default behavior are unchanged.
+See [HDR usage and measured limits](spectral_denoise.md).
+
+## November 14 — explicit HDR still postprocess follow-up
+
+Main Edit now supplies an opt-in postprocess command for a completed ordinary
+V3 headless still, preserving native raw files and writing separate beauty,
+difference, preview and hash-bound completion metadata. All 81 focused and
+inherited regression tests pass; an actual native still and no-overwrite check
+also pass. This is an experimental offline workflow, not a renderer default.
+
+Saturated-color controls exposed retained negative-RGB specks in the original
+HDR policy. An explicit signed-part filtering alternative passes four analytic
+seeds (9.7–16.5% lower XYZ error), but broader rendered qualification remains
+incomplete. The 384×288 campaign completed all eight input batches and one of
+eight reference batches; the tungsten reference timed out at its fixed 1,800 s
+limit. No full-reference quality gate or production-wide color claim is made.
+The next evidence step is diagnosing reference cost and completing the frozen
+independent reference set before considering native/default integration.
+See [usage and qualification limits](spectral_denoise.md).
+
+## November 14 — offline V3 denoise qualification
+
+Main Edit adds a guarded immutable offline adapter comparing whole-beauty HDR
+OIDN with a shared-XYZ, variance-guided component filter. Direct/glass-continuation
+layers remain exact; common volume-child weights preserve energy ownership and
+canonical recombination. Raw linear films and reconstruction stay unchanged.
+
+Frozen tungsten selection and unchanged LED holdout pass the conservative
+component setting, reducing independent regional XYZ RMSE by 11.7% and 10.5%.
+Whole HDR reduces more error but exceeds strict preservation screens. The
+component result retains visible grain; noisy raw feature screens and small
+fixtures do not establish production-wide denoise quality. All 73 focused tests
+pass. Keep this offline; higher-resolution/new-geometry and saturated-color
+qualification precede ordinary-job/default integration. Native V3 denoise,
+installed apps, packages and releases are unchanged.
+See [offline denoise usage, evidence and limits](spectral_denoise.md).
+
+## November 14 — bounded independent V3 still batches
+
+Main Edit adds an offline bounded campaign and linear component accumulator for
+ordinary V3 full-frame exports. Independent camera/map seeds, fixed per-map
+budgets and camera-sample weighting preserve the estimator and canonical total.
+Equal-budget batches export empirical variance of the mean; unequal budgets
+retain exact weights without a variance claim. Completed jobs resume only under
+exact identity; uncertain jobs and incompatible inputs refuse.
+
+Two glass/full-fog source fixtures pass the independent batch comparison with
+reconstruction fixed. Eighteen native jobs and 56 focused Python tests qualify
+this bounded path, including real resume and unequal 8/128 weighting. Noise
+reduction is measured against finite regional references. Rare-event confidence,
+whole-frame absolute quality and portable timing remain unqualified. No V3
+denoiser, renderer C/default, installed-app or release change is included.
+See [independent still batches](spectral_batch_accumulation.md) for usage and limits.
+
+## November 14 — diagnostic budget planner and combined full frames
+
+## November 14 — joint cost and absolute spectral noise diagnostics
+
+The offline absolute-budget planner measures a joint camera/photon cost grid and
+reports exposure-scaled XYZ RMS with explicit seed uncertainty. It selects only
+measured budgets and refuses insufficient or uncertainty-limited plans. The
+bounded original-tungsten/held-out-LED qualification reduced regional variance
+without reconstruction changes, but neither met the frozen 0.050 cleanup target;
+the 0.010 still target also remains unmet. The independent full-frame joint cost
+check passes LED but underpredicts tungsten by 26.5%, failing the 20% timing gate.
+Conditional confidence, rare-event
+coverage failure and per-job admission limits remain explicit. See
+[joint cost and absolute-noise usage](spectral_error_diagnostics.md#joint-cost-and-absolute-noise-planning).
+No renderer defaults, C estimator, denoising, installation or release change.
+
+Independent crossed pilots now produce frozen camera/photon budget plans, with
+ordinary-job execution and exact linear verification. The original and equal-area
+altered-emitter fixtures have matched full-frame and independent regional proof
+under both measured spectra. Reconstruction and renderer defaults stay fixed.
+See [qualification and remaining timing/quality limits](spectral_estimator.md#november-14-independent-pilot-budget-planner-and-full-frame-qualification).
+
+## November 14 — glint classes, MIS correction and budget balance
+
+Added ordinary disjoint non-scattered indirect diagnostics and corrected a
+surface/volume light-PDF mismatch in experimental angular policies. A 100-case
+corrected regional matrix separates camera and photon-map noise: glass glint,
+beam, haze and indirect color are mostly camera-driven at the tested budgets;
+the focused floor needs both camera and map precision. Wider glass splitting
+and global QMC do not justify default promotion. Analytic, normal/sanitized,
+mixed-transport and headless checks pass within their scope. See
+[the findings and next allocation boundary](spectral_estimator.md#november-14-glint-attribution-and-joint-sampling-budget-study).
+
+## November 14 — rectangle solid-angle sampler qualification
+
+Implemented explicit experimental `rectangle_mis` and an ordinary volume-light
+ledger stratified by order and source-plane distance. Angular misses fall from
+about56.6% to under0.01% in the fixed glass/full-fog fixture. Independent seed
+comparisons retain regional, median and timing failures, so no default changes.
+Direct/surface-indirect films are exact at matched samples; remaining glint
+variance largely belongs to a different, non-scattered component. Analytic,
+normal/sanitized, mixed-visible and headless checks pass within their scope.
+See [the controls, results and next boundary](spectral_estimator.md#november-14-rectangle-solid-angle-proposal-and-light-diagnostics).
+
+## November 14 — repeated-scatter light sampling ablation
+
+Ordinary V3 accepts diagnostic `volume_direction_sampling: "light_only"` beside
+`phase` and coupled `light_mis`. Two independent eight-seed groups per source at
+matched CPU time show that removing the continuation mixture does not solve the
+colored-patch variance failure. Coupled remains the stronger experimental
+reference; neither is default-qualified. Exact unaffected-component isolation,
+analytic/normal/sanitized transport and headless regressions pass. Camera, fog,
+maps, reconstruction, thresholds and installed/released defaults are unchanged.
+See [the ablation and remaining gates](spectral_estimator.md#november-14-angular-light-only-versus-coupled-continuation).
+
+## November 13 — repeated-scatter angular light/direction MIS
+
+Implemented explicit `volume_direction_sampling: "light_mis"` through ordinary
+V3 saved profiles, with a bounded solid-angle light proposal, full-support phase
+mixture, compensated continuation and matching direct/emitter-hit MIS PDFs.
+Near-emitter repeated scattering explains the inspected colored-patch tails.
+Independent energy/support, normal/focused-sanitizer transport, source scaling,
+exact default replay and ordinary headless regressions pass. Colored-patch
+variance improves in the fresh comparisons, but independent region and prior-seed
+failures remain. No default, map, reconstruction, installed-app or release change.
+See [the estimator contract and all qualification boundaries](spectral_estimator.md#november-13-repeated-scatter-angular-light-and-direction-mis).
+
+## November 13 — continuation roulette and repeated fog scattering
+
+Implemented explicit `continuation_roulette: "fog_survival"`, with compensated
+95% survival after volume collisions. Independent equal-time tests improve the
+fresh beam variance 27%/33% and pass all comparisons against the preceding
+camera-exit policy. Colored-patch and prior tungsten beam gates still fail
+against baseline; defaults stay unchanged. A repeated-scatter uniform-radiance
+energy reference, analytic/mixed controls, focused sanitizers and ordinary
+headless regressions pass. See [policy, evidence and remaining limits](spectral_estimator.md#november-13-continuation-roulette-after-fog-scattering).
+No photon reconstruction, installed app or release change.
+
+## November 13 — independent beam and equal-time allocation
+
+Implemented explicit `split_camera_exit`: one additional unscattered camera-path
+exit split, with four maximum branches including the fog split. At matched local
+CPU time, floor/glint RMS improves 26–43%; tungsten beam and LED floor-edge gates
+still fail. Defaults remain unchanged. New independent seeds, prior regressions,
+exact tail replay, analytic and mixed glass controls, focused sanitizers and
+headless smoke gates pass within their stated scopes. See the
+[allocation and remaining gates](spectral_estimator.md#november-13-camera-exit-allocation-and-equal-time-qualification).
+No reconstruction, installed-app or release change.
+
+## November 12 — bounded fog/glass estimator qualification
+
+Implemented independent ballistic/scattered segment splitting and bounded
+internal-glass reflection/transmission splitting with full continuation state,
+component ownership and branch-aware work admission. Fixed-camera measured
+source tests reduce pooled floor/glint RMS by 43–70%, but a held-out tungsten
+beam gate still fails. Defaults remain unchanged. Independent photon-only work
+passes the 1cm ensemble precision gate at 262,144 photons/16 maps; single-map
+variation and fixed-kernel bias remain. Analytic transport, focused sanitizers,
+ordinary glass/opaque and native headless smoke gates pass. See the
+[estimator contract and qualification limits](spectral_estimator.md).
+This is Main Edit source/headless evidence; no installed app or release change.
+
+## November 12 — bounded V3 sample attribution and sampler qualification
+
+Ordinary saved V3 profiles support a bounded per-pixel top-sample audit and
+selected-path replay without changing the rendered samples. The default hashed
+sampler is preserved exactly. An explicit experimental distinct-dimension
+camera sampler lowers floor-focus variance in the measured glass/fog fixture,
+but fails glint, held-out beam and fine-volume precision gates; it is not promoted
+to a quality default. All nine baseline mixed physical groups pass. See
+[sampling diagnostics, controls and limits](spectral_error_diagnostics.md#camera-sampling-and-sample-attribution).
+This is source/headless qualification, not installed-app or release adoption.
+
+## November 10 — visible source and material response qualification
+
+The ordinary V3 saved-scene route now has a reusable matched visible-spectrum
+bench. Eight synthetic source spectra, including an incident-XYZ-matched
+white pair, and selective diffuse reflectors were tested with fixed camera,
+exposure and scene geometry. A directly shadowed target shows colored indirect
+fill with zero direct contribution. The isolated selective amber response
+distinguishes the white pair, while the neutral control remains close. All 23
+fixed-budget visual cases and 48 independent transfer controls pass their
+declared checks. Three tested seed replicas pass the display RMS gate;
+broad blue retains visible grain and no general convergence claim is made.
+See [visible spectral material response](spectral_material_response.md).
+Renderer source and photon reconstruction are unchanged in this bench pass.
+
+## November 10 — ordinary V3 integration and diagnostic ownership
+
+Ordinary supported V3 scenes, native/editor jobs and local headless v2 requests
+now share the qualified opaque GI core, default policy, scene-profile parser,
+source/material adapters and owned diagnostic report. Generated-overlay Save
+preserves retained optical profiles and V3 presets. The native panel exposes
+scene transport and camera sample overrides; MCP provides guarded profile
+read/set and ordinary V3 job controls. Lit native/headless RGBA replay, native
+history/Save/fresh reopen, in-flight cancellation and diagnostic lifetime are
+covered by repeatable tests. See the [backend boundaries and diagnostic guide](spectral_transport_backend.md).
+
+RGB-authored source/material spectra remain labeled approximations. Glass
+photon maps retain their separate route, with no added/double-counted opaque GI.
+Admission limits, generic atmosphere/volume, nested media, checkpoint/resume,
+temporal accumulation and remote execution remain explicit boundaries. This is
+Main Edit source integration; installed apps and releases are unchanged.
+
+## November 10 — ordinary spectral surface/volume path workflow (prior milestone)
+
+Main Edit adds a local headless `surface_path_v1` route for spectral color
+bleeding across planes, boxes and native triangle meshes, with one area or sky
+source, per-object diffuse/GGX responses and an optional homogeneous scattering
+box. Its quality profile enables the qualified transport together by default;
+explicit depth/sample/display reductions are reported in the summary. See
+[contract, limits and reproduction](spectral_surface_path.md).
+
+Independent surface, angular, spectral and medium controls pass normal and
+ASan/UBSan execution (Mac leak detection disabled). Fixed-budget room images are
+visual evidence, not a convergence certificate. Existing photon reconstruction,
+prism calibration, V2/Direct Light and editor defaults are unchanged. Saved
+editor/general glass integration and nested media remain open. No installed
+package, release or canonical adoption is implied.
+
 ## November 5 — V3 camera cost and live convergence
 
 V3 reuses exact camera-ray spatial partitions and density integrals across
@@ -3860,3 +4122,21 @@ reference setting preserves scalar evaluation; budget/allocation failure also
 falls back without rejecting the scene. See
 [spectral volume reconstruction](spectral_volume_reconstruction.md#exact-source-geometry-reuse)
 for cache identity, memory and qualification boundaries.
+
+
+### Ordinary V3 linear films and scattering diagnostics
+
+Ordinary V3 final jobs export unexposed float64 XYZ component films by default,
+with saved `surface_path_v1.linear_components: false` opt-out. The native editor
+and headless path share the export and scattering-order report. See
+[the format, exact recombination rule, storage cost, and qualification](spectral_linear_components.md).
+
+
+### Bounded V3 error-budget diagnostics
+
+Developer tools now separate camera/photon seed variance and component covariance
+from independent mixed-path reference error. The fixture-specific test wrapper
+preserves exact original sensor rays and requires retained-full-film parity;
+its packed regional output is not a completed ordinary full-frame render.
+See [bounded diagnostics, controls and limits](spectral_error_diagnostics.md).
+This adds qualification tooling, not a sampler/reconstruction/default change.

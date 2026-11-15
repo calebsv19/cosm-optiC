@@ -1,3 +1,4 @@
+#include "render/runtime_spectral_transport.h"
 #include "tools/ray_tracing_headless_spectral.h"
 #include "render/runtime_surface_graph.h"
 #include "animation/sequence_frame_receipt.h"
@@ -223,7 +224,7 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
     LoadAllSettings();
     animSettings.spaceMode = SPACE_MODE_3D;
     animSettings.interactiveMode = false;
-    animSettings.integratorMode3D = spectral ? RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT
+    animSettings.integratorMode3D = spectral ? (RayTracingHeadlessSpectral_IsOrdinary(request)?RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:RAY_TRACING_3D_INTEGRATOR_DIRECT_LIGHT)
                                                           : (int)request->integrator_3d;
     animSettings.temporalFrames3D = request->temporal_frames;
     if (request->has_tiled_renderer_override) {
@@ -552,8 +553,9 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                 preflight.diagnostics, sizeof(preflight.diagnostics))) {
             preflight.prepared_frame = false;
         } else {
-        preflight.prepared_frame =
-            RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
+        preflight.prepared_frame = spectral && RayTracingHeadlessSpectral_IsOrdinary(request)
+            ? RayTracingHeadlessSpectral_PrepareNative(request,&evaluated_scene.snapshot,&frame)
+            : RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
                 &frame,
                 request->width,
                 request->height,
@@ -563,6 +565,9 @@ static int run_preflight(const RayTracingAgentRenderRequest *request,
                     ? ray_tracing_headless_compound_ingestion_mutate : NULL,
                 compound_ingestion.active ? &compound_ingestion : NULL);
         }
+    }
+    if (preflight.prepared_frame && spectral && frame.spectralFrame) {
+        (void)RuntimeSpectralTransport_Capture(&frame,false,&preflight.spectral_transport);
     }
     preflight.native_prepare_frame_ms = ray_tracing_elapsed_ms_since(&stage_started_at);
     RuntimeScene3DBuilder_TimingSnapshot(&preflight.scene_builder_timing_stats);
@@ -990,8 +995,8 @@ static int run_render(const RayTracingAgentRenderRequest *request,
 
         (void)clock_gettime(CLOCK_MONOTONIC, &stage_started_at);
         bool frame_ok = (request->integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)
-            ? RayTracingHeadlessSpectral_Render(request, &evaluated_scene.snapshot, pixels,
-                                               &preflight.spectral_readout, preflight.diagnostics,
+            ? RayTracingHeadlessSpectral_Render(request, frame_path, &evaluated_scene.snapshot, pixels,
+                                               &preflight.spectral_readout, &preflight.spectral_transport, preflight.diagnostics,
                                                sizeof(preflight.diagnostics))
             : RuntimeNative3DRenderToPixelBufferWithSamplingTemporalDetailedProgressBudgetedControlledForEvaluatedSceneAndMutation(
                 pixels,

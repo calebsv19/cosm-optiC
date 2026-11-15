@@ -564,7 +564,14 @@ static void source_stencil_cache(void) {
   puts("PASS source stencil: exact band/direction parity, sequence mismatch/overflow, map lifetime and budget fallback");
 }
 
+#include "spectral_independent_support_case.h"
+
+#include "spectral_kernel_case.h"
+#include "spectral_wide_surface_case.h"
 int main(void) {
+  kernel_cases();
+  wide_surface_cases();
+  independent_support();
   source_stencil_cache();
   mesh_boundaries();
   prism_boundaries();

@@ -657,12 +657,12 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             RayTracingJsonGetString(inspection, "prepared_acceleration_route", &value)) {
             request.has_trace_route_override = true;
             if (!agent_render_request_parse_trace_route(value, &request.trace_route)) {
-                json_object_put(root);
                 agent_render_request_set_diagf(out_diagnostics,
                                   out_diagnostics_size,
                                   "request=%s field=inspection.trace_route invalid value=%s",
                                   request_path,
                                   value);
+                json_object_put(root);
                 return false;
             }
         }
@@ -760,13 +760,13 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
                                     &value)) {
             RuntimeCausticPhotonEstimator3D estimator;
             if (!RuntimeCausticPhotonEstimator3D_FromLabel(value, &estimator)) {
-                json_object_put(root);
                 agent_render_request_set_diagf(
                     out_diagnostics,
                     out_diagnostics_size,
                     "request=%s field=inspection.caustic_photon_surface_estimator invalid value=%s",
                     request_path,
                     value);
+                json_object_put(root);
                 return false;
             }
             request.has_caustic_product_mode_override = true;
@@ -976,12 +976,12 @@ bool ray_tracing_agent_render_request_load_file(const char *request_path,
             if (!RuntimeCausticLensTransport3D_PresetTraversalProfileFromLabel(
                     value,
                     &request.caustic_settings.traversalProfileOverride)) {
-                json_object_put(root);
                 agent_render_request_set_diagf(out_diagnostics,
                                   out_diagnostics_size,
                                   "request=%s field=inspection.caustic_lens_traversal_preset invalid preset=%s",
                                   request_path,
                                   value ? value : "<null>");
+                json_object_put(root);
                 return false;
             }
             request.caustic_settings.hasTraversalProfileOverride = true;

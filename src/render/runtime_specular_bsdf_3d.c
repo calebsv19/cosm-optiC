@@ -31,6 +31,25 @@ static HitInfo3D reflection_hit(const HitInfo3D* hit,Vec3 view) {
     }
     return oriented;
 }
+Vec3 RuntimeSpecularBSDF3D_EvaluateCos(const RuntimePrincipledBSDF3D *bsdf,
+    const HitInfo3D *hit, Vec3 view, Vec3 direction) {
+    if (!bsdf || !bsdf->valid || !hit) return vec3(0, 0, 0);
+    view = vec3_normalize(view);
+    direction = vec3_normalize(direction);
+    HitInfo3D oriented = reflection_hit(hit, view);
+    Vec3 normal = HitInfo3D_ShadingNormalForReflection(&oriented, view);
+    if (!valid_sides(&oriented, view, direction, normal)) return vec3(0, 0, 0);
+    Vec3 half = vec3_normalize(vec3_add(view, direction));
+    double nh = vec3_dot(normal, half), vh = vec3_dot(view, half);
+    if (nh <= 0 || vh <= 0) return vec3(0, 0, 0);
+    double nv = vec3_dot(normal, view), nl = vec3_dot(normal, direction);
+    double alpha = alpha_for(bsdf);
+    double factor = distribution(alpha, nh) * masking(alpha, nv) * masking(alpha, nl) / (4 * nv);
+    return vec3(RuntimePrincipledBSDF3D_FresnelSchlick(vh, bsdf->specularF0R) * factor,
+                RuntimePrincipledBSDF3D_FresnelSchlick(vh, bsdf->specularF0G) * factor,
+                RuntimePrincipledBSDF3D_FresnelSchlick(vh, bsdf->specularF0B) * factor);
+}
+
 double RuntimeSpecularBSDF3D_Pdf(const RuntimePrincipledBSDF3D *bsdf,
     const HitInfo3D *hit, Vec3 view, Vec3 direction) {
     if (!bsdf || !bsdf->valid || !hit) return 0.0;

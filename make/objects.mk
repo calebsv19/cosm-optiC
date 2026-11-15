@@ -26,6 +26,7 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/app/scene_atmosphere_prepare.o \
 	$(BUILD_DIR)/app/scene_atmosphere_water.o \
 	$(BUILD_DIR)/app/agent_render_request_spectral.o \
+	$(BUILD_DIR)/app/spectral_scene_profile.o \
 	$(BUILD_DIR)/app/ray_tracing_request_utils.o \
 	$(BUILD_DIR)/app/ray_tracing_sha256.o \
 	$(BUILD_DIR)/animation/evaluated_scene_snapshot.o \
@@ -216,10 +217,26 @@ NATIVE3D_AUDIT_DEPS = \
 	$(BUILD_DIR)/render/runtime_spectral_sampling.o \
 	$(BUILD_DIR)/render/runtime_spectral_convergence.o \
 	$(BUILD_DIR)/render/runtime_spectral_film.o \
+	$(BUILD_DIR)/render/runtime_spectral_diffuse.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_source.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_sampling.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_audit.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_trace.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_estimator.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_volume_sampling.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_rectangle.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_volume_diagnostics.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_classes.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_material.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_diagnostics.o \
+	$(BUILD_DIR)/render/runtime_spectral_components.o \
 	$(BUILD_DIR)/render/runtime_spectral_frame.o \
+	$(BUILD_DIR)/render/runtime_spectral_transport.o \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
+	$(BUILD_DIR)/render/runtime_spectral_phase.o \
 	$(BUILD_DIR)/render/runtime_spectral_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_spectral_reconstruction_domain.o \
 	$(BUILD_DIR)/render/runtime_spectral_reconstruction_mesh.o \
@@ -386,6 +403,7 @@ RAY_TRACING_RENDER_HEADLESS_DEPS = \
 	$(BUILD_DIR)/tools/cli/ray_tracing_render_headless_photon_capture.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_headless_photon_termination.o \
 	$(BUILD_DIR)/tools/cli/ray_tracing_headless_spectral.o \
+	$(BUILD_DIR)/tools/cli/ray_tracing_headless_spectral_native.o \
 	$(BUILD_DIR)/app/agent_render_request_helpers.o \
 	$(BUILD_DIR)/app/agent_render_request_labels.o \
 	$(BUILD_DIR)/app/agent_render_request_validate.o \
@@ -681,10 +699,26 @@ TEST_DEPS := \
 	$(BUILD_DIR)/render/runtime_spectral_sampling.o \
 	$(BUILD_DIR)/render/runtime_spectral_convergence.o \
 	$(BUILD_DIR)/render/runtime_spectral_film.o \
+	$(BUILD_DIR)/render/runtime_spectral_diffuse.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_source.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_sampling.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_audit.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_trace.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_estimator.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_volume_sampling.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_rectangle.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_volume_diagnostics.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_classes.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_material.o \
+	$(BUILD_DIR)/render/runtime_spectral_surface_path_diagnostics.o \
+	$(BUILD_DIR)/render/runtime_spectral_components.o \
 	$(BUILD_DIR)/render/runtime_spectral_frame.o \
+	$(BUILD_DIR)/render/runtime_spectral_transport.o \
 	$(BUILD_DIR)/render/runtime_spectral_profile.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume.o \
 	$(BUILD_DIR)/render/runtime_spectral_volume_field.o \
+	$(BUILD_DIR)/render/runtime_spectral_phase.o \
 	$(BUILD_DIR)/render/runtime_spectral_reconstruction.o \
 	$(BUILD_DIR)/render/runtime_spectral_reconstruction_domain.o \
 	$(BUILD_DIR)/render/runtime_spectral_reconstruction_mesh.o \

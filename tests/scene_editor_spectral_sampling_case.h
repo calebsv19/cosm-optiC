@@ -14,7 +14,8 @@ spectral_sampling_frame_checks(RuntimeNative3DPreparedFrame *frame) {
   profile.map.samples = 1024;
   profile.sampling = RuntimeSpectralSampling_Defaults();
   profile.sampling.max_passes = 16;
-  profile.sampling.visible_error = profile.sampling.edge_error = 255;
+  profile.sampling.visible_error = profile.sampling.edge_error =
+      profile.sampling.local_error = 255;
   profile.sampling.energy_error = 1;
   size_t bytes = (size_t)frame->width * frame->height * 4;
   uint8_t *a = malloc(bytes), *b = malloc(bytes);

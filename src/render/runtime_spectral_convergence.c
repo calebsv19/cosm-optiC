@@ -87,39 +87,76 @@ static void resolve(Film *f, uint8_t *pixels) {
         vec3_scale(vec3_add(mean(&f->pixels[i], 0), mean(&f->pixels[i], 1)),
                    .5));
 }
-static void measure(Film *f, const RuntimeSpectralSamplingConfig *config,
+static void measure(Film *f, int w, int h, bool full,
+                    const RuntimeSpectralSamplingConfig *config,
                     RuntimeSpectralSamplingStats *st) {
   double lit_error = 0, edge_error = 0, total_y = 0, delta_y = 0;
   size_t lit = 0, edges = 0;
-  for (size_t i = 0; i < f->count; ++i) {
-    Vec3 a = mean(&f->pixels[i], 0), b = mean(&f->pixels[i], 1);
-    double dx = (display(a.x) - display(b.x)) * .5,
-           dy = (display(a.y) - display(b.y)) * .5,
-           dz = (display(a.z) - display(b.z)) * .5;
-    double error = (dx * dx + dy * dy + dz * dz) / 3;
-    /* Include newly illuminated pixels as well as the independent pilot. */
-    bool visible = f->visible[i] ||
-                   fmax(display(a.x), fmax(display(a.y), display(a.z))) > .5 ||
-                   fmax(display(b.x), fmax(display(b.y), display(b.z))) > .5;
-    if (visible) {
-      lit_error += error;
-      ++lit;
-      if (f->edge[i]) {
-        edge_error += error;
-        ++edges;
-      }
+  st->local_error = 0;
+  st->min_pixel_maps = UINT32_MAX;
+  st->max_pixel_maps = 0;
+  st->min_pixel_samples = UINT32_MAX;
+  st->max_pixel_samples = 0;
+  /* A broad dim patch must not disappear into a frame-wide average. These
+   * display-space blocks measure noise; they do not filter the estimator. */
+  for (int y0 = 0; y0 < h; y0 += 16)
+    for (int x0 = 0; x0 < w; x0 += 16) {
+      double block_error = 0;
+      size_t block_lit = 0;
+      for (int y = y0; y < h && y < y0 + 16; ++y)
+        for (int x = x0; x < w && x < x0 + 16; ++x) {
+          size_t i = (size_t)y * w + x;
+          uint32_t count = f->pixels[i].count[0] + f->pixels[i].count[1];
+          if (count < st->min_pixel_maps) st->min_pixel_maps = count;
+          if (count > st->max_pixel_maps) st->max_pixel_maps = count;
+          count *= st->camera_samples_per_map;
+          if (count < st->min_pixel_samples)
+            st->min_pixel_samples = count;
+          if (count > st->max_pixel_samples)
+            st->max_pixel_samples = count;
+          Vec3 a = mean(&f->pixels[i], 0), b = mean(&f->pixels[i], 1);
+          double dx = (display(a.x) - display(b.x)) * .5,
+                 dy = (display(a.y) - display(b.y)) * .5,
+                 dz = (display(a.z) - display(b.z)) * .5;
+          double error = (dx * dx + dy * dy + dz * dz) / 3;
+          /* Include newly illuminated pixels as well as the independent pilot.
+           */
+          bool visible =
+              f->visible[i] ||
+              fmax(display(a.x), fmax(display(a.y), display(a.z))) > .5 ||
+              fmax(display(b.x), fmax(display(b.y), display(b.z))) > .5;
+          if (visible) {
+            lit_error += error;
+            ++lit;
+            block_error += error;
+            ++block_lit;
+            if (f->edge[i]) {
+              edge_error += error;
+              ++edges;
+            }
+          }
+          total_y += (luminance(a) + luminance(b)) * .5;
+          delta_y += (luminance(a) - luminance(b)) * .5;
+        }
+      if (block_lit)
+        st->local_error = fmax(st->local_error, sqrt(block_error / block_lit));
     }
-    total_y += (luminance(a) + luminance(b)) * .5;
-    delta_y += (luminance(a) - luminance(b)) * .5;
-  }
   st->visible_error = lit ? sqrt(lit_error / lit) : 0;
   st->edge_error = edges ? sqrt(edge_error / edges) : 0;
   st->energy_error = fabs(delta_y) / fmax(fabs(total_y), 1e-20);
   ++st->checkpoints;
-  bool pass = st->visible_error <= config->visible_error &&
-              st->edge_error <= config->edge_error &&
-              st->energy_error <= config->energy_error;
-  st->consecutive = pass ? st->consecutive + 1 : 0;
+  bool pass =
+      st->visible_error <= config->visible_error &&
+      st->edge_error <= config->edge_error &&
+      st->local_error <= (config->local_error > 0 ? config->local_error
+                                                  : config->visible_error) &&
+      st->energy_error <= config->energy_error;
+  if (full)
+    ++st->full_checkpoints;
+  /* Sparse checkpoints reuse interior data: they can request validation but
+   * cannot provide a second independent full-camera acceptance checkpoint. */
+  st->validation_pending = pass && !full;
+  st->consecutive = pass && full ? st->consecutive + 1 : 0;
   st->converged = st->passes >= config->min_passes && st->consecutive >= 2;
 }
 static bool sample_map(const RuntimeSpectralFrame *source,
@@ -128,17 +165,24 @@ static bool sample_map(const RuntimeSpectralFrame *source,
                        const RuntimeNative3DTileSchedulerCancelToken *cancel,
                        RuntimeSpectralReadout *readout,
                        RuntimeNative3DTileSchedulerProgressCallback progress,
-                       void *user, int completed, int started, char *diag,
+                       void *user, int completed, int started, unsigned camera_sample,
+                       char *diag,
                        size_t size) {
   RuntimeSpectralSamplingStats previous = readout->sampling;
-  *readout = (RuntimeSpectralReadout){.map = source->stats, .sampling = previous};
+  *readout =
+      (RuntimeSpectralReadout){.map = source->stats, .sampling = previous};
+  RuntimeNative3DSamplingContext camera = RuntimeSpectralSampling_CameraForMap(
+      source->profile.sampling.camera_seed, started ? started - 1 : 0,
+      camera_sample, readout->sampling.camera_samples_per_map);
+  const RuntimeNative3DSamplingContext *camera_ptr =
+      started && source->profile.sampling.progressive_camera ? &camera : NULL;
   for (int y = 0; y < frame->height; y += 8) {
     if (canceled(cancel))
       return false;
     int end = y + 8 < frame->height ? y + 8 : frame->height;
     if (!RuntimeSpectralFilm_Sample(&source->profile, source->map, frame, y,
-                                    end, dx, dy, mask, film->sample, readout,
-                                    diag, size))
+                                    end, dx, dy, camera_ptr, mask, film->sample,
+                                    readout, diag, size))
       return false;
     if (progress) {
       RuntimeNative3DTileSchedulerProgress p = {
@@ -147,8 +191,10 @@ static bool sample_map(const RuntimeSpectralFrame *source,
           .totalSubpasses = source->profile.sampling.max_passes
                                 ? source->profile.sampling.max_passes
                                 : completed + 8,
-          .completedTilesInSubpass = (size_t)(end + 7) / 8,
-          .totalTilesInSubpass = (size_t)(frame->height + 7) / 8};
+          .completedTilesInSubpass =
+              (size_t)camera_sample * ((frame->height + 7) / 8) + (end + 7) / 8,
+          .totalTilesInSubpass = (size_t)(frame->height + 7) / 8 *
+              (started ? readout->sampling.camera_samples_per_map : 1)};
       if (!progress(&p, user)) {
         snprintf(diag, size, "Spectral progress publication failed.");
         return false;
@@ -164,15 +210,31 @@ bool RuntimeSpectralConvergence_Render(
     RuntimeNative3DTileSchedulerProgressCallback progress, void *user,
     RuntimeSpectralReadout *out, char *diag, size_t size) {
   Film film = {0};
-  RuntimeSpectralSamplingStats st = {.enabled = true};
+  RuntimeSpectralSamplingStats st = {
+      .enabled = true,
+      .camera_samples_per_map = profile->sampling.camera_samples_per_map
+                                    ? profile->sampling.camera_samples_per_map : 1,
+      .full_camera = profile->sampling.full_camera,
+      .progressive_camera = profile->sampling.progressive_camera,
+      .camera_seed = profile->sampling.camera_seed_set
+                         ? profile->sampling.camera_seed
+                         : profile->map.seed};
   const RuntimeScene3D *scene =
       frame->traceScene ? frame->traceScene : &frame->scene;
   RuntimeSpectralPencil current = *profile;
+  current.sampling.camera_seed = st.camera_seed;
+  current.sampling.camera_seed_set = true;
   RuntimeSpectralFrame *map = NULL;
   bool ok = false;
   Vec3 center_sum = vec3(0, 0, 0);
   double sensors[4] = {0};
   unsigned center_count = 0;
+  if ((st.camera_samples_per_map != 1 && st.camera_samples_per_map != 2 &&
+       st.camera_samples_per_map != 4 && st.camera_samples_per_map != 8) ||
+      (st.camera_samples_per_map > 1 && !profile->sampling.progressive_camera)) {
+    snprintf(diag, size, "Camera bundles require progressive sampling and 1/2/4/8 rays per map.");
+    goto done;
+  }
   if (!profile->sampling.enabled || !profile->map.enabled ||
       !allocate(&film, frame->width, frame->height)) {
     snprintf(diag, size,
@@ -193,12 +255,13 @@ bool RuntimeSpectralConvergence_Render(
         .totalSubpasses = profile->sampling.max_passes};
     out->sampling = st;
     if (!progress(&preparing, user)) {
-      snprintf(diag,size,"Spectral progress publication failed."); goto done;
+      snprintf(diag, size, "Spectral progress publication failed.");
+      goto done;
     }
   }
   map = RuntimeSpectralFrame_Create(&current, scene, diag, size);
   if (!map || !sample_map(map, frame, &film, 0, 0, NULL, cancel, out, progress,
-                          user, 0, 0, diag, size))
+                          user, 0, 0, 0, diag, size))
     goto done;
   pilot_mask(&film, frame->width, frame->height, &st);
   RuntimeSpectralFrame_Free(map);
@@ -207,7 +270,8 @@ bool RuntimeSpectralConvergence_Render(
     if (canceled(cancel))
       goto done;
     int batch = pass / 8;
-    bool full = batch % 4 == 0;
+    bool full = profile->sampling.full_camera || batch % 4 == 0 ||
+                st.consecutive > 0 || st.validation_pending;
     /* A shared mask gives equal sample counts in both four-quadrant groups.
      * Periodic full batches also refresh low-signal and newly visible areas. */
     for (int y = 0; y < frame->height; ++y)
@@ -233,30 +297,47 @@ bool RuntimeSpectralConvergence_Render(
     if (!map)
       goto done;
     double dx, dy;
-    RuntimeSpectralSampling_Jitter(profile->map.seed, pass, &dx, &dy);
-    if (!sample_map(map, frame, &film, dx, dy, film.mask, cancel, out, progress,
-                    user, st.passes, st.passes + 1, diag, size))
-      goto done;
+    RuntimeSpectralSampling_Jitter(st.camera_seed, pass, &dx, &dy);
+    int group = (pass % 8) / 4;
     size_t center =
         (size_t)(frame->height / 2) * frame->width + frame->width / 2;
-    if (film.mask[center]) {
-      center_sum = vec3_add(center_sum, out->center_pixel_xyz);
-      ++center_count;
-      for (int i = 0; i < 4; ++i)
-        sensors[i] += out->sensor_signal[i];
+    Vec3 map_center = vec3(0, 0, 0);
+    double map_sensors[4] = {0};
+    double weight = 1.0 / st.camera_samples_per_map;
+    for (unsigned ray = 0; ray < st.camera_samples_per_map; ++ray) {
+      if (!sample_map(map, frame, &film, dx, dy, film.mask, cancel, out, progress,
+                      user, st.passes, st.passes + 1, ray, diag, size))
+        goto done;
+      if (film.mask[center]) {
+        map_center = vec3_add(map_center, vec3_scale(out->center_pixel_xyz, weight));
+        for (int i = 0; i < 4; ++i)
+          map_sensors[i] += out->sensor_signal[i] * weight;
+      }
+      for (size_t i = 0; i < film.count; ++i)
+        if (film.mask[i]) {
+          Vec3 value = vec3(film.sample[4 * i], film.sample[4 * i + 1],
+                            film.sample[4 * i + 2]);
+          if (!isfinite(value.x) || !isfinite(value.y) || !isfinite(value.z)) {
+            snprintf(diag, size, "Non-finite spectral camera contribution.");
+            goto done;
+          }
+          film.pixels[i].sum[group] =
+              vec3_add(film.pixels[i].sum[group], vec3_scale(value, weight));
+        }
     }
-    int group = (pass % 8) / 4;
+    /* Commit only a complete bundle. Pixel counts/checkpoints count independent
+     * maps, never the correlated camera rays sharing one map. A failed bundle
+     * is never resolved or published as a completed pass. */
+    if (canceled(cancel)) goto done;
+    if (film.mask[center]) {
+      center_sum = vec3_add(center_sum, map_center);
+      ++center_count;
+      for (int i = 0; i < 4; ++i) sensors[i] += map_sensors[i];
+    }
     for (size_t i = 0; i < film.count; ++i)
       if (film.mask[i]) {
-        Vec3 value = vec3(film.sample[4 * i], film.sample[4 * i + 1],
-                          film.sample[4 * i + 2]);
-        if (!isfinite(value.x) || !isfinite(value.y) || !isfinite(value.z)) {
-          snprintf(diag, size, "Non-finite spectral camera contribution.");
-          goto done;
-        }
-        film.pixels[i].sum[group] = vec3_add(film.pixels[i].sum[group], value);
         ++film.pixels[i].count[group];
-        ++st.camera_samples;
+        st.camera_samples += st.camera_samples_per_map;
       }
     ++st.passes;
     if (full)
@@ -265,7 +346,8 @@ bool RuntimeSpectralConvergence_Render(
     map = NULL;
     if (st.passes % 8 == 0) {
       resolve(&film, pixels);
-      measure(&film, &profile->sampling, &st);
+      measure(&film, frame->width, frame->height, full, &profile->sampling,
+              &st);
       st.pass_limit = !st.converged && profile->sampling.max_passes &&
                       st.passes >= profile->sampling.max_passes;
       out->sampling = st;

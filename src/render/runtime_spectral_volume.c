@@ -60,15 +60,17 @@ static double phase(double mu, double g) {
     double d = 1 + g * g - 2 * g * fmax(-1, fmin(1, mu));
     return (1 - g * g) / (4 * M_PI * d * sqrt(d));
 }
-static Vec3 scatter_direction(Vec3 incoming, double g, double u, double phi, double *mu) {
+static double hg_sample(double g, double u) {
     /* Algebraically expanded HG inversion has a continuous isotropic limit. */
     double q = 2 * u - 1, den = 1 + g * q;
-    *mu = fmax(
+    return fmax(
         -1, fmin(1, (2 * q + g * (q * q + 3) + 2 * g * g * q + g * g * g * (q * q - 1)) / (2 * den * den)));
+}
+static Vec3 scatter_direction(Vec3 incoming, double phi, double mu) {
     Vec3 axis = fabs(incoming.z) < .9 ? vec3(0, 0, 1) : vec3(0, 1, 0);
     Vec3 x = vec3_normalize(vec3_cross(axis, incoming)), y = vec3_cross(incoming, x);
     Vec3 radial = vec3_add(vec3_scale(x, cos(phi)), vec3_scale(y, sin(phi)));
-    return vec3_add(vec3_scale(incoming, *mu), vec3_scale(radial, sqrt(fmax(0, 1 - *mu * *mu))));
+    return vec3_add(vec3_scale(incoming, mu), vec3_scale(radial, sqrt(fmax(0, 1 - mu * mu))));
 }
 double RuntimeSpectralVolume_Transmission(const RuntimeSpectralVolume *v, Ray3D ray, double t, double nm) {
     if (!v) return 1;
@@ -81,14 +83,17 @@ double RuntimeSpectralVolume_Transmission(const RuntimeSpectralVolume *v, Ray3D 
         mass += spectral_field_mass(&it, a, b);
     return exp(-mass * st);
 }
-static double source_term(const RuntimeSpectralVolume *v, Ray3D ray, double midpoint, int band,
+static double source_term(const RuntimeSpectralVolume *v, Ray3D ray, double midpoint, int band, double nm,
                           double *first) {
     double vol, sum = 0;
     uint64_t cell = cell_at(v, vec3_add(ray.origin, vec3_scale(ray.direction, midpoint)), &vol);
     for (int k = v->heads[spectral_volume_bucket(cell, band)]; k; k = v->points[k - 1].next) {
         const SpectralCollision *p = &v->points[k - 1];
         if (p->cell == cell && p->band == band) {
-            double x = p->watts * phase(-vec3_dot(p->incoming, ray.direction), v->config.g);
+            double mu = -vec3_dot(p->incoming, ray.direction);
+            double angular = v->mie_phase ? spectral_phase_value(v->mie_phase, nm, mu)
+                                          : phase(mu, v->config.g);
+            double x = p->watts * angular;
             sum += x;
             if (p->first) *first += x;
         }
@@ -124,18 +129,18 @@ static double camera_length(const SpectralFieldRay *it, double a, double b, doub
 static double continuous_camera(RuntimeSpectralVolume *v, Ray3D ray, int band,
                                 const SpectralFieldRay *it, double a, double b,
                                 double st, double tau, double *first,
-                                int depth) {
+                                int depth, double *budget, double *first_budget) {
     if(tau>.25) {
         double mid=a+(b-a)*.5;
         if(mid>a && mid<b) {
             double left_tau=st*spectral_field_mass(it,a,mid),left_first=0,right_first=0;
             double left = continuous_camera(v, ray, band, it, a, mid, st,
-                                            left_tau, &left_first, depth + 1),
+                                            left_tau, &left_first, depth + 1, budget, first_budget),
                    right = 0;
             if (left_tau < 40)
                 right = continuous_camera(v, ray, band, it, mid, b, st,
                                           st * spectral_field_mass(it, mid, b),
-                                          &right_first, depth + 1);
+                                          &right_first, depth + 1, budget, first_budget);
             *first+=left_first+exp(-left_tau)*right_first;
             return left+exp(-left_tau)*right;
         }
@@ -167,23 +172,42 @@ static double continuous_camera(RuntimeSpectralVolume *v, Ray3D ray, int band,
             coarse += weight * value;
             coarse_first += weight * single;
         }
-        if (fabs(sum - coarse) > 1e-5 * fmax(fabs(sum), 1e-300) ||
-            fabs(first_sum - coarse_first) >
-                1e-5 * fmax(fabs(first_sum), 1e-300)) {
+        /* Share the absolute allowance across the original interval.
+         * Tiny support-edge contributions can retain large local relative
+         * residuals even when their absolute residual is negligible. */
+        double extra = fmax(0, fabs(sum - coarse) - 1e-5 * fmax(fabs(sum), 1e-300));
+        double extra_first = fmax(0, fabs(first_sum - coarse_first) -
+                                      1e-5 * fmax(fabs(first_sum), 1e-300));
+        if (v->config.reconstruction == SPECTRAL_RECONSTRUCTION_KERNEL) {
+            if (*budget < 0) *budget = 1e-6 * fmax(sum, coarse);
+            /* First scatter is a component of total radiance. It may
+             * be absent at all parent quadrature points. */
+            if (*first_budget < 0) *first_budget = 1e-6 * fmax(sum, coarse);
+        }
+        if (extra > 0 || extra_first > 0) {
             double mid = a + (b - a) * .5;
             if (depth >= 24 || !(mid > a && mid < b)) {
-                spectral_reconstruction_fail(
-                    v->reconstruction,
-                    "continuous mesh camera quadrature did not converge");
+                if (extra <= fmax(0, *budget) &&
+                    extra_first <= fmax(0, *first_budget)) {
+                    *budget -= extra;
+                    *first_budget -= extra_first;
+                    *first += first_sum;
+                    return sum;
+                }
+                char message[192];
+                snprintf(message, sizeof(message),
+                         "mesh quadrature residual %.4g/%.4g first %.4g/%.4g at depth %d",
+                         extra, *budget, extra_first, *first_budget, depth);
+                spectral_reconstruction_fail(v->reconstruction, message);
                 return NAN;
             }
             double left_tau = st * spectral_field_mass(it, a, mid),
                    left_first = 0, right_first = 0;
             double left = continuous_camera(v, ray, band, it, a, mid, st,
-                                            left_tau, &left_first, depth + 1);
+                                            left_tau, &left_first, depth + 1, budget, first_budget);
             double right = continuous_camera(
                 v, ray, band, it, mid, b, st,
-                st * spectral_field_mass(it, mid, b), &right_first, depth + 1);
+                st * spectral_field_mass(it, mid, b), &right_first, depth + 1, budget, first_budget);
             *first += left_first + exp(-left_tau) * right_first;
             return left + exp(-left_tau) * right;
         }
@@ -214,15 +238,15 @@ bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectr
         if (camera) {
             if (v->heads && ss > 0) {
                 if(v->config.reconstruction) {
-                    double first=0;
+                    double first=0, budget=-1, first_budget=-1;
                     double value = continuous_camera(v, *ray, line->band, &it,
-                                                     a, b, st, tau, &first, 0);
+                                                     a, b, st, tau, &first, 0, &budget, &first_budget);
                     if (!isfinite(value))
                         return false;
                     out->inscattered+=out->weight*value;
                     out->single_scatter+=out->weight*first;
                 } else {
-                double first = 0, j = source_term(v, *ray, (a + b) * .5, line->band, &first);
+                double first = 0, j = source_term(v, *ray, (a + b) * .5, line->band, line->vacuum_nm, &first);
                 if (j) {
                     double weight = out->weight * camera_length(&it, a, b, st, tau);
                     out->inscattered += weight * j;
@@ -252,9 +276,10 @@ bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectr
             }
             Vec3 p = vec3_add(ray->origin, vec3_scale(ray->direction, t));
             if (!store_point(v, p, ray->direction, line->band, out->weight, !out->scatters)) return false;
-            double mu;
-            Vec3 dir = scatter_direction(ray->direction, v->config.g, RuntimeSpectral_Uniform64(id + 2),
-                                         2 * M_PI * RuntimeSpectral_Uniform64(id + 3), &mu);
+            double u = RuntimeSpectral_Uniform64(id + 2);
+            double mu = v->mie_phase ? spectral_phase_sample(v->mie_phase, line->vacuum_nm, u)
+                                     : hg_sample(v->config.g, u);
+            Vec3 dir = scatter_direction(ray->direction, 2 * M_PI * RuntimeSpectral_Uniform64(id + 3), mu);
             RuntimeSpectralBand *row = &v->ledger[line->band];
             ++row->collisions;
             row->cosine_sum += mu;
@@ -269,6 +294,38 @@ bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *v, const RuntimeSpectr
     }
     return true;
 }
+bool RuntimeSpectralVolume_SpecularSegment(RuntimeSpectralVolume *v,
+    const RuntimeSpectralPencilLine *line, Ray3D ray, double limit, int step,
+    RuntimeSpectralPathReadout *out) {
+    double sa = RuntimeSpectralCurve_Value(&v->config.absorption, line->vacuum_nm);
+    double ss = RuntimeSpectralCurve_Value(&v->config.scattering, line->vacuum_nm);
+    double st = sa + ss;
+    SpectralFieldRay interval;
+    if (!(st > 0) || !spectral_field_begin(&interval, v, ray, limit, false)) return true;
+
+    /* Split the ballistic and first-scattered energy without changing the
+     * launch, geometric path, Fresnel choices or surface deposition radius. */
+    double tau = st * (interval.end - interval.t);
+    double collision_probability = -expm1(-tau);
+    double removed = out->weight * collision_probability;
+    double scattered = removed * (ss / st);
+    out->weight *= exp(-tau);
+    out->medium_absorbed_w += removed * (sa / st);
+    out->medium_scattered_w += scattered;
+    if (!out->interfaces || !(scattered > 0)) return true;
+
+    /* Sample a collision conditioned on it occurring within this segment.
+     * The stored weight already includes sigma_s and pre-collision extinction. */
+    uint64_t id = line->sample_id ^ ((uint64_t)step * UINT64_C(0x9e3779b97f4a7c15)) ^
+                  UINT64_C(0x5bac01401bc5dafe);
+    double t = interval.t - log1p(-RuntimeSpectral_Uniform64(id) * collision_probability) / st;
+    Vec3 point = vec3_add(ray.origin, vec3_scale(ray.direction, t));
+    if (!store_point(v, point, ray.direction, line->band, scattered, true)) return false;
+    ++v->ledger[line->band].collisions;
+    v->ledger[line->band].first_scatter_w += scattered;
+    return true;
+}
+
 void RuntimeSpectralVolume_ScatterStats(const RuntimeSpectralVolume *v, RuntimeSpectralMapStats *st) {
     spectral_reconstruction_stats(v,st);
     for (int b = 0; b < st->band_count; ++b) {

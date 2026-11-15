@@ -1,4 +1,5 @@
 #include "render/runtime_spectral_film.h"
+#include "render/runtime_spectral_transport.h"
 #include "app/agent_render_request_internal.h"
 #include "app/evaluated_scene_service.h"
 #include "render/runtime_volume_3d_integrate.h"
@@ -1355,21 +1356,10 @@ static bool runtime_native_3d_prepare_frame_internal(
     out_frame->traceScene = &out_frame->scene;
     runtime_native_3d_prepare_bind_scene_for_frame(&out_frame->scene, true);
     if (animSettings.integratorMode3D == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
-        RuntimeSpectralPencil saved={0};
-        char diag[256]="Invalid spectral_transport_v1 profile in the current scene.";
-        bool ok=!out_frame->scene.volume.enabled;
-        if (!ok) snprintf(diag,sizeof(diag),"V3 volumes require a spectral participating_volume_v1 profile.");
-        if (ok && !profile && animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE && animSettings.runtimeScenePath[0]) {
-            json_object *document=json_object_from_file(animSettings.runtimeScenePath);
-            ok=document && RuntimeSpectralProfile_FromScene(document,animSettings.runtimeScenePath,false,&saved);
-            if (document) json_object_put(document);
-            profile=&saved;
-        }
-        if (ok && profile && profile->map.enabled) {
-            out_frame->spectralFrame=RuntimeSpectralFrame_Create(profile,&out_frame->scene,diag,sizeof(diag));
-            ok=out_frame->spectralFrame!=NULL;
-            out_frame->tileOccupancyConservativeAllTiles=true;
-        }
+        char diag[256]="V3 transport preparation failed";
+        bool ok=RuntimeSpectralTransport_Prepare(out_frame,profile,
+            animSettings.sceneSource==SCENE_SOURCE_RUNTIME_SCENE?animSettings.runtimeScenePath:NULL,
+            animSettings.interactiveMode && !animSettings.deepRenderMode?RUNTIME_SPECTRAL_PREVIEW:RUNTIME_SPECTRAL_FINAL,diag,sizeof(diag));
         if (!ok) {
             runtime_native_3d_prepare_frame_set_diag(diag);
             RuntimeNative3DPreparedFrame_Free(out_frame);

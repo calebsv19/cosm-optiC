@@ -1,6 +1,7 @@
 #pragma once
 #include "render/runtime_spectral_volume.h"
 #include "render/runtime_water_body_mesh_3d.h"
+#include "runtime_spectral_phase.h"
 
 typedef struct {
     Vec3 incoming;
@@ -14,6 +15,7 @@ struct RuntimeSpectralVolume {
     SpectralReconstruction *reconstruction;
     Vec3 *positions; /* Only continuous modes allocate collision positions. */
     RuntimeSpectralVolumeConfig config;
+    SpectralPhase *mie_phase;
     RuntimeVolumeAttachment3D vf;
     RuntimeWaterBodyMesh3DDesc water;
     float *heights;

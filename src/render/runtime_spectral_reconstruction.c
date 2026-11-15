@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void kernel_free(SpectralReconstruction *);
 static double axis(Vec3 p, int a) { return a == 0 ? p.x : a == 1 ? p.y : p.z; }
 bool spectral_reconstruction_fail(SpectralReconstruction *r, const char *message) {
     snprintf(r->error, sizeof(r->error), "%s", message);
@@ -35,8 +36,16 @@ void *spectral_reconstruction_resize(SpectralReconstruction *r, void *old, size_
 void spectral_reconstruction_free(SpectralReconstruction *r) {
     if (!r)
         return;
+    kernel_free(r);
     spectral_domain_free(&r->domain);
     free(r->source_cache);
+    free(r->support_cache);
+    free(r->support_cells);
+    free(r->support_next);
+    free(r->support_bitmap[0]);
+    free(r->support_bitmap[1]);
+    free(r->support_flux);
+    free(r->support_levels);
     free(r->mesh_quadrature);
     free(r->nodes);
     free(r->links);
@@ -64,6 +73,16 @@ bool RuntimeSpectralVolume_BindScene(RuntimeSpectralVolume *v, const RuntimeScen
         snprintf(diag, size, "%s", r->error);
         return false;
     }
+    if (v->config.reconstruction_cell_m > 0 && v->config.reconstruction_cell_m != v->config.cell_m && r->domain.mesh.count) {
+        snprintf(diag, size, "independent reconstruction spacing currently requires no intersecting mesh");
+        return false;
+    }
+    if (v->config.reconstruction_cell_m > 0 && v->config.reconstruction_cell_m != v->config.cell_m)
+        for (int i=1;i<=r->domain.region_count;i++)
+            if (!r->domain.regions[i].rectangular) {
+                snprintf(diag,size,"independent support requires rectangular occupied components");
+                return false;
+            }
     return true;
 }
 const char *RuntimeSpectralVolume_Error(const RuntimeSpectralVolume *v) {
@@ -73,7 +92,7 @@ const char *RuntimeSpectralVolume_Error(const RuntimeSpectralVolume *v) {
 }
 void spectral_reconstruction_basis(const RuntimeSpectralVolume *v, double x, int a, int level,
                                    int id[2], double w[2]) {
-    double lo = axis(v->lo, a), hi = axis(v->hi, a), h = v->config.cell_m * (level ? 2 : 1);
+    double lo = axis(v->lo, a), hi = axis(v->hi, a), h = spectral_reconstruction_spacing(v) * (level ? 2 : 1);
     int last = (int)ceil((hi - lo) / h), k = (int)fmax(0, fmin(last - 1, floor((x - lo) / h)));
     double left = lo + k * h, right = fmin(hi, left + h),
            u = fmax(0, fmin(1, (x - left) / (right - left)));
@@ -122,12 +141,34 @@ static int level_for(const RuntimeSpectralVolume *v, const SpectralCollision *p)
     }
     return 1;
 }
+#include "runtime_spectral_reconstruction_support.h"
+#include "runtime_spectral_reconstruction_kernel.h"
 bool spectral_reconstruction_build(RuntimeSpectralVolume *v) {
     SpectralReconstruction *r = v->reconstruction;
     if (!r)
         return !v->config.reconstruction;
     if (r->built)
         return true;
+    if (v->config.reconstruction==SPECTRAL_RECONSTRUCTION_KERNEL) return kernel_build(v);
+    if (support_independent(v)) {
+        if (!support_prepare(v)) return false;
+        if (!v->count) { r->built=true;return true; }
+        size_t transport=(size_t)v->capacity*(sizeof(SpectralCollision)+sizeof(Vec3))+
+                         (v->heads?65536*sizeof(int):0);
+        size_t available=r->owned_bytes+transport<r->budget_bytes
+                             ? r->budget_bytes-r->owned_bytes-transport : 0;
+        size_t geometry_bytes=SPECTRAL_SOURCE_CACHE_SIZE*sizeof(SpectralSourceStencil);
+        if (!v->config.disable_camera_cache && available>geometry_bytes) available-=geometry_bytes;
+        r->support_cache_size=SUPPORT_CACHE_SIZE;
+        while (r->support_cache_size>1024 &&
+               r->support_cache_size*sizeof(*r->support_cache)>available)
+            r->support_cache_size/=2;
+        size_t bytes=r->support_cache_size*sizeof(*r->support_cache);
+        r->support_cache=spectral_reconstruction_resize(r,NULL,0,bytes);
+        if (!r->support_cache) return false;
+        r->built=true;
+        return true;
+    }
     if (!grow_slots(r))
         return false;
     for (int i = 0; i < v->count; i++) {
@@ -297,6 +338,9 @@ bool spectral_reconstruction_begin_ray(RuntimeSpectralVolume *v, Ray3D ray) {
         }
         if (++r->generation == 0) {
             memset(r->angular, 0, sizeof(r->angular));
+            if (r->support_cache)
+                memset(r->support_cache,0,r->support_cache_size*sizeof(*r->support_cache));
+            kernel_reset_phases(r);
             r->generation = 1;
         }
     }
@@ -454,7 +498,8 @@ static bool source_cache_ready(SpectralReconstruction *r) {
     if (!r->source_cache_attempted) {
         r->source_cache_attempted = true;
         size_t bytes = SPECTRAL_SOURCE_CACHE_SIZE * sizeof(*r->source_cache);
-        size_t transport = (size_t)r->volume->capacity * sizeof(SpectralCollision) +
+        size_t transport = (size_t)r->volume->capacity *
+                               (sizeof(SpectralCollision)+(r->volume->positions?sizeof(Vec3):0)) +
                            (r->volume->heads ? 65536 * sizeof(int) : 0);
         if (r->built && bytes <= r->budget_bytes &&
             r->owned_bytes + transport <= r->budget_bytes - bytes) {
@@ -469,6 +514,8 @@ static bool source_cache_ready(SpectralReconstruction *r) {
 }
 double spectral_reconstruction_source(RuntimeSpectralVolume *v, Vec3 p, int band, double *first) {
     SpectralReconstruction *r = v->reconstruction;
+    if (v->config.reconstruction==SPECTRAL_RECONSTRUCTION_KERNEL) return kernel_source(v,p,band,first);
+    if (support_independent(v)) return support_source(v,p,band,first);
     if (v->config.disable_camera_cache || !source_cache_ready(r))
         return source_reference(v, p, band, first);
     if (r->source_cursor == SPECTRAL_SOURCE_CACHE_SIZE) {

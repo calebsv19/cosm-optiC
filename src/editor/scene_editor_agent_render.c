@@ -1,3 +1,4 @@
+#include "editor/scene_editor_spectral_profile.h"
 #include "editor/scene_editor_agent_render.h"
 #include "editor/scene_editor_render_control.h"
 #include "editor/scene_editor_document.h"
@@ -6,9 +7,18 @@
 #include <string.h>
 static json_object* get(json_object* p,const char* key) {json_object* v=NULL;if(json_object_is_type(p,json_type_object)) json_object_object_get_ex(p,key,&v);return v;}
 static bool integer(json_object* p,const char* key,int* out) {json_object* v=get(p,key);if(!json_object_is_type(v,json_type_int) || json_object_get_int64(v)<0 || json_object_get_int64(v)>INT_MAX) return false;*out=json_object_get_int(v);return true;}
-bool SceneEditorAgentRenderReadOnly(const char* name) {return !strcmp(name,"render.read") || !strcmp(name,"render.status") || !strcmp(name,"render.results");}
+bool SceneEditorAgentRenderReadOnly(const char* name) {return !strcmp(name,"render.profile_read") || !strcmp(name,"render.read") || !strcmp(name,"render.status") || !strcmp(name,"render.results");}
 bool SceneEditorAgentRenderDispatch(const char* name,json_object* p,json_object* response,char* message,size_t size) {
     if(!json_object_is_type(p,json_type_object)) goto invalid;
+    if(!strcmp(name,"render.profile_read")) {
+        if(json_object_object_length(p))goto invalid;
+        json_object *value=SceneEditorSpectralProfileRead();if(!value)goto invalid;
+        json_object_object_add(response,"spectral_profile",value);return true;
+    }
+    if(!strcmp(name,"render.profile_set")) {
+        if(json_object_object_length(p)!=2)goto invalid;
+        return SceneEditorSpectralProfileSet(get(p,"profile"),SceneEditorDocumentRevision(),message,size);
+    }
     if(!strcmp(name,"render.read")) {if(json_object_object_length(p)) goto invalid;json_object_object_add(response,"render",SceneEditorRenderRead());return true;}
     if(!strcmp(name,"render.status") || !strcmp(name,"render.results")) {
         if(json_object_object_length(p)!=1 || !json_object_is_type(get(p,"job_id"),json_type_string)) goto invalid;
@@ -27,8 +37,10 @@ bool SceneEditorAgentRenderDispatch(const char* name,json_object* p,json_object*
             const char *value=json_object_get_string(deposition);
             if(!strcmp(value,"surface")) o.deposition=EDITOR_SPECTRAL_SURFACE;
             else if(!strcmp(value,"surface_volume")) o.deposition=EDITOR_SPECTRAL_SURFACE_VOLUME;
-            else if(strcmp(value,"direct")) goto invalid;
+            else if(strcmp(value,"scene") && strcmp(value,"direct")) goto invalid;
         }
+        json_object *camera_samples=get(p,"camera_samples_override");
+        if(camera_samples && !integer(p,"camera_samples_override",&o.spectral_camera_samples))goto invalid;
         json_object *sampling=get(p,"sampling_override"),*maximum=get(p,"max_passes_override");
         if(sampling && !integer(p,"sampling_override",&o.spectral_sampling)) goto invalid;
         if(maximum && !integer(p,"max_passes_override",&o.spectral_max_passes)) goto invalid;
@@ -48,7 +60,7 @@ bool SceneEditorAgentRenderDispatch(const char* name,json_object* p,json_object*
                json_object_get_int64(exposure)<-1 || json_object_get_int64(exposure)>2) goto invalid;
             o.spectral_exposure_stops=json_object_get_int(exposure);
         }
-        if(json_object_object_length(p)!=(seeded?8:7)+(deposition!=NULL)+(exposure!=NULL)+(photons!=NULL)+(gather!=NULL)+(sampling!=NULL)+(maximum!=NULL) || !json_object_is_type(mode,json_type_string) || !json_object_is_type(id,json_type_string) || !integer(p,"width",&o.width) || !integer(p,"height",&o.height) || !integer(p,"temporal_frames",&o.temporal_frames) || !integer(p,"frame",&o.frame)) goto invalid;
+        if(json_object_object_length(p)!=(seeded?8:7)+(deposition!=NULL)+(exposure!=NULL)+(photons!=NULL)+(gather!=NULL)+(sampling!=NULL)+(maximum!=NULL)+(camera_samples!=NULL) || !json_object_is_type(mode,json_type_string) || !json_object_is_type(id,json_type_string) || !integer(p,"width",&o.width) || !integer(p,"height",&o.height) || !integer(p,"temporal_frames",&o.temporal_frames) || !integer(p,"frame",&o.frame)) goto invalid;
         if(seeded) {
             json_object *sequence=get(p,"sample_sequence");
             if(!json_object_is_type(sequence,json_type_int)||json_object_get_int64(sequence)<1||json_object_get_int64(sequence)>UINT32_MAX)goto invalid;

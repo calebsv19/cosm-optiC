@@ -1,5 +1,6 @@
 #include "render/runtime_direct_light_3d.h"
 #include "render/runtime_spectral_film.h"
+#include "render/runtime_spectral_transport.h"
 #include "render/runtime_spectral_observer.h"
 #include "render/runtime_spectral_volume.h"
 #include <math.h>
@@ -10,14 +11,15 @@ void RuntimeSpectralFrame_Free(RuntimeSpectralFrame *s) {
     if (!s)
         return;
     if (s->query_lock) SDL_DestroyMutex(s->query_lock);
+    RuntimeSpectralSurfacePath_Free(s->surface_path);
     RuntimeSpectralSurfaceMap_Free(s->map);
     RuntimeSpectralVolume_Free(s->profile.active_volume);
     free(s);
 }
 
-RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *profile,
-                                                  const RuntimeScene3D *scene, char *diag, size_t size) {
-    if (!RuntimeSpectralFilm_Supported(scene, profile)) {
+static RuntimeSpectralFrame *create_frame(const RuntimeSpectralPencil *profile,
+    const RuntimeScene3D *scene,int width,int height,char *diag,size_t size) {
+    if (!profile->surface_path.enabled && !profile->legacy_direct && !RuntimeSpectralFilm_Supported(scene, profile)) {
         snprintf(diag, size,
                  "V3 photon deposition requires a closed dielectric, named receiver planes and spectral "
                  "sources.");
@@ -28,7 +30,7 @@ RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *p
         snprintf(diag, size, "Cannot allocate spectral frame.");
         return NULL;
     }
-    if (profile->volume.kind && profile->volume.reconstruction) {
+    if (profile->surface_path.enabled || (profile->volume.kind && profile->volume.reconstruction)) {
         s->query_lock = SDL_CreateMutex();
         if (!s->query_lock) {
             snprintf(diag, size, "Cannot allocate the V3 volume query lock.");
@@ -37,6 +39,14 @@ RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *p
         }
     }
     s->profile = *profile;
+    if (profile->surface_path.enabled) {
+        s->surface_path=RuntimeSpectralSurfacePath_Create(&s->profile,scene,width,height,diag,size);
+        if(!s->surface_path) {RuntimeSpectralFrame_Free(s);return NULL;}
+        RuntimeSpectralSurfacePath_GetMetadata(s->surface_path,&s->readout);
+        return s;
+    }
+    if (profile->legacy_direct) return s;
+
     if (profile->volume.kind) {
         s->profile.active_volume = RuntimeSpectralVolume_Load(&profile->volume, diag, size);
         if (!s->profile.active_volume) {
@@ -59,6 +69,15 @@ RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *p
         return NULL;
     }
     return s;
+}
+
+RuntimeSpectralFrame *RuntimeSpectralFrame_Create(const RuntimeSpectralPencil *profile,
+    const RuntimeScene3D *scene,char *diag,size_t size) {
+    return create_frame(profile,scene,0,0,diag,size);
+}
+RuntimeSpectralFrame *RuntimeSpectralFrame_CreateForFilm(const RuntimeSpectralPencil *profile,
+    const RuntimeScene3D *scene,int width,int height,char *diag,size_t size) {
+    return create_frame(profile,scene,width,height,diag,size);
 }
 
 /* For existing RGB lights and matte surfaces, reconstruct incident and reflected
@@ -85,7 +104,15 @@ bool RuntimeSpectralFrame_Shade(const RuntimeNative3DPreparedFrame *frame, int x
     const RuntimeScene3D *scene = frame->traceScene ? frame->traceScene : &frame->scene;
     if (scene->volume.enabled)
         return false;
-    if (frame->spectralFrame) {
+    if (RuntimeSpectralTransport_IsSurfacePath(frame)) {
+        RuntimeSpectralFrame *s=frame->spectralFrame;
+        if (SDL_LockMutex(s->query_lock)!=0) return false;
+        bool ok=RuntimeSpectralSurfacePath_Region(s->surface_path,frame,x0,y0,x1,y1,NULL,radiance,stride,
+            &s->readout,NULL,s->diagnostic,sizeof(s->diagnostic));
+        SDL_UnlockMutex(s->query_lock);
+        return ok;
+    }
+    if (frame->spectralFrame && !frame->spectralFrame->profile.legacy_direct) {
         const RuntimeSpectralFrame *s = frame->spectralFrame;
         RuntimeSpectralReadout out = {.map = s->stats};
         if (s->query_lock && SDL_LockMutex(s->query_lock) != 0) return false;

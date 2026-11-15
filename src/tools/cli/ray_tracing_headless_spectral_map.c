@@ -109,6 +109,8 @@ void RayTracingHeadlessSpectralMap_Write(FILE *f, const RuntimeSpectralMapStats 
                 b ? "," : "", r->nm, r->launched_w, r->absorbed_w, r->receiver_w, r->escaped_w,
                 r->limited_w, r->optical_loss_w, r->first_scatter_w, r->higher_scatter_w, r->collisions,
                 r->cosine_sum);
+            if (st->fresnel_transport)
+                fprintf(f, ",\"glass_absorbed_w\":%.17g", r->glass_absorbed_w);
             if (rendered)
                 fprintf(f, ",\"center_single_radiance\":%.17g,\"center_multiple_radiance\":%.17g",
                         r->center_single, r->center_multiple);
@@ -135,6 +137,13 @@ void RayTracingHeadlessSpectralMap_Write(FILE *f, const RuntimeSpectralMapStats 
                     row->moment.z / row->watts);
         else
             fprintf(f, "null");
+        if (st->fresnel_transport)
+            fprintf(f, ",\"fresnel_transport\":{\"launched_w\":%.17g,\"receiver_w\":%.17g,"
+                "\"escaped_w\":%.17g,\"glass_absorbed_w\":%.17g,\"medium_absorbed_w\":%.17g,"
+                "\"depth_limited_w\":%.17g,\"other_loss_w\":%.17g,\"reflections\":%llu,\"tir\":%llu}",
+                row->launched_w, row->receiver_w, row->escaped_w, row->glass_absorbed_w,
+                row->absorbed_w, row->limited_w, row->optical_loss_w,
+                row->fresnel_reflections, row->total_internal_reflections);
         if (rendered) fprintf(f, ",\"center_band_radiance\":%.17g", row->center_radiance);
         fputc('}', f);
     }

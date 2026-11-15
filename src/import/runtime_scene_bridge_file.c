@@ -16,8 +16,8 @@ bool runtime_scene_bridge_apply_json_prepared(const char *,RuntimeSceneBridgePre
 #include <stdlib.h>
 #include <string.h>
 
-/* Explicit surface attributes cannot use the size-limited bounds-only preview
- * loader: dropping their mesh also drops the declared chart. */
+/* Surface charts, rigid bindings and optical boundaries need the full mesh.
+ * The preview byte limit must not discard geometry required by a saved job. */
 static bool runtime_scene_bridge_requires_full_surface_meshes(const char *text) {
     json_object *root=json_tokener_parse(text),*objects=NULL,*ext=NULL,*ray=NULL,*authoring=NULL,*rows=NULL;
     bool required=false;
@@ -36,7 +36,23 @@ static bool runtime_scene_bridge_requires_full_surface_meshes(const char *text) 
     }
     ext=ray=NULL;json_object_object_get_ex(root,"extensions",&ext);
     if(ext)json_object_object_get_ex(ext,"ray_tracing",&ray);
-    if(ray)json_object_object_get_ex(ray,"authoring",&authoring);
+    if (ray) {
+        json_object *profile=json_object_object_get(ray,"spectral_transport_v1");
+        json_object *surface=json_object_object_get(profile,"surface_path_v1");
+        json_object *materials=json_object_object_get(surface,"materials");
+        for (size_t i=0;json_object_is_type(materials,json_type_array) &&
+             i<json_object_array_length(materials);++i) {
+            json_object *material=json_object_array_get_idx(materials,i);
+            json_object *model=json_object_object_get(material,"model");
+            if (json_object_is_type(model,json_type_string) &&
+                json_object_get_string_len(model)==sizeof("smooth_glass")-1 &&
+                !strcmp(json_object_get_string(model),"smooth_glass")) {
+                required=true;
+                break;
+            }
+        }
+        json_object_object_get_ex(ray,"authoring",&authoring);
+    }
     if(authoring)json_object_object_get_ex(authoring,"object_materials",&rows);
     for(size_t i=0;json_object_is_type(rows,json_type_array)&&i<json_object_array_length(rows);++i){
         json_object *graph=NULL;json_object_object_get_ex(json_object_array_get_idx(rows,i),"surface_graph",&graph);required|=graph!=NULL;

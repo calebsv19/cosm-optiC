@@ -290,7 +290,6 @@ double spectral_domain_norm(SpectralReconstruction *r, const int id[3],
 double spectral_domain_part_norm(SpectralReconstruction *r, const int id[3],
                                  int level, uint16_t region, int part) {
     RuntimeSpectralVolume *v = r->volume;
-    SpectralDomain *d = &r->domain;
     double h = v->config.cell_m * (level ? 2 : 1), left[3], peak[3], right[3];
     for (int a = 0; a < 3; a++) {
         double lo = component(v->lo, a), hi = component(v->hi, a);
@@ -298,6 +297,12 @@ double spectral_domain_part_norm(SpectralReconstruction *r, const int id[3],
         left[a] = id[a] ? lo + (id[a] - 1) * h : lo;
         right[a] = fmin(hi, peak[a] + h);
     }
+    return spectral_domain_tent_norm(r,left,peak,right,region,part);
+}
+double spectral_domain_tent_norm(SpectralReconstruction *r,const double left[3],
+                                 const double peak[3],const double right[3],
+                                 uint16_t region,int part) {
+    SpectralDomain *d=&r->domain;
     const SpectralDomainRegion *c = &d->regions[region];
     if (c->rectangular) {
         if (part)

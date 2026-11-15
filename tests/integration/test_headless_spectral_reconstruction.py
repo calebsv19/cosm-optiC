@@ -66,6 +66,16 @@ def qualify(cli, root):
         assert exact['spectral_reconstruction']['exact_node_queries']>0
         assert exact['spectral_reconstruction']['owned_bytes']<=256*1024**2
         print(mode,'phase bound and unchanged physical ledgers',approx['spectral_reconstruction'])
+    # Finer evaluation spacing must leave transport and omitted/default output stable.
+    original=run();v['reconstruction_cell_m']=v['cell_m'];equal=run()
+    assert equal['spectral_center_pixel_xyz']==original['spectral_center_pixel_xyz']
+    v['reconstruction_cell_m']=v['cell_m']*.5
+    finer=run();assert physical(finer)==physical(original)
+    assert finer['spectral_reconstruction']['links']==0
+    assert finer['spectral_reconstruction']['owned_bytes']<=256*1024**2
+    for bad in [0,-1,v['cell_m']*.49,v['cell_m']*1.01,'bad',None]:
+        v['reconstruction_cell_m']=bad;run(False)
+    del v['reconstruction_cell_m']
     for key,bad in [('reconstruction','unknown'),('reconstruction','adaptive\0bad'),('phase_tolerance',-.01),('phase_tolerance',.051)]:
         good=v[key];v[key]=bad;run(False);v[key]=good
     v['reconstruction']='box';run(False) # tolerance has no meaning in box mode

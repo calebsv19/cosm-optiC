@@ -1,3 +1,4 @@
+#include "render/runtime_spectral_transport.h"
 #ifndef RAY_TRACING_RENDER_HEADLESS_INTERNAL_H
 #define RAY_TRACING_RENDER_HEADLESS_INTERNAL_H
 
@@ -76,6 +77,7 @@ typedef struct RayTracingHeadlessObjectAuditEntry {
 
 typedef struct RayTracingHeadlessPreflight {
     RuntimeSpectralReadout spectral_readout;
+    RuntimeSpectralTransportSnapshot spectral_transport;
     bool request_loaded;
     bool scene_applied;
     bool volume_attached;

@@ -157,11 +157,15 @@ METHODS['render_start_spectral_convergence']=('render.start','Render V3 with bal
     'max_passes_override':{'type':'integer','minimum':0,'maximum':1048576}})
 
 
+METHODS['render_start_v3']=('render.start','Render the saved/default ordinary V3 scene through the same native job as the UI. Zero camera_samples_override preserves the saved profile; no transport enable switches are needed.',{**METHODS['render_start'][2],'integrator':{'const':'disney_v3_spectral'},'temporal_frames':{'const':1},'camera_samples_override':{'type':'integer','minimum':0,'maximum':8192}})
+METHODS['render_profile_read']=('render.profile_read','Read the saved ordinary V3 profile or its pinned default without rendering or changing the scene.',{})
+METHODS['render_profile_set']=('render.profile_set','Replace the ordinary V3 optical profile through the shared Undo/Redo and Save owner. Opaque surface_path_v1 and explicit legacy_direct_v1 are supported; validation and source ownership are shared with native rendering.',{'profile':{'type':'object'}})
+
 def tool_list():
     result=[]
     for name,(method,description,fields) in METHODS.items():
         properties=dict(fields)
-        if method not in ('sequence.event_planner_read','sequence.event_pick','sequence.event_candidates','sequence.read','sequence.read_section','mesh.read','mesh.import_status','motion_plan.read','follower_orientation.read','path.list','path.read','animation.read','animation.track_read','scene.read','scene.connect','material.list','material.read','material.response_read','object.list','object.read','camera.read','lighting.read','render.read','render.status','render.results'):properties['expected_revision']={'type':'integer','minimum':0}
+        if method not in ('sequence.event_planner_read','sequence.event_pick','sequence.event_candidates','sequence.read','sequence.read_section','mesh.read','mesh.import_status','motion_plan.read','follower_orientation.read','path.list','path.read','animation.read','animation.track_read','scene.read','scene.connect','material.list','material.read','material.response_read','object.list','object.read','camera.read','lighting.read','render.read','render.profile_read','render.status','render.results'):properties['expected_revision']={'type':'integer','minimum':0}
         result.append({'name':name,'description':description,'inputSchema':{
             'type':'object','properties':properties,'required':list(properties),'additionalProperties':False}})
     return result

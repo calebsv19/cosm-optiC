@@ -11,6 +11,10 @@ double RuntimeSpectralVolume_Transmission(const RuntimeSpectralVolume *, Ray3D, 
 /* Handles a single exterior segment. A forward scattering event restarts the ray. */
 bool RuntimeSpectralVolume_Segment(RuntimeSpectralVolume *, const RuntimeSpectralPencilLine *, Ray3D *,
                                    double, bool, int, RuntimeSpectralPathReadout *, bool *);
+/* Ballistic exterior transport for the ordinary glass path. Stores only
+ * first-scatter source terms reached through a specular interface. */
+bool RuntimeSpectralVolume_SpecularSegment(RuntimeSpectralVolume *, const RuntimeSpectralPencilLine *,
+    Ray3D, double, int step, RuntimeSpectralPathReadout *);
 void RuntimeSpectralVolume_ScatterStats(const RuntimeSpectralVolume *, RuntimeSpectralMapStats *);
 
 /* Bind geometry before emitting photons. Continuous modes refuse unsupported boundaries. */

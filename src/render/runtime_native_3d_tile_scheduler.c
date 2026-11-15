@@ -1,3 +1,4 @@
+#include "render/runtime_spectral_transport.h"
 #include "render/runtime_native_3d_tile_scheduler_internal.h"
 #include "render/runtime_spectral_convergence.h"
 
@@ -750,6 +751,14 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
         return false;
     }
 
+    if(integrator_id==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL && RuntimeSpectralTransport_IsSurfacePath(frame)) {
+        if(effective_temporal_frames!=1) {
+            snprintf(frame->spectralFrame->diagnostic,sizeof(frame->spectralFrame->diagnostic),"surface_path_v1 owns its camera samples; temporal_frames must be1");RuntimeSpectralTransport_Finish(frame,false,scheduler_control?scheduler_control->cancelToken:NULL);return false;
+        }
+        bool result=RuntimeSpectralTransport_Render(frame,pixel_buffer,scheduler_control,tile_progress_callback,tile_progress_user_data,out_stats);
+        if(progress_callback)progress_callback(1,result?1:0,1,progress_user_data);
+        return result;
+    }
     if (integrator_id == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL && frame->spectralFrame &&
         frame->spectralFrame->profile.sampling.enabled) {
         /* Whole-frame convergence owns its independent map and camera samples.
@@ -760,6 +769,9 @@ bool RuntimeNative3DRenderPreparedFrameTemporalTiledWithProgressBudgetAndControl
             frame,pixel_buffer,scheduler_control?scheduler_control->cancelToken:NULL,
             tile_progress_callback,tile_progress_user_data,&result,diagnostic,sizeof(diagnostic));
         frame->spectralFrame->sampling=result.sampling;
+        frame->spectralFrame->readout=result;
+        snprintf(frame->spectralFrame->diagnostic,sizeof(frame->spectralFrame->diagnostic),"%s",diagnostic);
+        RuntimeSpectralTransport_Finish(frame,converged_render,scheduler_control?scheduler_control->cancelToken:NULL);
         if(out_stats) out_stats->temporalCommittedSubpasses=result.sampling.passes;
         if (progress_callback) progress_callback(result.sampling.passes,result.sampling.passes,
             result.sampling.passes,progress_user_data);
@@ -1024,5 +1036,6 @@ finalize:
     free(task_slots);
     free(completion_slots);
     free(checkpoint_tiles);
+    if(integrator_id==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)RuntimeSpectralTransport_Finish(frame,ok,scheduler_control?scheduler_control->cancelToken:NULL);
     return ok;
 }

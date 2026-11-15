@@ -227,7 +227,14 @@ void ray_tracing_render_headless_write_summary(
     fprintf(file, "  \"volume_visible\": %s,\n",
             request->volume_visible ? "true" : "false");
     if ((request->integrator_3d == RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) && preflight->prepared_frame)
-        RayTracingHeadlessSpectral_Write(file, request, &preflight->spectral_readout, preflight->rendered_frames);
+    {
+        RayTracingAgentRenderRequest effective=*request;
+        if(preflight->spectral_transport.valid)effective.spectral=preflight->spectral_transport.profile;
+        RayTracingHeadlessSpectral_Write(file,&effective,&preflight->spectral_readout,preflight->rendered_frames);
+        RuntimeSpectralTransportSnapshot fallback={.valid=true,.terminal=preflight->rendered_frames,.profile=effective.spectral};
+        json_object *transport=RuntimeSpectralTransportSnapshot_JSON(preflight->spectral_transport.valid?&preflight->spectral_transport:&fallback,true);
+        if(transport) {fprintf(file,"  \"spectral_transport\":%s,\n",json_object_to_json_string_ext(transport,JSON_C_TO_STRING_PLAIN));json_object_put(transport);}
+    }
     fprintf(file, "  \"integrator_3d\": ");
     RayTracingJsonWriteString(file,
                       ray_tracing_agent_render_request_integrator_label(
@@ -243,6 +250,7 @@ void ray_tracing_render_headless_write_summary(
     {
         const RuntimeCameraPixelSampler3D sampler = RuntimeNative3DSampling_ResolveCameraSampler(RUNTIME_CAMERA_PIXEL_AUTO);
         fprintf(file, "    \"camera_pixel_sampler\": \"%s\",\n",
+            (preflight->spectral_transport.valid?preflight->spectral_transport.profile.surface_path.enabled:request->spectral.surface_path.enabled) ? "jittered" :
             request->temporal_frames <= 1 || sampler == RUNTIME_CAMERA_PIXEL_CENTER ? "center" :
             sampler == RUNTIME_CAMERA_PIXEL_STRATIFIED ? "stratified" : "progressive_sobol_owen_v1");
     }

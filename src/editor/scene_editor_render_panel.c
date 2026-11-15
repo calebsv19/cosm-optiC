@@ -40,7 +40,7 @@ bool SceneEditorRenderPanelEvent(SDL_Event* e) {
         if(e->key.keysym.sym==SDLK_ESCAPE) {reset();return true;}
         if(e->key.keysym.sym==SDLK_BACKSPACE) {size_t n=strlen(input);if(n) input[n-1]=0;return true;}
         if(e->key.keysym.sym==SDLK_RETURN) {char* end;errno=0;long value=strtol(input,&end,10);SceneEditorRenderOptions copy=draft_options;
-            int* values[]={&copy.width,&copy.height,copy.deposition?&copy.spectral_max_passes:&copy.temporal_frames,&copy.frame};
+            int* values[]={&copy.width,&copy.height,copy.deposition?&copy.spectral_max_passes:copy.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL?&copy.spectral_camera_samples:&copy.temporal_frames,&copy.frame};
             if(!errno && end!=input && !*end && value>=0 && value<=1000000000) {*values[field]=(int)value;if(SceneEditorRenderOptionsValid(&copy)) {draft_options=copy;reset();}}
             if(field>=0) snprintf(feedback,sizeof(feedback),"Invalid render setting; Escape cancels.");return true;
         }return true;
@@ -60,9 +60,9 @@ bool SceneEditorRenderPanelEvent(SDL_Event* e) {
         for(int i=0;i<4;++i) if(hit(fields[i],x,y)) {field=i;input[0]=0;do{scene_editor_shared_field_begin(input,sizeof(input),0);SDL_StartTextInput();}while(0);return true;}
         if(hit(mode,x,y)) {reset();draft_options.integrator=draft_options.integrator==0?RAY_TRACING_3D_INTEGRATOR_DISNEY_V2:
             draft_options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2?RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL:0;
-            draft_options.spectral_photons=draft_options.spectral_exposure_stops=0;draft_options.spectral_sampling=draft_options.spectral_max_passes=0;draft_options.deposition=EDITOR_SPECTRAL_DIRECT;draft_options.gather=EDITOR_GATHER_SCENE;if(draft_options.integrator!=RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) draft_options.temporal_frames=1;return true;}
+            draft_options.spectral_camera_samples=0;draft_options.spectral_photons=draft_options.spectral_exposure_stops=0;draft_options.spectral_sampling=draft_options.spectral_max_passes=0;draft_options.deposition=EDITOR_SPECTRAL_DIRECT;draft_options.gather=EDITOR_GATHER_SCENE;if(draft_options.integrator!=RAY_TRACING_3D_INTEGRATOR_DISNEY_V2) draft_options.temporal_frames=1;return true;}
         if(hit(deposition,x,y)) {reset();draft_options.deposition=(draft_options.deposition+1)%3;
-            if(!draft_options.deposition) {draft_options.spectral_photons=draft_options.spectral_exposure_stops=0;draft_options.spectral_sampling=draft_options.spectral_max_passes=0;draft_options.gather=EDITOR_GATHER_SCENE;}
+            if(!draft_options.deposition) {draft_options.spectral_camera_samples=0;draft_options.spectral_photons=draft_options.spectral_exposure_stops=0;draft_options.spectral_sampling=draft_options.spectral_max_passes=0;draft_options.gather=EDITOR_GATHER_SCENE;}
             return true;}
         if(hit(sampling,x,y)) {draft_options.spectral_sampling=(draft_options.spectral_sampling+1)%3;return true;}
         if(hit(gather,x,y)) {draft_options.gather=(SceneEditorGather)((draft_options.gather+1)%3);return true;}
@@ -92,12 +92,12 @@ void SceneEditorRenderPanelDraw(SDL_Renderer* r) {
     toggle=(SDL_Rect){layout.viewport_rect.x+8,layout.viewport_rect.y+8,132,28};SceneEditorSharedUiPanelButton(r,6,128,toggle,"Render frame",open,true);if(!open) return;
     int extra=draft_options.deposition ? 64 : 0;
     panel=(SDL_Rect){toggle.x,toggle.y+34,360,350+extra};SDL_SetRenderDrawColor(r,30,34,43,255);SDL_RenderFillRect(r,&panel);
-    int values[]={draft_options.width,draft_options.height,draft_options.deposition?draft_options.spectral_max_passes:draft_options.temporal_frames,draft_options.frame};const char* names[]={"Width","Height",draft_options.deposition?"Max passes (0=auto)":"Passes","Frame"};
+    int values[]={draft_options.width,draft_options.height,draft_options.deposition?draft_options.spectral_max_passes:draft_options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL?draft_options.spectral_camera_samples:draft_options.temporal_frames,draft_options.frame};const char* names[]={"Width","Height",draft_options.deposition?"Max passes (0=auto)":draft_options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL?"Samples (0=scene)":"Passes","Frame"};
     for(int i=0;i<4;++i) {fields[i]=(SDL_Rect){panel.x+8,panel.y+8+i*32,170,28};if(field==i) snprintf(rows[i],sizeof(rows[i]),"%s: %s_",names[i],input);else snprintf(rows[i],sizeof(rows[i]),"%s: %d",names[i],values[i]);SceneEditorSharedUiPanelButton(r,6,256+(i),fields[i],rows[i],field==i,!SceneEditorRenderActive());}
     mode=(SDL_Rect){panel.x+184,panel.y+8,166,28};SceneEditorSharedUiPanelButton(r,6,384,mode,draft_options.integrator==0?"Direct Light":draft_options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V2?"Disney V2":"Disney V3 Spectral",false,!SceneEditorRenderActive());
     if (draft_options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL) {
         deposition=(SDL_Rect){panel.x+184,panel.y+40,166,28};
-        const char *modes[]={"Direct spectral","Surface photons","Surface + volume"};
+        const char *modes[]={"Scene transport","Surface photons","Surface + volume"};
         SceneEditorSharedUiPanelButton(r,6,385,deposition,modes[draft_options.deposition],false,!SceneEditorRenderActive());
     }
     if(draft_options.integrator==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL && draft_options.deposition) {

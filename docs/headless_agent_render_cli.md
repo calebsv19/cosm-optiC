@@ -3,8 +3,10 @@
 
 ## Selecting a qualified renderer
 
+For ordinary opaque spectral indirect lighting, see the [V3 surface path workflow](spectral_surface_path.md) and [backend contract](spectral_transport_backend.md). Native rendering, editor jobs and local headless v2 requests share the versioned quality default, scene policy and diagnostics. Explicit per-object spectra, native RGB adapters, mesh geometry and a homogeneous scattering medium are supported within the documented limits. The prism calibration and glass photon-map estimator remain separate routes.
+
 Disney V3 Spectral is available on the local headless route using a v2 request
-with explicit spectra and a supported receiver. Successful preflight returns
+with a saved/default ordinary scene profile or explicit calibration spectra. Successful preflight returns
 `spectral_execution` with the effective film schedule and capabilities.
 The local film uses one serial pass for one static frame. The request may spell
 out `temporal_frames: 1`, `frame_count: 1`, `denoise_enabled: false` and
@@ -12,6 +14,21 @@ out `temporal_frames: 1`, `frame_count: 1`, `denoise_enabled: false` and
 scheduling, denoise and checkpoint/resume require a different route. Detached
 submission rejects spectral requests before creating a job. Worker protocol v1
 reserves optional capability bit 7 for spectral transport.
+
+The scene snapshot and worker export tools can prepare an ordinary V3 still
+with a saved `surface_path_v1` profile and raw linear components. They
+preserve the selected camera and use the same pinned dependency manifest as
+RGB. V2 carries one serial frame and one temporal pass. Its output object
+contains only `root` and `overwrite`, with the summary and progress paths
+bound inside the worker attempt. An exported input bundle is source-side
+preparation. Running it on a worker requires a qualified package and worker
+materializer that both accept the V2 request.
+
+For an explicit experimental render-then-HDR workflow, use
+[`tools/spectral_render_denoise.py`](spectral_denoise.md#one-command-experimental-local-still-workflow).
+It composes the ordinary local raw V3 render with a separate verified OIDN
+postprocess, retaining raw output. Native `denoise_enabled` remains false;
+this does not enable detached/remote V3 jobs or establish feature preservation.
 
 The editor's New Scene command seeds Direct Light. To create new scenes with
 the RGB Disney V2 preset, start the editor with
@@ -30,7 +47,7 @@ The main 3D integrator menu also includes V3 immediately after V2. In the frame 
 
 | V3 control | What the frame uses |
 | --- | --- |
-| Direct spectral | The evaluated geometry, camera, native source visibility and matte textures. The renderer reconstructs separate approximate emission and reflectance curves from RGB and integrates their product in 20 nm steps against the CIE observer. |
+| Scene transport | The saved/default qualified scene policy. Ordinary opaque scenes use spectral GI with explicit spectra or labeled RGB source/material adapters. A saved glass photon-map scene retains that estimator. |
 | Surface photons | Spectral emitters, the named closed glass mesh, receiver planes and a wavelength-resolved surface photon map. The renderer omits the participating volume and can run with its file offline. |
 | Surface + volume | The same surface instrument plus the selected spectral medium. A VF3D input supplies the density grid and frame identity. Its absorption and scattering spectra come from the scene profile. |
 
@@ -39,13 +56,18 @@ For photon modes, place the v2 request’s `spectral` object at
 `enabled: true`. Use the profile’s sources for a photon scene and leave the ordinary light list empty. Volume paths resolve relative to the scene file. The supported glass, emitters,
 sensors, receivers and volume coefficients follow the contracts below. Use this spectral volume
 attachment with V3. RGB atmosphere attachments use the legacy integrators.
-The normal 3D menu loads the saved profile when present and uses direct spectral lighting otherwise.
-The editor panel overrides the selection for an individual frame. It uses the native tiled frame job,
-one pass and the desktop tone curve. The calibrated headless instrument uses its documented sRGB display transform.
+The normal 3D menu loads the saved profile when present and uses `surface_path_v1`
+otherwise. The editor panel overrides selection for one native frame job.
+Ordinary V3 uses its spectral display transform through both native and headless
+paths, without an additional desktop tone transform. Photon and calibration
+instruments keep their declared film/display contract.
 
 The scene profile currently supplies measured optics, emitter parameters, volume asset and photon budget.
-The panel controls integrator, deposition mode, photon budget per source (scene, 16,384, 65,536 or 262,144) and exposure relative to the scene (−1 through +2 EV). Direct spectral applies a matte lighting approximation
-to ordinary RGB-authored geometry. Use an explicit optical profile for dispersive glass.
+The panel controls integrator, scene transport/deposition mode, ordinary camera
+samples (**0=scene**), photon budget per source (scene, 16,384, 65,536 or 262,144)
+and photon exposure relative to the scene (−1 through +2 EV). Use an explicit
+optical profile for dispersive glass. `legacy_direct_v1` is the explicit saved
+rollback to the historical direct spectral approximation.
 The editor job receipt records the selected mode, surface deposits, volume scatter events, VF3D frame digest
 and verified image SHA-256. The native UI regression is `tests/integration/test_editor_spectral_render.py`;
 pass the workspace visual-test binary via `--binary` and a fresh directory via `--output-root`.
@@ -76,9 +98,70 @@ with only matte planes. At least the named receiver plane is required.
 | `kind` | `homogeneous`, `vf3d_density` or `water_heightfield` |
 | `sigma_a_per_m`, `sigma_s_per_m` | Separate nonnegative piecewise-linear absorption and scattering coefficients in m⁻¹ at unit density. Each table has 2–32 increasing `[vacuum_nm, value]` pairs spanning exactly 380–780 nm. |
 | `g` | Henyey–Greenstein mean cosine in [−0.99, 0.99]. Zero is isotropic, positive is forward scattering. |
-| `cell_m` | Edge of the spatial cell used to reconstruct scattered radiance from photon events. Refine it together with the photon budget. |
+| `mie_phase_path` | Full-angle phase table for a homogeneous volume with box reconstruction. Supply this field in place of `g`. Paths resolve relative to the request. |
+| `cell_m` | Base photon bucket and averaging scale; also the evaluation spacing unless `reconstruction_cell_m` is set. Adaptive support may widen to twice this scale. Refine it together with the photon budget. |
+| `reconstruction_cell_m` | Optional experimental continuous/adaptive evaluation spacing, from `cell_m / 2` through `cell_m`. Photon buckets, averaging widths and adaptive count selection retain `cell_m`. Omission preserves legacy behavior. Finer independent spacing currently requires rectangular occupied components, refuses intersecting mesh obstacles, normalizes each photon kernel over its component, and retains the 256 MiB reconstruction budget. |
 | `bounds_min_m`, `bounds_max_m` | World-space XYZ corners, required only for the homogeneous box. Density inside is one. |
 | `source_path`, `frame_index` | Required for simulation inputs. Paths resolve relative to the request. The decoded frame must match the requested nonnegative index. |
+
+### Tabulated Mie scattering
+
+The table is a regular text file with whitespace-separated values. Start with
+`optic_mie_phase_v1 B N` where `B` is the number of wavelength bands (2–16)
+and `N` is the number of angular nodes per band (3–32,769). For each band,
+write its vacuum wavelength in nanometers followed by exactly `N` nonnegative
+phase densities in sr⁻¹. Wavelengths increase from exactly 380 to 780 nm.
+Angular nodes run from backscatter to forward scatter with cosine
+`mu[i] = -cos(pi * i / (N - 1))`.
+
+Each band's piecewise-linear integral over solid angle must be within 0.5%
+of one. The renderer normalizes the table and uses the same distribution
+for photon direction sampling and camera radiance. Between wavelength knots
+it linearly mixes their normalized phase functions. Use enough wavelength
+and angular nodes to resolve the droplet distribution of interest. The phase
+table and the per-meter extinction coefficients are separate inputs.
+
+The participating-volume digest includes the loaded normalized phase values.
+The source qualification fixture uses the Particle Sim sphere oracle to
+generate a five-band, full-angle table and checks its rainbow against the
+independent droplet-angle reference.
+
+### Experimental analytic reconstruction and local integration
+
+`reconstruction: "kernel"` evaluates normalized, photon-centered tensor tents
+without a global fine reconstruction lattice. It reuses admitted occupied
+components and the convex-mesh face partition, including clipped normalization
+and opposite-face restrictions. The original box, continuous and adaptive modes
+retain their behavior. Kernel mode does not accept `reconstruction_cell_m`.
+
+Optional kernel-only fields:
+
+- `higher_scatter_support_m`: requested wider bandwidth for sparse higher-order events,
+  between `cell_m` and `64 * cell_m`. First scattering retains its dense/sparse
+  base support; dense higher-order events also retain the base support. This
+  setting never narrows the existing dense/sparse bandwidths.
+- `local_refinement_v1`: `bounds_min_m`, `bounds_max_m`, and positive `step_m`
+  no greater than `cell_m`. This refines camera integration inside an explicit
+  world-space box. It changes neither the VF3D extent nor the density or photon
+  support. The analytic source field is shared across the box boundary, so no
+  coarse/fine field blend or extra photon energy is introduced. The box does
+  not automatically follow an animated camera.
+
+For example, a 2 mm base scale can use `step_m: 0.00025` in a small focus region
+while retaining the full VF3D asset. Reconstruction-owned storage stays under
+256 MiB; the optional achromatic candidate cache falls back to the scalar BVH
+when unavailable or full. This is an opt-in qualification mode, not a default.
+
+The existing `surface_map.gather: "adaptive_scattered"` additionally accepts
+`scattered_support_m` (between the receiver radius and 64 times that radius,
+with a 1 m parser ceiling) and `scattered_neighbors` (4–64, default 16).
+These choose sample-point k-nearest bandwidths for scattered receiver deposits
+only. A separate coarse index covers those footprints; unscattered caustics
+retain the original radius. Expanded supports are capped by finite receiver
+edges and conservative clearance to other geometry. Each kernel retains unit
+area normalization. These controls trade spatial bias for lower variance;
+qualify beam detail and energy for the intended scene. They do not change
+photon transport or remove the participating volume.
 
 For example, use this medium with the water fixture from a request alongside the slab request.
 
@@ -177,6 +260,133 @@ keep their neutral response. The transport contract has one closed dielectric
 and one homogeneous exterior. Sensor, display and terminal receiver color can
 change independently of the incident-flux map. Preflight lists the effective
 source models and the explicit RGB receiver approximation.
+
+## Local Disney V3 two-surface diffuse calibration
+
+A v2 `disney_v3_spectral` request can opt into a single diffuse bounce between
+two finite rectangular planes. This is a local headless calibration route.
+Use a meter-scale runtime scene with a named receiver and panel, optionally
+with opaque rectangular blockers (at most eight planes total). The two named
+planes use explicit, one-sided Lambertian reflectances. Do not supply scene
+lights, object material extensions, photon maps or participating media in this
+profile.
+
+Example `spectral` block:
+
+```json
+{
+  "receiver_id": "receiver",
+  "receiver_reflectance": [[380, 0.8], [780, 0.8]],
+  "origin_m": [0.4, 1, 0],
+  "lines": [[450, 1], [610, 1]],
+  "exposure": 50,
+  "selected_pixel": {"x": 4, "y": 4},
+  "diffuse_bounce_v1": {
+    "panel_id": "panel",
+    "panel_reflectance": [[380, 0.02], [450, 0.02], [610, 0.8], [780, 0.8]],
+    "grid": 32,
+    "indirect": true
+  }
+}
+```
+
+The source is an isotropic point with total radiant power in watts for each
+discrete vacuum wavelength (nm). Reflectance curves span 380–780 nm and are
+bounded by 0 and 1. The panel uses deterministic midpoint area quadrature
+with `grid` samples along each axis (4–64). The request caps
+`width * height * grid * grid` at 4,194,304. Set `indirect: false` for the
+same profile's direct-only control. Test with `make test-headless-spectral-diffuse`.
+
+For environment illumination, replace both `origin_m` and `lines` with a
+`sky` object. The sky emits constant radiance inside the specified angular
+cap and zero outside it. The axis points from the scene toward the sky.
+A 90-degree half angle describes a hemisphere.
+
+```json
+"sky": {
+  "axis": [-0.6, 0.8, 0],
+  "half_angle_deg": 10,
+  "grid": 16,
+  "radiance_lines": [[450, 1], [610, 1]]
+}
+```
+
+Each line gives a vacuum wavelength in nm and radiance in W/m²/sr.
+The axis is normalized. Half angles range from 1 to 90 degrees and the grid
+ranges from 4 to 64 cells along each angular coordinate. Equal solid-angle
+cells sample incoming directions, with opaque-plane visibility and cosine
+weighting at the receiver and panel. The sky profile also caps
+`(width * height + panel_grid²) * sky.grid²` at 4,194,304. The selected-pixel
+report gives the source `sky_radiance` per line and the
+`direct_geometry_per_sky_radiance` and `indirect_geometry_per_sky_radiance`
+transfer factors. The scene background remains black in this calibration route.
+
+The optional `selected_pixel` accepts one zero-based in-film pixel. It reports
+unexposed XYZ and signed linear RGB, direct and bounced radiance per wavelength
+line, the geometric transfer, and panel visibility counts. The probe also
+works for single-map v2 requests (without progressive sampling). For maps it
+reports direct surface, photon surface, first and higher volume scatter,
+camera throughput and interface counts, gather candidates and the largest
+surface deposit per band, including the source index and map record index
+relative to the existing map key. Band values are integrated radiance in
+W/m²/sr; `width_nm: 0` identifies an exact line. The reported map record is
+not a complete photon path history. Adding a probe does not affect the
+sampling, map key or displayed image.
+
+## Spectral display and linear film controls
+
+A local V3 single-frame request can set these optional fields in `spectral`.
+
+| Field | Value | Effect |
+| --- | --- | --- |
+| `display_transform` | `"spectral_soft_v1"` | Compresses out-of-gamut colors toward neutral at constant luminance, then rolls off highlights with a common scale for the RGB channels before sRGB encoding. |
+| `surface_observer` | `"deposit_wavelength"` | Uses the exact vacuum wavelength of each gathered surface deposit to form XYZ. Requires an enabled surface map. |
+| `linear_strip` | `{"x":0,"y":31,"count":257}` | Returns an in-film horizontal row of unexposed XYZ values in the summary. A surface-map request can select up to 512 pixels. |
+| `pixel_grid` | Integer 1–4 | Integrates a regular subpixel grid in linear light before display. A 2×2 grid uses four primary ray positions. A surface-map request is required. |
+
+The observer option changes the color weighting of deposited surface light.
+Camera attenuation, reflectance, direct and volume light, and custom sensor
+responses keep their band evaluation. The option shares the same photon
+map and power ledger. Use the linear strip to compare these estimates at
+identical screen coordinates. The display transform operates after exposure
+and leaves the strip and selected-pixel linear values intact.
+
+These controls are qualified for local headless requests. Saved editor
+profiles and progressive convergence requests use their existing controls.
+Omitting the new fields preserves the previous display, observer and
+one-ray behavior. Run `make test-headless-spectral-prism-film` for the
+independent prism, pixel-area and display checks.
+
+## Smooth Fresnel glass and mixed spectral lighting
+
+For a V3 surface-map request with one closed smooth dielectric, set
+`spectral.smooth_glass_transport` to `"fresnel"`. Each smooth interface
+samples ordinary reflection or transmission using the wavelength-dependent
+Fresnel probability. Total internal reflection continues deterministically.
+`glass_camera_samples` is optional and accepts 1–64, with a default of 16.
+The forward map key identifies the Fresnel mode independently of this camera
+budget. Omission of the mode retains the ballistic comparison profile.
+
+The `fresnel_transport` record in each map band lists launched, receiver,
+escaped, glass-absorbed, medium-absorbed, depth-limited and other loss in watts.
+It also counts ordinary reflection and total internal reflection events.
+The terminal power categories sum to launched power. Reflection event counts
+can exceed the number of reflected exits when a ray bounces inside the glass.
+
+A local single-map request can combine Fresnel glass with the
+`diffuse_bounce_v1` and `sky` objects above. Declare each sky line wavelength
+as an exact line in a map source. A zero-watt line suffices to register a band.
+Set `receiver_reflectance` and use distinct named receiver and panel planes.
+The map lamp supplies caustics and fog scattering. The sky contributes direct
+light and one diffuse panel bounce, including medium extinction along those
+segments. A glass mesh blocks these sky illumination segments. Camera rays
+can see the lit surfaces through reflection and refraction. The mixed mode
+accepts up to eight scene objects and applies a bounded sky quadrature budget.
+
+The selected-pixel report separates `sky_direct_radiance` and
+`indirect_radiance` from the lamp's direct, photon surface and volume terms.
+This is a headless mixed fixture profile for these enumerated paths.
+Run `make test-headless-spectral-fresnel` for the independent slab controls.
 
 ## Disney V3 spectral surface photon map
 
@@ -1731,3 +1941,21 @@ caching in continuous modes. See [normalization, admission limits, storage and
 verification](spectral_volume_reconstruction.md) before selecting these modes.
 
 See [V3 balanced edge-aware convergence](spectral_sampling.md) for ordinary render, saved-scene and headless sampling controls.
+
+### Camera rays per spectral photon map
+
+Converge-mode spectral requests accept `camera_samples_per_map: 1|2|4|8` inside
+`spectral.sampling`. Bundles above one require `camera_sequence: "progressive"`.
+For example, `{"mode":"converge","camera_sequence":"progressive",
+"camera_samples_per_map":4,"max_passes":32}` reuses each map for four camera
+rays while retaining a 32-map cap. One remains the compatible default. Map
+counts and camera-ray counts are reported separately; the convergence thresholds
+and checkpoint schedule are unchanged. See [sampling](spectral_sampling.md).
+
+
+### Ordinary V3 linear films and scattering diagnostics
+
+Ordinary V3 final jobs export unexposed float64 XYZ component films by default,
+with saved `surface_path_v1.linear_components: false` opt-out. The native editor
+and headless path share the export and scattering-order report. See
+[the format, exact recombination rule, storage cost, and qualification](spectral_linear_components.md).

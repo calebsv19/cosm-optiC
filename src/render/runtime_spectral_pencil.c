@@ -26,8 +26,21 @@ double RuntimeSpectralPencil_Index(const RuntimeSpectralPencil *p, double vacuum
                 1.01046945 * l2 / (l2 - 103.560653));
 }
 
-/* Both paths start in the exterior medium. Smooth paths track ballistic
- * transmission and TIR. Rough interfaces sample the native GGX random walk. */
+/* An ordinary rectangular emitter also occludes a forward path that returns
+ * to it after refraction or reflection. The launch point itself is excluded. */
+static double return_to_area_distance(const RuntimeSpectralSurfacePathConfig *a, Ray3D ray, double limit) {
+    double cosine = vec3_dot(ray.direction,a->normal);
+    if (fabs(cosine) < 1e-12) return INFINITY;
+    double t = vec3_dot(vec3_sub(a->origin,ray.origin),a->normal)/cosine;
+    if (!(t > 1e-7 && t < limit)) return INFINITY;
+    Vec3 offset = vec3_sub(vec3_add(ray.origin,vec3_scale(ray.direction,t)),a->origin);
+    return fabs(vec3_dot(offset,a->axis_u)) <= a->width*.5 &&
+           fabs(vec3_dot(offset,a->axis_v)) <= a->height*.5 ? t : INFINITY;
+}
+
+/* Both paths start in the exterior medium. Smooth interfaces can sample
+ * Fresnel reflection and transmission. The ballistic profile is retained for
+ * existing requests. Rough interfaces use the native GGX random walk. */
 static bool trace_closed_dielectric(const RuntimeScene3D *scene, const RuntimeSpectralPencil *p,
                                  const RuntimeSpectralPencilLine *line, double index, Ray3D ray,
                                  bool camera, RuntimeSpectralPathReadout *out) {
@@ -47,7 +60,17 @@ static bool trace_closed_dielectric(const RuntimeScene3D *scene, const RuntimeSp
         double min_distance = 64 * DBL_EPSILON * scale;
         bool surface = RuntimeRay3D_TraceSceneFirstHit(scene, &ray, min_distance,
                                                        RUNTIME_RAY_3D_UNBOUNDED_SCENE_DISTANCE, &hit);
-        if (p->active_volume && !inside) {
+        double limit = surface ? hit.t : INFINITY;
+        if (p->surface_path.enabled && step) {
+            double emitter = return_to_area_distance(&p->surface_path, ray, limit);
+            if (isfinite(emitter)) limit = emitter;
+        }
+        if (p->active_volume && !inside && p->surface_path.enabled && !camera) {
+            if (!RuntimeSpectralVolume_SpecularSegment(p->active_volume, line, ray, limit, step, out))
+                return false;
+        }
+        if (limit < (surface ? hit.t : INFINITY)) return !inside;
+        if (p->active_volume && !inside && !p->surface_path.enabled) {
             bool restart;
             if (step >= 1024 ||
                 !RuntimeSpectralVolume_Segment(p->active_volume, line, &ray, surface ? hit.t : INFINITY,
@@ -60,7 +83,10 @@ static bool trace_closed_dielectric(const RuntimeScene3D *scene, const RuntimeSp
         out->position = hit.position;
         if (inside) {
             out->glass_m += hit.t;
+            double before = out->weight;
             out->weight *= exp(-line->absorption_per_m * hit.t);
+            if (!camera && p->fresnel_camera_samples)
+                out->glass_absorbed_w += before - out->weight;
         }
         if (hit.source.kind == RUNTIME_PRIMITIVE_3D_KIND_PLANE &&
             (p->map.source_count || !strcmp(hit.source.objectId, p->receiver_id))) {
@@ -101,12 +127,24 @@ static bool trace_closed_dielectric(const RuntimeScene3D *scene, const RuntimeSp
             }
             ray = RuntimeRay3D_Make(hit.position, sample.direction);
         } else if (event.totalInternalReflection) {
+            ++out->total_internal_reflections;
             ray = RuntimeRay3D_Make(hit.position, event.reflectionDir);
         } else {
-            inside = !inside;
-            out->weight *= 1 - event.fresnel;
-            if (camera) out->weight *= (from / to) * (from / to);
-            ray = RuntimeRay3D_Make(hit.position, event.refractionDir);
+            /* The selected branch probability cancels its Fresnel factor.
+             * Photon power is unchanged. Camera transmission still needs the
+             * radiance-mode index factor across the interface. */
+            uint64_t id = line->sample_id ^
+                ((uint64_t)out->interfaces * UINT64_C(0xd1b54a32d192ed03)) ^
+                UINT64_C(0x7ca04d663658e9cb);
+            if (p->fresnel_camera_samples && RuntimeSpectral_Uniform64(id) < event.fresnel) {
+                ++out->fresnel_reflections;
+                ray = RuntimeRay3D_Make(hit.position, event.reflectionDir);
+            } else {
+                inside = !inside;
+                if (!p->fresnel_camera_samples) out->weight *= 1 - event.fresnel;
+                if (camera) out->weight *= (from / to) * (from / to);
+                ray = RuntimeRay3D_Make(hit.position, event.refractionDir);
+            }
         }
         /* At grazing angles a rounded hit point can meet its own face again
          * beyond min_distance. Move across the boundary in the outgoing

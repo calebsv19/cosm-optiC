@@ -1644,6 +1644,22 @@ test-headless-spectral-optics: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 test-headless-spectral-surface-map: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/test_headless_spectral_surface_map.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
 
+.PHONY: test-headless-spectral-fresnel
+test-headless-spectral-fresnel: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/test_headless_spectral_fresnel.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+.PHONY: test-headless-spectral-prism-film
+test-headless-spectral-prism-film: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/test_headless_spectral_prism_film.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+.PHONY: test-headless-spectral-mixed
+test-headless-spectral-mixed: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/test_headless_spectral_mixed.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
+.PHONY: test-headless-spectral-diffuse
+test-headless-spectral-diffuse: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	python3 tests/integration/test_headless_spectral_diffuse.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
+
 .PHONY: test-headless-spectral-prism
 test-headless-spectral-prism: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/test_headless_spectral_prism.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN)
@@ -3583,7 +3599,7 @@ test-scene-catalog-labels: $(BUILD_DIR)/tests/scene_catalog_labels_test
 test-spectral-reconstruction: $(BUILD_DIR)/tests/spectral_reconstruction_test
 	$(BUILD_DIR)/tests/spectral_reconstruction_test
 
-$(BUILD_DIR)/tests/test_spectral_reconstruction.o: $(TEST_DIR)/spectral_mesh_reconstruction_case.h
+$(BUILD_DIR)/tests/test_spectral_reconstruction.o: $(TEST_DIR)/spectral_mesh_reconstruction_case.h $(TEST_DIR)/spectral_independent_support_case.h $(TEST_DIR)/spectral_kernel_case.h $(TEST_DIR)/spectral_wide_surface_case.h
 
 $(BUILD_DIR)/tests/spectral_reconstruction_test: $(BUILD_DIR)/tests/test_spectral_reconstruction.o $(RAY_TRACING_RENDER_HEADLESS_DEPS)
 	@mkdir -p $(dir $@)
@@ -3596,8 +3612,55 @@ test-headless-spectral-reconstruction: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 .PHONY: test-spectral-sampling test-headless-spectral-sampling
 test-spectral-sampling: $(BUILD_DIR)/tests/spectral_sampling_test
 	$(BUILD_DIR)/tests/spectral_sampling_test
-$(BUILD_DIR)/tests/spectral_sampling_test: tests/spectral_sampling_test.c $(BUILD_DIR)/render/runtime_spectral_sampling.o
+$(BUILD_DIR)/tests/spectral_sampling_test: tests/spectral_sampling_test.c $(BUILD_DIR)/render/runtime_spectral_sampling.o $(BUILD_DIR)/render/runtime_camera_pixel_sampling_3d.o
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LIBS)
 test-headless-spectral-sampling: $(RAY_TRACING_RENDER_HEADLESS_BIN)
 	python3 tests/integration/test_headless_spectral_sampling.py --cli $(RAY_TRACING_RENDER_HEADLESS_BIN) --output-root $(BUILD_DIR)/spectral-sampling-proof-$$(date +%s)-$$$$
+
+.PHONY: test-spectral-convergence
+test-spectral-convergence: $(BUILD_DIR)/tests/spectral_convergence_test
+	$(BUILD_DIR)/tests/spectral_convergence_test
+$(BUILD_DIR)/tests/spectral_convergence_test: tests/spectral_convergence_test.c $(BUILD_DIR)/render/runtime_spectral_sampling.o $(BUILD_DIR)/render/runtime_spectral_convergence.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LIBS)
+
+.PHONY: test-headless-spectral-surface-path
+test-headless-spectral-surface-path: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/test_headless_spectral_surface_path.py --cli $(abspath $(RAY_TRACING_RENDER_HEADLESS_BIN))
+
+.PHONY: test-headless-spectral-native
+test-headless-spectral-native: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/test_headless_spectral_native.py --cli $(abspath $(RAY_TRACING_RENDER_HEADLESS_BIN))
+
+.PHONY: test-headless-spectral-ordinary-glass
+test-headless-spectral-ordinary-glass: $(RAY_TRACING_RENDER_HEADLESS_BIN)
+	PYTHONDONTWRITEBYTECODE=1 python3 tests/integration/test_headless_spectral_ordinary_glass.py --cli $(abspath $(RAY_TRACING_RENDER_HEADLESS_BIN))
+
+.PHONY: test-spectral-components
+$(BUILD_DIR)/tests/runtime_spectral_components_test: tests/runtime_spectral_components_test.c $(BUILD_DIR)/render/runtime_spectral_components.o $(BUILD_DIR)/app/ray_tracing_sha256.o
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@
+test-spectral-components: $(BUILD_DIR)/tests/runtime_spectral_components_test
+	@$<
+
+.PHONY: test-spectral-path-sampling
+$(BUILD_DIR)/tests/spectral_path_sampling_test: tests/spectral_path_sampling_test.c $(RAY_TRACING_RENDER_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LIBS)
+test-spectral-path-sampling: $(BUILD_DIR)/tests/spectral_path_sampling_test
+	@$<
+
+.PHONY: test-spectral-estimator
+$(BUILD_DIR)/tests/spectral_estimator_test: tests/spectral_estimator_test.c $(RAY_TRACING_RENDER_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LIBS)
+test-spectral-estimator: $(BUILD_DIR)/tests/spectral_estimator_test
+	@$<
+
+.PHONY: test-spectral-volume-sampling
+$(BUILD_DIR)/tests/spectral_volume_sampling_test: tests/spectral_volume_sampling_test.c $(RAY_TRACING_RENDER_HEADLESS_DEPS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS) $(LIBS)
+test-spectral-volume-sampling: $(BUILD_DIR)/tests/spectral_volume_sampling_test
+	@$<

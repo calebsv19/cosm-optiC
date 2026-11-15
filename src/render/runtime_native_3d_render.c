@@ -1,3 +1,4 @@
+#include "render/runtime_spectral_transport.h"
 #include "render/runtime_spectral_film.h"
 #include "render/runtime_native_3d_render_internal_host.h"
 
@@ -143,6 +144,15 @@ bool RuntimeNative3DRenderPreparedRegion(uint8_t* pixel_buffer,
     }
     if (!pixel_buffer || !frame || !frame->valid) return false;
     if (region_width <= 0 || region_height <= 0) return true;
+    if(integrator_id==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL && RuntimeSpectralTransport_IsSurfacePath(frame)) {
+        RuntimeSpectralFrame *s=frame->spectralFrame;
+        if(SDL_LockMutex(s->query_lock)!=0)return false;
+        bool result=RuntimeSpectralSurfacePath_Region(s->surface_path,frame,start_x,start_y,end_x,end_y,pixel_buffer,NULL,0,
+            &s->readout,NULL,s->diagnostic,sizeof(s->diagnostic));
+        if(result)snprintf(s->diagnostic,sizeof(s->diagnostic),"ok");
+        SDL_UnlockMutex(s->query_lock);return result;
+    }
+
     radiance_buffer = (float*)calloc((size_t)region_width * (size_t)region_height *
                                          RUNTIME_NATIVE_3D_RADIANCE_CHANNELS,
                                      sizeof(*radiance_buffer));
@@ -531,7 +541,7 @@ static bool runtime_native_3d_render_to_pixel_buffer_internal(
                                              height,
                                              &frame.scene,
                                              &frame.projector);
-    if ((frame.spectralFrame && frame.spectralFrame->profile.sampling.enabled) || scheduler_control || runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
+    if (RuntimeSpectralTransport_IsSurfacePath(&frame) || (frame.spectralFrame && frame.spectralFrame->profile.sampling.enabled) || scheduler_control || runtime_native_3d_render_should_use_tile_scheduler(width, height)) {
         if (tile_progress_callback) {
             tile_progress_adapter.callback = tile_progress_callback;
             tile_progress_adapter.user_data = tile_progress_user_data;
@@ -570,6 +580,8 @@ static bool runtime_native_3d_render_to_pixel_buffer_internal(
                                                             progress_user_data,
                                                             out_stats);
     }
+    if(integrator_id==RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL)
+        RuntimeSpectralTransport_Finish(&frame,ok,scheduler_control?scheduler_control->cancelToken:NULL);
     if (ok && out_stats) {
         runtime_native_3d_render_stats_normalize_temporal(
             out_stats,

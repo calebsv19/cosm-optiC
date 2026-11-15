@@ -71,6 +71,23 @@ static bool load_vf(RuntimeSpectralVolume *v, RayTracingSha256Context *hash, cha
 }
 RuntimeSpectralVolume *RuntimeSpectralVolume_Load(const RuntimeSpectralVolumeConfig *cfg, char *diag,
                                                   size_t size) {
+    if ((cfg->higher_scatter_support_m!=0 || cfg->local_refinement_step_m!=0 || cfg->reconstruction==SPECTRAL_RECONSTRUCTION_KERNEL) &&
+        (cfg->reconstruction!=SPECTRAL_RECONSTRUCTION_KERNEL || cfg->reconstruction_cell_m!=0 ||
+         !isfinite(cfg->higher_scatter_support_m) || !isfinite(cfg->local_refinement_step_m) ||
+         (cfg->higher_scatter_support_m!=0 && (cfg->higher_scatter_support_m<cfg->cell_m || cfg->higher_scatter_support_m>64*cfg->cell_m)) ||
+         (cfg->local_refinement_step_m!=0 &&
+          (cfg->local_refinement_step_m<1e-6 || cfg->local_refinement_step_m>cfg->cell_m ||
+           !isfinite(cfg->local_refinement_lo.x) || !isfinite(cfg->local_refinement_lo.y) || !isfinite(cfg->local_refinement_lo.z) ||
+           !isfinite(cfg->local_refinement_hi.x) || !isfinite(cfg->local_refinement_hi.y) || !isfinite(cfg->local_refinement_hi.z) ||
+           !(cfg->local_refinement_lo.x<cfg->local_refinement_hi.x && cfg->local_refinement_lo.y<cfg->local_refinement_hi.y && cfg->local_refinement_lo.z<cfg->local_refinement_hi.z))))) {
+        snprintf(diag,size,"invalid continuous kernel support/refinement configuration");return NULL;
+    }
+    if (cfg->reconstruction_cell_m != 0 &&
+        (!isfinite(cfg->reconstruction_cell_m) || !cfg->reconstruction ||
+         cfg->reconstruction_cell_m < .5*cfg->cell_m || cfg->reconstruction_cell_m > cfg->cell_m)) {
+        snprintf(diag,size,"independent spacing requires continuous/adaptive mode and half-to-full support width");
+        return NULL;
+    }
     RuntimeSpectralVolume *v = calloc(1, sizeof(*v));
     if (!v) return NULL;
     v->config = *cfg;
@@ -81,6 +98,13 @@ RuntimeSpectralVolume *RuntimeSpectralVolume_Load(const RuntimeSpectralVolumeCon
     ray_tracing_sha256_init(&hash);
     ray_tracing_sha256_update(&hash, cfg->profile_hash, 64);
     ray_tracing_sha256_update(&hash, cfg->path, strlen(cfg->path));
+    if (cfg->mie_phase_path[0]) {
+        if (cfg->kind != SPECTRAL_VOLUME_BOX || cfg->reconstruction != SPECTRAL_RECONSTRUCTION_BOX ||
+            !(v->mie_phase = spectral_phase_load(cfg->mie_phase_path, &hash))) {
+            snprintf(diag, size, "invalid Mie phase table or unsupported volume mode");
+            goto fail;
+        }
+    }
     if ((cfg->kind != SPECTRAL_VOLUME_BOX && !ray_tracing_sha256_file(cfg->path, v->source_sha)) ||
         (cfg->kind == SPECTRAL_VOLUME_WATER && !load_water(v, &hash, diag, size)) ||
         (cfg->kind == SPECTRAL_VOLUME_VF3D && !load_vf(v, &hash, diag, size))) {
@@ -102,6 +126,11 @@ RuntimeSpectralVolume *RuntimeSpectralVolume_Load(const RuntimeSpectralVolumeCon
             snprintf(diag, size, "spectral volume reconstruction requires 1 to 4096 cells per axis (4095 for continuous nodes)");
             goto fail;
         }
+        if (cfg->reconstruction_cell_m > 0 &&
+            ceil(extent[i] / cfg->reconstruction_cell_m) > 4095) {
+            snprintf(diag,size,"independent reconstruction lattice exceeds 4095 cells per axis");
+            goto fail;
+        }
         v->dims[i] = (int)n;
     }
     ray_tracing_sha256_update(&hash, v->source_sha, strlen(v->source_sha));
@@ -120,6 +149,7 @@ void RuntimeSpectralVolume_Free(RuntimeSpectralVolume *v) {
     if (!v) return;
     RuntimeVolumeAttachment3D_Free(&v->vf);
     free(v->heights);
+    spectral_phase_free(v->mie_phase);
     spectral_reconstruction_free(v->reconstruction);
     free(v->positions);
     free(v->points);
@@ -179,7 +209,18 @@ bool spectral_field_next(SpectralFieldRay *it, double *a, double *b) {
     while (it->t < it->end) {
         double start = it->t, step = it->end - start;
         Vec3 p = at(it->ray, start), d = it->ray.direction;
-        if (it->cells) step = fmin(step, grid_step(p, d, v->lo, v->config.cell_m));
+        if (it->cells) step = fmin(step, grid_step(p, d, v->lo,
+            v->config.reconstruction_cell_m > 0 ? v->config.reconstruction_cell_m : v->config.cell_m));
+        if (it->cells && v->config.local_refinement_step_m>0) {
+            double enter=start,exit=start+step;
+            Vec3 lo=v->config.local_refinement_lo,hi=v->config.local_refinement_hi;
+            if (slab(it->ray.origin.x,d.x,lo.x,hi.x,&enter,&exit) &&
+                slab(it->ray.origin.y,d.y,lo.y,hi.y,&enter,&exit) &&
+                slab(it->ray.origin.z,d.z,lo.z,hi.z,&enter,&exit)) {
+                if (enter>start) step=fmin(step,enter-start);
+                else step=fmin(step,fmin(exit-start,grid_step(p,d,lo,v->config.local_refinement_step_m)));
+            }
+        }
         if (v->config.kind == SPECTRAL_VOLUME_VF3D) {
             double h = v->vf.grid.voxelSize, k = v->vf.grid.cellCentered ? .5 * h : 0;
             step = fmin(step, grid_step(p, d, vec3_add(v->lo, vec3(k, k, k)), h));

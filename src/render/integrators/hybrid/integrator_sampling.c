@@ -19,9 +19,9 @@ void NormalizeVector(double* x, double* y) {
 }
 
 double HashDouble(int x, int y, int s) {
-    uint32_t h = (uint32_t)(x * 73856093) ^
-                 (uint32_t)(y * 19349663) ^
-                 (uint32_t)(s * 83492791);
+    uint32_t h = (uint32_t)x * UINT32_C(73856093) ^
+                 (uint32_t)y * UINT32_C(19349663) ^
+                 (uint32_t)s * UINT32_C(83492791);
     h ^= h >> 13;
     h *= 0x5bd1e995;
     h ^= h >> 15;

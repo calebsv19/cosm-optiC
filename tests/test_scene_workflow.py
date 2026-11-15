@@ -12,6 +12,28 @@ from scene_workflow_bundle import REPO, read, sha, verify, write
 
 
 class WorkflowTests(unittest.TestCase):
+    def test_v3_snapshot_preserves_camera_and_omits_v1_video_controls(self):
+        from scene_workflow_bundle import snapshot_inputs
+        scene = self.source/'scene_runtime.json'
+        intent = self.source/'spectral-intent.json'
+        request = {
+            'schema_version': 'ray_tracing_agent_render_request_v2',
+            'scene': {'runtime_scene_path': scene.name, 'camera_id': 'review-camera'},
+            'render': {'width': 64, 'height': 48, 'integrator_3d': 'disney_v3_spectral'},
+        }
+        write(intent, request)
+        frozen = self.root/'spectral'
+        snapshot_inputs(scene, intent, frozen)
+        output = read(frozen/'render_request.json')
+        self.assertEqual(output['scene'], request['scene'])
+        self.assertEqual(output['render'], request['render'])
+        self.assertEqual(output['output'], {'root': 'results', 'overwrite': False})
+        for field, value in [('frame_count', 2), ('temporal_frames', 2),
+                             ('integrator_3d', 'disney_v2')]:
+            write(intent, {**request, 'render': {**request['render'], field: value}})
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'ordinary V3 still'):
+                snapshot_inputs(scene, intent, self.root/'refused')
+
     def test_nested_manifest_parent_reference_is_contained_and_repeatable(self):
         from scene_workflow_bundle import snapshot_inputs
         scene=read(self.source/'scene_runtime.json')

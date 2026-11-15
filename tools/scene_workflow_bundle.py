@@ -105,7 +105,9 @@ def snapshot_inputs(scene_path, request_path, dest):
                 asset_id = safe_id(obj['geometry_ref']['id'])
                 ext['runtime_mesh_path'] = f'assets/mesh_assets/{asset_id}.runtime.json'
     request = read(request_path)
-    if request.get('schema_version') != 'ray_tracing_agent_render_request_v1':
+    schema = request.get('schema_version')
+    spectral = schema == 'ray_tracing_agent_render_request_v2'
+    if not spectral and schema != 'ray_tracing_agent_render_request_v1':
         raise ValueError('unsupported render request')
     if request.get('volume', {}).get('enabled') or request.get('simulation_frames') or request.get('scene_project'):
         raise ValueError('scene-only workflow: use Physics Trio exporter for simulation/volume projects')
@@ -116,6 +118,20 @@ def snapshot_inputs(scene_path, request_path, dest):
             raise ValueError(f'render.{key} must be a positive integer')
     if type(render.get('start_frame', 0)) is not int or render.get('start_frame', 0) < 0:
         raise ValueError('invalid start_frame')
+    if spectral:
+        declared_scene = request.get('scene', {}).get('runtime_scene_path')
+        if (not isinstance(declared_scene, str)
+                or contained(request_path.parent, declared_scene) != scene_path.resolve()
+                or render.get('integrator_3d') != 'disney_v3_spectral'
+                or render.get('frame_count', 1) != 1 or render.get('temporal_frames', 1) != 1
+                or set(render) - {'integrator_3d', 'width', 'height', 'frame_count',
+                                  'temporal_frames', 'denoise_enabled', 'use_tiled_renderer'}
+                or render.get('denoise_enabled', False) is not False
+                or render.get('use_tiled_renderer', False) is not False
+                or 'video' in request.get('output', {})
+                or set(request) - {'schema_version', 'run_id', 'scene', 'render',
+                                   'inspection', 'progress', 'output'}):
+            raise ValueError('scene snapshot requires an ordinary V3 still and its saved scene profile')
     from scene_workflow_rigid_assets import rigid_dependencies
     dependencies = rigid_dependencies(scene, source, contained, read, sha)
     from scene_atmosphere_assets import scene_dependencies
@@ -148,11 +164,16 @@ def snapshot_inputs(scene_path, request_path, dest):
             raise ValueError(f'dependency changed during snapshot: {rel}')
     write(dest / 'scene_runtime.json', scene)
     request = copy.deepcopy(request)
-    request['scene'] = {'runtime_scene_path': 'scene_runtime.json'}
-    video = copy.deepcopy(request.get('output', {}).get('video', {'enabled': False}))
-    if video.get('enabled'):
-        video['path'] = 'results/render.mp4'
-    request['output'] = {'root': 'results', 'overwrite': False, 'video': video}
+    scene_binding = request['scene'] if spectral else {}
+    request['scene'] = {**scene_binding, 'runtime_scene_path': 'scene_runtime.json'}
+    if spectral:
+        # V2's native request schema excludes video, including an off flag.
+        request['output'] = {'root': 'results', 'overwrite': False}
+    else:
+        video = copy.deepcopy(request.get('output', {}).get('video', {'enabled': False}))
+        if video.get('enabled'):
+            video['path'] = 'results/render.mp4'
+        request['output'] = {'root': 'results', 'overwrite': False, 'video': video}
     request['progress'] = {'summary_path': 'results/render_summary.json',
                            'progress_path': 'results/render_progress.json'}
     if request.get('checkpoint', {}).get('path'):

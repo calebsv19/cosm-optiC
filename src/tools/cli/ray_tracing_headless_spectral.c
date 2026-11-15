@@ -1,3 +1,6 @@
+#include "render/runtime_spectral_transport.h"
+#include "render/runtime_spectral_surface_path.h"
+#include "render/runtime_spectral_diffuse.h"
 #include "render/runtime_spectral_film.h"
 #include "tools/ray_tracing_headless_spectral.h"
 #include "tools/ray_tracing_headless_spectral_map.h"
@@ -64,6 +67,12 @@ static bool receiver_materials(json_object *ext, const RuntimeSpectralPencil *p)
     return true;
 }
 bool RayTracingHeadlessSpectral_SceneSupported(const char *path, const RuntimeSpectralPencil *p) {
+    if (p->surface_path.enabled || p->legacy_direct || (!p->map.source_count && !p->count && !p->diffuse.enabled)) {
+        json_object *scene=json_object_from_file(path);
+        bool ok=scene && json_object_is_type(scene,json_type_object);
+        if(scene)json_object_put(scene);
+        return ok; /* Native preparation owns ordinary scene/feature capability admission. */
+    }
     bool mapping = p->map.source_count > 0;
     json_object *scene = json_object_from_file(path);
     if (!scene) return false;
@@ -77,13 +86,17 @@ bool RayTracingHeadlessSpectral_SceneSupported(const char *path, const RuntimeSp
         (json_object_is_type(scale, json_type_int) || json_object_is_type(scale, json_type_double)) &&
         json_object_get_double(scale) == 1 && receiver_materials(ext, p) &&
         json_object_is_type(objects, json_type_array) &&
-        (mapping ? json_object_array_length(objects) >= (p->glass_id[0] ? 2u : 1u) && json_object_array_length(objects) <= 64
+        (p->surface_path.enabled ? json_object_array_length(objects) >= 1 &&
+             json_object_array_length(objects) <= SPECTRAL_PATH_MATERIALS
+         : p->diffuse.enabled ? json_object_array_length(objects) >= 2 && json_object_array_length(objects) <= 8
+         : mapping ? json_object_array_length(objects) >= (p->glass_id[0] ? 2u : 1u) && json_object_array_length(objects) <= 64
                  : json_object_array_length(objects) == 2) &&
         (!lights || (json_object_is_type(lights, json_type_array) && !json_object_array_length(lights)));
     for (size_t i = 0; ok && i < json_object_array_length(objects); ++i) {
         json_object *obj = json_object_array_get_idx(objects, i);
         json_object *extensions = json_object_object_get(obj, "extensions");
         if (!extensions) continue;
+        if (p->diffuse.enabled && !mapping) { ok = false; break; }
         json_object *ld = json_object_object_get(extensions, "line_drawing");
         ok = json_object_is_type(extensions, json_type_object) &&
              (!json_object_object_length(extensions) ||
@@ -104,6 +117,20 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
                                     RuntimeSpectralReadout *out, char *diag, size_t size) {
     const RuntimeSpectralPencil *p = &request->spectral;
     const RuntimeScene3D *scene = &frame->scene;
+    if (RayTracingHeadlessSpectral_IsOrdinary(request) && frame->spectralFrame) {
+        if (!pixels) {*out=frame->spectralFrame->readout;return true;}
+        if (frame->spectralFrame->surface_path) {
+            bool ok=RuntimeSpectralTransport_Render((RuntimeNative3DPreparedFrame *)frame,pixels,NULL,NULL,NULL,NULL);
+            *out=frame->spectralFrame->readout;
+            snprintf(diag,size,"%s",frame->spectralFrame->diagnostic);return ok;
+        }
+        if (frame->spectralFrame->profile.legacy_direct)
+            return RuntimeNative3DRenderPreparedRegion(pixels,RAY_TRACING_3D_INTEGRATOR_DISNEY_V3_SPECTRAL,frame,0,0,frame->width,frame->height,NULL);
+    }
+
+    if (p->surface_path.enabled)
+        return RuntimeSpectralSurfacePath_Run(p, frame, pixels, out, diag, size);
+    if (p->diffuse.enabled && !p->map.source_count) return RuntimeSpectralDiffuse_Run(p, frame, pixels, out, diag, size);
     if (!RuntimeSpectralFilm_Supported(scene, p)) {
         snprintf(
             diag, size,
@@ -149,9 +176,9 @@ bool RayTracingHeadlessSpectral_Run(const RayTracingAgentRenderRequest *request,
                     xyz = vec3_add(xyz, vec3_scale(response[i], hit.weight));
             }
             if (x == frame->width / 2 && y == frame->height / 2) out->center_pixel_xyz = xyz;
-            RayTracingHeadlessSpectral_Pixel(pixels + ((size_t)y * frame->width + x) *
-                                                          RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES,
-                                             xyz, p->exposure);
+            RuntimeSpectral_DisplayPixelWithTransform(
+                pixels + ((size_t)y * frame->width + x) * RUNTIME_NATIVE_3D_PIXEL_STRIDE_BYTES,
+                RuntimeSpectral_LinearRGB(vec3_scale(xyz, p->exposure)), p->soft_display);
         }
     }
     return true;
@@ -162,9 +189,11 @@ invalid_boundary:
     return false;
 }
 
-bool RayTracingHeadlessSpectral_Render(const RayTracingAgentRenderRequest *request,
+bool RayTracingHeadlessSpectral_Render(const RayTracingAgentRenderRequest *request,const char *image_path,
                                        const RayEvaluatedSceneSnapshot *scene, uint8_t *pixels,
-                                       RuntimeSpectralReadout *out, char *diag, size_t size) {
+                                       RuntimeSpectralReadout *out, RuntimeSpectralTransportSnapshot *snapshot, char *diag, size_t size) {
+    if (RayTracingHeadlessSpectral_IsOrdinary(request))
+        return RayTracingHeadlessSpectral_RenderNative(request,image_path,scene,pixels,out,snapshot,diag,size);
     RuntimeNative3DPreparedFrame frame = {0};
     bool ok = RuntimeNative3DPrepareFrameWithSamplingForEvaluatedSceneAndMutation(
         &frame, request->width, request->height, scene, NULL, NULL, NULL);
@@ -183,9 +212,66 @@ static void write_path(FILE *f, const RuntimeSpectralPathReadout *hit, const cha
             hit->position.z, hit->direction.x, hit->direction.y, hit->direction.z);
 }
 
+static void write_probe(FILE *f, const RuntimeSpectralPencil *p, const RuntimeSpectralReadout *out) {
+    const RuntimeSpectralProbeReadout *q = &out->probe;
+    if (!q->valid) return;
+    const char *geometry_unit = p->diffuse.sky_grid ? "per_sky_radiance" : "per_watt";
+    fprintf(f, "  \"spectral_selected_pixel\":{\"x\":%d,\"y\":%d,\"receiver_or_panel_hit\":%s,"
+        "\"first_sample_primitive\":%d,\"first_sample_position_m\":[%.17g,%.17g,%.17g],"
+        "\"xyz\":[%.17g,%.17g,%.17g],\"signed_linear_rgb\":[%.17g,%.17g,%.17g],"
+        "\"direct_geometry_%s\":%.17g,\"indirect_geometry_%s\":%.17g,"
+        "\"panel_nodes_accepted\":%d,\"panel_nodes_dark_or_occluded\":%d,"
+        "\"base_surface_support_m\":%.17g,\"configured_scattered_support_m\":%.17g,\"bands\":[",
+        p->probe.x, p->probe.y, q->hit ? "true" : "false", q->primitive,
+        q->position.x, q->position.y, q->position.z, q->xyz.x, q->xyz.y, q->xyz.z,
+        q->signed_rgb.x, q->signed_rgb.y, q->signed_rgb.z,
+        geometry_unit, q->direct_geometry, geometry_unit, q->indirect_geometry,
+        q->panel_accepted, q->panel_occluded, q->base_support_m, q->scattered_support_m);
+    bool calibration = !p->map.source_count && p->diffuse.enabled;
+    int count = calibration ? p->count : out->map.band_count;
+    for (int b = 0; b < count; ++b) {
+        const RuntimeSpectralProbeBand *r = &q->bands[b];
+        double nm = calibration ? p->lines[b].vacuum_nm : out->map.bands[b].nm;
+        fprintf(f, "%s{\"vacuum_nm\":%.17g,\"width_nm\":%.17g,"
+            "\"direct_radiance\":%.17g,\"indirect_radiance\":%.17g,"
+            "\"photon_surface_radiance\":%.17g,\"single_scatter_radiance\":%.17g,"
+            "\"multiple_scatter_radiance\":%.17g,\"mean_camera_throughput\":%.17g,"
+            "\"samples\":%u,\"interfaces\":%u,\"depth_limited_samples\":%u,\"gather_candidates\":%llu",
+            b ? "," : "", nm, calibration ? 0 : out->map.bands[b].width_nm, r->direct, r->indirect,
+            r->mapped_surface, r->single_scatter, r->multiple_scatter, r->camera_throughput,
+            r->samples, r->interfaces, r->depth_limited, r->candidates);
+        if (p->diffuse.enabled && !calibration)
+            fprintf(f, ",\"sky_direct_radiance\":%.17g", r->sky_direct);
+        if (calibration)
+            fprintf(f, ",\"%s\":%.17g,\"panel_reflectance\":%.17g,\"receiver_reflectance\":%.17g",
+                p->diffuse.sky_grid ? "sky_radiance" : "source_watts",
+                p->diffuse.sky_grid ? p->diffuse.sky_radiance[b] : p->lines[b].watts, RuntimeSpectralCurve_Value(&p->diffuse.panel_reflectance, nm),
+                RuntimeSpectralCurve_Value(&p->reflectance, nm));
+        else {
+            fprintf(f, ",\"mean_receiver_reflectance\":%.17g", r->mean_receiver_reflectance);
+            const RuntimeSpectralDepositProbe *d = &r->largest_deposit;
+            if (d->radiance > 0)
+                fprintf(f, ",\"largest_surface_deposit\":{\"map_record\":%d,\"source_index\":%d,"
+                    "\"vacuum_nm\":%.17g,\"deposited_watts\":%.17g,\"support_m\":%.17g,"
+                    "\"kernel_per_m2\":%.17g,\"radiance_contribution\":%.17g,\"medium_scattered\":%s,"
+                    "\"incoming_direction\":[%.17g,%.17g,%.17g]}",
+                    d->record, d->source, d->vacuum_nm, d->deposited_watts, d->support_m, d->kernel_per_m2,
+                    d->radiance, d->scattered ? "true" : "false", d->incident.x, d->incident.y, d->incident.z);
+        }
+        fputc('}', f);
+    }
+    fprintf(f, "]},\n");
+}
+
 void RayTracingHeadlessSpectral_Write(FILE *f, const RayTracingAgentRenderRequest *request,
                                       const RuntimeSpectralReadout *out, bool rendered) {
     const RuntimeSpectralPencil *p = &request->spectral;
+    if (p->surface_path.enabled) {
+        RuntimeSpectralSurfacePath_Write(f, p, out);
+        return;
+    }
+    if (p->soft_display)
+        fprintf(f, "  \"spectral_display_transform\":\"spectral_soft_v1\",\n");
     json_object *sampling=RuntimeSpectralSampling_JSON(&out->sampling);
     fprintf(f,"  \"spectral_sampling\":%s,\n",json_object_to_json_string_ext(sampling,JSON_C_TO_STRING_PLAIN));
     json_object_put(sampling);
@@ -197,6 +283,31 @@ void RayTracingHeadlessSpectral_Write(FILE *f, const RayTracingAgentRenderReques
     if (rendered)
         fprintf(f, "  \"spectral_center_pixel_xyz\":[%.17g,%.17g,%.17g],\n", out->center_pixel_xyz.x,
                 out->center_pixel_xyz.y, out->center_pixel_xyz.z);
+    if (p->pixel_grid > 1)
+        fprintf(f, "  \"spectral_pixel_grid\":%d,\n", p->pixel_grid);
+    if (p->exact_surface_observer)
+        fprintf(f, "  \"spectral_surface_observer\":\"deposit_wavelength\",\n");
+    if (rendered && p->strip_count) {
+        fprintf(f, "  \"spectral_linear_strip\":{\"x\":%d,\"y\":%d,\"xyz\":[", p->strip_x, p->strip_y);
+        for (int i = 0; i < p->strip_count; ++i) {
+            Vec3 xyz = out->strip_xyz[i];
+            fprintf(f, "%s[%.17g,%.17g,%.17g]", i ? "," : "", xyz.x, xyz.y, xyz.z);
+        }
+        fprintf(f, "]},\n");
+    }
+    if (rendered) write_probe(f, p, out);
+    if (p->diffuse.enabled) {
+        fprintf(f, "  \"spectral_diffuse_bounce\":{\"estimator\":\"finite_panel_midpoint\","
+            "\"grid\":%d,\"indirect_enabled\":%s,\"source\":\"%s\"",
+            p->diffuse.grid, p->diffuse.indirect ? "true" : "false",
+            p->diffuse.sky_grid ? "constant_sky_cap" : "isotropic_point");
+        if (p->diffuse.sky_grid)
+            fprintf(f, ",\"sky_grid\":%d,\"sky_half_angle_deg\":%.17g,\"sky_axis\":[%.17g,%.17g,%.17g]",
+                p->diffuse.sky_grid, p->diffuse.sky_half_angle_deg, p->diffuse.sky_axis.x,
+                p->diffuse.sky_axis.y, p->diffuse.sky_axis.z);
+        fprintf(f, "},\n");
+        if (!p->map.source_count) return;
+    }
     if (rendered && p->sensor_count) {
         fprintf(f, "  \"spectral_center_sensor_signals\":[");
         for (int i = 0; i < p->sensor_count; ++i)
