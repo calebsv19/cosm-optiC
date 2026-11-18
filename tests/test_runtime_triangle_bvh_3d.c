@@ -498,12 +498,37 @@ static void test_bvh_tie_candidates_are_not_clipped(void) {
     RuntimeScene3D_Free(&scene);
 }
 
+
+static void test_bvh_opposing_boundaries_keep_distance_order(void) {
+    for(int order=0;order<2;++order) {
+        RuntimeScene3D scene; RuntimeScene3D_Init(&scene);
+        scene.triangleMesh.triangleCount=scene.triangleMesh.triangleCapacity=2;
+        scene.triangleMesh.triangles=calloc(2,sizeof(RuntimeTriangle3D));
+        int near_id=order,far_id=1-order;
+        scene.triangleMesh.triangles[near_id]=make_triangle(
+            vec3(0,0,0),vec3(1,0,0),vec3(0,1,0),0,0,near_id);
+        scene.triangleMesh.triangles[far_id]=make_triangle(
+            vec3(0,0,-2e-11),vec3(0,1,-2e-11),vec3(1,0,-2e-11),0,0,far_id);
+        scene.triangleMesh.bvhDirty=true;
+        assert_true("opposing_boundaries_build",RuntimeTriangleMesh3D_BuildBVH(&scene.triangleMesh));
+        Ray3D ray=RuntimeRay3D_Make(vec3(.25,.25,1),vec3(0,0,-1));HitInfo3D hit;
+        assert_true("opposing_boundaries_hit",RuntimeTriangleBVH3D_TraceFirstHit(&scene.triangleMesh,&ray,0,2,&hit));
+        assert_true("opposing_boundaries_nearer_face",hit.triangleIndex==near_id);
+        assert_true("opposing_boundaries_entering",hit.boundaryEntering);
+        ray=RuntimeRay3D_Make(vec3(.25,.25,-1),vec3(0,0,1));
+        assert_true("opposing_boundaries_reverse_hit",RuntimeTriangleBVH3D_TraceFirstHit(&scene.triangleMesh,&ray,0,2,&hit));
+        assert_true("opposing_boundaries_reverse_nearer",hit.triangleIndex==far_id);
+        RuntimeScene3D_Free(&scene);
+    }
+}
+
 #include "test_runtime_bvh_query_edges.h"
 
 int main(void) {
     RuntimeRay3D_SetTraceRouteForTests(RUNTIME_RAY_3D_TRACE_ROUTE_FLATTENED_BVH);
     test_bvh_matches_flat_trace();
     test_bvh_query_edges();
+    test_bvh_opposing_boundaries_keep_distance_order();
     test_bvh_tie_candidates_are_not_clipped();
     test_bvh_float_bounds_remain_conservative_at_t_max();
     test_bvh_copy_preserves_trace_results();

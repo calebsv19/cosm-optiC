@@ -158,6 +158,13 @@ static bool runtime_triangle_bvh_hit_better(const HitInfo3D* candidate,
                                             bool found) {
     if (!candidate) return false;
     if (!found || !best) return true;
+    /* Opposing boundaries of one solid are ordered crossings, even when
+     * closer than the display-oriented identity tie tolerance. Skipping the
+     * nearer exit can turn the next face into an impossible second entry. */
+    if (candidate->primitiveIndex == best->primitiveIndex &&
+        candidate->hasBoundaryOrientation && best->hasBoundaryOrientation &&
+        candidate->boundaryEntering != best->boundaryEntering &&
+        candidate->t != best->t) return candidate->t < best->t;
     if (candidate->t < best->t - 1e-9) return true;
     if (fabs(candidate->t - best->t) <= 1e-9 &&
         candidate->triangleIndex > best->triangleIndex) {
